@@ -1,22 +1,20 @@
 use assert_matches::assert_matches;
-use ic_base_types::PrincipalId;
-use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
+use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_governance::pb::v1::{
+    governance_error::ErrorType,
+    manage_neuron_response::{Command, FollowResponse},
+    Tally, Topic, Vote,
 };
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_common::types::ProposalId;
-use ic_nns_governance::pb::v1::governance_error::ErrorType;
-use ic_nns_governance::pb::v1::manage_neuron_response::{Command, FollowResponse};
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::{ExecuteNnsFunction, NnsFunction, Proposal, Tally, Topic, Vote};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
+    neuron_helpers::{
+        get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_unauthorized_neuron,
+        submit_proposal, TestNeuronOwner,
+    },
     state_test_helpers::{
-        get_neuron_ids, nns_cast_yes_vote, nns_governance_get_full_neuron,
+        get_neuron_ids, nns_cast_vote, nns_governance_get_full_neuron,
         nns_governance_get_proposal_info, nns_governance_get_proposal_info_as_anonymous,
-        nns_governance_make_proposal, nns_set_followees_for_neuron, nns_split_neuron,
-        setup_nns_canisters,
+        nns_set_followees_for_neuron, nns_split_neuron, setup_nns_canisters,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -25,15 +23,15 @@ const VALID_TOPIC: i32 = Topic::ParticipantManagement as i32;
 const INVALID_TOPIC: i32 = 69420;
 const NETWORK_CANISTER_MANAGEMENT_TOPIC: i32 = Topic::NetworkCanisterManagement as i32;
 const NEURON_MANAGEMENT_TOPIC: i32 = Topic::NeuronManagement as i32;
-const INVALID_NEURON_ID: u64 = 0;
 const VOTING_POWER_NEURON_1: u64 = 1_404_004_106;
 const VOTING_POWER_NEURON_2: u64 = 140_400_410;
 const VOTING_POWER_NEURON_3: u64 = 14_040_040;
 
-#[derive(Debug, Clone)]
-struct TestNeuron {
-    principal_id: PrincipalId,
-    neuron_id: NeuronId,
+fn setup_state_machine_with_nns_canisters() -> StateMachine {
+    let state_machine = StateMachine::new();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+    state_machine
 }
 
 #[test]
@@ -78,7 +76,7 @@ fn follow_on_invalid_topic() {
     assert_matches!(result,
         Command::Error(err)
         if err.error_type() == ErrorType::InvalidCommand
-        && err.error_message.contains("Invalid topic"));
+        && err.error_message.contains("Not a known topic number."));
 }
 
 #[test]
@@ -111,7 +109,7 @@ fn nonexistent_neuron_cannot_follow_neuron() {
     let n1 = get_neuron_1();
     let nonexistent_neuron = get_nonexistent_neuron();
 
-    // the nonexisting neuron cannot follow a neuron
+    // the non-existing neuron cannot follow a neuron
     let result = nns_set_followees_for_neuron(
         &mut state_machine,
         nonexistent_neuron.principal_id,
@@ -223,21 +221,23 @@ fn vote_propagation_with_following() {
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
 
     // re-vote explicitly, still no change
-    nns_cast_yes_vote(
+    nns_cast_vote(
         &mut state_machine,
         n2.principal_id,
         n2.neuron_id,
         proposal_id.0,
+        Vote::Yes,
     );
     let votes = get_yes_votes(&mut state_machine, &proposal_id);
     assert_eq!(votes, VOTING_POWER_NEURON_2);
 
     // n1 needs to vote explicitly
-    nns_cast_yes_vote(
+    nns_cast_vote(
         &mut state_machine,
         n1.principal_id,
         n1.neuron_id,
         proposal_id.0,
+        Vote::Yes,
     );
     let votes = get_yes_votes(&mut state_machine, &proposal_id);
     assert_eq!(votes, 1_544_404_516);
@@ -280,9 +280,9 @@ fn vote_propagation_with_following() {
     // split n1 and build a follow chain like this:
     // n2 -> n1a -> n3 -> n1
     let n1a_id = split_neuron(&mut state_machine, &n1, 500_000_000);
-    let n1a = TestNeuron {
+    let n1a = TestNeuronOwner {
         neuron_id: n1a_id,
-        principal_id: *TEST_NEURON_1_OWNER_PRINCIPAL,
+        principal_id: n1.principal_id,
     };
 
     // make n2 follow n1a
@@ -378,59 +378,11 @@ fn vote_propagation_with_following() {
     assert_eq!(ballot_n3, (VOTING_POWER_NEURON_3, Vote::Yes));
 }
 
-fn setup_state_machine_with_nns_canisters() -> StateMachine {
-    let state_machine = StateMachine::new();
-    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
-    setup_nns_canisters(&state_machine, nns_init_payloads);
-    state_machine
-}
-
-fn get_unauthorized_neuron() -> TestNeuron {
-    TestNeuron {
-        neuron_id: NeuronId {
-            id: TEST_NEURON_2_ID,
-        },
-        principal_id: *TEST_NEURON_3_OWNER_PRINCIPAL,
-    }
-}
-
-fn get_nonexistent_neuron() -> TestNeuron {
-    TestNeuron {
-        neuron_id: NeuronId {
-            id: INVALID_NEURON_ID,
-        },
-        principal_id: *TEST_NEURON_2_OWNER_PRINCIPAL,
-    }
-}
-
-fn get_neuron_1() -> TestNeuron {
-    TestNeuron {
-        neuron_id: NeuronId {
-            id: TEST_NEURON_1_ID,
-        },
-        principal_id: *TEST_NEURON_1_OWNER_PRINCIPAL,
-    }
-}
-
-fn get_neuron_2() -> TestNeuron {
-    TestNeuron {
-        neuron_id: NeuronId {
-            id: TEST_NEURON_2_ID,
-        },
-        principal_id: *TEST_NEURON_2_OWNER_PRINCIPAL,
-    }
-}
-
-fn get_neuron_3() -> TestNeuron {
-    TestNeuron {
-        neuron_id: NeuronId {
-            id: TEST_NEURON_3_ID,
-        },
-        principal_id: *TEST_NEURON_3_OWNER_PRINCIPAL,
-    }
-}
-
-fn split_neuron(state_machine: &mut StateMachine, neuron: &TestNeuron, amount: u64) -> NeuronId {
+fn split_neuron(
+    state_machine: &mut StateMachine,
+    neuron: &TestNeuronOwner,
+    amount: u64,
+) -> NeuronId {
     let response = nns_split_neuron(state_machine, neuron.principal_id, neuron.neuron_id, amount);
     if let Command::Split(resp) = response.command.unwrap() {
         resp.created_neuron_id.unwrap()
@@ -442,7 +394,7 @@ fn split_neuron(state_machine: &mut StateMachine, neuron: &TestNeuron, amount: u
 fn check_ballots(
     state_machine: &mut StateMachine,
     proposal_id: &ProposalId,
-    neuron: &TestNeuron,
+    neuron: &TestNeuronOwner,
 ) -> (u64, Vote) {
     let info = nns_governance_get_proposal_info(state_machine, proposal_id.0, neuron.principal_id);
     let ballots = info.ballots;
@@ -459,34 +411,11 @@ fn get_yes_votes(state_machine: &mut StateMachine, proposal_id: &ProposalId) -> 
     }
 }
 
-fn submit_proposal(state_machine: &mut StateMachine, neuron: &TestNeuron) -> ProposalId {
-    let proposal = Proposal {
-        title: Some("<proposal created from initialization>".to_string()),
-        summary: "".to_string(),
-        url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::NnsRootUpgrade as i32,
-            payload: Vec::new(),
-        })),
-    };
-
-    let response = nns_governance_make_proposal(
-        state_machine,
-        neuron.principal_id,
-        neuron.neuron_id,
-        &proposal,
-    )
-    .command
-    .expect("Making NNS proposal failed");
-
-    if let Command::MakeProposal(resp) = response {
-        ProposalId::from(resp.proposal_id.unwrap())
-    } else {
-        panic!("funny ManageNeuronResponse")
-    }
-}
-
-fn clear_followees_on_topic(state_machine: &mut StateMachine, neuron: &TestNeuron, topic: i32) {
+fn clear_followees_on_topic(
+    state_machine: &mut StateMachine,
+    neuron: &TestNeuronOwner,
+    topic: i32,
+) {
     let result = nns_set_followees_for_neuron(
         state_machine,
         neuron.principal_id,
@@ -507,7 +436,7 @@ fn clear_followees_on_topic(state_machine: &mut StateMachine, neuron: &TestNeuro
 /// make neuron follow the neurons in followees
 fn set_followees_on_topic(
     state_machine: &mut StateMachine,
-    neuron: &TestNeuron,
+    neuron: &TestNeuronOwner,
     followees: &[NeuronId],
     topic: i32,
 ) {

@@ -12,6 +12,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reject;
 use ic_test_utilities::assert_utils::assert_balance_equals;
+use ic_test_utilities::universal_canister::management::UpgradeOptions;
 use ic_test_utilities::universal_canister::{call_args, management, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_types::{ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId};
 use maplit::btreeset;
@@ -550,7 +551,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
     let provisional_whitelist = ProvisionalWhitelist::Set(btreeset!(
         // PrincipalId of CanisterA that is created below.  This code assumes
         // that we can predict the canister Ids that are generated in
-        // CanisterManager and may need upating if that is no longer the case.
+        // CanisterManager and may need updating if that is no longer the case.
         PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(),
         PrincipalId::new_anonymous(),
     ));
@@ -710,6 +711,8 @@ fn can_get_canister_information() {
                 ComputeAllocation::default().as_percent(),
                 None,
                 2592000,
+                Some(5_000_000_000_000u128),
+                0u128,
                 0u128,
             )
         );
@@ -752,7 +755,7 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(res)) => assert_canister_status_result_equals(
                 CanisterStatusResultV2::new(
                     CanisterStatusType::Running,
-                    Some(ic_crypto_sha::Sha256::hash(UNIVERSAL_CANISTER_WASM).to_vec()),
+                    Some(ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM).to_vec()),
                     canister_a.get(),
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's
@@ -762,6 +765,8 @@ fn can_get_canister_information() {
                     ComputeAllocation::default().as_percent(),
                     None,
                     259200,
+                    None,
+                    0u128,
                     0u128,
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
@@ -939,4 +944,84 @@ fn assert_canister_status_result_equals(
         Cycles::from(actual.cycles()),
         Cycles::from(epsilon),
     );
+}
+
+#[test]
+// Tests canister Upgrade with skipping pre_upgrade hook, using CanisterInstallModeV2.
+fn test_canister_skip_upgrade() {
+    utils::simple_canister_test(|canister| {
+        let num_cycles = Cycles::new(1 << 70);
+
+        // Create a new canister from within a canister.
+        let reply = match canister
+            .update(wasm().call(management::create_canister(num_cycles.into_parts())))
+            .unwrap()
+        {
+            WasmResult::Reply(reply) => reply,
+            _ => panic!("Unexpected result"),
+        };
+
+        let canister_id = CanisterIdRecord::decode(&reply).unwrap().get_canister_id();
+
+        // Install canister code.
+        assert_matches!(
+            canister.update(wasm().call(management::install_code(
+                canister_id,
+                UNIVERSAL_CANISTER_WASM
+            ))),
+            Ok(WasmResult::Reply(_))
+        );
+
+        let set_trap_pre_upgrade = wasm().set_pre_upgrade(wasm().trap()).reply().build();
+
+        // Set pre_upgrade to trap.
+        assert_matches!(
+            canister.update(wasm().call_simple(
+                canister_id,
+                "update",
+                call_args().other_side(set_trap_pre_upgrade),
+            )),
+            Ok(WasmResult::Reply(_))
+        );
+
+        // Upgrade without skipping pre_upgrade should fail.
+        assert_matches!(
+            canister.update(wasm().call(
+                management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
+                    management::InstallMode::Upgrade(Some(UpgradeOptions {
+                        skip_pre_upgrade: Some(false),
+                        keep_main_memory: None,
+                    })),
+                ),
+            )),
+            Ok(WasmResult::Reject(_))
+        );
+
+        // Upgrade with skipping pre upgrade should succeed.
+        assert_matches!(
+            canister.update(wasm().call(
+                management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
+                    management::InstallMode::Upgrade(Some(UpgradeOptions {
+                        skip_pre_upgrade: Some(true),
+                        keep_main_memory: None,
+                    }))
+                ),
+            )),
+            Ok(WasmResult::Reply(_))
+        );
+
+        // Check that canister is upgraded. We try to execute another upgrade without skipping pre_upgrade,
+        // and it should succeed since there's a no-op pre_ugprade method after the upgrade.
+        assert_matches!(
+            canister.update(wasm().call(
+                management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
+                    management::InstallMode::Upgrade(Some(UpgradeOptions {
+                        skip_pre_upgrade: Some(false),
+                        keep_main_memory: None,
+                    })),
+                ),
+            )),
+            Ok(WasmResult::Reply(_))
+        );
+    });
 }

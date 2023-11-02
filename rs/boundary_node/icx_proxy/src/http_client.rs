@@ -72,7 +72,7 @@ impl<B> HyperBody for B where
 {
 }
 
-/// Trait representing the contraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
+/// Trait representing the constraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
 pub trait HyperService<B1: HyperBody>:
     http_transport::HyperService<B1, ResponseBody = Self::ResponseBody2>
 {
@@ -242,9 +242,9 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
 
     let build = HttpsConnectorBuilder::new().with_tls_config(tls_config);
 
-    #[cfg(feature = "allow_http")]
+    #[cfg(feature = "dev_proxy")]
     let build = build.https_or_http();
-    #[cfg(not(feature = "allow_http"))]
+    #[cfg(not(feature = "dev_proxy"))]
     let build = build.https_only();
 
     let connector = build

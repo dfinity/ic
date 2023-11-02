@@ -24,6 +24,7 @@ fn should_generate_all_keys_for_new_node() {
                 .current_node_public_keys()
                 .expect("Failed to retrieve node public keys"),
             node_id,
+            ic_types::time::current_time(),
         )
         .expect("retrieved public keys are invalid");
 
@@ -36,7 +37,7 @@ fn should_generate_all_keys_for_new_node_with_remote_csp_vault() {
     let tokio_rt = new_tokio_runtime();
     let (temp_dir, socket_path) = start_new_remote_csp_vault_server_in_temp_dir(tokio_rt.handle());
     let config =
-        CryptoConfig::new_with_unix_socket_vault(temp_dir.path().to_path_buf(), socket_path);
+        CryptoConfig::new_with_unix_socket_vault(temp_dir.path().to_path_buf(), socket_path, None);
 
     let generated_pks = generate_node_keys_once(&config, Some(tokio_rt.handle().clone()))
         .expect("error generating node public keys");
@@ -48,6 +49,7 @@ fn should_generate_all_keys_for_new_node_with_remote_csp_vault() {
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys"),
         node_id,
+        ic_types::time::current_time(),
     )
     .expect("retrieved public keys are invalid");
 

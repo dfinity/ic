@@ -86,7 +86,7 @@ fn proptest_round(
             .validate_payload(Height::from(0), &wrapped_payload, &[], &context)
             .unwrap();
 
-        // Check that no critical errors occured during the run.
+        // Check that no critical errors occurred during the run.
         assert_eq!(payload_builder.count_critical_errors(), 0);
     });
 }

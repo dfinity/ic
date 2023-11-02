@@ -2,7 +2,7 @@
 //!
 //! Implements the necessary network logic for state sync:
 //!    - Periodic broadcasting of the latest state advert to all peers.
-//!    - Checking advertisments for peers against local state and
+//!    - Checking advertisements for peers against local state and
 //!      starting state sync if necessary.
 //!    - Adding peers to ongoing state sync if they advertise the same state.
 //!
@@ -32,7 +32,11 @@ use routes::{
     build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
     StateSyncAdvertHandler, StateSyncChunkHandler, STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH,
 };
-use tokio::{runtime::Handle, select, task::JoinHandle};
+use tokio::{
+    runtime::Handle,
+    select,
+    task::{JoinHandle, JoinSet},
+};
 
 use crate::ongoing::start_ongoing_state_sync;
 
@@ -43,7 +47,7 @@ mod routes;
 // Interval with which state is advertised to peers.
 const ADVERT_BROADCAST_INTERVAL: Duration = Duration::from_secs(5);
 // Timeout that is applies to advert broadcasts. This should be lower than the interval itself to
-// avoid unecessary build up of pending adverts in case of timeouts.
+// avoid unnecessary build up of pending adverts in case of timeouts.
 const ADVERT_BROADCAST_TIMEOUT: Duration =
     ADVERT_BROADCAST_INTERVAL.saturating_sub(Duration::from_secs(2));
 
@@ -111,24 +115,35 @@ struct StateSyncManager {
 impl StateSyncManager {
     async fn run(mut self) {
         let mut interval = tokio::time::interval(ADVERT_BROADCAST_INTERVAL);
+        let mut advertise_task = JoinSet::new();
         loop {
             select! {
-                _ = interval.tick() => {
-                    self.handle_advert_tick();
+                // Make sure we only have one active advertise task.
+                _ = interval.tick(), if advertise_task.is_empty() => {
+                    advertise_task.spawn_on(
+                        Self::send_state_adverts(
+                            self.rt.clone(),
+                            self.state_sync.clone(),
+                            self.transport.clone(),
+                            self.metrics.clone(),
+                        ),
+                        &self.rt
+                    );
                 },
-                Some((advert, peer)) = self.advert_receiver.recv() =>{
-                    self.handle_advert(advert, peer).await;
+                Some((advert, peer_id)) = self.advert_receiver.recv() =>{
+                    self.handle_advert(advert, peer_id).await;
                 }
+                Some(_) = advertise_task.join_next() => {}
             }
         }
     }
 
-    async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer: NodeId) {
+    async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer_id: NodeId) {
         self.metrics.adverts_received_total.inc();
         // Remove ongoing state sync if finished or try to add peer if ongoing.
         if let Some(ongoing) = &mut self.ongoing_state_sync {
             // Try to add peer to state sync peer set.
-            let _ = ongoing.sender.send(peer).await;
+            let _ = ongoing.sender.try_send(peer_id);
             if ongoing.jh.is_finished() {
                 info!(self.log, "Cleaning up state sync {}", artifact_id.height);
                 self.ongoing_state_sync = None;
@@ -162,26 +177,49 @@ impl StateSyncManager {
             // Add peer that initiated this state sync to ongoing state sync.
             ongoing
                 .sender
-                .send(peer)
+                .send(peer_id)
                 .await
                 .expect("Receive side is not dropped");
             self.ongoing_state_sync = Some(ongoing);
         }
     }
 
-    fn handle_advert_tick(&mut self) {
-        if let Some(state_id) = self.state_sync.latest_state() {
-            self.metrics
-                .latest_state_height_broadcasted
-                .set(state_id.height.get() as i64);
-            // Unreliable broadcast of adverts to all current peers.
-            for peer in self.transport.peers() {
-                let request = build_advert_handler_request(state_id.clone());
-                let transport_c = self.transport.clone();
+    async fn send_state_adverts(
+        rt: Handle,
+        state_sync: Arc<dyn StateSyncClient>,
+        transport: Arc<dyn Transport>,
+        metrics: StateSyncManagerMetrics,
+    ) {
+        let available_states = tokio::task::spawn_blocking(move || state_sync.available_states())
+            .await
+            .expect("Will not be cancelled");
+        metrics.lowest_state_broadcasted.set(
+            available_states
+                .iter()
+                .map(|h| h.height.get())
+                .min()
+                .unwrap_or_default() as i64,
+        );
+        metrics.highest_state_broadcasted.set(
+            available_states
+                .iter()
+                .map(|h| h.height.get())
+                .max()
+                .unwrap_or_default() as i64,
+        );
 
-                self.rt.spawn(async move {
-                    tokio::time::timeout(ADVERT_BROADCAST_TIMEOUT, transport_c.push(&peer, request))
-                        .await
+        for state_id in available_states {
+            // Unreliable broadcast of adverts to all current peers.
+            for (peer_id, _) in transport.peers() {
+                let request = build_advert_handler_request(state_id.clone());
+                let transport_c = transport.clone();
+
+                rt.spawn(async move {
+                    tokio::time::timeout(
+                        ADVERT_BROADCAST_TIMEOUT,
+                        transport_c.push(&peer_id, request),
+                    )
+                    .await
                 });
             }
         }

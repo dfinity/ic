@@ -26,9 +26,9 @@ fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), Key
 
 #[test]
 fn test_sign_prehash_works_with_any_size_input_gte_16() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk = PrivateKey::generate_using_rng(&mut rng);
+    let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
 
     for i in 0..16 {
@@ -62,7 +62,7 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
     assert_eq!(hex::encode(generated_sig), expected_sig);
 
     // Now check the prehash variant:
-    let message_hash = ic_crypto_sha::Sha256::hash(message);
+    let message_hash = ic_crypto_sha2::Sha256::hash(message);
     let generated_sig = sk.sign_digest(&message_hash).unwrap();
     assert_eq!(hex::encode(generated_sig), expected_sig);
 }
@@ -87,9 +87,9 @@ fn should_reject_long_x_when_deserializing_private_key() {
 fn should_accept_signatures_that_we_generate() {
     use rand::RngCore;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk = PrivateKey::generate_using_rng(&mut rng);
+    let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
 
     for m in 0..100 {
@@ -118,7 +118,7 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
     assert!(pk.verify_signature_with_malleability(msg, &sig));
 
     // Test again using the pre-hashed variants:
-    let msg_hash = ic_crypto_sha::Sha256::hash(msg);
+    let msg_hash = ic_crypto_sha2::Sha256::hash(msg);
 
     assert!(!pk.verify_signature_prehashed(&msg_hash, &sig));
     assert!(pk.verify_signature_prehashed_with_malleability(&msg_hash, &sig));
@@ -129,10 +129,10 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
 #[test]
 fn should_serialization_and_deserialization_round_trip_for_private_keys(
 ) -> Result<(), KeyDecodingError> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..200 {
-        let key = PrivateKey::generate_using_rng(&mut rng);
+        let key = PrivateKey::generate_using_rng(rng);
 
         let key_via_sec1 = PrivateKey::deserialize_sec1(&key.serialize_sec1())?;
         let key_via_5915_der = PrivateKey::deserialize_rfc5915_der(&key.serialize_rfc5915_der())?;
@@ -155,10 +155,10 @@ fn should_serialization_and_deserialization_round_trip_for_private_keys(
 #[test]
 fn should_serialization_and_deserialization_round_trip_for_public_keys(
 ) -> Result<(), KeyDecodingError> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..2000 {
-        let key = PrivateKey::generate_using_rng(&mut rng).public_key();
+        let key = PrivateKey::generate_using_rng(rng).public_key();
 
         let key_via_sec1 = PublicKey::deserialize_sec1(&key.serialize_sec1(false))?;
         let key_via_sec1c = PublicKey::deserialize_sec1(&key.serialize_sec1(true))?;
@@ -199,4 +199,83 @@ i389XZmdlKFbsLkUI9dDQgMP98YnUA==
         key.serialize_rfc5915_pem().replace('\r', ""),
         SAMPLE_SECP256K1_PEM
     );
+}
+
+mod try_recovery_from_digest {
+    use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey, RecoveryError};
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use k256::ecdsa::{Signature, VerifyingKey};
+    use rand::Rng;
+
+    #[test]
+    fn should_fail_when_signature_not_parsable() {
+        let rng = &mut reproducible_rng();
+        let public_key = PrivateKey::generate_using_rng(rng).public_key();
+
+        let recid = public_key.try_recovery_from_digest(&[0], &[0_u8; 64]);
+
+        assert_eq!(
+            recid,
+            Err(RecoveryError::SignatureParseError(
+                "signature error".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn should_recover_public_key_from_y_parity() {
+        let rng = &mut reproducible_rng();
+        let private_key = PrivateKey::generate_using_rng(rng);
+        let public_key = private_key.public_key();
+        let digest = rng.gen::<[u8; 32]>();
+        let signature = private_key
+            .sign_digest(&digest)
+            .expect("cannot fail because digest > 16 bytes");
+
+        let recid = public_key
+            .try_recovery_from_digest(&digest, &signature)
+            .expect("cannot fail because params are correct");
+
+        let recovered_public_key = VerifyingKey::recover_from_prehash(
+            &digest,
+            &Signature::from_slice(&signature).expect("valid signature"),
+            k256::ecdsa::RecoveryId::from_byte(recid.to_byte()).expect("valid recovery id"),
+        )
+        .expect("cannot fail because params are correct");
+
+        assert_eq!(
+            public_key.serialize_sec1(false),
+            recovered_public_key
+                .to_encoded_point(false)
+                .as_bytes()
+                .to_vec()
+        );
+    }
+
+    #[test]
+    fn should_compute_signature_y_parity_on_eth_transaction() {
+        //https://sepolia.etherscan.io/tx/0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f
+        let public_key = "040b6fb17608bd3389242d3746988c6e45e89387ba80862414052a7893422397d63d52f93565eb26aebfc1d83e4d6d9fcedf08d04c91709c10d8703bfd1514811e";
+        let unsigned_tx_hash = "0x2d9e6453d9864cff7453ca35dcab86be744c641ba4891c2fe9aeaa2f767b9758";
+        let r = "0x7d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3";
+        let s = "0x4f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441";
+        let expected_v = true;
+
+        let public_key =
+            PublicKey::deserialize_sec1(&hex::decode(public_key).expect("valid hex string"))
+                .expect("valid public key");
+        let digest = hex::decode(&unsigned_tx_hash[2..]).expect("valid hex string");
+        let signature = [
+            hex::decode(&r[2..]).expect("valid hex string"),
+            hex::decode(&s[2..]).expect("valid hex string"),
+        ]
+        .concat();
+
+        let recid = public_key
+            .try_recovery_from_digest(&digest, &signature)
+            .expect("valid signature");
+
+        assert_eq!(recid.is_y_odd(), expected_v);
+        assert!(!recid.is_x_reduced());
+    }
 }

@@ -45,6 +45,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
+    batch::ReceivedEpochStats,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
@@ -132,7 +133,7 @@ impl SimulatedIngressHistory {
     fn set_history(&self, messages: BTreeMap<Time, MessageId>) {
         let mut rng = rand::thread_rng();
         let start_time = self.time_source.get_relative_time();
-        let end_time = *messages.keys().rev().next().unwrap();
+        let end_time = *messages.keys().next_back().unwrap();
         let mut histories = vec![];
         let mut time = start_time + Duration::from_secs(2);
         let set_limit = MAX_INGRESS_COUNT_PER_PAYLOAD * (MAX_INGRESS_TTL.as_secs() as usize) / 2;
@@ -188,6 +189,7 @@ where
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
+                        ReceivedEpochStats::default(),
                     )),
                 )
             });

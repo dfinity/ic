@@ -136,7 +136,7 @@ impl From<CspPublicKeyStoreError> for CurrentNodePublicKeysError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspTlsKeygenError {
-    InvalidNotAfterDate { message: String, not_after: String },
+    InvalidArguments { message: String },
     InternalError { internal_error: String },
     DuplicateKeyId { key_id: KeyId },
     TransientInternalError { internal_error: String },
@@ -686,7 +686,7 @@ pub trait PublicAndSecretKeyStoreCspVault {
     /// * all public keys in the public key store (corresponding to all required public keys
     ///   and potentially additionally stored public keys, like rotated IDKG dealing encryption public keys)
     ///   have a corresponding secret key in the secret key store,
-    /// * all public keys are valid.
+    /// * all public keys are valid, also with respect to the current time.
     /// If all check passes, the current node public keys in validated form is returned.
     ///
     /// # Errors
@@ -711,7 +711,8 @@ pub trait TlsHandshakeCspVault: Send + Sync {
     /// * a random serial,
     /// * the common name (CN) of both subject and issuer being the `ToString`
     ///   form of the given `node_id`,
-    /// * validity starting at the time of calling this method, and
+    /// * validity starting two minutes before the time of calling this method
+    ///   (to account for differences in system clocks on different nodes), and
     /// * validity ending at `not_after`, which must be specified according to
     ///   section 4.1.2.5 in RFC 5280.
     ///

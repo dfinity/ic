@@ -40,7 +40,9 @@ fn test_upgrade_after_state_shrink() {
         let mut canister = set_up_governance_canister(&runtime, governance_proto).await;
 
         // First let's do a self-upgrade
+        canister.stop().await.unwrap();
         canister.upgrade_to_self_binary(Vec::new()).await.unwrap();
+        canister.start().await.unwrap();
 
         // Now make the state smaller
         let _remove_hot_res: ManageNeuronResponse = canister
@@ -64,7 +66,9 @@ fn test_upgrade_after_state_shrink() {
             .unwrap();
 
         // Now, one more self-upgrade
+        canister.stop().await.unwrap();
         canister.upgrade_to_self_binary(Vec::new()).await.unwrap();
+        canister.start().await.unwrap();
 
         Ok(())
     });

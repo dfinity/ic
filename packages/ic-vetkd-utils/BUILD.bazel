@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 COMMON_DEPS = [
     "@crate_index//:zeroize",
@@ -26,7 +27,21 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_features = ["js"],
     deps = COMMON_DEPS + [
-        "@crate_index//:wasm-bindgen",
         "@crate_index//:getrandom",
+        "@crate_index//:wasm-bindgen",
+    ],
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "vetkd_tests",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/**/test_*.rs"],
+    ),
+    compile_data = glob(["tests/data/*"]),
+    extra_srcs = glob(["tests/**/test_*.rs"]),
+    deps = COMMON_DEPS + [
+        ":ic-vetkd-utils",
+        "@crate_index//:hex",
     ],
 )

@@ -34,7 +34,6 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
             "//publish/binaries:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
-            "//publish/binaries:ic-onchain-observability-adapter": "/opt/ic/bin/ic-onchain-observability-adapter:0755",
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",
@@ -49,8 +48,7 @@ def image_deps(mode, malicious = False):
         },
 
         # Set various configuration values
-        "base_image": Label("//ic-os/guestos:rootfs/docker-base." + mode),
-        "docker_context": Label("//ic-os/guestos:rootfs-files"),
+        "container_context_files": Label("//ic-os/guestos:rootfs-files"),
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -68,13 +66,33 @@ def image_deps(mode, malicious = False):
     }
 
     # Add extra files depending on image variant
-    extra_rootfs_deps = {
-        "dev": {"//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644"},
-        "dev-sev": {"//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644"},
-        "dev-malicious": {},
-        "prod": {},
+    extra_deps = {
+        "dev": {
+            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev:build_container_filesystem_config.txt",
+        },
+        "dev-malicious": {
+            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev-malicious:build_container_filesystem_config.txt",
+        },
+        "dev-sev": {
+            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev-sev:build_container_filesystem_config.txt",
+        },
+        "prod": {
+            "build_container_filesystem_config_file": "//ic-os/guestos/envs/prod:build_container_filesystem_config.txt",
+        },
     }
 
-    deps["rootfs"].update(extra_rootfs_deps[mode])
+    deps.update(extra_deps[mode])
+
+    # Add extra files depending on image variant
+    extra_rootfs_deps = {
+        "dev": {
+            "//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644",
+        },
+        "dev-sev": {
+            "//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644",
+        },
+    }
+
+    deps["rootfs"].update(extra_rootfs_deps.get(mode, {}))
 
     return deps

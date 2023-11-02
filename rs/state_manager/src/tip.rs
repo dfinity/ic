@@ -6,7 +6,10 @@ use crate::{
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_logger::{error, fatal, info, ReplicaLogger};
-use ic_protobuf::state::system_metadata::v1::{SplitFrom, SystemMetadata};
+use ic_protobuf::state::{
+    stats::v1::Stats,
+    system_metadata::v1::{SplitFrom, SystemMetadata},
+};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
@@ -49,6 +52,13 @@ enum TipState {
     Serialized(Height),
 }
 
+/// A single pagemap to truncate and/or flush.
+pub struct PageMapToFlush {
+    pub page_map_type: PageMapType,
+    pub truncate: bool,
+    pub page_map: Option<PageMap>,
+}
+
 /// Request for the Tip directory handling thread.
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
@@ -64,18 +74,11 @@ pub(crate) enum TipRequest {
         height: Height,
         ids: BTreeSet<CanisterId>,
     },
-    /// Truncate PageMaps's path.
-    /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
-    TruncatePageMapsPath {
-        height: Height,
-        page_map_type: PageMapType,
-    },
     /// Flush PageMaps's unflushed delta on disc.
     /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
     FlushPageMapDelta {
         height: Height,
-        page_map: PageMap,
-        page_map_type: PageMapType,
+        pagemaps: Vec<PageMapToFlush>,
     },
     /// Reset tip folder to the checkpoint with given height.
     /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
@@ -103,7 +106,10 @@ pub(crate) enum TipRequest {
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
-    Wait { sender: Sender<()> },
+    Wait {
+        sender: Sender<()>,
+    },
+    Noop,
 }
 
 fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
@@ -214,27 +220,8 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 });
                         }
-                        TipRequest::TruncatePageMapsPath {
-                            height,
-                            page_map_type,
-                        } => {
-                            #[cfg(debug_assert)]
-                            match tip_state {
-                                TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
-                                _ => panic!("Unexpected tip state: {:?}", tip_state),
-                            }
-                            tip_state = TipState::ReadyForPageDeltas(height);
-                            let _timer = request_timer(&metrics, "truncate_page_maps_path");
-                            let path =
-                                page_map_path(&log, &mut tip_handler, height, &page_map_type);
-                            truncate_path(&log, &path);
-                        }
 
-                        TipRequest::FlushPageMapDelta {
-                            height,
-                            page_map,
-                            page_map_type,
-                        } => {
+                        TipRequest::FlushPageMapDelta { height, pagemaps } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             #[cfg(debug_assert)]
                             match tip_state {
@@ -242,15 +229,47 @@ pub(crate) fn spawn_tip_thread(
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
                             }
                             tip_state = TipState::ReadyForPageDeltas(height);
-                            let path =
-                                page_map_path(&log, &mut tip_handler, height, &page_map_type);
-                            if !page_map.unflushed_delta_is_empty() {
-                                page_map
-                                    .persist_unflushed_delta(&path)
-                                    .unwrap_or_else(|err| {
-                                        fatal!(log, "Failed to persist unflushed delta: {}", err);
-                                    });
-                            }
+                            parallel_map(
+                                &mut thread_pool,
+                                pagemaps.into_iter().map(
+                                    |PageMapToFlush {
+                                         page_map_type,
+                                         truncate,
+                                         page_map,
+                                     }| {
+                                        (
+                                            truncate,
+                                            page_map,
+                                            page_map_path(
+                                                &log,
+                                                &mut tip_handler,
+                                                height,
+                                                &page_map_type,
+                                            ),
+                                        )
+                                    },
+                                ),
+                                |(truncate, page_map, path)| {
+                                    if *truncate {
+                                        truncate_path(&log, path);
+                                    }
+                                    if page_map.is_some()
+                                        && !page_map.as_ref().unwrap().unflushed_delta_is_empty()
+                                    {
+                                        page_map
+                                            .as_ref()
+                                            .unwrap()
+                                            .persist_unflushed_delta(path)
+                                            .unwrap_or_else(|err| {
+                                                fatal!(
+                                                    log,
+                                                    "Failed to persist unflushed delta: {}",
+                                                    err
+                                                );
+                                            });
+                                    }
+                                },
+                            );
                         }
                         TipRequest::SerializeToTip {
                             height,
@@ -343,6 +362,7 @@ pub(crate) fn spawn_tip_thread(
                             );
                             have_latest_manifest = true;
                         }
+                        TipRequest::Noop => {}
                     }
                 }
             })
@@ -385,6 +405,10 @@ fn serialize_to_tip(
 
     tip.subnet_queues()
         .serialize((state.subnet_queues()).into())?;
+
+    tip.stats().serialize(Stats {
+        query_stats: state.query_stats().as_query_stats(),
+    })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
         serialize_canister_to_tip(log, canister_state, tip)
@@ -458,6 +482,13 @@ fn serialize_canister_to_tip(
             None
         }
     };
+
+    canister_state
+        .system_state
+        .wasm_chunk_store
+        .page_map()
+        .persist_delta(&canister_layout.wasm_chunk_store())?;
+
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
     canister_layout.canister().serialize(
@@ -471,6 +502,8 @@ fn serialize_canister_to_tip(
             freeze_threshold: canister_state.system_state.freeze_threshold,
             cycles_balance: canister_state.system_state.balance(),
             cycles_debit: canister_state.system_state.ingress_induction_cycles_debit(),
+            reserved_balance: canister_state.system_state.reserved_balance(),
+            reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
             status: canister_state.system_state.status.clone(),
             scheduled_as_first: canister_state
@@ -482,10 +515,10 @@ fn serialize_canister_to_tip(
                 .canister_metrics
                 .skipped_round_due_to_no_messages,
             executed: canister_state.system_state.canister_metrics.executed,
-            interruped_during_execution: canister_state
+            interrupted_during_execution: canister_state
                 .system_state
                 .canister_metrics
-                .interruped_during_execution,
+                .interrupted_during_execution,
             certified_data: canister_state.system_state.certified_data.clone(),
             consumed_cycles_since_replica_started: canister_state
                 .system_state
@@ -519,6 +552,12 @@ fn serialize_canister_to_tip(
                 .get_consumed_cycles_since_replica_started_by_use_cases()
                 .clone(),
             canister_history: canister_state.system_state.get_canister_history().clone(),
+            wasm_chunk_store_metadata: canister_state
+                .system_state
+                .wasm_chunk_store
+                .metadata()
+                .clone(),
+            total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
         }
         .into(),
     )?;
@@ -538,7 +577,7 @@ fn serialize_canister_to_tip(
 /// file had a lot of writes in the past but is mostly being read now.
 ///
 /// The current defragmentation strategy is to pseudorandomly choose a
-/// chunk of size max_size among the eligble files, read it to memory,
+/// chunk of size max_size among the eligible files, read it to memory,
 /// and write it back to the file. The effect is that this chunk is
 /// definitely unique to the tip at the end of defragmentation.
 pub fn defrag_tip(

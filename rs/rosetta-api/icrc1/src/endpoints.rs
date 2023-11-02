@@ -149,8 +149,8 @@ pub struct StandardRecord {
 
 // Non-standard queries
 
-impl From<Block> for Transaction {
-    fn from(b: Block) -> Transaction {
+impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
+    fn from(b: Block<Tokens>) -> Self {
         use crate::Operation;
 
         let mut tx = Transaction {
@@ -169,7 +169,7 @@ impl From<Block> for Transaction {
                 tx.kind = "mint".to_string();
                 tx.mint = Some(Mint {
                     to,
-                    amount: Nat::from(amount),
+                    amount: amount.into(),
                     created_at_time,
                     memo,
                 });
@@ -183,7 +183,7 @@ impl From<Block> for Transaction {
                 tx.burn = Some(Burn {
                     from,
                     spender,
-                    amount: Nat::from(amount),
+                    amount: amount.into(),
                     created_at_time,
                     memo,
                 });
@@ -200,10 +200,8 @@ impl From<Block> for Transaction {
                     from,
                     to,
                     spender,
-                    amount: Nat::from(amount),
-                    fee: fee
-                        .map(Nat::from)
-                        .or_else(|| b.effective_fee.map(Nat::from)),
+                    amount: amount.into(),
+                    fee: fee.or(b.effective_fee).map(Into::into),
                     created_at_time,
                     memo,
                 });
@@ -220,12 +218,12 @@ impl From<Block> for Transaction {
                 tx.approve = Some(Approve {
                     from,
                     spender,
-                    amount: Nat::from(amount),
-                    expected_allowance: expected_allowance.map(|ea| Nat::from(ea.get_e8s())),
-                    expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
+                    amount: amount.into(),
+                    expected_allowance: expected_allowance.map(Into::into),
+                    expires_at,
                     fee: fee
-                        .map(Nat::from)
-                        .or_else(|| b.effective_fee.map(Nat::from)),
+                        .map(Into::into)
+                        .or_else(|| b.effective_fee.map(Into::into)),
                     created_at_time,
                     memo,
                 });

@@ -5,27 +5,36 @@ use crate::{
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     pb::v1::{
-        audit_event::{Payload, ResetAging},
+        governance::NeuronInFlightCommand,
         governance_error::ErrorType,
-        manage_neuron,
+        manage_neuron::{self, NeuronIdOrSubaccount},
         neuron::DissolveState,
-        AuditEvent, Ballot, BallotInfo, GovernanceError, Neuron, NeuronInfo, NeuronState, Topic,
-        Vote,
+        Ballot, BallotInfo, GovernanceError, Neuron, NeuronInfo, NeuronState, ProposalData,
+        ProposalStatus, Topic, Vote,
     },
 };
 use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use std::collections::HashMap;
-
-// Use the same logic as GTC canister for resetting the aging timestamp.
-const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
-const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
-const GTC_NEURON_PRE_AGE_DURATION_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;
+use icp_ledger::Subaccount;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    ops::RangeBounds,
+};
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
+
+    /// Returns the subaccount constructed from the `account` vector if it's well-formed (32 bytes).
+    /// Otherwise returns None.
+    pub fn subaccount(&self) -> Result<Subaccount, GovernanceError> {
+        self.account.as_slice().try_into().map_err(|_| {
+            GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!("Neuron {:?} has invalid account", self.id),
+            )
+        })
+    }
 
     /// Returns the state the neuron would be in a time
     /// `now_seconds`. See [NeuronState] for details.
@@ -75,6 +84,47 @@ impl Neuron {
     /// Returns true if and only if `principal` is either the controller or a hotkey
     fn is_hotkey_or_controller(&self, principal: &PrincipalId) -> bool {
         self.is_controlled_by(principal) || self.hot_keys.contains(principal)
+    }
+
+    // Returns all principal ids with special permissions..
+    pub fn principal_ids_with_special_permissions(&self) -> Vec<PrincipalId> {
+        let mut principal_ids: Vec<_> = self
+            .hot_keys
+            .iter()
+            .chain(self.controller.iter())
+            .copied()
+            .collect();
+        // The number of entries is bounded so Vec->HashSet->Vec won't have a clear advantage. Also,
+        // although the order isn't needed by this method and expected use cases, having a stable
+        // ordering (instead of being determined by hash) is usually good for debugging.
+        principal_ids.sort();
+        principal_ids.dedup();
+        principal_ids
+    }
+
+    pub fn topic_followee_pairs(&self) -> BTreeSet<(Topic, NeuronId)> {
+        self.followees
+            .iter()
+            .filter_map(|(topic, followees)| {
+                let topic = match Topic::from_i32(*topic) {
+                    Some(topic) => topic,
+                    None => {
+                        println!(
+                            "{} Invalid topic {:?} in neuron {:?}",
+                            LOG_PREFIX, topic, self.id
+                        );
+                        return None;
+                    }
+                };
+                Some((topic, followees))
+            })
+            .flat_map(|(topic, followees)| {
+                followees
+                    .followees
+                    .iter()
+                    .map(move |followee| (topic, *followee))
+            })
+            .collect()
     }
 
     /// Returns true if this is a community fund neuron.
@@ -166,10 +216,11 @@ impl Neuron {
 
     /// Returns the list of followees on the manage neuron topic for
     /// this neuron.
-    pub(crate) fn neuron_managers(&self) -> Option<&Vec<NeuronId>> {
+    pub(crate) fn neuron_managers(&self) -> Vec<NeuronId> {
         self.followees
             .get(&(Topic::NeuronManagement as i32))
-            .map(|x| &x.followees)
+            .map(|x| x.followees.clone())
+            .unwrap_or_default()
     }
 
     /// Register that this neuron has cast a ballot for a
@@ -199,6 +250,18 @@ impl Neuron {
         // the maximum allowed length of the vector.
         while self.recent_ballots.len() > MAX_NEURON_RECENT_BALLOTS {
             self.recent_ballots.pop();
+        }
+    }
+
+    pub(crate) fn unstake_maturity_if_dissolved(&mut self, now_seconds: u64) {
+        if self.state(now_seconds) == NeuronState::Dissolved
+            && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
+        {
+            self.maturity_e8s_equivalent = self
+                .maturity_e8s_equivalent
+                .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0));
+
+            self.staked_maturity_e8s_equivalent = None;
         }
     }
 
@@ -264,17 +327,7 @@ impl Neuron {
                     let new_delay = std::cmp::min(additional_delay, MAX_DISSOLVE_DELAY_SECONDS);
                     self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
                     // We transition from `Dissolved` to `NotDissolving`: reset age.
-                    //
-                    // We set the age to ts as, at this point in
-                    // time, the neuron exited the dissolving
-                    // state and entered the dissolved state.
-                    //
-                    // This way of setting the age of neuron
-                    // transitioning from dissolved to non-dissolving
-                    // creates an incentive to increase the
-                    // dissolve delay of a dissolved neuron
-                    // instead of dissolving it.
-                    self.aging_since_timestamp_seconds = ts;
+                    self.aging_since_timestamp_seconds = now_seconds;
                 }
             }
             None => {
@@ -614,18 +667,27 @@ impl Neuron {
     }
 
     /// Set the cached stake of this neuron to `updated_stake_e8s` and adjust
-    /// this neuron's age accordingly.
-    pub fn update_stake(&mut self, updated_stake_e8s: u64, now: u64) {
+    /// this neuron's age to be the weighted average of the priorly cached
+    /// and the added stakes. For example, if neuron N had staked 10 ICP aging
+    /// since 3 years and 5 ICP has been added, then
+    /// `N.update_stake_adjust_age(15 ICP)` will result in N staking 15 ICP aged
+    /// at (10 ICP * 3 years) / (10 ICP + 5 ICP) = 2 years.
+    ///
+    /// Only a non-dissolving neuron has a non-zero age. The age of all other
+    /// neurons (i.e., dissolving and dissolved) is represented as
+    /// `againg_since_timestamp_seconds == u64::MAX`. This method maintains
+    /// that invariant.
+    pub fn update_stake_adjust_age(&mut self, updated_stake_e8s: u64, now: u64) {
         // If the updated stake is less than the original stake, preserve the
         // age and distribute it over the new amount. This should not happen
         // in practice, so this code exists merely as a defensive fallback.
         //
-        // TODO(NNS1-954) Consider whether update_stake (and other similar
-        // methods) should use a neurons effective stake rather than the
-        // cached stake.
+        // TODO(NNS1-954) Consider whether update_stake_adjust_age (and other
+        // similar methods) should use a neurons effective stake rather than
+        // the cached stake.
         if updated_stake_e8s < self.cached_neuron_stake_e8s {
             println!(
-                "{}Reducing neuron {:?} stake via update_stake: {} -> {}",
+                "{}Reducing neuron {:?} stake via update_stake_adjust_age: {} -> {}",
                 LOG_PREFIX, self.id, self.cached_neuron_stake_e8s, updated_stake_e8s
             );
             self.cached_neuron_stake_e8s = updated_stake_e8s;
@@ -646,83 +708,456 @@ impl Neuron {
             // appropriately pro-rated to accommodate the new stake.
             assert!(new_stake_e8s == updated_stake_e8s);
             self.cached_neuron_stake_e8s = new_stake_e8s;
-            self.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
+
+            self.aging_since_timestamp_seconds =
+                if let Some(DissolveState::WhenDissolvedTimestampSeconds(_)) = self.dissolve_state {
+                    // Check if invariant is violated.
+                    if self.aging_since_timestamp_seconds != u64::MAX {
+                        println!(
+                            "{}Neuron {:?} is in state {:?}, so it should not have \
+                         an age, but aging_since_timestamp_seconds = {}",
+                            LOG_PREFIX,
+                            self.id,
+                            self.state(now),
+                            self.aging_since_timestamp_seconds
+                        );
+                    }
+                    // If, for some reason, the invariant did not already hold, we
+                    // recover by re-establishing it.
+                    u64::MAX
+                } else {
+                    // Only a non-dissolving neurons have a non-zero age.
+                    now.saturating_sub(new_age_seconds)
+                }
         }
     }
 
-    /// If the aging timestamp is earlier than GENESIS - PRE_AGE, reset it to GENISIS.
-    pub fn maybe_reset_aging_timestamp(&mut self, now: u64) -> Option<AuditEvent> {
-        let genesis_timestamp_seconds = ic_types::time::GENESIS.as_secs_since_unix_epoch();
-        let aging_limit_timestamp_seconds =
-            genesis_timestamp_seconds.saturating_sub(GTC_NEURON_PRE_AGE_DURATION_SECONDS);
-        let should_reset = self.aging_since_timestamp_seconds < aging_limit_timestamp_seconds;
-        if should_reset {
-            let event = AuditEvent {
-                timestamp_seconds: now,
-                payload: Some(Payload::ResetAging(ResetAging {
-                    neuron_id: self.id.as_ref().map(|id| id.id).unwrap_or_default(),
-                    previous_aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
-                    new_aging_since_timestamp_seconds: genesis_timestamp_seconds,
-                    neuron_dissolve_state: self
-                        .dissolve_state
-                        .clone()
-                        .map(|dissolve_state| dissolve_state.into()),
-                    neuron_stake_e8s: self.minted_stake_e8s(),
-                })),
-            };
-            self.aging_since_timestamp_seconds = genesis_timestamp_seconds;
-            Some(event)
-        } else {
-            None
+    /// An inactive neuron is supposed to end up living in stable memory.
+    ///
+    /// The exact criteria is subject to change. Currently, all of the following must hold:
+    ///
+    ///     1. Not funded (i.e. no stake, and no maturity).
+    ///     2. Not currently involved in an open proposal
+    ///     3. Not in the middle of a neuron operation.
+    ///
+    /// Notice that under these criteria, a Neuron cannot become inactive merely by the passage of
+    /// time. This is nice, because we can always immediately detect when a neuron transitions from
+    /// active to inactive simply by watching all mutations, as opposed to scheduling an update at
+    /// the future moment when a neuron transitions from active to inactive. (Therefore, we could
+    /// say that this property is "static", or, perhaps, even better "temporaly stable".)
+    ///
+    /// The last two criteria are why auxiliary data needs to be passed. (By contrast, 1 can be
+    /// determined using only data in self.)
+    ///
+    /// Usage Tip
+    /// ---------
+    ///
+    /// To avoid violating Rust's reference rules, it is useful to create some references, like so:
+    ///
+    /// ```Rust
+    /// // Good.
+    /// let proposals = &governance.heap_data.proposals;
+    /// let in_flight_commands = &governance.heap_data.in_flight_commands;
+    /// let is_neuron_inactive = |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+    /// ```
+    ///
+    /// instead of
+    ///
+    /// ```Rust
+    /// // Bad.
+    /// let is_neuron_inactive = |neuron: &Neuron| {
+    ///     neuron.is_inactive(
+    ///        &governance.heap_data.proposals,
+    ///        &governance.heap_data.in_flight_commands,
+    ///     )
+    /// };
+    /// ```
+    ///
+    /// The reason that the latter is more likely to cause reference rules violations is that it
+    /// captures _everything_ in governance, not just the two sub-data that we need. need-to-know
+    /// basis for the win!
+    ///
+    /// Also, to avoid using these references (indirectly via is_neuron_inactive) after an await, it
+    /// is a good idea to enclose the call where you pass is_neuron_inactive to some other function
+    /// in an "extra" set of braces. I.e.
+    ///
+    /// ```Rust
+    /// let f_result = {
+    ///     let proposals = &governance.heap_data.proposals;
+    ///     let in_flight_commands = &governance.heap_data.in_flight_commands;
+    ///     let is_neuron_inactive = |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+    ///     f(&mut neuron_store, is_neuron_inactive)
+    /// };
+    /// ```
+    ///
+    /// Notice that after the block, is_neuron_inactive can't be accidentally used after an await.
+    ///
+    /// Also, notice that f should not be async. Otherwise, the bad thing can can easily be done
+    /// within f: is_neuron_inactive is used after an await.
+    pub fn is_inactive(
+        &self,
+        // Supporting auxiliary data, from GovernanceProto.
+        proposals: &BTreeMap</* Proposal ID */ u64, ProposalData>,
+        in_flight_commands: &HashMap</* Neuron ID */ u64, NeuronInFlightCommand>,
+    ) -> bool {
+        fn involved_with_open_proposal(
+            proposals: &BTreeMap<u64, ProposalData>,
+            neuron: &Neuron,
+        ) -> bool {
+            let id = neuron.id.as_ref().unwrap();
+            let subaccount = &neuron.account;
+
+            proposals.values().any(|p| {
+                if p.status() != ProposalStatus::Open {
+                    return false;
+                }
+
+                if p.proposer.as_ref() == Some(id) {
+                    return true;
+                }
+
+                let manage_neuron_proposal_involves_neuron = p.is_manage_neuron()
+                    && p.proposal.as_ref().map_or(false, |pr| {
+                        pr.managed_neuron() == Some(NeuronIdOrSubaccount::NeuronId(*id))
+                            || pr.managed_neuron()
+                                == Some(NeuronIdOrSubaccount::Subaccount(subaccount.clone()))
+                    });
+
+                manage_neuron_proposal_involves_neuron
+            })
         }
+
+        let is_locked = self
+            .id
+            .as_ref()
+            .map(|id| in_flight_commands.contains_key(&id.id))
+            .unwrap_or_default();
+
+        let has_stake = self.stake_e8s() != 0;
+
+        let has_maturity = self.maturity_e8s_equivalent != 0;
+
+        !has_maturity && !has_stake && !is_locked && !involved_with_open_proposal(proposals, self)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::pb::v1::{
-        audit_event::{Payload, ResetAging},
-        AuditEvent, Neuron,
-    };
+    use crate::pb::v1::{neuron::DissolveState, Neuron, NeuronState};
+    use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 
     const NOW: u64 = 123_456_789;
 
+    const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
+
     #[test]
-    fn reset_aging_timestamp_should_reset() {
+    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_a_now() {
+        // WhenDissolvedTimestampSeconds(NOW) ==> dissolved
+        let original_dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(NOW));
         let mut neuron = Neuron {
-            aging_since_timestamp_seconds: 1_572_992_229, // Tue, 05 Nov 2019 22:17:09 GMT
+            aging_since_timestamp_seconds: u64::MAX,
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
             ..Default::default()
         };
+        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        assert_eq!(neuron.aging_since_timestamp_seconds, u64::MAX);
+    }
 
-        assert_eq!(
-            neuron.maybe_reset_aging_timestamp(NOW),
-            Some(AuditEvent {
-                timestamp_seconds: 123_456_789,
-                payload: Some(Payload::ResetAging(ResetAging {
-                    neuron_id: 0,
-                    previous_aging_since_timestamp_seconds: 1_572_992_229,
-                    new_aging_since_timestamp_seconds: 1_620_328_630,
-                    neuron_dissolve_state: neuron.dissolve_state.clone().map(|state| state.into()),
-                    neuron_stake_e8s: neuron.minted_stake_e8s(),
-                }))
-            })
-        );
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_a_past() {
+        // WhenDissolvedTimestampSeconds(past) ==> dissolved
+        let original_dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
+            NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
+        ));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: u64::MAX,
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        assert_eq!(neuron.aging_since_timestamp_seconds, u64::MAX);
+    }
 
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_b() {
+        let original_dissolve_state = Some(DissolveState::DissolveDelaySeconds(0));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s: u64 = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        // This is the weighted average that tells us what the age should be
+        // in seconds.
+        let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
+        // Decrease the age that we expect from now to get the expected timestamp
+        // since when the neurons should be aging.
+        assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_c() {
+        // This should mean the neuron is dissolved.
+        let original_dissolve_state = None;
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        // This is the weighted average that tells us what the age should be
+        // in seconds.
+        let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
+        // Decrease the age that we expect from now to get the expected timestamp
+        // since when the neurons should be aging.
+        assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_non_dissolving_neuron() {
+        let original_dissolve_state =
+            Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        // This is the weighted average that tells us what the age should be
+        // in seconds.
+        let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
+        // Decrease the age that we expect from now to get the expected timestamp
+        // since when the neurons should be aging.
+        assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolving_neuron() {
+        // WhenDissolvedTimestampSeconds(future) <==> dissolving
+        let original_dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
+            NOW.saturating_add(TWELVE_MONTHS_SECONDS),
+        ));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: u64::MAX,
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 15 * E8;
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        assert_eq!(neuron.aging_since_timestamp_seconds, u64::MAX);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_invalid_cache() {
+        // For a neuron N, the value of the `N.cached_neuron_stake_e8s` should
+        // monotonically grow over time. If this invariant is violated, that
+        // means the cache was invalid. Calling `N.update_stake_adjust_age(X)`
+        // should recover an invalid cache by setting it to `X`.
+        let mut neuron = Neuron {
+            cached_neuron_stake_e8s: 10 * E8,
+            ..Default::default()
+        };
+        let original_dissolve_state = neuron.dissolve_state.clone();
+        // We expect that the age does not change in this scenario.
+        let original_aging_since_timestamp_seconds = neuron.aging_since_timestamp_seconds;
+        let new_stake_e8s = 5 * E8;
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        // The only effect of the above call should be an update of
+        // `cached_neuron_stake_e8s`; e.g., the operation does not simply fail.
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
         assert_eq!(
             neuron.aging_since_timestamp_seconds,
-            1_620_328_630 // Thu, 06 May 2021 19:17:10 GMT (Genesis)
+            original_aging_since_timestamp_seconds
         );
     }
 
     #[test]
-    fn reset_aging_timestamp_no_op() {
-        let mut neuron = Neuron {
-            aging_since_timestamp_seconds: 1_572_992_230, // Tue, 05 Nov 2019 22:17:10 GMT
-            ..Default::default()
-        };
+    fn increase_dissolve_delay_sets_age_correctly_for_dissolved_neurons() {
+        // We set NOW to const in the test since it's shared in the cases and the test impl fn
+        const NOW: u64 = 1000;
+        fn test_increase_dissolve_delay_by_1_on_dissolved_neuron(
+            current_aging_since_timestamp_seconds: u64,
+            current_dissolve_state: Option<DissolveState>,
+        ) {
+            let mut neuron = Neuron {
+                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
+                dissolve_state: current_dissolve_state,
+                ..Default::default()
+            };
+            // precondition, neuron is considered dissolved
+            assert_eq!(neuron.state(NOW), NeuronState::Dissolved);
 
-        assert!(neuron.maybe_reset_aging_timestamp(NOW).is_none());
+            neuron.increase_dissolve_delay(NOW, 1);
 
-        assert_eq!(neuron.aging_since_timestamp_seconds, 1_572_992_230);
+            // Post-condition - always aging_since_timestamp_seconds = now
+            // always DissolveState::DissolveDelaySeconds(1)
+            assert_eq!(
+                neuron,
+                Neuron {
+                    aging_since_timestamp_seconds: NOW,
+                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
+                    ..Default::default()
+                }
+            );
+        }
+
+        #[rustfmt::skip]
+        let cases = [
+            // These invalid cases ensure that the method actually transforms "now" correctly
+            (0, Some(DissolveState::DissolveDelaySeconds(0))),
+            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
+            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
+            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
+            (0, None),
+            // These are also inconsistent with what should be observed.
+            (NOW + 100, Some(DissolveState::DissolveDelaySeconds(0))),
+            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
+            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
+            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
+            (NOW + 100, None),
+            // Consistent with observations
+            (NOW - 100, Some(DissolveState::DissolveDelaySeconds(0))),
+            (NOW - 100, None),
+            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
+            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
+            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
+        ];
+
+        for (current_aging_since_timestamp_seconds, current_dissolve_state) in cases {
+            test_increase_dissolve_delay_by_1_on_dissolved_neuron(
+                current_aging_since_timestamp_seconds,
+                current_dissolve_state,
+            );
+        }
     }
+
+    #[test]
+    fn increase_dissolve_delay_does_not_set_age_for_non_dissolving_neurons() {
+        const NOW: u64 = 1000;
+        fn test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
+            current_aging_since_timestamp_seconds: u64,
+            current_dissolve_delay_seconds: u64,
+        ) {
+            let mut non_dissolving_neuron = Neuron {
+                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    current_dissolve_delay_seconds,
+                )),
+                ..Default::default()
+            };
+
+            // Precondition - the neuron is non-dissolving
+            assert_eq!(non_dissolving_neuron.state(NOW), NeuronState::NotDissolving);
+
+            non_dissolving_neuron.increase_dissolve_delay(NOW, 1);
+
+            assert_eq!(
+                non_dissolving_neuron,
+                Neuron {
+                    // This field should be unaffected
+                    aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
+                    // This field's inner value should increment by 1
+                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                        current_dissolve_delay_seconds + 1
+                    )),
+                    ..Default::default()
+                }
+            );
+        }
+
+        // Test cases
+        for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
+            for current_dissolve_delay_seconds in
+                [1, 10, 100, NOW, NOW + 1000, (SECONDS_PER_DAY * 365 * 8)]
+            {
+                test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
+                    current_aging_since_timestamp_seconds,
+                    current_dissolve_delay_seconds,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn increase_dissolve_delay_set_age_to_u64_max_for_dissolving_neurons() {
+        const NOW: u64 = 1000;
+        fn test_increase_dissolve_delay_by_1_for_dissolving_neuron(
+            current_aging_since_timestamp_seconds: u64,
+            dissolved_at_timestamp_seconds: u64,
+        ) {
+            let mut neuron = Neuron {
+                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                    dissolved_at_timestamp_seconds,
+                )),
+                ..Default::default()
+            };
+
+            // Precondition - neuron is already dissolving
+            assert_eq!(neuron.state(NOW), NeuronState::Dissolving);
+
+            neuron.increase_dissolve_delay(NOW, 1);
+
+            assert_eq!(
+                neuron,
+                Neuron {
+                    aging_since_timestamp_seconds: u64::MAX,
+                    dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                        dissolved_at_timestamp_seconds + 1
+                    )),
+                    ..Default::default()
+                }
+            );
+        }
+
+        for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
+            for dissolved_at_timestamp_seconds in
+                [NOW + 1, NOW + 1000, NOW + (SECONDS_PER_DAY * 365 * 8)]
+            {
+                test_increase_dissolve_delay_by_1_for_dissolving_neuron(
+                    current_aging_since_timestamp_seconds,
+                    dissolved_at_timestamp_seconds,
+                );
+            }
+        }
+    }
+}
+
+/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
+/// that operate on NeuronId ranges with internal u64 representations in data.
+pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
+    let first = match range.start_bound() {
+        std::ops::Bound::Included(start) => start.id,
+        std::ops::Bound::Excluded(start) => start.id + 1,
+        std::ops::Bound::Unbounded => 0,
+    };
+    let last = match range.end_bound() {
+        std::ops::Bound::Included(end) => end.id,
+        std::ops::Bound::Excluded(end) => end.id - 1,
+        std::ops::Bound::Unbounded => u64::MAX,
+    };
+    first..=last
 }

@@ -1,5 +1,4 @@
 use ic_btc_types_internal::{GetSuccessorsRequestInitial, SendTransactionRequest};
-use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::{
@@ -9,47 +8,177 @@ use ic_protobuf::{
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
-    messages::{CallbackId, Request},
-    node_id_into_protobuf, node_id_try_from_option, NodeId, RegistryVersion, Time,
+    messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
+    node_id_into_protobuf, node_id_try_from_option, CanisterId, NodeId, RegistryVersion, Time,
 };
+use phantom_newtype::Id;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{From, TryFrom},
+    sync::Arc,
 };
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
-    SignWithEcsda(SignWithEcdsaContext),
+    SignWithEcdsa(SignWithEcdsaContext),
     CanisterHttpRequest(CanisterHttpRequestContext),
     EcdsaDealings(EcdsaDealingsContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
-    InstallCode(InstallCodeContext),
 }
 
 impl SubnetCallContext {
     pub fn get_request(&self) -> &Request {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => &context.request,
-            SubnetCallContext::SignWithEcsda(context) => &context.request,
+            SubnetCallContext::SignWithEcdsa(context) => &context.request,
             SubnetCallContext::CanisterHttpRequest(context) => &context.request,
             SubnetCallContext::EcdsaDealings(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
-            SubnetCallContext::InstallCode(context) => &context.request,
         }
     }
 
     pub fn get_time(&self) -> Time {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => context.time,
-            SubnetCallContext::SignWithEcsda(context) => context.batch_time,
+            SubnetCallContext::SignWithEcdsa(context) => context.batch_time,
             SubnetCallContext::CanisterHttpRequest(context) => context.time,
             SubnetCallContext::EcdsaDealings(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
-            SubnetCallContext::InstallCode(context) => context.time,
         }
+    }
+}
+
+pub struct InstallCodeCallIdTag;
+pub type InstallCodeCallId = Id<InstallCodeCallIdTag, u64>;
+
+/// Collection of install code call messages whose execution is paused at the
+/// end of the round.
+///
+/// During a subnet split, these messages will be automatically rejected if
+/// the targeted canister has moved to a new subnet.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct InstallCodeCallManager {
+    next_call_id: u64,
+    install_code_calls: BTreeMap<InstallCodeCallId, InstallCodeCall>,
+}
+
+impl InstallCodeCallManager {
+    fn push_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
+        let call_id = InstallCodeCallId::new(self.next_call_id);
+        self.next_call_id += 1;
+        self.install_code_calls.insert(call_id, call);
+
+        call_id
+    }
+
+    fn remove_call(&mut self, call_id: InstallCodeCallId) -> Option<InstallCodeCall> {
+        self.install_code_calls.remove(&call_id)
+    }
+
+    /// Removes and returns all `InstallCodeCalls` not targeted to local canisters.
+    ///
+    /// Used for rejecting all calls targeting migrated canisters after a subnet
+    /// split.
+    fn remove_non_local_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<InstallCodeCall> {
+        let mut removed = Vec::new();
+        self.install_code_calls.retain(|_call_id, call| {
+            if is_local_canister(call.effective_canister_id) {
+                true
+            } else {
+                removed.push(call.clone());
+                false
+            }
+        });
+        removed
+    }
+}
+
+/// Collection of stop canister messages whose execution is paused at the
+/// end of the round.
+///
+/// During a subnet split, these messages will be automatically rejected if
+/// the target canister has moved to a new subnet.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct StopCanisterCallManager {
+    next_call_id: u64,
+    stop_canister_calls: BTreeMap<StopCanisterCallId, StopCanisterCall>,
+}
+
+impl StopCanisterCallManager {
+    fn push_call(&mut self, call: StopCanisterCall) -> StopCanisterCallId {
+        let call_id = StopCanisterCallId::new(self.next_call_id);
+        self.next_call_id += 1;
+        self.stop_canister_calls.insert(call_id, call);
+
+        call_id
+    }
+
+    fn remove_call(&mut self, call_id: StopCanisterCallId) -> Option<StopCanisterCall> {
+        self.stop_canister_calls.remove(&call_id)
+    }
+
+    /// Removes and returns all `StopCanisterCalls` not targeted to local canisters.
+    ///
+    /// Used for rejecting all calls targeting migrated canisters after a subnet
+    /// split.
+    fn remove_non_local_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<StopCanisterCall> {
+        let mut removed = Vec::new();
+        self.stop_canister_calls.retain(|_call_id, call| {
+            if is_local_canister(call.effective_canister_id) {
+                true
+            } else {
+                removed.push(call.clone());
+                false
+            }
+        });
+        removed
+    }
+}
+
+/// It is responsible for keeping track of all subnet messages that
+/// do not require work to be done by another IC layer and
+/// cannot finalize the execution in a single round.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct CanisterManagementCalls {
+    install_code_call_manager: InstallCodeCallManager,
+    stop_canister_call_manager: StopCanisterCallManager,
+}
+
+impl CanisterManagementCalls {
+    fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
+        self.install_code_call_manager.push_call(call)
+    }
+
+    fn push_stop_canister_call(&mut self, call: StopCanisterCall) -> StopCanisterCallId {
+        self.stop_canister_call_manager.push_call(call)
+    }
+
+    fn remove_install_code_call(&mut self, call_id: InstallCodeCallId) -> Option<InstallCodeCall> {
+        self.install_code_call_manager.remove_call(call_id)
+    }
+
+    fn remove_stop_canister_call(
+        &mut self,
+        call_id: StopCanisterCallId,
+    ) -> Option<StopCanisterCall> {
+        self.stop_canister_call_manager.remove_call(call_id)
+    }
+
+    pub fn install_code_calls_len(&self) -> usize {
+        self.install_code_call_manager.install_code_calls.len()
+    }
+
+    pub fn stop_canister_calls_len(&self) -> usize {
+        self.stop_canister_call_manager.stop_canister_calls.len()
     }
 }
 
@@ -63,80 +192,39 @@ pub struct SubnetCallContextManager {
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
-    pub install_code_contexts: BTreeMap<CallbackId, InstallCodeContext>,
+    canister_management_calls: CanisterManagementCalls,
 }
 
 impl SubnetCallContextManager {
-    pub fn push_setup_initial_dkg_request(&mut self, context: SetupInitialDkgContext) {
+    pub fn push_context(&mut self, context: SubnetCallContext) -> CallbackId {
         let callback_id = CallbackId::new(self.next_callback_id);
         self.next_callback_id += 1;
 
-        self.setup_initial_dkg_contexts.insert(callback_id, context);
-    }
+        match context {
+            SubnetCallContext::SetupInitialDKG(context) => {
+                self.setup_initial_dkg_contexts.insert(callback_id, context);
+            }
+            SubnetCallContext::SignWithEcdsa(context) => {
+                self.sign_with_ecdsa_contexts.insert(callback_id, context);
+            }
+            SubnetCallContext::CanisterHttpRequest(context) => {
+                self.canister_http_request_contexts
+                    .insert(callback_id, context);
+            }
+            SubnetCallContext::EcdsaDealings(context) => {
+                self.ecdsa_dealings_contexts.insert(callback_id, context);
+            }
+            SubnetCallContext::BitcoinGetSuccessors(context) => {
+                self.bitcoin_get_successors_contexts
+                    .insert(callback_id, context);
+            }
+            SubnetCallContext::BitcoinSendTransactionInternal(context) => {
+                self.bitcoin_send_transaction_internal_contexts
+                    .insert(callback_id, context);
+            }
+        };
 
-    pub fn push_sign_with_ecdsa_request(
-        &mut self,
-        context: SignWithEcdsaContext,
-        max_queue_size: u32,
-    ) -> Result<(), UserError> {
-        if self.sign_with_ecdsa_contexts.len() >= max_queue_size as usize {
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "sign_with_ecdsa request could not be handled, the ECDSA signature queue is full."
-                    .to_string(),
-            ))
-        } else {
-            let callback_id = CallbackId::new(self.next_callback_id);
-            self.next_callback_id += 1;
-            self.sign_with_ecdsa_contexts.insert(callback_id, context);
-            Ok(())
-        }
-    }
-
-    pub fn push_http_request(&mut self, context: CanisterHttpRequestContext) {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.canister_http_request_contexts
-            .insert(callback_id, context);
-    }
-
-    pub fn push_ecdsa_dealings_request(&mut self, context: EcdsaDealingsContext) {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.ecdsa_dealings_contexts.insert(callback_id, context);
-    }
-
-    pub fn push_bitcoin_get_successors_request(
-        &mut self,
-        context: BitcoinGetSuccessorsContext,
-    ) -> u64 {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.bitcoin_get_successors_contexts
-            .insert(callback_id, context);
-        callback_id.get()
-    }
-
-    pub fn push_bitcoin_send_transaction_internal_request(
-        &mut self,
-        context: BitcoinSendTransactionInternalContext,
-    ) -> u64 {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.bitcoin_send_transaction_internal_contexts
-            .insert(callback_id, context);
-        callback_id.get()
-    }
-
-    pub fn push_install_code_request(&mut self, context: InstallCodeContext) {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.install_code_contexts.insert(callback_id, context);
+        callback_id
     }
 
     pub fn retrieve_context(
@@ -164,7 +252,7 @@ impl SubnetCallContextManager {
                             context.pseudo_random_id,
                             context.request.sender
                         );
-                        SubnetCallContext::SignWithEcsda(context)
+                        SubnetCallContext::SignWithEcdsa(context)
                     })
             })
             .or_else(|| {
@@ -219,6 +307,56 @@ impl SubnetCallContextManager {
                         SubnetCallContext::BitcoinSendTransactionInternal(context)
                     })
             })
+    }
+
+    pub fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
+        self.canister_management_calls.push_install_code_call(call)
+    }
+
+    pub fn remove_install_code_call(
+        &mut self,
+        call_id: InstallCodeCallId,
+    ) -> Option<InstallCodeCall> {
+        self.canister_management_calls
+            .remove_install_code_call(call_id)
+    }
+
+    pub fn remove_non_local_install_code_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<InstallCodeCall> {
+        self.canister_management_calls
+            .install_code_call_manager
+            .remove_non_local_calls(is_local_canister)
+    }
+
+    pub fn install_code_calls_len(&self) -> usize {
+        self.canister_management_calls.install_code_calls_len()
+    }
+
+    pub fn push_stop_canister_call(&mut self, call: StopCanisterCall) -> StopCanisterCallId {
+        self.canister_management_calls.push_stop_canister_call(call)
+    }
+
+    pub fn remove_stop_canister_call(
+        &mut self,
+        call_id: StopCanisterCallId,
+    ) -> Option<StopCanisterCall> {
+        self.canister_management_calls
+            .remove_stop_canister_call(call_id)
+    }
+
+    pub fn remove_non_local_stop_canister_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<StopCanisterCall> {
+        self.canister_management_calls
+            .stop_canister_call_manager
+            .remove_non_local_calls(is_local_canister)
+    }
+
+    pub fn stop_canister_calls_len(&self) -> usize {
+        self.canister_management_calls.stop_canister_calls_len()
     }
 }
 
@@ -286,16 +424,36 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     }
                 })
                 .collect(),
-            install_code_contexts: item
-                .install_code_contexts
+            install_code_calls: item
+                .canister_management_calls
+                .install_code_call_manager
+                .install_code_calls
                 .iter()
-                .map(
-                    |(callback_id, context)| pb_metadata::InstallCodeContextTree {
-                        callback_id: callback_id.get(),
-                        context: Some(context.into()),
-                    },
-                )
+                .map(|(call_id, call)| pb_metadata::InstallCodeCallTree {
+                    call_id: call_id.get(),
+                    call: Some(call.into()),
+                })
                 .collect(),
+            install_code_requests: vec![],
+            next_install_code_call_id: item
+                .canister_management_calls
+                .install_code_call_manager
+                .next_call_id,
+
+            stop_canister_calls: item
+                .canister_management_calls
+                .stop_canister_call_manager
+                .stop_canister_calls
+                .iter()
+                .map(|(call_id, call)| pb_metadata::StopCanisterCallTree {
+                    call_id: call_id.get(),
+                    call: Some(call.into()),
+                })
+                .collect(),
+            next_stop_canister_call_id: item
+                .canister_management_calls
+                .stop_canister_call_manager
+                .next_call_id,
         }
     }
 }
@@ -359,13 +517,37 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 .insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut install_code_contexts = BTreeMap::<CallbackId, InstallCodeContext>::new();
-        for entry in item.install_code_contexts {
-            let pb_context =
-                try_from_option_field(entry.context, "SystemMetadata::InstallCodeContext")?;
-            let context = InstallCodeContext::try_from((time, pb_context))?;
-            install_code_contexts.insert(CallbackId::new(entry.callback_id), context);
+        let mut install_code_calls = BTreeMap::<InstallCodeCallId, InstallCodeCall>::new();
+        // TODO(EXC-1454): Remove when `install_code_requests` field is not needed.
+        for entry in item.install_code_requests {
+            let pb_request = entry.request.ok_or(ProxyDecodeError::MissingField(
+                "InstallCodeRequest::request",
+            ))?;
+            let call = InstallCodeCall::try_from((time, pb_request))?;
+            install_code_calls.insert(InstallCodeCallId::new(entry.request_id), call);
         }
+        for entry in item.install_code_calls {
+            let pb_call = entry.call.ok_or(ProxyDecodeError::MissingField(
+                "SystemMetadata::InstallCodeCall",
+            ))?;
+            let call = InstallCodeCall::try_from((time, pb_call))?;
+            install_code_calls.insert(InstallCodeCallId::new(entry.call_id), call);
+        }
+        let install_code_call_manager: InstallCodeCallManager = InstallCodeCallManager {
+            next_call_id: item.next_install_code_call_id,
+            install_code_calls,
+        };
+
+        let mut stop_canister_calls = BTreeMap::<StopCanisterCallId, StopCanisterCall>::new();
+        for entry in item.stop_canister_calls {
+            let pb_call = try_from_option_field(entry.call, "SystemMetadata::StopCanisterCall")?;
+            let call = StopCanisterCall::try_from((time, pb_call))?;
+            stop_canister_calls.insert(StopCanisterCallId::new(entry.call_id), call);
+        }
+        let stop_canister_call_manager = StopCanisterCallManager {
+            next_call_id: item.next_stop_canister_call_id,
+            stop_canister_calls,
+        };
 
         Ok(Self {
             next_callback_id: item.next_callback_id,
@@ -375,7 +557,10 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             ecdsa_dealings_contexts,
             bitcoin_get_successors_contexts,
             bitcoin_send_transaction_internal_contexts,
-            install_code_contexts,
+            canister_management_calls: CanisterManagementCalls {
+                install_code_call_manager,
+                stop_canister_call_manager,
+            },
         })
     }
 }
@@ -622,34 +807,182 @@ impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct InstallCodeContext {
-    pub request: Request,
+pub struct InstallCodeCall {
+    pub call: CanisterCall,
     pub time: Time,
+    pub effective_canister_id: CanisterId,
 }
 
-impl From<&InstallCodeContext> for pb_metadata::InstallCodeContext {
-    fn from(context: &InstallCodeContext) -> Self {
-        pb_metadata::InstallCodeContext {
-            request: Some((&context.request).into()),
+impl From<&InstallCodeCall> for pb_metadata::InstallCodeCall {
+    fn from(install_code_call: &InstallCodeCall) -> Self {
+        use pb_metadata::install_code_call::CanisterCall as PbCanisterCall;
+        let call = match &install_code_call.call {
+            CanisterCall::Request(request) => PbCanisterCall::Request(request.as_ref().into()),
+            CanisterCall::Ingress(ingress) => PbCanisterCall::Ingress(ingress.as_ref().into()),
+        };
+        pb_metadata::InstallCodeCall {
+            canister_call: Some(call),
+            effective_canister_id: Some((install_code_call.effective_canister_id).into()),
             time: Some(pb_metadata::Time {
-                time_nanos: context.time.as_nanos_since_unix_epoch(),
+                time_nanos: install_code_call.time.as_nanos_since_unix_epoch(),
             }),
         }
     }
 }
 
-impl TryFrom<(Time, pb_metadata::InstallCodeContext)> for InstallCodeContext {
+impl TryFrom<(Time, pb_metadata::InstallCodeRequest)> for InstallCodeCall {
     type Error = ProxyDecodeError;
     fn try_from(
-        (time, context): (Time, pb_metadata::InstallCodeContext),
+        (time, install_code_request): (Time, pb_metadata::InstallCodeRequest),
     ) -> Result<Self, Self::Error> {
-        let request: Request =
-            try_from_option_field(context.request, "InstallCodeContext::request")?;
-        Ok(InstallCodeContext {
-            request,
-            time: context
+        let pb_call = install_code_request
+            .request
+            .ok_or(ProxyDecodeError::MissingField(
+                "InstallCodeRequest::request",
+            ))?;
+        let effective_canister_id: CanisterId = try_from_option_field(
+            install_code_request.effective_canister_id,
+            "InstallCodeRequest::effective_canister_id",
+        )?;
+        Ok(InstallCodeCall {
+            call: CanisterCall::Request(Arc::new(pb_call.try_into()?)),
+            effective_canister_id,
+            time: install_code_request
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
         })
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::InstallCodeCall)> for InstallCodeCall {
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (time, install_code_call): (Time, pb_metadata::InstallCodeCall),
+    ) -> Result<Self, Self::Error> {
+        use pb_metadata::install_code_call::CanisterCall as PbCanisterCall;
+        let pb_call = install_code_call
+            .canister_call
+            .ok_or(ProxyDecodeError::MissingField(
+                "InstallCodeCall::canister_call",
+            ))?;
+
+        let call = match pb_call {
+            PbCanisterCall::Request(request) => {
+                CanisterCall::Request(Arc::new(request.try_into()?))
+            }
+            PbCanisterCall::Ingress(ingress) => {
+                CanisterCall::Ingress(Arc::new(ingress.try_into()?))
+            }
+        };
+
+        let effective_canister_id: CanisterId = try_from_option_field(
+            install_code_call.effective_canister_id,
+            "InstallCodeCall::effective_canister_id",
+        )?;
+        Ok(InstallCodeCall {
+            call,
+            effective_canister_id,
+            time: install_code_call
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StopCanisterCall {
+    pub call: CanisterCall,
+    pub effective_canister_id: CanisterId,
+    pub time: Time,
+}
+
+impl From<&StopCanisterCall> for pb_metadata::StopCanisterCall {
+    fn from(stop_canister_call: &StopCanisterCall) -> Self {
+        use pb_metadata::stop_canister_call::CanisterCall as PbCanisterCall;
+        let call = match &stop_canister_call.call {
+            CanisterCall::Request(request) => PbCanisterCall::Request(request.as_ref().into()),
+            CanisterCall::Ingress(ingress) => PbCanisterCall::Ingress(ingress.as_ref().into()),
+        };
+        pb_metadata::StopCanisterCall {
+            canister_call: Some(call),
+            effective_canister_id: Some((stop_canister_call.effective_canister_id).into()),
+            time: Some(pb_metadata::Time {
+                time_nanos: stop_canister_call.time.as_nanos_since_unix_epoch(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::StopCanisterCall)> for StopCanisterCall {
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (time, stop_canister_call): (Time, pb_metadata::StopCanisterCall),
+    ) -> Result<Self, Self::Error> {
+        use pb_metadata::stop_canister_call::CanisterCall as PbCanisterCall;
+        let pb_call = stop_canister_call
+            .canister_call
+            .ok_or(ProxyDecodeError::MissingField(
+                "StopCanisterCall::canister_call",
+            ))?;
+
+        let call = match pb_call {
+            PbCanisterCall::Request(request) => {
+                CanisterCall::Request(Arc::new(request.try_into()?))
+            }
+            PbCanisterCall::Ingress(ingress) => {
+                CanisterCall::Ingress(Arc::new(ingress.try_into()?))
+            }
+        };
+        let effective_canister_id = try_from_option_field(
+            stop_canister_call.effective_canister_id,
+            "StopCanisterCall::effective_canister_id",
+        )?;
+        Ok(StopCanisterCall {
+            call,
+            effective_canister_id,
+            time: stop_canister_call
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+mod testing {
+    use super::*;
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing replicated state fields to think about and/or ask the Message
+    /// Routing team to think about any repercussions to the subnet splitting logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the replicated state to also require changes
+    /// to the subnet splitting logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `ReplicatedState::split()` and `ReplicatedState::after_split()` for more
+    /// context.
+    #[allow(dead_code)]
+    fn subnet_splitting_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let canister_management_calls = CanisterManagementCalls {
+            install_code_call_manager: Default::default(),
+            stop_canister_call_manager: Default::default(),
+        };
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _subnet_call_context_manager = SubnetCallContextManager {
+            next_callback_id: 0,
+            setup_initial_dkg_contexts: Default::default(),
+            sign_with_ecdsa_contexts: Default::default(),
+            canister_http_request_contexts: Default::default(),
+            ecdsa_dealings_contexts: Default::default(),
+            bitcoin_get_successors_contexts: Default::default(),
+            bitcoin_send_transaction_internal_contexts: Default::default(),
+            canister_management_calls,
+        };
     }
 }

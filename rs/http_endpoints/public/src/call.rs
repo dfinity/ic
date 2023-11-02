@@ -3,7 +3,7 @@
 use crate::{
     body::BodyReceiverLayer,
     common::{
-        get_cors_headers, make_plaintext_response, make_response, remove_effective_canister_id,
+        get_cors_headers, make_plaintext_response, make_response, remove_effective_principal_id,
     },
     metrics::LABEL_UNKNOWN,
     types::ApiReqType,
@@ -15,7 +15,9 @@ use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact, ingress_pool::IngressPoolThrottler, time_source::TimeSource,
+    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
+    ingress_pool::IngressPoolThrottler,
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
@@ -24,7 +26,7 @@ use ic_registry_client_helpers::{
     subnet::{IngressMessageSettings, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_types::messages::SignedIngressContent;
+use ic_types::{artifact_kind::IngressArtifact, messages::SignedIngressContent};
 use ic_types::{
     messages::{SignedIngress, SignedRequestBytes},
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
@@ -49,7 +51,7 @@ pub(crate) struct CallService {
     validator_executor: ValidatorExecutor<SignedIngressContent>,
     ingress_filter: IngressFilterService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
 }
 
 impl CallService {
@@ -65,7 +67,7 @@ impl CallService {
         validator_executor: ValidatorExecutor<SignedIngressContent>,
         ingress_filter: IngressFilterService,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
+        ingress_tx: Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
     ) -> EndpointService {
         let base_service = BoxCloneService::new(
             ServiceBuilder::new()
@@ -172,12 +174,23 @@ impl Service<Request<Vec<u8>>> for CallService {
             }
         };
 
-        let effective_canister_id = match remove_effective_canister_id(&mut parts) {
-            Ok(canister_id) => canister_id,
+        let effective_principal_id = match remove_effective_principal_id(&mut parts) {
+            Ok(principal_id) => principal_id,
             Err(res) => {
                 error!(
                     self.log,
                     "Effective canister ID is not attached to call request. This is a bug."
+                );
+                return Box::pin(async move { Ok(res) });
+            }
+        };
+
+        let effective_canister_id = match CanisterId::new(effective_principal_id) {
+            Ok(canister_id) => canister_id,
+            Err(_) => {
+                let res = make_plaintext_response(
+                    StatusCode::BAD_REQUEST,
+                    format!("Invalid canister id: {}", effective_principal_id),
                 );
                 return Box::pin(async move { Ok(res) });
             }
@@ -259,11 +272,11 @@ impl Service<Request<Vec<u8>>> for CallService {
 
             let is_overloaded = ingress_throttler.read().unwrap().exceeds_threshold()
                 || ingress_tx
-                    .try_send(UnvalidatedArtifact {
+                    .try_send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                         message: msg,
                         peer_id: node_id,
                         timestamp: time_source.get_relative_time(),
-                    })
+                    }))
                     .is_err();
 
             let response = if is_overloaded {

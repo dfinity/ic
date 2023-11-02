@@ -53,9 +53,18 @@ impl<T: Eq + Clone> HeightIndex<T> {
     /// Removes `value` from `height`. Returns `true` if `value` was removed,
     /// `false` if not present.
     pub fn remove(&mut self, height: Height, value: &T) -> bool {
+        self.retain(height, |x| x != value)
+    }
+
+    /// Retains only the elements of the given height that match the predicate.
+    /// Returns `true` if any value was removed, otherwise `false`.
+    pub fn retain<F>(&mut self, height: Height, f: F) -> bool
+    where
+        F: FnMut(&T) -> bool,
+    {
         if let Some(bucket) = self.buckets.get_mut(&height) {
             let len = bucket.len();
-            bucket.retain(|x| x != value);
+            bucket.retain(f);
             let removed = len != bucket.len();
             if bucket.is_empty() {
                 self.buckets.remove(&height);
@@ -355,5 +364,26 @@ mod tests {
         }
 
         assert!(index.buckets.is_empty());
+    }
+
+    #[test]
+    fn test_height_index_retain() {
+        let mut index = HeightIndex::new();
+        let max = 100;
+        let height = Height::from(0);
+
+        for i in 0..max {
+            index.insert(height, &i);
+        }
+
+        assert!(!index.retain(height, |&x| x < max));
+        assert!(index.retain(height, |&x| x % 2 == 0));
+
+        assert!(!index
+            .buckets
+            .get(&height)
+            .unwrap()
+            .iter()
+            .any(|x| x % 2 != 0));
     }
 }

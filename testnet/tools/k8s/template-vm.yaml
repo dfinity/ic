@@ -1,0 +1,76 @@
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: "$NODE_NAME-image"
+  namespace: "$NAMESPACE"
+spec:
+  source:
+    http:
+      url: "https://dfinity-download-public.s3.eu-central-1.amazonaws.com/ic/$VERSION/guest-os/disk-img-dev/disk-img.tar.gz"
+  contentType: "archive"
+  pvc:
+    storageClassName: ceph-block
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 100Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  labels:
+    kubevirt.io/vm: $NODE_NAME
+  name: $NODE_NAME
+  namespace: "$NAMESPACE"
+spec:
+  running: true
+  template:
+    metadata:
+      annotations:
+        "cni.projectcalico.org/ipAddrs": "[\"$IPV6\"]"
+      labels:
+        kubevirt.io/vm: $NODE_NAME
+        kubevirt.io/network: passt
+    spec:
+      subdomain: "mysubdomain"
+      domain:
+        cpu:
+          cores: 32
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
+        devices:
+          disks:
+            - name: disk0
+              disk:
+                bus: virtio
+            - name: disk1
+              disk:
+                bus: scsi
+              serial: "config"
+          interfaces:
+          - name: default
+            passt: {}
+            ports:
+              - port: 22
+              - port: 4100
+              - port: 2497
+              - port: 8080
+              - port: 9090
+              - port: 9100
+        resources:
+          requests:
+            memory: 64Gi
+      networks:
+      - name: default
+        pod: {}
+      volumes:
+        - dataVolume:
+            name: "$NODE_NAME-image"
+          name: disk0
+        - dataVolume:
+            name: "$NODE_NAME-config"
+          name: disk1

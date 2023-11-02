@@ -8,10 +8,10 @@ mod ingress_selector;
 #[cfg(test)]
 mod proptests;
 
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
     ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
 };
@@ -19,6 +19,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
@@ -95,7 +96,7 @@ impl IngressManagerMetrics {
             ),
             ingress_selector_validate_payload_time: metrics_registry.histogram(
                 "ingress_selector_validate_payload_time",
-                "Ingress Selector vaidate_payload execution time in seconds",
+                "Ingress Selector validate_payload execution time in seconds",
                 decimal_buckets(-3, 1),
             ),
             ingress_payload_cache_size: metrics_registry.int_gauge(
@@ -115,7 +116,8 @@ pub struct IngressManager {
     ingress_payload_cache: Arc<RwLock<IngressPayloadCache>>,
     ingress_pool: IngressPoolSelectWrapper,
     registry_client: Arc<dyn RegistryClient>,
-    request_validator: Arc<dyn HttpRequestVerifier<SignedIngressContent>>,
+    request_validator:
+        Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     metrics: IngressManagerMetrics,
     subnet_id: SubnetId,
     log: ReplicaLogger,
@@ -146,12 +148,12 @@ impl IngressManager {
         let request_validator = if malicious_flags.maliciously_disable_ingress_validation {
             pub struct DisabledHttpRequestVerifier;
 
-            impl<C: HttpRequestContent> HttpRequestVerifier<C> for DisabledHttpRequestVerifier {
+            impl<C: HttpRequestContent, R> HttpRequestVerifier<C, R> for DisabledHttpRequestVerifier {
                 fn validate_request(
                     &self,
                     _request: &HttpRequest<C>,
                     _current_time: Time,
-                    _registry_version: RegistryVersion,
+                    _root_of_trust_provider: &R,
                 ) -> Result<CanisterIdSet, RequestValidationError> {
                     Ok(CanisterIdSet::all())
                 }
@@ -217,20 +219,19 @@ impl IngressManager {
             }),
         }
     }
+
+    fn registry_root_of_trust_provider(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> RegistryRootOfTrustProvider {
+        RegistryRootOfTrustProvider::new(Arc::clone(&self.registry_client), registry_version)
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
-    use ic_interfaces::{
-        artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
-        ingress_pool::{
-            ChangeSet, IngressPool, PoolSection, UnvalidatedIngressArtifact,
-            ValidatedIngressArtifact,
-        },
-        time_source::TimeSource,
-    };
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client::client::RegistryClientImpl;
@@ -247,10 +248,8 @@ pub(crate) mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
-    use ic_types::{
-        artifact_kind::IngressArtifact, ingress::IngressStatus, Height, RegistryVersion, SubnetId,
-    };
-    use std::sync::{Arc, RwLockWriteGuard};
+    use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
+    use std::{ops::DerefMut, sync::Arc};
 
     pub(crate) fn setup_registry(
         subnet_id: SubnetId,
@@ -345,59 +344,11 @@ pub(crate) mod tests {
         setup_with_params(None, None, None, None, run)
     }
 
-    /// This is a wrapper around the `RwLockWriteGuard` of an `IngressPoolImpl`, which implements `IngressPool`
-    /// related traits, allowing easy manipulation of the `IngressPool` for testing.
-    pub(crate) struct IngressPoolTestAccess<'a>(RwLockWriteGuard<'a, IngressPoolImpl>);
-
     /// This function takes a lock on the ingress pool and allows the closure to access it.
-    pub(crate) fn access_ingress_pool<'a, F, T>(
-        ingress_pool: &'a Arc<RwLock<IngressPoolImpl>>,
-        f: F,
-    ) -> T
+    pub(crate) fn access_ingress_pool<F, T>(ingress_pool: &Arc<RwLock<IngressPoolImpl>>, f: F) -> T
     where
-        F: FnOnce(IngressPoolTestAccess<'a>) -> T,
+        F: FnOnce(&mut IngressPoolImpl) -> T,
     {
-        f(IngressPoolTestAccess(ingress_pool.write().unwrap()))
-    }
-
-    impl<'a> IngressPool for IngressPoolTestAccess<'a> {
-        fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact> {
-            self.0.validated()
-        }
-
-        fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
-            self.0.unvalidated()
-        }
-    }
-
-    impl<'a> MutablePool<IngressArtifact, ChangeSet> for IngressPoolTestAccess<'a> {
-        fn insert(&mut self, unvalidated_artifact: UnvalidatedArtifact<SignedIngress>) {
-            self.0.insert(unvalidated_artifact)
-        }
-
-        fn apply_changes(
-            &mut self,
-            time_source: &dyn TimeSource,
-            change_set: ChangeSet,
-        ) -> ChangeResult<IngressArtifact> {
-            self.0.apply_changes(time_source, change_set)
-        }
-    }
-
-    impl<'a> ValidatedPoolReader<IngressArtifact> for IngressPoolTestAccess<'a> {
-        fn contains(&self, id: &IngressMessageId) -> bool {
-            self.0.contains(id)
-        }
-
-        fn get_validated_by_identifier(&self, _id: &IngressMessageId) -> Option<SignedIngress> {
-            unimplemented!()
-        }
-
-        fn get_all_validated_by_filter(
-            &self,
-            _filter: &(),
-        ) -> Box<dyn Iterator<Item = SignedIngress> + '_> {
-            unimplemented!()
-        }
+        f(ingress_pool.write().unwrap().deref_mut())
     }
 }

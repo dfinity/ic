@@ -26,10 +26,17 @@ function read_variables() {
         case "${key}" in
             "certificate_orchestrator_uri") ORCHESTRATOR_URI="${value}" ;;
             "certificate_orchestrator_canister_id") ORCHESTRATOR_CANISTER_ID="${value}" ;;
+            "certificate_issuer_name_servers") NAME_SERVERS="${value}" ;;
+            "certificate_issuer_name_servers_port") NAME_SERVERS_PORT="${value}" ;;
             "certificate_issuer_delegation_domain") DELEGATION_DOMAIN="${value}" ;;
+            "certificate_issuer_acme_provider_url") ACME_PROVIDER_URL="${value}" ;;
             "certificate_issuer_acme_id") ACME_ACCOUNT_ID="${value}" ;;
             "certificate_issuer_acme_key") ACME_ACCOUNT_KEY="${value}" ;;
+            "certificate_issuer_cloudflare_api_url") CLOUDFLARE_API_URL="${value}" ;;
             "certificate_issuer_cloudflare_api_key") CLOUDFLARE_API_KEY="${value}" ;;
+            "certificate_issuer_task_delay_sec") TASK_DELAY_SEC="${value}" ;;
+            "certificate_issuer_task_error_delay_sec") TASK_ERROR_DELAY_SEC="${value}" ;;
+            "certificate_issuer_peek_sleep_sec") PEEK_SLEEP_SEC="${value}" ;;
         esac
     done <"${BOOT_DIR}/certificate_issuer.conf"
 }
@@ -49,10 +56,17 @@ NNS_KEY_PATH="${CFG_DIR}/root_key.der"
 KEY_PATH=${CFG_DIR}/enc_key.pem
 ORCHESTRATOR_URI=${ORCHESTRATOR_URI}
 ORCHESTRATOR_CANISTER_ID=${ORCHESTRATOR_CANISTER_ID}
+NAME_SERVERS=${NAME_SERVERS:-}
+NAME_SERVERS_PORT=${NAME_SERVERS_PORT:-}
 DELEGATION_DOMAIN=${DELEGATION_DOMAIN}
-ACME_ACCOUNT_ID=${ACME_ACCOUNT_ID}
-ACME_ACCOUNT_KEY=${ACME_ACCOUNT_KEY}
+ACME_PROVIDER_URL=${ACME_PROVIDER_URL:-}
+ACME_ACCOUNT_ID=${ACME_ACCOUNT_ID:-}
+ACME_ACCOUNT_KEY=${ACME_ACCOUNT_KEY:-}
+CLOUDFLARE_API_URL=${CLOUDFLARE_API_URL:-}
 CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY}
+TASK_DELAY_SEC=${TASK_DELAY_SEC:-}
+TASK_ERROR_DELAY_SEC=${TASK_ERROR_DELAY_SEC:-}
+PEEK_SLEEP_SEC=${PEEK_SLEEP_SEC:-}
 EOF
 }
 

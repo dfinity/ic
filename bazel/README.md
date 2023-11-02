@@ -35,7 +35,7 @@ develop inside the build and development container with
 `./gitlab-ci/container/container-run.sh`.
 
 ```bash
-bazel test //rs/crypto/sha:all
+bazel test //rs/crypto/sha2:all
 ```
 
 Most targets should build on the host machine. However, the IC-OS image only
@@ -210,6 +210,8 @@ rust_test(
 Python bazel targets are built very similarly and also include `py_test`, `py_library`, `py_binary`. Note that `py_library` is a python module which tests can import and test against. Test deps can either be a `py_library` or a `requirement`, see example below:
 
 ```
+load("@python_deps//:requirements.bzl", "requirement")
+
 py_library(
     name = "my_module",
     srcs = ["my_module.py"],
@@ -227,7 +229,8 @@ Note that if a module is defined with a package dependency, then the test does n
 
 Some good examples for writing bazel tests can be found in `scalability/BUILD.bazel`.
 
-To add new packages required for a test run in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/gitlab-ci/src/docs/HowTo-Developer.adoc).
+To add python packages to the build container for use in a build or test target in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/gitlab-ci/src/docs/HowTo-Developer.adoc).
+
 
 ## Target Labels
 
@@ -276,7 +279,7 @@ contrast the  the  `Cargo.toml` file with its associated `BAZEL.build` file.
 # Visualize and Share
 
 Developers may inspect and share detailed build results, timings, logs and
-artifacts with the buildfarm URL. Note the buildfarm URL emited at the start and
+artifacts with the buildfarm URL. Note the buildfarm URL emitted at the start and
 end of the build.
 
 
@@ -292,7 +295,7 @@ Mark the test as **flaky** to make Bazel will retry the test up to three times.
 ```bash
 rust_test(
 	name = "foo_test",
-  # lines ommitted
+  # lines omitted
 	flaky = True",
 )
 ```
@@ -303,7 +306,7 @@ concurrent test cases collide but may greatly increase the runtime of the tests.
 ```bash
 rust_test(
 	name = "foo_test",
-  # lines ommitted
+  # lines omitted
   args = [
        "--test-threads",
       "1",

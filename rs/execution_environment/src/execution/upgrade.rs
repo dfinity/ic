@@ -1,7 +1,10 @@
-// This module defines how the `install_code` IC method in mode
-// `upgrade` is executed.
-// See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
-// and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
+//! This module defines how the `install_code` IC method in mode
+//! `upgrade` is executed.
+//! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
+//! and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
+
+use std::sync::Arc;
+
 use crate::canister_manager::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
@@ -13,13 +16,16 @@ use crate::execution::install_code::{
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_ic00_types::CanisterInstallModeV2;
 use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
-use ic_interfaces::messages::CanisterCall;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_replicated_state::{CanisterState, SystemState};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
+};
 use ic_system_api::ApiType;
-use ic_types::funds::Cycles;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types::{funds::Cycles, messages::CanisterCall};
 
 #[cfg(test)]
 mod tests;
@@ -86,6 +92,7 @@ pub(crate) fn execute_upgrade(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
@@ -118,9 +125,16 @@ pub(crate) fn execute_upgrade(
     };
 
     let method = WasmMethod::System(SystemMethod::CanisterPreUpgrade);
-    if !execution_state.exports_method(&method) {
-        // If the Wasm module does not export the method, then this execution
-        // succeeds as a no-op.
+    let skip_pre_upgrade = match context.mode {
+        CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
+            upgrade_options.skip_pre_upgrade.unwrap_or(false)
+        }
+        _ => false,
+    };
+
+    if skip_pre_upgrade || !execution_state.exports_method(&method) {
+        // If the Wasm module does not export the method, or skip_pre_upgrade
+        // is enabled then this execution succeeds as a no-op.
         upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             context,
             clean_canister,
@@ -128,6 +142,7 @@ pub(crate) fn execute_upgrade(
             original,
             round,
             round_limits,
+            fd_factory,
         )
     } else {
         let wasm_execution_result = round.hypervisor.execute_dts(
@@ -153,6 +168,7 @@ pub(crate) fn execute_upgrade(
                     original,
                     round,
                     round_limits,
+                    fd_factory,
                 )
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -170,6 +186,7 @@ pub(crate) fn execute_upgrade(
                     paused_helper: helper.pause(),
                     context,
                     original,
+                    fd_factory,
                 });
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
@@ -191,14 +208,16 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
-    let result = helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) =
+        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
 
     info!(
         round.log,
         "Executing (canister_pre_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
         helper.canister().canister_id(),
-        helper.instructions_consumed(),
+        instructions_consumed,
         helper.instructions_left(),
     );
 
@@ -214,6 +233,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
         original,
         round,
         round_limits,
+        fd_factory,
     )
 }
 
@@ -225,6 +245,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
     let canister_id = helper.canister().canister_id();
     let context_sender = context.sender();
@@ -241,11 +262,6 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         original.compilation_cost_handling,
     );
 
-    let memory_handling = if context.keep_main_memory {
-        MemoryHandling::KeepBothMemories
-    } else {
-        MemoryHandling::KeepOnlyStableMemory
-    };
     if let Err(err) = helper.replace_execution_state_and_allocations(
         instructions_from_compilation,
         result,
@@ -281,7 +297,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::start(original.time),
             execution_state,
-            &SystemState::new_for_start(canister_id),
+            &SystemState::new_for_start(canister_id, fd_factory),
             helper.canister_memory_usage(),
             helper.execution_parameters().clone(),
             FuncRef::Method(method),
@@ -343,13 +359,14 @@ fn upgrade_stage_3b_process_start_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let result = helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) =
+        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
 
     info!(
         round.log,
         "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
         helper.canister().canister_id(),
-        helper.instructions_consumed(),
+        instructions_consumed,
         helper.instructions_left(),
     );
 
@@ -449,12 +466,13 @@ fn upgrade_stage_4b_process_post_upgrade_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let result = helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) =
+        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
     info!(
         round.log,
         "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
         helper.canister().canister_id(),
-        helper.instructions_consumed(),
+        instructions_consumed,
         helper.instructions_left();
     );
     if let Err(err) = result {
@@ -473,6 +491,7 @@ struct PausedPreUpgradeExecution {
     paused_helper: PausedInstallCodeHelper,
     context: InstallCodeContext,
     original: OriginalContext,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
@@ -520,6 +539,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     self.original,
                     round,
                     round_limits,
+                    self.fd_factory,
                 )
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -546,7 +566,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_pre_upgrade) execution of canister {}.",
@@ -555,6 +575,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         self.paused_wasm_execution.abort();
         (
             self.original.message,
+            self.original.call_id,
             self.original.prepaid_execution_cycles,
         )
     }
@@ -644,7 +665,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id
@@ -653,6 +674,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         self.paused_wasm_execution.abort();
         (
             self.original.message,
+            self.original.call_id,
             self.original.prepaid_execution_cycles,
         )
     }
@@ -738,13 +760,13 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_post_upgrade) execution of canister {}.",
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        (self.original.message, Cycles::zero())
+        (self.original.message, self.original.call_id, Cycles::zero())
     }
 }

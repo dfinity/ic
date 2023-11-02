@@ -28,8 +28,6 @@ pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
 pub mod memory_manager_upgrade_storage;
 
-pub const BASIS_POINTS_PER_UNITY: u64 = 10_000;
-
 // 10^8
 pub const E8: u64 = 100_000_000;
 
@@ -47,7 +45,7 @@ pub const SNS_CREATION_FEE: u64 = 180 * ONE_TRILLION;
 pub const NANO_SECONDS_PER_SECOND: u64 = 1_000_000_000;
 
 // The size of a WASM page in bytes, as defined by the WASM specification
-#[cfg(any(target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 
 // 1 Mi. Approximately 10^6, 1 million (slightly more).
@@ -212,7 +210,7 @@ impl ExplosiveTokens {
 
     // This is a bit special and is an interface optimization that serves a
     // common use case: proportional scaling. E.g. Suppose you have two
-    // accounts, one with 100 ICP and aother with 200 ICP. From these two
+    // accounts, one with 100 ICP and another with 200 ICP. From these two
     // sources, you want to raise 30 ICP. If you want the accounts to be used
     // "proportionally", then you'd source 10 ICP from the first account, and 20
     // ICP from the second. To calculate these, you would do
@@ -754,7 +752,7 @@ pub fn validate_proposal_url(
 }
 
 /// Returns the total amount of memory (heap, stable memory, etc) that the calling canister has allocated.
-#[cfg(any(target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 pub fn total_memory_size_bytes() -> usize {
     core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
 }
@@ -765,7 +763,7 @@ pub fn total_memory_size_bytes() -> usize {
 }
 
 /// Returns the amount of stable memory that the calling canister has allocated.
-#[cfg(any(target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 pub fn stable_memory_size_bytes() -> usize {
     dfn_core::api::stable_memory_size_in_pages() as usize * WASM_PAGE_SIZE_BYTES
 }

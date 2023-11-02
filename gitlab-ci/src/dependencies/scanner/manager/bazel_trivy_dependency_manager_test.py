@@ -52,6 +52,12 @@ def test_return_os_finding():
                         "VulnerabilityID": "CVE-123",
                         "CVSS": {"nvd": {"V3Score": 8.6}},
                     },
+                    {
+                        "PkgName": "linux-modules-5.15.0-76-generic",
+                        "InstalledVersion": "5.15.0-76.83~20.04.1",
+                        "VulnerabilityID": "CVE-2023-35829",
+                        "CVSS": {"nvd": {"V3Score": 7}},
+                    },
                 ],
             }
         ],
@@ -62,7 +68,7 @@ def test_return_os_finding():
 
     res = manager.get_findings("repo", Project(name="proj", path="/some/path", link="https://some.link"), None)
 
-    assert len(res) == 1
+    assert len(res) == 2
     assert res[0].repository == "repo"
     assert res[0].scanner == manager.get_scanner_id()
     assert res[0].vulnerable_dependency == Dependency(
@@ -91,6 +97,24 @@ def test_return_os_finding():
     assert res[0].score == 9
     assert res[0].more_info is None
 
+    assert res[1].repository == "repo"
+    assert res[1].scanner == manager.get_scanner_id()
+    assert res[1].vulnerable_dependency == Dependency(
+        id="linux-modules-5.15.0",
+        name="linux-modules-5.15.0-76-generic",
+        version="5.15.0-76.83~20.04.1",
+    )
+    assert res[1].vulnerabilities == [
+        Vulnerability(id="CVE-2023-35829", name="CVE-2023-35829", description="n/a", score=7),
+    ]
+    assert res[1].first_level_dependencies == []
+    assert res[1].projects == ["OSP: /some/path (https://some.link)"]
+    assert res[1].risk_assessor == []
+    assert res[1].risk is None
+    assert res[1].patch_responsible == []
+    assert res[1].due_date is None
+    assert res[1].score == 7
+    assert res[1].more_info is None
 
 def test_return_binary_finding():
     binary_finding = {

@@ -1,7 +1,7 @@
 use ic_crypto_internal_basic_sig_cose::*;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
 use ic_crypto_internal_test_vectors::*;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 
 // A COSE-encoded ECDSA-P256 public key, with a signature over an example

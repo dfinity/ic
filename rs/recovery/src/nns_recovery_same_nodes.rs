@@ -14,6 +14,7 @@ use slog::Logger;
 use std::{iter::Peekable, net::IpAddr, path::PathBuf};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumMessage, EnumString};
+use url::Url;
 
 use crate::{Recovery, Step};
 
@@ -47,6 +48,14 @@ pub struct NNSRecoverySameNodesArgs {
     /// Replica version to upgrade the broken subnet to
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub upgrade_version: Option<ReplicaVersion>,
+
+    /// URL of the upgrade image
+    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    pub upgrade_image_url: Option<Url>,
+
+    /// SHA256 hash of the upgrade image
+    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    pub upgrade_image_hash: Option<String>,
 
     /// IP address of the node to download the subnet state from. Should be different to node used in nns-url.
     #[clap(long)]
@@ -187,9 +196,19 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::ICReplay => {
                 if let Some(upgrade_version) = self.params.upgrade_version.clone() {
+                    let params = self.params.clone();
+                    let (url, hash) = params
+                        .upgrade_image_url
+                        .and_then(|url| params.upgrade_image_hash.map(|hash| (url, hash)))
+                        .or_else(|| Recovery::get_img_url_and_sha(&upgrade_version).ok())
+                        .ok_or(RecoveryError::UnexpectedError(
+                            "couldn't retrieve the upgrade image params".into(),
+                        ))?;
                     Ok(Box::new(self.recovery.get_replay_with_upgrade_step(
                         self.params.subnet_id,
                         upgrade_version,
+                        url,
+                        hash,
                     )?))
                 } else {
                     Ok(Box::new(self.recovery.get_replay_step(

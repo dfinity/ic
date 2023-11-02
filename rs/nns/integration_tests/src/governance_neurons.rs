@@ -128,10 +128,16 @@ fn test_merge_neurons_and_simulate_merge_neurons() {
         // assert simulated response is identical
         let ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Merge(merge_simulate)),
-        } = simulate_1_res else {panic!("Wrong response");};
+        } = simulate_1_res
+        else {
+            panic!("Wrong response");
+        };
         let ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Merge(merge_real)),
-        } = merge1_res else {panic!("Wrong response");};
+        } = merge1_res
+        else {
+            panic!("Wrong response");
+        };
 
         // We test we're getting the same info. neuron_info is derived and tested
         // in unit tests.

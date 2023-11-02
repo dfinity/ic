@@ -1,5 +1,5 @@
 use ic_certification_test_utils::{hash_full_tree, CertificateBuilder, CertificateData};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{
     flatmap, Digest, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
     WitnessGenerator,

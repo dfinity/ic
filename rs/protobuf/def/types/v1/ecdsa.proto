@@ -1,10 +1,12 @@
 syntax = "proto3";
 
 package types.v1;
+
 import "registry/crypto/v1/crypto.proto";
 import "registry/subnet/v1/subnet.proto";
-import "types/v1/types.proto";
 import "state/queues/v1/queues.proto";
+import "types/v1/signature.proto";
+import "types/v1/types.proto";
 
 message EcdsaPayload {
   repeated CompletedSignature signature_agreements = 1;
@@ -147,7 +149,7 @@ message CompletedSignature {
   reserved 2;
   state.queues.v1.Response unreported = 3;
   bytes pseudo_random_id = 4;
- }
+}
 
 message EcdsaReshareRequest {
   reserved 1;
@@ -175,3 +177,43 @@ message KeyTranscriptCreation {
   UnmaskedTranscript created = 9;
 }
 
+message EcdsaMessage {
+  oneof msg {
+    registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
+    IDkgDealingSupport dealing_support = 2;
+    EcdsaSigShare sig_share = 3;
+    EcdsaComplaint complaint = 4;
+    EcdsaOpening opening = 5;
+  }
+}
+
+message EcdsaSigShare {
+  NodeId signer_id = 1;
+  RequestId request_id = 2;
+  bytes sig_share_raw = 3;
+}
+
+message EcdsaComplaint {
+  EcdsaComplaintContent content = 1;
+  types.v1.BasicSignature signature = 2;
+}
+
+message EcdsaComplaintContent {
+  registry.subnet.v1.IDkgComplaint idkg_complaint = 1;
+}
+
+message EcdsaOpening {
+  EcdsaOpeningContent content = 1;
+  types.v1.BasicSignature signature = 2;
+}
+
+message EcdsaOpeningContent {
+  registry.subnet.v1.IDkgOpening idkg_opening = 1;
+}
+
+message IDkgDealingSupport {
+  registry.subnet.v1.IDkgTranscriptId transcript_id = 1;
+  types.v1.NodeId dealer = 2;
+  bytes dealing_hash = 3;
+  types.v1.BasicSignature sig_share = 4;
+}

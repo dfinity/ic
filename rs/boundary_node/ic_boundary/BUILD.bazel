@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,14 +32,14 @@ DEPENDENCIES = [
     "@crate_index//:futures-util",
     "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:http",
+    "@crate_index//:http-body",
     "@crate_index//:hyper",
     "@crate_index//:hyper-rustls",
     "@crate_index//:instant-acme",
-    "@crate_index//:lazy_static",
     "@crate_index//:mockall",
-    "@crate_index//:opentelemetry_0_18_0",
-    "@crate_index//:opentelemetry_prometheus_0_11_0",
     "@crate_index//:prometheus",
+    "@crate_index//:rand_0_8_4",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
     "@crate_index//:rustls",
@@ -52,11 +52,14 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
     "@crate_index//:tokio-rustls",
     "@crate_index//:tokio",
+    "@crate_index//:tower",
+    "@crate_index//:tower_governor",
+    "@crate_index//:tower-http",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
     "@crate_index//:url",
     "@crate_index//:wiremock",
-    "@crate_index//:x509_parser_0_15",
+    "@crate_index//:x509-parser",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -69,11 +72,17 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+VERSION = "0.1.0"
+
 rust_binary(
     name = "ic-boundary",
-    srcs = glob(["src/**"]),
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/lib.rs"],
+    ),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = VERSION,
     deps = DEPENDENCIES,
 )
 
@@ -81,6 +90,20 @@ rust_test(
     name = "ic_boundary",
     aliases = ALIASES,
     crate = ":ic-boundary",
+    crate_features = ["tls"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_library(
+    name = "ic-boundary-lib",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["tls"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    version = VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -1,1 +1,0 @@
-FARM_RATE_LIMIT = 16

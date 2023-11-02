@@ -30,7 +30,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:serde",
-    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",

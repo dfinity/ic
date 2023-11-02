@@ -35,7 +35,7 @@ use crate::{
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_ic00_types::CanisterInstallModeError;
 use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
@@ -157,7 +157,7 @@ impl governance::Mode {
     ///
     /// # Arguments
     /// * `action` Value in the action field of a Proposal. This function
-    ///   determins whether to allow submission of the proposal.
+    ///   determines whether to allow submission of the proposal.
     /// * `disallowed_target_canister_ids`: When the action is a
     ///   ExecuteGenericNervousSystemFunction, the target of the function cannot
     ///   be one of these canisters. Generally, this would contain the ID of the
@@ -1976,7 +1976,7 @@ impl From<DeregisterDappCanisters> for Action {
 
 pub mod test_helpers {
     use super::*;
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use rand::{Rng, RngCore};
     use std::{
         borrow::BorrowMut,
@@ -2533,7 +2533,7 @@ pub(crate) mod tests {
                 Action::TransferSnsTreasuryFunds(Default::default())
             ];
 
-            // Conditionally allow: No targetting SNS canisters.
+            // Conditionally allow: No targeting SNS canisters.
             fn execute(function_id: u64) -> Action {
                 Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
                     function_id,

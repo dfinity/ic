@@ -5,6 +5,7 @@ mod query_cache;
 mod query_call_graph;
 mod query_context;
 mod query_scheduler;
+pub mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -13,12 +14,15 @@ use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
+use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{QueryExecutionService, QueryHandler};
+use ic_interfaces::execution_environment::{
+    QueryExecutionError, QueryExecutionResponse, QueryExecutionService, QueryHandler,
+};
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -33,8 +37,9 @@ use ic_types::{
     CanisterId, NumInstructions,
 };
 use serde::Serialize;
+use std::convert::Infallible;
+use std::str::FromStr;
 use std::{
-    convert::Infallible,
     future::Future,
     pin::Pin,
     sync::Arc,
@@ -44,6 +49,9 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
+use self::query_stats::QueryStatsCollector;
+use ic_ic00_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload, QueryMethod};
+use ic_replicated_state::NetworkTopology;
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -98,6 +106,7 @@ pub struct InternalHttpQueryHandler {
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    local_query_execution_stats: QueryStatsCollector,
     query_cache: query_cache::QueryCache,
 }
 
@@ -118,6 +127,7 @@ impl InternalHttpQueryHandler {
         metrics_registry: &MetricsRegistry,
         max_instructions_per_query: NumInstructions,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        local_query_execution_stats: QueryStatsCollector,
     ) -> Self {
         let query_cache_capacity = config.query_cache_capacity;
         Self {
@@ -128,9 +138,37 @@ impl InternalHttpQueryHandler {
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
             cycles_account_manager,
+            local_query_execution_stats,
             query_cache: query_cache::QueryCache::new(metrics_registry, query_cache_capacity),
         }
     }
+}
+
+fn route_bitcoin_message(
+    network: BitcoinNetwork,
+    network_topology: &NetworkTopology,
+) -> Result<CanisterId, UserError> {
+    let canister_id = match network {
+        // Route to the bitcoin canister if it exists, otherwise return the error.
+        BitcoinNetwork::Testnet
+        | BitcoinNetwork::testnet
+        | BitcoinNetwork::Regtest
+        | BitcoinNetwork::regtest => {
+            network_topology
+                .bitcoin_testnet_canister_id
+                .ok_or(UserError::new(
+                    ErrorCode::CanisterNotHostedBySubnet,
+                    "Bitcoin testnet canister is not installed.".to_string(),
+                ))?
+        }
+        BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => network_topology
+            .bitcoin_mainnet_canister_id
+            .ok_or(UserError::new(
+                ErrorCode::CanisterNotHostedBySubnet,
+                "Bitcoin mainnet canister is not installed.".to_string(),
+            ))?,
+    };
+    Ok(canister_id)
 }
 
 impl QueryHandler for InternalHttpQueryHandler {
@@ -138,11 +176,34 @@ impl QueryHandler for InternalHttpQueryHandler {
 
     fn query(
         &self,
-        query: UserQuery,
+        mut query: UserQuery,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
+
+        // Update the query receiver if the query is for the management canister.
+        if query.receiver == CanisterId::ic_00() {
+            let network = match QueryMethod::from_str(query.method_name.as_str()) {
+                Ok(QueryMethod::BitcoinGetUtxosQuery) => {
+                    let args = BitcoinGetUtxosArgs::decode(&query.method_payload)?;
+                    args.network
+                }
+                Ok(QueryMethod::BitcoinGetBalanceQuery) => {
+                    let args = BitcoinGetBalanceArgs::decode(&query.method_payload)?;
+                    args.network
+                }
+                Err(_) => {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterMethodNotFound,
+                        format!("Query method {} not found.", query.method_name),
+                    ))
+                }
+            };
+
+            query.receiver =
+                route_bitcoin_message(network, &state.as_ref().metadata.network_topology)?;
+        }
 
         // Check the query cache first (if the query caching is enabled).
         // If a valid cache entry found, the result will be immediately returned.
@@ -172,7 +233,6 @@ impl QueryHandler for InternalHttpQueryHandler {
             state,
             data_certificate,
             subnet_available_memory,
-            self.config.subnet_memory_capacity,
             max_canister_memory_size,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
@@ -183,12 +243,32 @@ impl QueryHandler for InternalHttpQueryHandler {
             query.receiver,
             &self.metrics.query_critical_error,
         );
+
+        let canister_id = query.receiver;
+        let ingress_payload_size = query.method_payload.len();
+
         let result = context.run(
             query,
             &self.metrics,
             Arc::clone(&self.cycles_account_manager),
             &measurement_scope,
         );
+
+        let egress_payload_size = match &result {
+            Ok(WasmResult::Reply(vec)) => vec.len(),
+            Ok(WasmResult::Reject(_)) => 0,
+            Err(_) => 0,
+        };
+
+        // Add query statistics to the query aggregator.
+        if self.config.query_stats_aggregation == FlagStatus::Enabled {
+            self.local_query_execution_stats.register_query_statistics(
+                canister_id,
+                context.total_instructions_used,
+                ingress_payload_size as u64,
+                egress_payload_size as u64,
+            );
+        }
 
         // Add the query execution result to the query cache  (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
@@ -229,7 +309,7 @@ impl QueryHandler for HttpQueryHandler {
 }
 
 impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
-    type Response = HttpQueryResponse;
+    type Response = QueryExecutionResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -252,38 +332,44 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                 // We managed to upgrade the weak pointer, so the query was not cancelled.
                 // Canceling the query after this point will have no effect: the query will
                 // be executed anyway. That is fine because the execution will take O(ms).
+
+                // Retrieving the state must be done here in the query handler, and should be immediately used.
+                // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
+                // with a reference to older states which can cause out-of-memory crashes.
                 let result = match get_latest_certified_state_and_data_certificate(
                     state_reader,
                     certificate_delegation,
                     query.receiver,
                 ) {
-                    Some((state, cert)) => internal.query(query, state, cert),
-                    None => Err(UserError::new(
-                        ErrorCode::CertifiedStateUnavailable,
-                        "Certified state is not available yet. Please try again...",
-                    )),
+                    Some((state, cert)) => {
+                        let time = state.metadata.batch_time;
+                        let result = internal.query(query, state, cert);
+
+                        let response = match result {
+                            Ok(res) => match res {
+                                WasmResult::Reply(vec) => HttpQueryResponse::Replied {
+                                    reply: HttpQueryResponseReply { arg: Blob(vec) },
+                                },
+                                WasmResult::Reject(message) => HttpQueryResponse::Rejected {
+                                    error_code: ErrorCode::CanisterRejectedMessage.to_string(),
+                                    reject_code: RejectCode::CanisterReject as u64,
+                                    reject_message: message,
+                                },
+                            },
+
+                            Err(user_error) => HttpQueryResponse::Rejected {
+                                error_code: user_error.code().to_string(),
+                                reject_code: user_error.reject_code() as u64,
+                                reject_message: user_error.to_string(),
+                            },
+                        };
+
+                        Ok((response, time))
+                    }
+                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
                 };
 
-                let http_query_response = match result {
-                    Ok(res) => match res {
-                        WasmResult::Reply(vec) => HttpQueryResponse::Replied {
-                            reply: HttpQueryResponseReply { arg: Blob(vec) },
-                        },
-                        WasmResult::Reject(message) => HttpQueryResponse::Rejected {
-                            error_code: ErrorCode::CanisterRejectedMessage.to_string(),
-                            reject_code: RejectCode::CanisterReject as u64,
-                            reject_message: message,
-                        },
-                    },
-
-                    Err(user_error) => HttpQueryResponse::Rejected {
-                        error_code: user_error.code().to_string(),
-                        reject_code: user_error.reject_code() as u64,
-                        reject_message: user_error.to_string(),
-                    },
-                };
-
-                let _ = tx.send(Ok(http_query_response));
+                let _ = tx.send(Ok(result));
             }
             start.elapsed()
         });

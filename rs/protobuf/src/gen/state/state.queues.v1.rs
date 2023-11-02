@@ -36,6 +36,16 @@ pub struct StreamEntry {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RequestMetadata {
+    #[prost(uint64, optional, tag = "1")]
+    pub call_tree_depth: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "2")]
+    pub call_tree_start_time_nanos: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub call_subtree_deadline_nanos: ::core::option::Option<u64>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Request {
     #[prost(message, optional, tag = "1")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::CanisterId>,
@@ -51,6 +61,8 @@ pub struct Request {
     pub method_payload: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "7")]
     pub cycles_payment: ::core::option::Option<Cycles>,
+    #[prost(message, optional, tag = "8")]
+    pub metadata: ::core::option::Option<RequestMetadata>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -169,7 +181,6 @@ pub struct CanisterQueues {
 }
 /// Nested message and enum types in `CanisterQueues`.
 pub mod canister_queues {
-    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum NextInputQueue {
@@ -189,6 +200,16 @@ pub mod canister_queues {
                 NextInputQueue::LocalSubnet => "NEXT_INPUT_QUEUE_LOCAL_SUBNET",
                 NextInputQueue::Ingress => "NEXT_INPUT_QUEUE_INGRESS",
                 NextInputQueue::RemoteSubnet => "NEXT_INPUT_QUEUE_REMOTE_SUBNET",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "NEXT_INPUT_QUEUE_UNSPECIFIED" => Some(Self::Unspecified),
+                "NEXT_INPUT_QUEUE_LOCAL_SUBNET" => Some(Self::LocalSubnet),
+                "NEXT_INPUT_QUEUE_INGRESS" => Some(Self::Ingress),
+                "NEXT_INPUT_QUEUE_REMOTE_SUBNET" => Some(Self::RemoteSubnet),
+                _ => None,
             }
         }
     }

@@ -212,6 +212,7 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::DebugPrint => api::print(&stack.pop_blob()),
             Ops::Trap => api::trap_with_blob(&stack.pop_blob()),
             Ops::SetGlobal => set_global(stack.pop_blob()),
+            Ops::AppendGlobal => append_global(stack.pop_blob()),
             Ops::GetGlobal => stack.push_blob(get_global()),
             Ops::BadPrint => api::bad_print(),
             Ops::SetPreUpgrade => set_pre_upgrade(stack.pop_blob()),
@@ -465,6 +466,9 @@ lazy_static! {
 }
 fn set_global(data: Vec<u8>) {
     *GLOBAL.lock().unwrap() = data;
+}
+fn append_global(mut data: Vec<u8>) {
+    GLOBAL.lock().unwrap().append(&mut data);
 }
 fn get_global() -> Vec<u8> {
     GLOBAL.lock().unwrap().clone()

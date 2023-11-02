@@ -99,11 +99,11 @@ mod tls_cert_from_registry_raw {
 
 mod tls_cert_from_registry {
     use super::*;
-    use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
+    use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 
     #[test]
     fn should_succeed_if_valid_certificate_found_in_registry() {
-        let valid_certificate = valid_tls_certificate();
+        let valid_certificate = valid_tls_certificate_and_validation_time().0;
         let setup = Setup::builder()
             .with_registry_tls_certificate(valid_certificate.clone())
             .build();

@@ -1,70 +1,36 @@
-// Set up a testnet for SNS testing:
-// single 1-node System and two 1-node Application subnets, single unassigned node, single boundary node and a p8s (with grafana) VM.
-// All nodes use the following resources: 4 vCPUs, 24GiB of RAM and 50 GiB disk.
+// Set up a testnet containing:
+//   one 1-node System and two 1-node Application subnets, one unassigned node, single boundary node, and a p8s (with grafana) VM.
+// All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
-// In addition to these subnets, this testnet additionally installs the NNS canisters,
-// the II and NNS frontend dapp canisters (on the NNS subnet),
-// and SNS aggregator canister (on the SNS subnet).
+// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-// You can setup this testnet by executing the following commands:
+//   $ ./gitlab-ci/tools/docker-run
+//   $ ict testnet create sns_testing --lifetime-mins=180 --output-dir=./sns_testing -- --test_tmpdir=./sns_testing
 //
-//   $ gitlab-ci/container/container-run.sh
-//   $ ict testnet sns_testing -- --test_tmpdir=./sns_testing
-//
-// The --test_tmpdir=./sns_testing will store the test output in the specified directory.
+// The --output-dir=./sns_testing will store the debug output of the test driver in the specified directory.
+// The --test_tmpdir=./sns_testing will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
-//   $ ssh -i sns_testing/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
+//   $ ssh -i sns_testing/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
 //
-// Note that you can get the $ipv6 address of the IC node by looking for a log line like:
+// Note that you can get the  address of the IC node from the ict console output:
 //
-//   Apr 11 15:34:10.175 INFO[rs/tests/src/driver/farm.rs:94:0]
-//     VM(h2tf2-odxlp-fx5uw-kvn43-bam4h-i4xmw-th7l2-xxwvv-dxxpz-bs3so-iqe)
-//     Host: ln1-dll10.ln1.dfinity.network
-//     IPv6: 2a0b:21c0:4003:2:5051:85ff:feec:6864
-//     vCPUs: 4
-//     Memory: 25165824 KiB
+//   {
+//     nodes: [
+//       {
+//         id: y4g5e-dpl4n-swwhv-la7ec-32ngk-w7f3f-pr5bt-kqw67-2lmfy-agipc-zae,
+//         ipv6: 2a0b:21c0:4003:2:5034:46ff:fe3c:e76f
+//       }
+//     ],
+//     subnet_id: 5hv4k-srndq-xgw53-r6ldt-wtv4x-6xvbj-6lvpf-sbu5n-sqied-63bgv-eqe,
+//     subnet_type: application
+//   },
 //
-// To get access to P8s and Grafana look for the following log lines:
+// To get access to P8s and Grafana look for the following lines in the ict console output:
 //
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:168:0]
-//     Prometheus Web UI at http://prometheus.sns_testing--1681227226065.testnet.farm.dfinity.systems
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
-//     Grafana at http://grafana.sns_testing--1681227226065.testnet.farm.dfinity.systems
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
-//     IC Progress Clock at http://grafana.sns_testing--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
-//
-// To access the II and NNS frontend dapp canisters look for the following log lines:
-//
-//   2023-05-03 11:06:27.948 INFO[setup:rs/tests/src/nns_dapp.rs:99:0]
-//     Internet Identity: https://qhbym-qaaaa-aaaaa-aaafq-cai.ic0.farm.dfinity.systems
-//   2023-05-03 11:06:27.948 INFO[setup:rs/tests/src/nns_dapp.rs:103:0]
-//     NNS frontend dapp: https://qsgjb-riaaa-aaaaa-aaaga-cai.ic0.farm.dfinity.systems
-//
-// To interactively deploy an SNS and perform testing, we recommend to take the following steps:
-//
-// 1. Clone the sns-testing repo at https://github.com/dfinity/sns-testing
-//
-// 2. Setup this testnet by using `ict` (explained above).
-//
-//    Make sure to await until you see the following lines before proceeding with the next steps.
-//
-//    ============================= Summary =============================
-//    Task setup              PASSED               -- Exited with code 0.
-//    Task debugKeepAliveTask PASSED
-//    ===================================================================
-//
-// 3. Set the testnet's hostname as `TESTNET` in the file `settings.sh` in the sns-testing repo.
-//    You can determine the hostname from the II and NNS frontend dapp URLs available
-//    in the logs printed by `ict` into your console. For the above example, you'd set
-//
-//    export TESTNET="ic0.farm.dfinity.systems"
-//
-//    on the last line in the file `settings.sh` in the sns-testing repo.
-//
-// 4. Execute scripts from the sns-testing repo, e.g., `run_basic_scenario.sh`.
-//
-//    Note. DO NOT run either `setup_locally.sh` or `setup.sh` when testing with this testnet!
+//     prometheus: Prometheus Web UI at http://prometheus.sns_testing--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.sns_testing--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.sns_testing--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 
@@ -121,7 +87,7 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 
     let topology = env.topology_snapshot();
     let mut app_subnets = topology

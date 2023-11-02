@@ -147,11 +147,14 @@
   when: aux_nodes | length > 0
   tags: [ "ic_guest" ]
 
-- name: Prepare the Guest template file
+- name: Prepare the GuestOS template file
   vars:
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(api_nodes) | difference(aux_nodes)  | difference(boundary_nodes) }}"
     ic_memory_kib: "{{ ic_memory_gb | int * (1024 | pow(2)) }}"
     mac_address: "{{ hostvars[item].mac_address }}"
-    ipv4_interface: "{{ hostvars[item].ipv4_interface | default('vlan66') }}"
     ipv6_interface: "{{ hostvars[item].ipv6_interface | default('vlan66') }}"
   template:
     src: "../ic_guest/templates/guest.xml"
@@ -159,7 +162,27 @@
     owner: root
     group: root
     mode: 0644
-  loop: "{{ hostvars[inventory_hostname].ic_guests | default([]) }}"
+  loop: "{{ replica_nodes }}"
+  loop_control:
+    label:
+  tags: [ "ic_guest" ]
+
+- name: Prepare the generic guest template file
+  vars:
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    ic_memory_kib: "{{ ic_memory_gb | int * (1024 | pow(2)) }}"
+    mac_address: "{{ hostvars[item].mac_address }}"
+    ipv4_interface: "{{ hostvars[item].ipv4_interface | default('vlan66') }}"
+    ipv6_interface: "{{ hostvars[item].ipv6_interface | default('vlan66') }}"
+  template:
+    src: "../ic_guest/templates/generic.xml"
+    dest: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ item }}.xml"
+    owner: root
+    group: root
+    mode: 0644
+  loop: "{{ api_nodes | union(aux_nodes)  | union(boundary_nodes) }}"
   loop_control:
     label:
   tags: [ "ic_guest" ]

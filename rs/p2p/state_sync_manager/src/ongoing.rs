@@ -39,7 +39,7 @@ use tokio::{
 };
 
 // TODO: NET-1461 find appropriate value for the parallelism
-const PARALLEL_CHUNK_DOWNLOADS: usize = 50;
+const PARALLEL_CHUNK_DOWNLOADS: usize = 10;
 const ONGOING_STATE_SYNC_CHANNEL_SIZE: usize = 200;
 const CHUNK_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10);
 /// Same reasoning as old state sync mechanism:
@@ -224,13 +224,13 @@ impl OngoingStateSync {
                         break;
                     }
                     // Spawn chunk download to random peer.
-                    let peer = peers.get(small_rng.gen_range(0..peers.len())).unwrap();
+                    let peer_id = peers.get(small_rng.gen_range(0..peers.len())).unwrap();
                     self.downloading_chunks.spawn_on(
                         chunk,
                         self.metrics
                             .download_task_monitor
                             .instrument(Self::download_chunk_task(
-                                *peer,
+                                *peer_id,
                                 self.transport.clone(),
                                 self.tracker.clone(),
                                 self.artifact_id.clone(),
@@ -286,36 +286,29 @@ impl OngoingStateSync {
             Err(_) => Err(DownloadChunkError::Timeout),
         }?;
 
-        let chunk = parse_chunk_handler_response(response, chunk_id)?;
-
-        // TODO: This should be done in a threadpool of size 1.
-        let chunk_add_result =
-            tokio::task::spawn_blocking(move || tracker.lock().unwrap().add_chunk(chunk)).await;
+        let chunk_add_result = tokio::task::spawn_blocking(move || {
+            let chunk = parse_chunk_handler_response(response, chunk_id)?;
+            Ok(tracker.lock().unwrap().add_chunk(chunk))
+        })
+        .await
+        .map_err(|err| DownloadChunkError::RequestError {
+            peer_id,
+            chunk_id,
+            err: err.to_string(),
+        })??;
 
         match chunk_add_result {
-            Ok(Ok(Artifact::StateSync(msg))) => Ok(Some(CompletedStateSync { msg, peer_id })),
-            Ok(Ok(_)) => {
+            Ok(Artifact::StateSync(msg)) => Ok(Some(CompletedStateSync { msg, peer_id })),
+            Ok(_) => {
                 //TODO: (NET-1448) With new protobufs this condition will redundant.
                 panic!("Should not happen");
             }
-            Ok(Err(ArtifactErrorCode::ChunksMoreNeeded)) => Ok(None),
-            Ok(Err(ArtifactErrorCode::ChunkVerificationFailed)) => {
+            Err(ArtifactErrorCode::ChunksMoreNeeded) => Ok(None),
+            Err(ArtifactErrorCode::ChunkVerificationFailed) => {
                 Err(DownloadChunkError::RequestError {
                     peer_id,
                     chunk_id,
                     err: String::from("Chunk verification failed."),
-                })
-            }
-            // If task panic we propagate  but we allow tasks to be cancelled.
-            // Task can be cancelled if someone calls .abort()
-            Err(err) => {
-                if err.is_panic() {
-                    std::panic::resume_unwind(err.into_panic());
-                }
-                Err(DownloadChunkError::RequestError {
-                    peer_id,
-                    chunk_id,
-                    err: String::from("Add chunk canceled."),
                 })
             }
         }
@@ -336,7 +329,7 @@ pub(crate) enum DownloadChunkError {
     /// Request was not processed because peer endpoint is overloaded.
     /// This error is transient.
     Overloaded,
-    /// Request was not processed beacuse of a timeout either on the client side or on the server side.
+    /// Request was not processed because of a timeout either on the client side or on the server side.
     Timeout,
     /// An unexpected error occurred during the request. Requests to well-behaving peers
     /// do not return a RequestError.
@@ -351,66 +344,24 @@ pub(crate) enum DownloadChunkError {
 mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use async_trait::async_trait;
-    use axum::http::{Request, Response, StatusCode};
-    use bytes::Bytes;
+    use axum::http::{Response, StatusCode};
+    use bytes::{Bytes, BytesMut};
     use ic_metrics::MetricsRegistry;
-    use ic_quic_transport::TransportError;
+    use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{chunkable::ArtifactChunk, crypto::CryptoHash, CryptoHashOfState, Height};
+    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
-    use mockall::mock;
+    use prost::Message;
     use tokio::runtime::Runtime;
 
     use super::*;
 
-    mock! {
-        pub StateSync {}
-
-        impl StateSyncClient for StateSync {
-            fn latest_state(&self) -> Option<StateSyncArtifactId>;
-
-            fn start_state_sync(
-                &self,
-                id: &StateSyncArtifactId,
-            ) -> Option<Box<dyn Chunkable + Send + Sync>>;
-
-            fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
-
-            fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk>;
-
-            fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId);
-        }
-    }
-
-    mock! {
-        pub Transport {}
-
-        #[async_trait]
-        impl Transport for Transport{
-            async fn rpc(
-                &self,
-                peer: &NodeId,
-                request: Request<Bytes>,
-            ) -> Result<Response<Bytes>, TransportError>;
-
-            async fn push(
-                &self,
-                peer: &NodeId,
-                request: Request<Bytes>,
-            ) -> Result<(), TransportError>;
-
-            fn peers(&self) -> Vec<NodeId>;
-        }
-    }
-
-    mock! {
-        pub Chunkable {}
-
-        impl Chunkable for Chunkable{
-            fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-            fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode>;
-        }
+    fn compress_empty_bytes() -> Bytes {
+        let mut raw = BytesMut::new();
+        Bytes::new()
+            .encode(&mut raw)
+            .expect("Allocated enough memory");
+        Bytes::from(zstd::bulk::compress(&raw, zstd::DEFAULT_COMPRESSION_LEVEL).unwrap())
     }
 
     /// Verify that state sync gets aborted if state sync should be cancelled.
@@ -425,7 +376,7 @@ mod tests {
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
                     .status(StatusCode::TOO_MANY_REQUESTS)
-                    .body(Bytes::new())
+                    .body(compress_empty_bytes())
                     .unwrap())
             });
             let mut c = MockChunkable::default();
@@ -464,7 +415,7 @@ mod tests {
                 Ok(Response::builder()
                     .status(StatusCode::OK)
                     .extension(NODE_2)
-                    .body(Bytes::new())
+                    .body(compress_empty_bytes())
                     .unwrap())
             });
             let mut c = MockChunkable::default();
@@ -510,7 +461,7 @@ mod tests {
                 Ok(Response::builder()
                     .status(StatusCode::OK)
                     .extension(NODE_2)
-                    .body(Bytes::new())
+                    .body(compress_empty_bytes())
                     .unwrap())
             });
             let mut c = MockChunkable::default();

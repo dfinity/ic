@@ -158,10 +158,10 @@ fn should_return_correct_enum_variant() {
     ));
     assert_eq!(key.enum_variant(), "FsEncryption");
 
-    let mut rng = Seed::from_bytes(&[0u8; 32]).into_rng();
-    let mega_private_key = MEGaPrivateKey::generate(EccCurveType::K256, &mut rng);
+    let rng = &mut Seed::from_bytes(&[0u8; 32]).into_rng();
+    let mega_private_key = MEGaPrivateKey::generate(EccCurveType::K256, rng);
     let mega_private_key_bytes = MEGaPrivateKeyK256Bytes::try_from(&mega_private_key).unwrap();
-    let mega_public_key = mega_private_key.public_key().unwrap();
+    let mega_public_key = mega_private_key.public_key();
     let mega_public_key_bytes = MEGaPublicKeyK256Bytes::try_from(&mega_public_key).unwrap();
     let key = CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
         public_key: mega_public_key_bytes,
@@ -174,7 +174,7 @@ fn should_return_correct_enum_variant() {
     ));
     assert_eq!(key.enum_variant(), "IDkgCommitmentOpening");
 
-    // plase add here tests for newly added ’CspSecretKey’ enums and increment the counter to match their count
+    // Please add here tests for newly added ’CspSecretKey’ enums and increment the counter to match their count.
     assert_eq!(CspSecretKey::COUNT, 7);
 }
 

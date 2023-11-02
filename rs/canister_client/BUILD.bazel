@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 # The package is deprecated, NET-1274.
 package(default_visibility = [
     "//rs/cup_explorer:__pkg__",
-    "//rs/monitoring/onchain_observability/adapter:__pkg__",
     "//rs/nns/init:__pkg__",
     "//rs/orchestrator:__pkg__",
     "//rs/registry/admin:__pkg__",
@@ -48,6 +47,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//rs/certification/test-utils",
     "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils/root_of_trust",
     "//rs/test_utilities",
     "//rs/validator",
     "@crate_index//:hex",

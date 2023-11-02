@@ -19,13 +19,16 @@ use crate::{
     consensus::{certification::CertificationMessageHash, ConsensusMessageHash},
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
-    messages::MessageId,
+    messages::{HttpRequestError, MessageId, SignedRequestBytes},
     p2p::GossipAdvert,
     CryptoHashOfState, Height, Time,
 };
 use derive_more::{AsMut, AsRef, From, TryInto};
-use ic_protobuf::p2p::v1 as pb;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
+use ic_protobuf::p2p::v1 as p2p_pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::types::{v1 as pb, v1::artifact::Kind};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
@@ -309,6 +312,7 @@ pub struct ConsensusMessageFilter {
 
 /// [`IngressMessageId`] includes expiry time in addition to [`MessageId`].
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressMessageId {
     expiry: Time,
     pub message_id: MessageId,
@@ -507,7 +511,6 @@ impl ChunkableArtifact for StateSyncMessage {
 
             Some(ArtifactChunk {
                 chunk_id,
-                witness: Vec::new(),
                 artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(payload),
             })
         }
@@ -525,7 +528,7 @@ impl ChunkableArtifact for StateSyncMessage {
 // 2. Even if we use it for other purposes (e.g. in a HashSet), this
 //    is still safe because identical (height, root_hash) should
 //    lead to identical checkpoint_root.
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for StateSyncMessage {
     fn hash<Hasher: std::hash::Hasher>(&self, state: &mut Hasher) {
         self.height.hash(state);
@@ -548,6 +551,47 @@ pub type FileTreeSyncAttribute = String;
 
 // ------------------------------------------------------------------------------
 // Conversions
+
+impl From<&Artifact> for pb::Artifact {
+    fn from(value: &Artifact) -> Self {
+        let kind = match value {
+            Artifact::ConsensusMessage(x) => Kind::Consensus(x.clone().into()),
+            Artifact::IngressMessage(x) => Kind::SignedIngress(x.binary().clone().into()),
+            Artifact::CertificationMessage(x) => Kind::Certification(x.clone().into()),
+            Artifact::DkgMessage(x) => Kind::Dkg(x.into()),
+            Artifact::EcdsaMessage(x) => Kind::Ecdsa(x.into()),
+            Artifact::CanisterHttpMessage(x) => Kind::HttpShare(x.into()),
+            Artifact::FileTreeSync(x) => Kind::FileTreeSync(x.clone().into()),
+            Artifact::StateSync(_) => {
+                panic!("state sync messages are not supposed to be serialized!")
+            }
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<pb::Artifact> for Artifact {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::Artifact) -> Result<Self, Self::Error> {
+        let kind = value
+            .kind
+            .ok_or(ProxyDecodeError::MissingField("Artifact::msg"))?;
+
+        Ok(match kind {
+            Kind::Consensus(x) => Artifact::ConsensusMessage(x.try_into()?),
+            Kind::SignedIngress(x) => Artifact::IngressMessage({
+                SignedRequestBytes::from(x)
+                    .try_into()
+                    .map_err(|x: HttpRequestError| ProxyDecodeError::Other(x.to_string()))?
+            }),
+            Kind::Certification(x) => Artifact::CertificationMessage(x.try_into()?),
+            Kind::Dkg(x) => Artifact::DkgMessage(x.try_into()?),
+            Kind::Ecdsa(x) => Artifact::EcdsaMessage((&x).try_into()?),
+            Kind::HttpShare(x) => Artifact::CanisterHttpMessage(x.try_into()?),
+            Kind::FileTreeSync(x) => Artifact::FileTreeSync(x.try_into()?),
+        })
+    }
+}
 
 impl From<ArtifactFilter> for pb::ArtifactFilter {
     fn from(filter: ArtifactFilter) -> Self {
@@ -631,7 +675,7 @@ impl TryFrom<pb::StateSyncFilter> for StateSyncFilter {
     }
 }
 
-impl From<StateSyncArtifactId> for pb::StateSyncId {
+impl From<StateSyncArtifactId> for p2p_pb::StateSyncId {
     fn from(id: StateSyncArtifactId) -> Self {
         Self {
             height: id.height.get(),
@@ -640,8 +684,8 @@ impl From<StateSyncArtifactId> for pb::StateSyncId {
     }
 }
 
-impl From<pb::StateSyncId> for StateSyncArtifactId {
-    fn from(id: pb::StateSyncId) -> Self {
+impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
+    fn from(id: p2p_pb::StateSyncId) -> Self {
         Self {
             height: Height::from(id.height),
             hash: CryptoHashOfState::new(CryptoHash(id.hash)),

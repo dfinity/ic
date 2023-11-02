@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("706a648d859d1a55b5722ebb3a35426928e8231a3c6177f4de6491e86231129b");
+    hex!("4515e8476f0a4f92300cc392c5fbe07f58c1481912304e5da8f750f8debdac20");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -82,6 +82,13 @@ impl PayloadBuilder {
 
     pub fn reply_data_append(mut self) -> Self {
         self.0.push(Ops::ReplyDataAppend as u8);
+        self
+    }
+
+    /// Pop a blob from the stack and append it to the global data on the heap.
+    /// NOTE: This does _not_ correspond to a Wasm global.
+    pub fn append_to_global_data(mut self) -> Self {
+        self.0.push(Ops::AppendGlobal as u8);
         self
     }
 
@@ -333,6 +340,13 @@ impl PayloadBuilder {
         self
     }
 
+    /// Store the current stack data (in a global variable) on the heap.
+    /// NOTE: This does _not_ correspond to a Wasm global.
+    pub fn set_global_data_from_stack(mut self) -> Self {
+        self.0.push(Ops::SetGlobal as u8);
+        self
+    }
+
     /// Get data (stored in a global variable) from the heap.
     /// NOTE: This does _not_ correspond to a Wasm global.
     pub fn get_global_data(mut self) -> Self {
@@ -479,8 +493,8 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn msg_cycles_accept128(mut self, max_amount_hight: i64, max_amount_low: i64) -> Self {
-        self = self.push_int64(max_amount_hight as u64);
+    pub fn msg_cycles_accept128(mut self, max_amount_height: i64, max_amount_low: i64) -> Self {
+        self = self.push_int64(max_amount_height as u64);
         self = self.push_int64(max_amount_low as u64);
         self.0.push(Ops::AcceptCycles128 as u8);
         self
@@ -687,7 +701,7 @@ mod test {
     fn check_hardcoded_sha256_is_up_to_date() {
         assert_eq!(
             UNIVERSAL_CANISTER_WASM_SHA256,
-            ic_crypto_sha::Sha256::hash(UNIVERSAL_CANISTER_WASM)
+            ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM)
         );
     }
 

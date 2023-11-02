@@ -30,7 +30,9 @@ use crate::util::block_on;
 use anyhow::bail;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc};
+use ic_ic00_types::{
+    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
@@ -136,7 +138,7 @@ pub fn test(env: TestEnv) {
                     RemoteHttpRequest {
                         request: CanisterHttpRequestArgs {
                             url: webserver_url.to_string(),
-                            headers: vec![],
+                            headers: BoundedHttpHeaders::new(vec![]),
                             body: None,
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {
@@ -184,7 +186,7 @@ pub fn test(env: TestEnv) {
                     RemoteHttpRequest {
                         request: CanisterHttpRequestArgs {
                             url: webserver_url.to_string(),
-                            headers: vec![],
+                            headers: BoundedHttpHeaders::new(vec![]),
                             body: None,
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {

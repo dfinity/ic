@@ -2,27 +2,30 @@
 
 mod bls12_381_sig_cache;
 
-use convert_case::{Case, Casing};
-use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGaugeVec};
-use std::fmt::{Display, Formatter};
+use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::ops::Add;
 use std::time::Instant;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, IntoStaticStr};
+use strum_macros::EnumIter;
+#[cfg(test)]
+use strum_macros::IntoStaticStr;
 
 /// Provides metrics for the crypto component.
 ///
 /// This struct allows metrics being disabled and enabled.
 pub struct CryptoMetrics {
     metrics: Option<Metrics>,
+    metrics_registry: Option<MetricsRegistry>,
 }
 
 impl CryptoMetrics {
     /// Constructs CryptoMetrics that are disabled.
     pub fn none() -> Self {
-        Self { metrics: None }
+        Self {
+            metrics: None,
+            metrics_registry: None,
+        }
     }
 
     /// Constructs CryptoMetrics that are enabled if the metrics registry is
@@ -30,7 +33,13 @@ impl CryptoMetrics {
     pub fn new(registry: Option<&MetricsRegistry>) -> Self {
         Self {
             metrics: registry.map(Metrics::new),
+            metrics_registry: registry.cloned(),
         }
+    }
+
+    /// Returns an `Option` of a reference to the metrics registry iff metrics are enabled.
+    pub fn metrics_registry(&self) -> Option<&MetricsRegistry> {
+        self.metrics_registry.as_ref()
     }
 
     /// Returns `Instant::now()` iff metrics are enabled.
@@ -118,6 +127,12 @@ impl CryptoMetrics {
                 .crypto_idkg_dealing_encryption_pubkey_count
                 .with_label_values(&[&format!("{}", result)])
                 .set(idkg_dealing_encryption_pubkey_count as i64);
+        }
+    }
+
+    pub fn observe_idkg_load_transcript_error(&self, id: u64) {
+        if let Some(metrics) = &self.metrics {
+            metrics.crypto_idkg_load_transcript_error.set(id as i64);
         }
     }
 
@@ -286,7 +301,9 @@ impl CryptoMetrics {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyType {
     PublicRegistry,
     PublicLocal,
@@ -294,7 +311,9 @@ pub enum KeyType {
     IdkgDealingEncryptionLocal,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsDomain {
     BasicSignature,
     MultiSignature,
@@ -308,13 +327,17 @@ pub enum MetricsDomain {
     KeyManagement,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsScope {
     Full,
     Local,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsResult {
     Ok,
     Err,
@@ -329,7 +352,9 @@ impl<T, E> From<&Result<T, E>> for MetricsResult {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyRotationResult {
     KeyRotated,
     LatestLocalRotationTooRecent,
@@ -342,13 +367,17 @@ pub enum KeyRotationResult {
     PublicKeyNotFound,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum ServiceType {
     Client,
     Server,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MessageType {
     Request,
     Response,
@@ -420,29 +449,19 @@ impl Add for KeyCounts {
 
 /// A result for operations returning booleans. Using an enum allows adding errors, and using
 /// macros for deriving the string representation needed for the dashboards.
-#[derive(EnumIter, IntoStaticStr)]
+#[derive(EnumIter, strum_macros::Display)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum BooleanResult {
     True,
     False,
 }
 
-impl Display for BooleanResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-#[derive(EnumIter, IntoStaticStr)]
+#[derive(EnumIter, strum_macros::Display)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum BooleanOperation {
     LatestLocalIdkgKeyExistsInRegistry,
-}
-
-impl Display for BooleanOperation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
 }
 
 struct Metrics {
@@ -465,6 +484,9 @@ struct Metrics {
 
     /// A gauge vector for the number of iDKG dealing encryption public keys stored locally.
     pub crypto_idkg_dealing_encryption_pubkey_count: IntGaugeVec,
+
+    /// A gauge for the transcript ID in iDKG load_transcript errors that may cause the loss of the key.
+    pub crypto_idkg_load_transcript_error: IntGauge,
 
     /// A gauge vector for the different types of keys and certificates of a node. The keys and
     /// certificates that are kept track of are:
@@ -521,55 +543,6 @@ struct Metrics {
 
     /// Counter for iDKG dealing encryption public key too old, but not in registry.
     crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry: IntCounter,
-}
-
-impl Display for MetricsDomain {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for MetricsScope {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for MetricsResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for KeyRotationResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for KeyType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for ServiceType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for MessageType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
 }
 
 impl Metrics {
@@ -645,6 +618,10 @@ impl Metrics {
                 &["result"],
             ),
             crypto_idkg_dealing_encryption_pubkey_count: idkg_dealing_encryption_pubkey_count,
+            crypto_idkg_load_transcript_error: r.int_gauge(
+                "crypto_idkg_load_transcript_error",
+                "Error while loading iDKG transcript",
+            ),
             crypto_key_counts: key_counts,
             crypto_key_rotation_results: rotation_results,
             crypto_keys_in_registry_missing_locally_total: r.int_counter(
@@ -680,7 +657,7 @@ impl Metrics {
                 "Number of cache hits for successfully verified BLS12-381 threshold signatures"),
                 cache_misses: r.int_counter(
                     "crypto_bls12_381_sig_cache_misses",
-                "Number of cache misses for successfully verified BLS12-381 threshold signatures"), 
+                "Number of cache misses for successfully verified BLS12-381 threshold signatures"),
             },
             observe_minimum_epoch_in_active_nidkg_transcripts: r.gauge(
                 "crypto_minimum_epoch_in_active_nidkg_transcripts",
@@ -695,7 +672,7 @@ impl Metrics {
                 "Minimum registry version in active iDKG transcripts"
             ),
             crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry: r.int_counter(
-                "crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry", 
+                "crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry",
                 "latest iDKG dealing encryption public key too old, but not in registry"
             ),
         }

@@ -4,7 +4,7 @@
 //! filesystem tree like layout.
 
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
-use ic_interfaces::artifact_pool::UnvalidatedArtifact;
+use ic_interfaces::artifact_pool::{ChangeResult, UnvalidatedArtifactEvent};
 use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{
     TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
@@ -33,7 +33,7 @@ type FileTreeSyncInMemoryPool = HashMap<TestArtifactId, FileTreeSyncArtifact>;
 #[derive(Clone)]
 pub struct ArtifactChunkingTestImpl {
     node_pool_dir: PathBuf, // Path to on disk pool
-    file_tree_sync_unvalidated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>, /* In memory representaion
+    file_tree_sync_unvalidated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>, /* In memory representation
                                                                             * on on-disk
                                                                             * pool */
     file_tree_sync_validated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>,
@@ -43,8 +43,8 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
     fn process_changes(
         &self,
         _time_source: &dyn TimeSource,
-        _artifacts: Vec<UnvalidatedArtifact<FileTreeSyncArtifact>>,
-    ) -> (Vec<Advert<TestArtifact>>, bool) {
+        _artifact_events: Vec<UnvalidatedArtifactEvent<TestArtifact>>,
+    ) -> ChangeResult<TestArtifact> {
         let mut unvalidated_pool = self.file_tree_sync_unvalidated_pool.lock();
         let mut validated_pool = self.file_tree_sync_validated_pool.lock();
         let adverts = unvalidated_pool
@@ -58,7 +58,12 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
             .collect::<Vec<_>>();
         let changed = !adverts.is_empty();
         validated_pool.extend(unvalidated_pool.drain());
-        (adverts, changed)
+
+        ChangeResult {
+            adverts,
+            purged: Vec::new(),
+            changed,
+        }
     }
 }
 

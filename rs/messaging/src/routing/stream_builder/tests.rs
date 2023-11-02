@@ -29,7 +29,6 @@ use ic_types::{
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles, SubnetId, Time,
 };
-use ic_utils::str::StrTruncate;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use rand::{Rng, SeedableRng};
@@ -96,7 +95,6 @@ fn reject_local_request() {
 
         // Reject the message.
         let reject_message = (0..MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1)
-            .into_iter()
             .map(|_| "a")
             .collect::<String>();
         stream_builder.reject_local_request(
@@ -107,6 +105,15 @@ fn reject_local_request() {
         );
 
         // Which should result in a reject Response being enqueued onto the input queue.
+        let expected_reject_context = RejectContext::new_with_message_length_limit(
+            RejectCode::SysFatal,
+            reject_message,
+            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        );
+        assert_eq!(
+            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+            expected_reject_context.message().len()
+        );
         expected_state
             .push_input(
                 Response {
@@ -114,12 +121,7 @@ fn reject_local_request() {
                     respondent: msg.receiver,
                     originator_reply_callback: msg.sender_reply_callback,
                     refund: msg.payment,
-                    response_payload: Payload::Reject(RejectContext {
-                        code: RejectCode::SysFatal,
-                        message: reject_message
-                            .safe_truncate(MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN)
-                            .to_string(),
-                    }),
+                    response_payload: Payload::Reject(expected_reject_context),
                 }
                 .into(),
                 &mut (i64::MAX / 2),
@@ -179,10 +181,10 @@ fn reject_local_request_for_subnet() {
                     respondent: msg.receiver,
                     originator_reply_callback: msg.sender_reply_callback,
                     refund: msg.payment,
-                    response_payload: Payload::Reject(RejectContext {
-                        code: RejectCode::SysFatal,
-                        message: reject_message.to_string(),
-                    }),
+                    response_payload: Payload::Reject(RejectContext::new(
+                        RejectCode::SysFatal,
+                        reject_message,
+                    )),
                 }
                 .into(),
                 &mut (i64::MAX / 2),
@@ -708,6 +710,7 @@ fn build_streams_with_oversized_payloads() {
             payment: Cycles::new(1),
             method_name: method_name.clone(),
             method_payload: oversized_request_payload.clone(),
+            metadata: None,
         };
         assert!(local_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
 
@@ -719,6 +722,7 @@ fn build_streams_with_oversized_payloads() {
             payment: Cycles::new(2),
             method_name,
             method_payload: oversized_request_payload,
+            metadata: None,
         };
         assert!(remote_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
         let remote_request_reject = Response {
@@ -768,7 +772,8 @@ fn build_streams_with_oversized_payloads() {
             respondent: local_canister,
             originator_reply_callback: CallbackId::from(4),
             refund: Cycles::new(4),
-            response_payload: Payload::Reject(RejectContext::new(
+            // Abuse `RejectContext::from_canonical()`, as it doesn't truncate the message.
+            response_payload: Payload::Reject(RejectContext::from_canonical(
                 RejectCode::SysTransient,
                 oversized_error_message,
             )),
@@ -781,7 +786,8 @@ fn build_streams_with_oversized_payloads() {
             refund: Cycles::new(4),
             response_payload: Payload::Reject(RejectContext::new(
                 RejectCode::SysTransient,
-                "x".repeat(5 * 1024) + "..." + &"x".repeat(2 * 1024),
+                // Long enough message to be properly truncated by the constructor.
+                "x".repeat(10 * 1024),
             )),
         };
 

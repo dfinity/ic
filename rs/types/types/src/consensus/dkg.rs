@@ -17,6 +17,7 @@ pub type Message = BasicSigned<DealingContent>;
 
 /// Holds the content of a DKG dealing
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DealingContent {
     pub version: ReplicaVersion,
     /// the cryptographic data of the dealing
@@ -81,6 +82,7 @@ impl HasVersion for DealingContent {
 /// corresponding to the start of a new DKG interval.
 #[serde_as]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Summary {
     /// The registry version used to create this summary.
     pub registry_version: RegistryVersion,
@@ -105,7 +107,7 @@ pub struct Summary {
     pub interval_length: Height,
     /// The length of the next interval in rounds (following the start block).
     pub next_interval_length: Height,
-    /// The height of the block conatining that summary.
+    /// The height of the block containing that summary.
     pub height: Height,
     /// The number of intervals a DKG for the given remote target was attempted.
     pub initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
@@ -428,6 +430,7 @@ pub type DealingMessages = Vec<Message>;
 /// Dealings contains dealing messages and the height at which this DKG interval
 /// started
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Dealings {
     /// The height of the DKG interval that this object belongs to
     pub start_height: Height,

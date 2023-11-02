@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use candid::{Decode, Encode};
+use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
@@ -8,7 +9,10 @@ use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
 };
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential},
     pb::v1::{
@@ -22,8 +26,11 @@ use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use lazy_static::lazy_static;
+use maplit::hashmap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
@@ -31,6 +38,7 @@ use std::{
 };
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -388,6 +396,7 @@ impl Environment for FakeDriver {
                         nns_proposal_id: None,              // TODO[NNS1-2339]
                         neurons_fund_participants: None,    // TODO[NNS1-2339]
                         should_auto_finalize: Some(true),
+                        neurons_fund_participation_constraints: None,
                     }),
                     ..Default::default() // Not realistic, but sufficient for tests.
                 }),
@@ -436,6 +445,36 @@ impl Environment for FakeDriver {
                     canister_id: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
                     status: None,
                 }),
+            })
+            .unwrap());
+        }
+
+        if method_name == "get_node_providers_monthly_xdr_rewards" {
+            assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
+
+            return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
+                NodeProvidersMonthlyXdrRewards {
+                    rewards: hashmap! {
+                        PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
+                    }
+                }
+            ))
+            .unwrap());
+        }
+
+        if method_name == "get_average_icp_xdr_conversion_rate" {
+            assert_eq!(PrincipalId::from(target), CYCLES_MINTING_CANISTER_ID.get());
+
+            return Ok(Encode!(&IcpXdrConversionRateCertifiedResponse {
+                data: IcpXdrConversionRate {
+                    timestamp_seconds: SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                    xdr_permyriad_per_icp: 1 // Below the minimum exchange rate limit
+                },
+                hash_tree: vec![],
+                certificate: vec![],
             })
             .unwrap());
         }
@@ -583,7 +622,7 @@ impl ProposalNeuronBehavior {
 impl From<&str> for ProposalNeuronBehavior {
     /// Format: <neuron_behaviour>* <proposal_topic>?
     ///
-    /// neuron_behaviour: each subsequentcharacter corresponds to the
+    /// neuron_behaviour: each subsequent character corresponds to the
     /// behavior of one neuron, in order.
     ///
     /// "-" means "does not vote"

@@ -14,8 +14,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     EccCurveType, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKey,
     MEGaPublicKeyK256Bytes,
 };
-use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
+use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_secrets_containers::SecretArray;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -74,6 +75,7 @@ fn should_not_leak_any_data_on_protobuf_deserialization_error_when_opening_key_s
 
 #[test]
 fn should_not_leak_any_data_on_cbor_deserialization_error_when_opening_key_store() {
+    let rng = &mut reproducible_rng();
     let temp_dir = tempfile::Builder::new()
         .prefix("ic_crypto_")
         .tempdir()
@@ -87,7 +89,7 @@ fn should_not_leak_any_data_on_cbor_deserialization_error_when_opening_key_store
     let temp_file = "temp_sks_data.pb";
     let mut key_store = ProtoSecretKeyStore::open(temp_dir.path(), temp_file, None);
     let key_id: KeyId = KeyId::from([1; 32]);
-    let key = make_secret_key(2);
+    let key = make_secret_key(rng);
     assert!(key_store.insert(key_id, key, None).is_ok());
 
     let file = std::fs::OpenOptions::new()
@@ -147,87 +149,87 @@ fn open_should_panic_if_secret_keystore_is_a_directory() {
 
     let _opened_sks = ProtoSecretKeyStore::open(temp_dir.as_ref(), &sks_file_name, None);
 }
+#[test]
+fn should_retrieve_inserted_key() {
+    let rng = &mut reproducible_rng();
+    let mut key_store = proto_key_store();
+    let key_id: KeyId = make_key_id(rng);
+    let key = make_secret_key(rng);
 
-proptest! {
-    #[test]
-    fn should_retrieve_inserted_key(seed1: u64, seed2: u64) {
-        let mut key_store = proto_key_store();
-        let key_id: KeyId = make_key_id(seed1);
-        let key = make_secret_key(seed2);
+    assert!(key_store.insert(key_id, key.clone(), None).is_ok());
 
-        assert!(key_store.insert(key_id, key.clone(), None).is_ok());
+    let retrieved_key = key_store.get(&key_id).unwrap();
+    assert_eq!(key, retrieved_key);
+}
 
-        let retrieved_key = key_store.get(&key_id).unwrap();
-        assert_eq!(key, retrieved_key);
-    }
+#[test]
+fn should_contain_existing_key() {
+    let rng = &mut reproducible_rng();
+    let mut key_store = proto_key_store();
+    let key_id: KeyId = make_key_id(rng);
 
-    #[test]
-    fn should_contain_existing_key(seed1: u64, seed2: u64) {
-        let mut key_store = proto_key_store();
-        let key_id: KeyId = make_key_id(seed1);
+    assert!(key_store.insert(key_id, make_secret_key(rng), None).is_ok());
+    assert!(key_store.contains(&key_id));
+}
 
-        assert!(key_store
-            .insert(key_id, make_secret_key(seed2), None)
-            .is_ok());
-        assert!(key_store.contains(&key_id));
-    }
+#[test]
+fn should_not_contain_nonexisting_key() {
+    let rng = &mut reproducible_rng();
+    let key_store = proto_key_store();
+    let non_existing_key_id: KeyId = make_key_id(rng);
 
-    #[test]
-    fn should_not_contain_nonexisting_key(seed1: u64) {
-        let key_store = proto_key_store();
-        let non_existing_key_id: KeyId = make_key_id(seed1);
+    assert!(!key_store.contains(&non_existing_key_id));
+}
 
-        assert!(!key_store.contains(&non_existing_key_id));
-    }
+#[test]
+fn should_remove_existing_key() {
+    let rng = &mut reproducible_rng();
+    let mut key_store = proto_key_store();
+    let key_id: KeyId = make_key_id(rng);
 
-    #[test]
-    fn should_remove_existing_key(seed1: u64, seed2: u64) {
-        let mut key_store = proto_key_store();
-        let key_id: KeyId = make_key_id(seed1);
+    assert!(key_store.insert(key_id, make_secret_key(rng), None).is_ok());
 
-        assert!(key_store
-            .insert(key_id, make_secret_key(seed2), None)
-            .is_ok());
+    assert!(key_store.get(&key_id).is_some());
+    assert!(key_store.remove(&key_id).unwrap());
+    assert!(key_store.get(&key_id).is_none());
+}
 
-        assert!(key_store.get(&key_id).is_some());
-        assert!(key_store.remove(&key_id).unwrap());
-        assert!(key_store.get(&key_id).is_none());
-    }
+#[test]
+fn should_not_remove_nonexisting_key() {
+    let rng = &mut reproducible_rng();
+    let mut key_store = proto_key_store();
+    let non_existing_key_id: KeyId = make_key_id(rng);
 
-    #[test]
-    fn should_not_remove_nonexisting_key(seed1: u64) {
-        let mut key_store = proto_key_store();
-        let non_existing_key_id: KeyId = make_key_id(seed1);
+    assert!(!key_store.remove(&non_existing_key_id).unwrap());
+}
 
-        assert!(!key_store.remove(&non_existing_key_id).unwrap());
-    }
+#[test]
+fn deleting_twice_should_return_false() {
+    let rng = &mut reproducible_rng();
+    let mut key_store = proto_key_store();
+    let key_id_1: KeyId = make_key_id(rng);
+    let key_1 = make_secret_key(rng);
 
-    #[test]
-    fn deleting_twice_should_return_false(seed1: u64, seed2: u64) {
-        let mut key_store = proto_key_store();
-        let key_id_1: KeyId = make_key_id(seed1);
-        let key_1 = make_secret_key(seed2);
+    assert!(key_store.insert(key_id_1, key_1, None).is_ok());
 
-        assert!(key_store.insert(key_id_1, key_1, None).is_ok());
+    assert!(key_store.remove(&key_id_1).unwrap());
+    assert!(!key_store.contains(&key_id_1));
+    assert!(!key_store.remove(&key_id_1).unwrap());
+}
 
-        assert!(key_store.remove(&key_id_1).unwrap());
-        assert!(!key_store.contains(&key_id_1));
-        assert!(!key_store.remove(&key_id_1).unwrap());
-    }
+#[test]
+fn no_overwrites() {
+    let rng = &mut reproducible_rng();
+    let mut key_store = proto_key_store();
+    let key_id_1: KeyId = make_key_id(rng);
+    let key_1 = make_secret_key(rng);
+    let key_2 = make_secret_key(rng);
+    assert_ne!(key_1, key_2);
 
-    #[test]
-    fn no_overwrites(seed1: u64, seed2: u64, seed3: u64) {
-        let mut key_store = proto_key_store();
-        let key_id_1: KeyId = make_key_id(seed1);
-        let key_1 = make_secret_key(seed2);
-        let key_2 = make_secret_key(seed3);
-        assert_ne!(key_1, key_2);
+    key_store.insert(key_id_1, key_1.clone(), None).unwrap();
 
-        key_store.insert(key_id_1, key_1.clone(), None).unwrap();
-
-        assert!(key_store.insert(key_id_1, key_2, None).is_err());
-        assert_eq!(key_1, key_store.get(&key_id_1).unwrap());
-    }
+    assert!(key_store.insert(key_id_1, key_2, None).is_err());
+    assert_eq!(key_1, key_store.get(&key_id_1).unwrap());
 }
 
 #[test]
@@ -279,8 +281,8 @@ fn should_upgrade_secret_key_store_to_current_sks_version() {
 
 //Generate dummy key to ensure that SKS is written to disk
 fn write_secret_key_store_to_disk(secret_key_store: &mut ProtoSecretKeyStore) {
-    let seed = 42;
-    let (key_id, secret_key) = (make_key_id(seed), make_secret_key(seed));
+    let rng = &mut reproducible_rng();
+    let (key_id, secret_key) = (make_key_id(rng), make_secret_key(rng));
     secret_key_store
         .insert(
             key_id,
@@ -439,13 +441,8 @@ mod retain {
     fn should_retain_expected_keys_with_specified_scope_and_not_remove_keys_with_non_matching_scope(
     ) {
         let mut key_store = proto_key_store();
-        let mut seeds = 0..;
-        let mut next_key = || {
-            (
-                make_key_id(seeds.next().unwrap()),
-                make_secret_key(seeds.next().unwrap()),
-            )
-        };
+        let rng = &mut reproducible_rng();
+        let mut next_key = || (make_key_id(rng), make_secret_key(rng));
         let key_with_id_to_retain = next_key();
         let key_with_value_to_retain = next_key();
         let key_to_remove = next_key();
@@ -499,10 +496,11 @@ mod retain {
 
     #[test]
     fn should_succeed_on_empty_secret_key_store() {
+        let rng = &mut reproducible_rng();
         let mut key_store = proto_key_store();
         let selected_scope = Scope::Const(ConstScope::Test0);
-        let id_to_retain = make_key_id(42);
-        let value_to_retain = make_secret_key(37);
+        let id_to_retain = make_key_id(rng);
+        let value_to_retain = make_secret_key(rng);
 
         assert_eq!(key_store.retain(|_, _| true, selected_scope), Ok(()));
         assert_eq!(key_store.retain(|_, _| false, selected_scope), Ok(()));
@@ -518,10 +516,11 @@ mod retain {
 
     #[test]
     fn should_not_modify_secret_key_store_on_disk_when_retain_is_a_nop() {
+        let rng = &mut reproducible_rng();
         let (_temp_dir, mut key_store, file) = temp_proto_secret_key_store_and_file_path();
         let selected_scope = Scope::Const(ConstScope::Test0);
-        let key_id = make_key_id(42);
-        let key_value = make_secret_key(37);
+        let key_id = make_key_id(rng);
+        let key_value = make_secret_key(rng);
 
         key_store
             .insert(key_id, key_value, Some(selected_scope))
@@ -541,11 +540,12 @@ mod retain {
 
     #[test]
     fn should_succeed_when_retaining_non_existing_key_by_key_id() {
+        let rng = &mut reproducible_rng();
         let mut key_store = proto_key_store();
         let selected_scope = Scope::Const(ConstScope::Test0);
-        let key_id = make_key_id(42);
-        let key_value = make_secret_key(37);
-        let key_id_to_retain = make_key_id(77);
+        let key_id = make_key_id(rng);
+        let key_value = make_secret_key(rng);
+        let key_id_to_retain = make_key_id(rng);
 
         key_store
             .insert(key_id, key_value, Some(selected_scope))
@@ -560,11 +560,12 @@ mod retain {
 
     #[test]
     fn should_succeed_when_retaining_non_existing_key_by_key_value() {
+        let rng = &mut reproducible_rng();
         let mut key_store = proto_key_store();
         let selected_scope = Scope::Const(ConstScope::Test0);
-        let key_id = make_key_id(42);
-        let key_value = make_secret_key(37);
-        let key_value_to_retain = make_secret_key(97);
+        let key_id = make_key_id(rng);
+        let key_value = make_secret_key(rng);
+        let key_value_to_retain = make_secret_key(rng);
 
         key_store
             .insert(key_id, key_value, Some(selected_scope))
@@ -582,11 +583,12 @@ mod retain {
 
     #[test]
     fn should_not_remove_if_filter_matches_but_scope_does_not_match() {
+        let rng = &mut reproducible_rng();
         let mut key_store = proto_key_store();
         let selected_scope = Scope::Const(ConstScope::Test0);
         let different_scope = Scope::Const(ConstScope::Test1);
-        let key_id = make_key_id(42);
-        let key_value = make_secret_key(37);
+        let key_id = make_key_id(rng);
+        let key_value = make_secret_key(rng);
 
         key_store
             .insert(key_id, key_value, Some(selected_scope))
@@ -602,11 +604,12 @@ mod retain {
     #[test]
     #[should_panic(expected = "retain filter panicked!")]
     fn should_panic_if_retain_filter_panics() {
+        let rng = &mut reproducible_rng();
         let mut key_store = proto_key_store();
         let selected_scope = Scope::Const(ConstScope::Test0);
-        let key_id = make_key_id(42);
+        let key_id = make_key_id(rng);
         key_store
-            .insert(key_id, make_secret_key(37), Some(selected_scope))
+            .insert(key_id, make_secret_key(rng), Some(selected_scope))
             .expect("insert should succeed");
 
         assert_eq!(
@@ -643,6 +646,7 @@ mod zeroize_old_secret_key_store {
 
     #[test]
     fn should_overwrite_old_secret_key_store_with_zeroes() {
+        let rng = &mut reproducible_rng();
         let mut setup = Setup::new();
         ic_utils::fs::create_hard_link_to_existing_file(
             &setup.secret_key_store.proto_file,
@@ -650,8 +654,8 @@ mod zeroize_old_secret_key_store {
         )
         .expect("error creating hard link to existing secret key store file");
 
-        let key_id = make_key_id(42);
-        let key = make_secret_key(42);
+        let key_id = make_key_id(rng);
+        let key = make_secret_key(rng);
         setup
             .secret_key_store
             .insert(key_id, key, None)
@@ -662,6 +666,7 @@ mod zeroize_old_secret_key_store {
 
     #[test]
     fn should_not_overwrite_new_keystore_with_zeroes() {
+        let rng = &mut reproducible_rng();
         let mut setup = Setup::new();
         ic_utils::fs::create_hard_link_to_existing_file(
             &setup.secret_key_store.proto_file,
@@ -669,8 +674,8 @@ mod zeroize_old_secret_key_store {
         )
         .expect("error creating hard link to existing secret key store file");
 
-        let key_id = make_key_id(42);
-        let key = make_secret_key(42);
+        let key_id = make_key_id(rng);
+        let key = make_secret_key(rng);
         setup
             .secret_key_store
             .insert(key_id, key, None)
@@ -871,7 +876,6 @@ fn should_fail_to_read_from_secret_key_store_with_no_read_permissions() {
 
 mod insert_or_replace {
     use super::*;
-    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
     use proptest::option;
@@ -880,10 +884,10 @@ mod insert_or_replace {
     proptest! {
         #[test]
         fn should_insert_secret_key(seed: [u8; 32], scope in option::of(arb_scope())) {
-            let mut rng = ReproducibleRng::from_seed(seed);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
-            let secret_key = secret_key(&mut rng);
+            let secret_key = secret_key(rng);
 
             assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope).is_ok());
 
@@ -897,13 +901,13 @@ mod insert_or_replace {
             scope_first_key in option::of(arb_scope()),
             scope_second_key in option::of(arb_scope())
         ) {
-            let mut rng = ReproducibleRng::from_seed(seed);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
-            let first_secret_key = secret_key(&mut rng);
+            let first_secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, first_secret_key.clone(), scope_first_key).is_ok());
 
-            let second_secret_key = secret_key(&mut rng);
+            let second_secret_key = secret_key(rng);
             assert_ne!(first_secret_key, second_secret_key);
             assert!(key_store.insert_or_replace(key_id, second_secret_key.clone(), scope_second_key).is_ok());
 
@@ -917,10 +921,10 @@ mod insert_or_replace {
             scope1 in option::of(arb_scope()),
             scope2 in option::of(arb_scope())
         ) {
-            let mut rng = ReproducibleRng::from_seed(seed);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
-            let secret_key = secret_key(&mut rng);
+            let secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, secret_key.clone(), scope1).is_ok());
 
             assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope2).is_ok());
@@ -935,9 +939,9 @@ mod insert_or_replace {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let replica_logger = ReplicaLogger::from(&in_memory_logger);
             let mut key_store = ProtoSecretKeyStore::open(temp_dir.path(), "sks_data.pb", Some(replica_logger));
-            let mut rng = ReproducibleRng::from_seed(seed);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
-            let secret_key = secret_key(&mut rng);
+            let secret_key = secret_key(rng);
 
             assert!(key_store.insert(key_id, secret_key.clone(), scope).is_ok()); // 1 overwrite
             assert!(key_store.insert_or_replace(key_id, secret_key, scope).is_ok()); // expect 1 overwrite

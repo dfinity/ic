@@ -149,7 +149,7 @@ mod tests {
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-    use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
@@ -165,6 +165,7 @@ mod tests {
         methods::{FuncRef, WasmMethod},
         time::Time,
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        MAX_WASM_MEMORY_IN_BYTES,
     };
     use mockall::*;
     use std::collections::{BTreeMap, BTreeSet};
@@ -180,13 +181,12 @@ mod tests {
                 NumInstructions::new(INSTRUCTION_LIMIT),
                 NumInstructions::new(INSTRUCTION_LIMIT),
             ),
-            canister_memory_limit: NumBytes::new(4 << 30),
+            canister_memory_limit: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
             memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
-            subnet_memory_capacity: NumBytes::new(1_000_000_000),
-            subnet_memory_threshold: NumBytes::new(1_000_000_000),
+            subnet_memory_saturation: ResourceSaturation::default(),
         }
     }
 
@@ -201,6 +201,8 @@ mod tests {
             MemoryAllocation::BestEffort,
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
+            Cycles::zero(),
+            None,
             BTreeMap::new(),
             CyclesAccountManager::new(
                 NumInstructions::from(1_000_000_000),
@@ -444,7 +446,7 @@ mod tests {
               )
 
               (func $write_stable
-                (call $msg_arg_data_copy ;; copy entire messge ;;
+                (call $msg_arg_data_copy ;; copy entire message ;;
                   (i32.const 0) ;; dst ;;
                   (i32.const 0) ;; offset ;;
                   (call $msg_arg_data_size) ;; size ;;
@@ -470,36 +472,31 @@ mod tests {
     }
 
     fn make_long_running_canister_wasm() -> Vec<u8> {
-        // This canister supports a `run` method that takes 4 bytes
-        // representing an integer number of iterations to run as an argument.
-        // Each iteration executes 6 instructions.
+        // This canister supports a `run` method that takes 8 bytes
+        // representing an integer number of instructions to run as an argument.
         let wat_data = r#"
             (module
-              (import "ic0" "msg_arg_data_size"
-                (func $msg_arg_data_size (result i32)))
               (import "ic0" "msg_arg_data_copy"
                 (func $msg_arg_data_copy (param i32 i32 i32)))
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32) (param i32)))
+              (import "ic0" "performance_counter"
+                (func $performance_counter (param i32) (result i64)))
 
               (func $run
-                (local $i i32)
-                (local $limit i32)
-                (call $msg_arg_data_copy ;; copy entire messge ;;
+                (local $limit i64)
+                (call $msg_arg_data_copy ;; copy i64 argument ;;
                   (i32.const 0) ;; dst ;;
                   (i32.const 0) ;; offset ;;
-                  (call $msg_arg_data_size) ;; size ;;
+                  (i32.const 8) ;; size of (i64) ;;
                 )
-                (i32.load (i32.const 0))
+                (i64.load (i32.const 0))
                 (local.set $limit)
                 (loop $loop
-                    local.get $i
-                    i32.const 1
-                    i32.add
-                    local.tee $i
+                    (call $performance_counter (i32.const 0))
                     local.get $limit
-                    i32.lt_s
+                    i64.lt_s
                     br_if $loop
                 )
                 (call $msg_reply)
@@ -1300,19 +1297,20 @@ mod tests {
         let child_wasm_memory_id = MemoryId::new();
         let child_stable_memory_id = MemoryId::new();
 
-        // Prepare the input such that the total execution requires 600+ instructions.
+        // Prepare the input such that the total execution requires 10K+ instructions.
         let exec_id = ExecId::new();
         let mut exec_input = exec_input_for_update(
             "run",
-            &[100, 0, 0, 0],
+            &10_000_u64.to_le_bytes(),
             vec![Global::I64(0)],
             child_wasm_memory_id,
             child_stable_memory_id,
         );
         exec_input.execution_parameters.instruction_limits = InstructionLimits::new(
             FlagStatus::Enabled,
-            NumInstructions::new(1000),
-            NumInstructions::new(70),
+            NumInstructions::new(100_000),
+            // The slice should be big enough for any syscall to fit.
+            NumInstructions::new(1_000),
         );
 
         // Execute the first slice.
@@ -1419,19 +1417,20 @@ mod tests {
         let child_wasm_memory_id = MemoryId::new();
         let child_stable_memory_id = MemoryId::new();
 
-        // Prepare the input such that the total execution requires 600+ instructions.
+        // Prepare the input such that the total execution requires 10K+ instructions.
         let exec_id = ExecId::new();
         let mut exec_input = exec_input_for_update(
             "run",
-            &[100, 0, 0, 0],
+            &10_000_u64.to_le_bytes(),
             vec![Global::I64(0)],
             child_wasm_memory_id,
             child_stable_memory_id,
         );
         exec_input.execution_parameters.instruction_limits = InstructionLimits::new(
             FlagStatus::Enabled,
-            NumInstructions::new(1000),
-            NumInstructions::new(70),
+            NumInstructions::new(100_000),
+            // The slice should be big enough for any syscall to fit.
+            NumInstructions::new(1_000),
         );
 
         // Execute the first slice.

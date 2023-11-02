@@ -151,7 +151,7 @@ impl LocalRegistry {
             let mut guard = self.cached_registry_canister.write().await;
             // invariant: the registry version of the memoized urls grows monotonically.
             // Thus, this is robust wrt. concurrent updates to the cache that
-            // might have happend before we obtained the lock.
+            // might have happened before we obtained the lock.
             if guard.0.registry_version < latest_version {
                 let urls_and_pubkey =
                     Self::get_root_subnet_info(&self.registry_cache, latest_version)?;
@@ -200,8 +200,8 @@ impl LocalRegistry {
     ) -> Result<Vec<Url>, LocalRegistryError> {
         let t_infos = registry_result_to_local_registry_error(
             version,
-            "get_subnet_transport_infos",
-            reg_client.get_subnet_transport_infos(subnet_id, version),
+            "get_subnet_node_records",
+            reg_client.get_subnet_node_records(subnet_id, version),
         )?;
         let mut urls: Vec<Url> = t_infos
             .iter()

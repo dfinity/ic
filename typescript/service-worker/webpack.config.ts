@@ -6,6 +6,10 @@ import CopyPlugin from 'copy-webpack-plugin';
 
 const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
   const isDevelopment = Boolean(env.development);
+  const outputPath = path.join(
+    __dirname,
+    isDevelopment ? 'dist-dev' : 'dist-prod'
+  );
 
   return {
     entry: {
@@ -16,7 +20,7 @@ const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
     target: 'webworker',
     devtool: 'source-map',
     output: {
-      path: path.join(__dirname, isDevelopment ? 'dist-dev' : 'dist-prod'),
+      path: outputPath,
       filename: '[name].js',
       publicPath: '/',
       assetModuleFilename: (pathData) =>
@@ -30,23 +34,23 @@ const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
           test: /\.tsx?$/,
           exclude: /node_modules/,
           use: [
-            {
-              loader: 'ts-loader',
-            },
+            { loader: 'minify-html-literals-loader' },
+            { loader: 'ts-loader' },
           ],
+        },
+        {
+          test: /\.wasm$/,
+          type: 'asset/inline',
         },
       ],
     },
     resolve: {
-      alias: {
-        process: 'process/browser',
-      },
       extensions: ['.tsx', '.ts', '.js'],
-      fallback: {
-        assert: require.resolve('assert/'),
-        events: require.resolve('events/'),
-        stream: require.resolve('stream-browserify/'),
-        util: require.resolve('util/'),
+      alias: {
+        'lit-html/lib/shady-render.js': path.resolve(
+          __dirname,
+          './node_modules/lit-html/lit-html.js'
+        ),
       },
     },
     plugins: [
@@ -78,9 +82,6 @@ const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
             },
           },
         ],
-      }),
-      new webpack.ProvidePlugin({
-        process: require.resolve('process/browser'),
       }),
       new webpack.EnvironmentPlugin({
         FORCE_FETCH_ROOT_KEY: isDevelopment,

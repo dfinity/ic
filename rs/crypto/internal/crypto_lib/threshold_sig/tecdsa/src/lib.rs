@@ -277,16 +277,13 @@ pub use crate::key_derivation::{DerivationIndex, DerivationPath};
 pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal};
 
 /// Create MEGa encryption keypair
-pub fn gen_keypair(
-    curve_type: EccCurveType,
-    seed: Seed,
-) -> Result<(MEGaPublicKey, MEGaPrivateKey), ThresholdEcdsaError> {
-    let mut rng = seed.into_rng();
-    let private_key = MEGaPrivateKey::generate(curve_type, &mut rng);
+pub fn gen_keypair(curve_type: EccCurveType, seed: Seed) -> (MEGaPublicKey, MEGaPrivateKey) {
+    let rng = &mut seed.into_rng();
+    let private_key = MEGaPrivateKey::generate(curve_type, rng);
 
-    let public_key = private_key.public_key()?;
+    let public_key = private_key.public_key();
 
-    Ok((public_key, private_key))
+    (public_key, private_key)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -587,7 +584,7 @@ pub fn publicly_verify_dealing(
 
 /// Verify a dealing using private information
 ///
-/// This private verification must be done after the dealing has been publically
+/// This private verification must be done after the dealing has been publicly
 /// verified. This operation decrypts the dealing and verifies that the
 /// decrypted value is consistent with the commitment in the dealing.
 #[allow(clippy::too_many_arguments)]
@@ -1052,7 +1049,7 @@ impl From<ThresholdEcdsaError> for ThresholdOpenDealingInternalError {
 /// opening for the dealing commitment.
 ///
 /// # Preconditions
-/// * The dealing has already been publically verified
+/// * The dealing has already been publicly verified
 /// * The complaint which caused us to provide an opening for this dealing has
 ///   already been verified to be valid.
 pub fn open_dealing(
@@ -1096,7 +1093,7 @@ impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
 /// complaint is a valid opening for the dealing.
 ///
 /// # Preconditions
-/// * The dealing has already been publically verified
+/// * The dealing has already been publicly verified
 /// # Errors
 /// * `ThresholdVerifyOpeningInternalError::InvalidOpening` if the opening does
 /// not match with the polynomial commitment.
@@ -1109,9 +1106,10 @@ pub fn verify_dealing_opening(
     opener_index: NodeIndex,
     opening: &CommitmentOpening,
 ) -> Result<(), ThresholdVerifyOpeningInternalError> {
-    let is_invalid = !verified_dealing
+    let is_invalid = verified_dealing
         .commitment
-        .check_opening(opener_index, opening)?;
+        .check_opening(opener_index, opening)
+        .is_err();
     if is_invalid {
         return Err(ThresholdVerifyOpeningInternalError::InvalidOpening);
     }

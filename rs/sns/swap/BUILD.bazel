@@ -1,8 +1,8 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:prost.bzl", "generated_files_check")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -14,26 +14,18 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/runtime",
     "//rs/nervous_system/proto",
-    "//rs/protobuf",
-    "//rs/registry/canister",
-    "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
-    "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "@crate_index//:build-info",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:hex",
@@ -45,7 +37,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
-    "@crate_index//:strum",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
@@ -60,7 +51,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
-    "@crate_index//:strum_macros",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -70,13 +60,10 @@ BUILD_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/config",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/common/test_utils",
-    "//rs/nns/common",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:criterion",
     "@crate_index//:futures",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
@@ -179,7 +166,7 @@ rust_test_suite_with_extra_srcs(
         "tests/common/doubles.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":swap"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":swap--test_feature"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(
@@ -187,8 +174,8 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**"]) + [
         ":protos",
-        "//rs/types/base_types:protos",
         "//rs/nervous_system/proto:protos",
+        "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/swap",
     deps = [

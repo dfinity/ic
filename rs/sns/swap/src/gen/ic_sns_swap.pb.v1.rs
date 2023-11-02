@@ -13,7 +13,7 @@
 ///                                                                      sufficient_participation
 ///                                                                      && (swap_due || icp_target_reached)
 /// PENDING -------------------> ADOPTED ---------------------> OPEN -----------------------------------------> COMMITTED
-///          Swap recieves a request        The opening delay      |                                                |
+///          Swap receives a request        The opening delay      |                                                |
 ///          from NNS governance to         has elapsed            | not sufficient_participation                   |
 ///          schedule opening                                      | && (swap_due || icp_target_reached)            |
 ///                                                                v                                                v
@@ -142,15 +142,9 @@
 /// - On reject of proposal to open decentralization swap:
 ///    - Assign the control of the dapp (now under the SNS control) back to the
 ///      specified principals.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Swap {
     /// The current lifecycle of the swap.
     #[prost(enumeration = "Lifecycle", tag = "3")]
@@ -217,21 +211,25 @@ pub struct Swap {
     /// from being attempted more than once.
     #[prost(bool, optional, tag = "17")]
     pub already_tried_to_auto_finalize: ::core::option::Option<bool>,
+    /// Set when auto-finalization finishes. Calling finalize manually has no effect
+    /// on this parameter.
+    #[prost(message, optional, tag = "18")]
+    pub auto_finalize_swap_response: ::core::option::Option<FinalizeSwapResponse>,
+    /// Amount of contributions from direct participants committed to this SNS so far.
+    #[prost(uint64, optional, tag = "19")]
+    pub direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Amount of contributions from the Neurons' Fund committed to this SNS so far.
+    #[prost(uint64, optional, tag = "20")]
+    pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
 ///
 /// If the initialization parameters are incorrect, the swap will
 /// immediately be aborted.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Init {
     /// The canister ID of the NNS governance canister. This is the only
     /// principal that can open the swap.
@@ -349,32 +347,87 @@ pub struct Init {
     /// (regardless of the value of this field).
     #[prost(bool, optional, tag = "28")]
     pub should_auto_finalize: ::core::option::Option<bool>,
+    /// Constraints for the Neurons' Fund participation in this swap.
+    /// TODO\[NNS1-2570\]: Use this data to compute neurons_fund_participation_icp_e8s.
+    #[prost(message, optional, tag = "29")]
+    pub neurons_fund_participation_constraints:
+        ::core::option::Option<NeuronsFundParticipationConstraints>,
+}
+/// Constraints for the Neurons' Fund participation in an SNS swap.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundParticipationConstraints {
+    /// The Neurons' Fund will not participate in this swap unless the direct
+    /// contributions reach this threshold (in ICP e8s).
+    #[prost(uint64, optional, tag = "1")]
+    pub min_direct_participation_threshold_icp_e8s: ::core::option::Option<u64>,
+    /// Maximum amount (in ICP e8s) of contributions from the Neurons' Fund to this swap.
+    #[prost(uint64, optional, tag = "2")]
+    pub max_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
+    /// List of intervals in which the given linear coefficients apply for scaling the
+    /// ideal Neurons' Fund participation amount (down) to the effective Neurons' Fund
+    /// participation amount.
+    #[prost(message, repeated, tag = "3")]
+    pub coefficient_intervals: ::prost::alloc::vec::Vec<LinearScalingCoefficient>,
+}
+/// Some Neurons' Fund neurons might be too small, and some might be too large to participate in a
+/// given SNS swap. This causes the need to adjust Neurons' Fund participation from an "ideal" amount
+/// to an "effective" amount.
+/// * The ideal-participation of the Neurons' Fund refers to the value dictated by some curve that
+///    specifies how direct contributions should be matched with Neurons' Fund maturity.
+/// * The effective-participation of the Neurons' Fund refers to the value that the NNS Governance
+///    can actually allocate, given (1) the configuration of the Neurons' Fund at the time of
+///    execution of the corresponding CreateServiceNervousSystem proposal and (2) the amount of direct
+///    participation.
+///
+/// This structure represents the coefficients of a linear transformation used for
+/// mapping the Neurons' Fund ideal-participation to effective-participation on a given
+/// linear (semi-open) interval. Say we have the following function for matching direct
+/// participants' contributions: `f: ICP e8s -> ICP e8s`; then the *ideal* Neuron's Fund
+/// participation amount corresponding to the direct participatio of `x` ICP e8s is
+/// `f(x)`, while the Neuron's Fund *effective* participation amount is:
+/// ```
+/// g(x) = (c.slope_numerator / c.slope_denominator) * f(x) + c.intercept
+/// ```
+/// where `c: LinearScalingCoefficient` with
+/// `c.from_direct_participation_icp_e8s <= x < c.to_direct_participation_icp_e8s`.
+/// Note that we represent the slope as a rational number (as opposed to floating point),
+/// enabling equality comparison between two instances of this structure.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LinearScalingCoefficient {
+    /// (Included) lower bound on the amount of direct participation (in ICP e8s) at which
+    /// these coefficients apply.
+    #[prost(uint64, optional, tag = "1")]
+    pub from_direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// (Excluded) upper bound on the amount of direct participation (in ICP e8s) at which
+    /// these coefficients apply.
+    #[prost(uint64, optional, tag = "2")]
+    pub to_direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Numerator or the slope of the linear transformation.
+    #[prost(uint64, optional, tag = "3")]
+    pub slope_numerator: ::core::option::Option<u64>,
+    /// Denominator or the slope of the linear transformation.
+    #[prost(uint64, optional, tag = "4")]
+    pub slope_denominator: ::core::option::Option<u64>,
+    /// Intercept of the linear transformation (in ICP e8s).
+    #[prost(uint64, optional, tag = "5")]
+    pub intercept_icp_e8s: ::core::option::Option<u64>,
 }
 /// Represents multiple Neurons' Fund participants.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronsFundParticipants {
     #[prost(message, repeated, tag = "1")]
     pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
 }
 /// Represents one NNS neuron from the Neurons' Fund participating in this swap.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CfNeuron {
     /// The NNS neuron ID of the participating neuron.
     #[prost(fixed64, tag = "1")]
@@ -385,16 +438,9 @@ pub struct CfNeuron {
     pub amount_icp_e8s: u64,
 }
 /// Represents a Neurons' Fund participant, possibly with several neurons.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CfParticipant {
     /// The principal that can vote on behalf of these Neurons' Fund neurons.
     #[prost(string, tag = "1")]
@@ -405,16 +451,9 @@ pub struct CfParticipant {
 }
 /// The construction parameters for the basket of neurons created for all
 /// investors in the decentralization swap.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronBasketConstructionParameters {
     /// The number of neurons each investor will receive after the
     /// decentralization swap. The total tokens swapped for will be
@@ -427,15 +466,9 @@ pub struct NeuronBasketConstructionParameters {
 }
 /// The parameters of the swap, provided in the call to `open`. Cannot
 /// be modified after the call to `open`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Params {
     /// The minimum number of buyers that must participate for the swap
     /// to take place. Must be greater than zero.
@@ -502,15 +535,9 @@ pub struct Params {
     #[prost(uint64, optional, tag = "9")]
     pub sale_delay_seconds: ::core::option::Option<u64>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransferableAmount {
     /// The amount in e8s equivalent that the participant committed to the Swap,
     /// which is held by the swap canister until the swap is committed or aborted.
@@ -530,15 +557,9 @@ pub struct TransferableAmount {
     #[prost(uint64, optional, tag = "5")]
     pub transfer_fee_paid_e8s: ::core::option::Option<u64>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BuyerState {
     /// The amount of ICP accepted from this buyer. ICP is accepted by
     /// first making a ledger transfer and then calling the method
@@ -558,7 +579,7 @@ pub struct BuyerState {
     /// where `P` is the principal ID associated with this buyer's state.
     ///
     /// ownership
-    /// * PENDING - a `BuyerState` cannot exists
+    /// * PENDING - a `BuyerState` cannot exist
     /// * OPEN - owned by the buyer, cannot be transferred out
     /// * COMMITTED - owned by the SNS governance canister, can be transferred out
     /// * ABORTED - owned by the buyer, can be transferred out
@@ -566,30 +587,18 @@ pub struct BuyerState {
     pub icp: ::core::option::Option<TransferableAmount>,
 }
 /// Information about a direct investor.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DirectInvestment {
     #[prost(string, tag = "1")]
     pub buyer_principal: ::prost::alloc::string::String,
 }
 /// Information about a Neurons' Fund investment. The NNS Governance
 /// canister is the controller of these neurons.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CfInvestment {
     #[prost(string, tag = "1")]
     pub hotkey_principal: ::prost::alloc::string::String,
@@ -597,30 +606,19 @@ pub struct CfInvestment {
     pub nns_neuron_id: u64,
 }
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Copy,
-    Clone,
-    PartialEq,
-    ::prost::Message,
+    candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Copy,
 )]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TimeWindow {
     #[prost(uint64, tag = "1")]
     pub start_timestamp_seconds: u64,
     #[prost(uint64, tag = "2")]
     pub end_timestamp_seconds: u64,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SnsNeuronRecipe {
     #[prost(message, optional, tag = "1")]
     pub sns: ::core::option::Option<TransferableAmount>,
@@ -637,15 +635,9 @@ pub struct SnsNeuronRecipe {
 /// Nested message and enum types in `SnsNeuronRecipe`.
 pub mod sns_neuron_recipe {
     /// Attributes of the Neuron to be created from the SnsNeuronRecipe
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct NeuronAttributes {
         /// The memo to be used when calculating the Neuron's staking account
         /// in the SNS Ledger.
@@ -717,16 +709,21 @@ pub mod sns_neuron_recipe {
                 ClaimedStatus::Invalid => "CLAIMED_STATUS_INVALID",
             }
         }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "CLAIMED_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+                "CLAIMED_STATUS_PENDING" => Some(Self::Pending),
+                "CLAIMED_STATUS_SUCCESS" => Some(Self::Success),
+                "CLAIMED_STATUS_FAILED" => Some(Self::Failed),
+                "CLAIMED_STATUS_INVALID" => Some(Self::Invalid),
+                _ => None,
+            }
+        }
     }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Investor {
         #[prost(message, tag = "2")]
         Direct(super::DirectInvestment),
@@ -734,19 +731,9 @@ pub mod sns_neuron_recipe {
         CommunityFund(super::CfInvestment),
     }
 }
-//
-// === Request/Response Messages
-//
-
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OpenRequest {
     /// The parameters of the swap.
     #[prost(message, optional, tag = "1")]
@@ -758,112 +745,58 @@ pub struct OpenRequest {
     #[prost(uint64, optional, tag = "3")]
     pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OpenResponse {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetCanisterStatusRequest {}
 /// TODO: introduce a limits on the number of buyers to include?
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetStateRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetStateResponse {
     #[prost(message, optional, tag = "1")]
     pub swap: ::core::option::Option<Swap>,
     #[prost(message, optional, tag = "2")]
     pub derived: ::core::option::Option<DerivedState>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetBuyerStateRequest {
     /// The principal_id of the user who's buyer state is being queried for.
     #[prost(message, optional, tag = "1")]
     pub principal_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetBuyerStateResponse {
     #[prost(message, optional, tag = "1")]
     pub buyer_state: ::core::option::Option<BuyerState>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetBuyersTotalRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetBuyersTotalResponse {
     /// The total amount of ICP deposited by buyers.
     #[prost(uint64, tag = "1")]
     pub buyers_total: u64,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DerivedState {
     #[prost(uint64, tag = "1")]
     pub buyer_total_icp_e8s: u64,
@@ -883,16 +816,16 @@ pub struct DerivedState {
     /// Current approximate rate SNS tokens per ICP.
     #[prost(float, tag = "2")]
     pub sns_tokens_per_icp: f32,
+    /// Current amount of contributions from direct swap participants.
+    #[prost(uint64, optional, tag = "6")]
+    pub direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Current amount of contributions from the Neurons' Fund.
+    #[prost(uint64, optional, tag = "7")]
+    pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetOpenTimeWindowRequest {
     /// Duration must be between 1 and 90 days. The TimeWindow's
     /// end time but be greater than or equal to the TimeWindow's
@@ -901,29 +834,17 @@ pub struct SetOpenTimeWindowRequest {
     pub open_time_window: ::core::option::Option<TimeWindow>,
 }
 /// Response if setting the open time window succeeded.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetOpenTimeWindowResponse {}
 /// Informs the swap canister that a buyer has sent funds to participate in the
 /// swap.
 ///
 /// Only in lifecycle state `open`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefreshBuyerTokensRequest {
     /// If not specified, the caller is used.
     #[prost(string, tag = "1")]
@@ -934,15 +855,9 @@ pub struct RefreshBuyerTokensRequest {
     #[prost(string, optional, tag = "2")]
     pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefreshBuyerTokensResponse {
     #[prost(uint64, tag = "1")]
     pub icp_accepted_participation_e8s: u64,
@@ -951,26 +866,14 @@ pub struct RefreshBuyerTokensResponse {
 }
 /// Once a swap is committed or aborted, the tokens need to be
 /// distributed, and, if the swap was committed, neurons created.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FinalizeSwapRequest {}
 /// Response from the `finalize_swap` canister API.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FinalizeSwapResponse {
     #[prost(message, optional, tag = "1")]
     pub sweep_icp_result: ::core::option::Option<SweepResult>,
@@ -989,15 +892,9 @@ pub struct FinalizeSwapResponse {
     #[prost(string, optional, tag = "7")]
     pub error_message: ::core::option::Option<::prost::alloc::string::String>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SweepResult {
     /// Success means that on this call to finalize, the item in the
     /// sweep succeeded.
@@ -1022,40 +919,22 @@ pub struct SweepResult {
     pub global_failures: u32,
 }
 /// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetModeCallResult {
     #[prost(oneof = "set_mode_call_result::Possibility", tags = "1, 2")]
     pub possibility: ::core::option::Option<set_mode_call_result::Possibility>,
 }
 /// Nested message and enum types in `SetModeCallResult`.
 pub mod set_mode_call_result {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct SetModeResult {}
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Possibility {
         #[prost(message, tag = "1")]
         Ok(SetModeResult),
@@ -1064,27 +943,15 @@ pub mod set_mode_call_result {
     }
 }
 /// Request struct for the method restore_dapp_controllers.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RestoreDappControllersRequest {}
 /// Response of the method restore_dapp_controllers.
 /// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RestoreDappControllersResponse {
     #[prost(
         oneof = "restore_dapp_controllers_response::Possibility",
@@ -1094,15 +961,9 @@ pub struct RestoreDappControllersResponse {
 }
 /// Nested message and enum types in `RestoreDappControllersResponse`.
 pub mod restore_dapp_controllers_response {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Possibility {
         /// TODO(NNS1-1589): Uncomment.
         /// ic_sns_root.pb.v1.
@@ -1113,30 +974,18 @@ pub mod restore_dapp_controllers_response {
     }
 }
 /// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetDappControllersCallResult {
     #[prost(oneof = "set_dapp_controllers_call_result::Possibility", tags = "1, 2")]
     pub possibility: ::core::option::Option<set_dapp_controllers_call_result::Possibility>,
 }
 /// Nested message and enum types in `SetDappControllersCallResult`.
 pub mod set_dapp_controllers_call_result {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Possibility {
         /// TODO(NNS1-1589): Uncomment.
         /// ic_sns_root.pb.v1.
@@ -1146,15 +995,9 @@ pub mod set_dapp_controllers_call_result {
         Err(super::CanisterCallError),
     }
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SettleCommunityFundParticipationResult {
     #[prost(
         oneof = "settle_community_fund_participation_result::Possibility",
@@ -1165,29 +1008,17 @@ pub struct SettleCommunityFundParticipationResult {
 }
 /// Nested message and enum types in `SettleCommunityFundParticipationResult`.
 pub mod settle_community_fund_participation_result {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Response {
         /// Can be blank.
         #[prost(message, optional, tag = "1")]
         pub governance_error: ::core::option::Option<super::GovernanceError>,
     }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Possibility {
         #[prost(message, tag = "1")]
         Ok(Response),
@@ -1195,21 +1026,11 @@ pub mod settle_community_fund_participation_result {
         Err(super::CanisterCallError),
     }
 }
-// TODO(NNS1-1589): Delete these copied definitions.
-
-// BEGIN NNS1-1589 HACKS
-
 /// Change control of the listed canisters to the listed principal id.
 /// Copy of the type in root.proto. TODO(NNS1-1589)
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetDappControllersRequest {
     #[prost(message, optional, tag = "1")]
     pub canister_ids: ::core::option::Option<set_dapp_controllers_request::CanisterIds>,
@@ -1218,44 +1039,26 @@ pub struct SetDappControllersRequest {
 }
 /// Nested message and enum types in `SetDappControllersRequest`.
 pub mod set_dapp_controllers_request {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct CanisterIds {
         #[prost(message, repeated, tag = "1")]
         pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     }
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetDappControllersResponse {
     #[prost(message, repeated, tag = "1")]
     pub failed_updates: ::prost::alloc::vec::Vec<set_dapp_controllers_response::FailedUpdate>,
 }
 /// Nested message and enum types in `SetDappControllersResponse`.
 pub mod set_dapp_controllers_response {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct FailedUpdate {
         #[prost(message, optional, tag = "1")]
         pub dapp_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
@@ -1264,15 +1067,9 @@ pub mod set_dapp_controllers_response {
     }
 }
 /// Copied from nns governance.proto.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GovernanceError {
     #[prost(enumeration = "governance_error::ErrorType", tag = "1")]
     pub error_type: i32,
@@ -1384,18 +1181,39 @@ pub mod governance_error {
                 ErrorType::NotInTheCommunityFund => "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND",
             }
         }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "ERROR_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+                "ERROR_TYPE_OK" => Some(Self::Ok),
+                "ERROR_TYPE_UNAVAILABLE" => Some(Self::Unavailable),
+                "ERROR_TYPE_NOT_AUTHORIZED" => Some(Self::NotAuthorized),
+                "ERROR_TYPE_NOT_FOUND" => Some(Self::NotFound),
+                "ERROR_TYPE_INVALID_COMMAND" => Some(Self::InvalidCommand),
+                "ERROR_TYPE_REQUIRES_NOT_DISSOLVING" => Some(Self::RequiresNotDissolving),
+                "ERROR_TYPE_REQUIRES_DISSOLVING" => Some(Self::RequiresDissolving),
+                "ERROR_TYPE_REQUIRES_DISSOLVED" => Some(Self::RequiresDissolved),
+                "ERROR_TYPE_HOT_KEY" => Some(Self::HotKey),
+                "ERROR_TYPE_RESOURCE_EXHAUSTED" => Some(Self::ResourceExhausted),
+                "ERROR_TYPE_PRECONDITION_FAILED" => Some(Self::PreconditionFailed),
+                "ERROR_TYPE_EXTERNAL" => Some(Self::External),
+                "ERROR_TYPE_LEDGER_UPDATE_ONGOING" => Some(Self::LedgerUpdateOngoing),
+                "ERROR_TYPE_INSUFFICIENT_FUNDS" => Some(Self::InsufficientFunds),
+                "ERROR_TYPE_INVALID_PRINCIPAL" => Some(Self::InvalidPrincipal),
+                "ERROR_TYPE_INVALID_PROPOSAL" => Some(Self::InvalidProposal),
+                "ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND" => {
+                    Some(Self::AlreadyJoinedCommunityFund)
+                }
+                "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND" => Some(Self::NotInTheCommunityFund),
+                _ => None,
+            }
+        }
     }
 }
 /// Copied from nns governance.proto.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SettleCommunityFundParticipation {
     /// The caller's principal ID must match the value in the
     /// target_swap_canister_id field in the proposal (more precisely, in the
@@ -1413,45 +1231,34 @@ pub mod settle_community_fund_participation {
     /// canister's main account on the ICP Ledger. As with Aborted, the amount of
     /// ICP that needs to be minted can be deduced from the ProposalData's
     /// cf_participants field.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Committed {
         /// This is where the minted ICP will be sent. In principal, this could be
         /// fetched using the swap canister's get_state method.
         #[prost(message, optional, tag = "1")]
         pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// Total amount of contributions from direct swap participants.
+        #[prost(uint64, optional, tag = "2")]
+        pub total_direct_contribution_icp_e8s: ::core::option::Option<u64>,
+        /// Total amount of contributions from the Neuron's Fund.
+        /// TODO\[NNS1-2570\]: Ensure this field is set.
+        #[prost(uint64, optional, tag = "3")]
+        pub total_neurons_fund_contribution_icp_e8s: ::core::option::Option<u64>,
     }
     /// When this happens, maturity needs to be restored to Neurons' Fund neurons.
     /// The amounts to be refunded can be found in the ProposalData's
     /// `cf_participants` field.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Aborted {}
     /// Each of the possibilities here corresponds to one of two ways that a swap
     /// can terminate. See also sns_swap_pb::Lifecycle::is_terminal.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
         #[prost(message, tag = "2")]
         Committed(Committed),
@@ -1461,30 +1268,16 @@ pub mod settle_community_fund_participation {
 }
 /// The id of a specific neuron, which equals the neuron's subaccount on
 /// the ledger canister (the account that holds the neuron's staked tokens).
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
     #[prost(bytes = "vec", tag = "1")]
     pub id: ::prost::alloc::vec::Vec<u8>,
 }
-// END NNS1-1589 HACKS
-
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterCallError {
     #[prost(int32, optional, tag = "1")]
     pub code: ::core::option::Option<i32>,
@@ -1494,30 +1287,18 @@ pub struct CanisterCallError {
 /// Request a refund of tokens that were sent to the canister in
 /// error. The refund is always on the ICP ledger, from this canister's
 /// subaccount of the caller to the account of the caller.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ErrorRefundIcpRequest {
     /// Principal who originally sent the funds to us, and is now asking for any
     /// unaccepted balance to be returned.
     #[prost(message, optional, tag = "1")]
     pub source_principal_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ErrorRefundIcpResponse {
     #[prost(oneof = "error_refund_icp_response::Result", tags = "1, 2")]
     pub result: ::core::option::Option<error_refund_icp_response::Result>,
@@ -1525,30 +1306,18 @@ pub struct ErrorRefundIcpResponse {
 /// Nested message and enum types in `ErrorRefundIcpResponse`.
 pub mod error_refund_icp_response {
     /// Request was completed successfully.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Ok {
         /// The ledger transfer went through at this block height.
         #[prost(uint64, optional, tag = "1")]
         pub block_height: ::core::option::Option<u64>,
     }
     /// Request was not successful, and no funds were transferred.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Err {
         #[prost(enumeration = "err::Type", optional, tag = "1")]
         pub error_type: ::core::option::Option<i32>,
@@ -1602,17 +1371,21 @@ pub mod error_refund_icp_response {
                     Type::External => "TYPE_EXTERNAL",
                 }
             }
+            /// Creates an enum from field names used in the ProtoBuf definition.
+            pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+                match value {
+                    "TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+                    "TYPE_INVALID_REQUEST" => Some(Self::InvalidRequest),
+                    "TYPE_PRECONDITION" => Some(Self::Precondition),
+                    "TYPE_EXTERNAL" => Some(Self::External),
+                    _ => None,
+                }
+            }
         }
     }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
         #[prost(message, tag = "1")]
         Ok(Ok),
@@ -1621,78 +1394,62 @@ pub mod error_refund_icp_response {
     }
 }
 /// Request struct for the method `get_lifecycle`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetLifecycleRequest {}
 /// Response struct for the method `get_lifecycle`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetLifecycleResponse {
     #[prost(enumeration = "Lifecycle", optional, tag = "1")]
     pub lifecycle: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "2")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
 }
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetAutoFinalizationStatusRequest {}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetAutoFinalizationStatusResponse {
+    /// Reflects whether auto-finalization has been enabled via in the init
+    /// parameters (`should_auto_finalize`).
+    #[prost(bool, optional, tag = "1")]
+    pub is_auto_finalize_enabled: ::core::option::Option<bool>,
+    /// True if and only if auto-finalization has been started.
+    #[prost(bool, optional, tag = "2")]
+    pub has_auto_finalize_been_attempted: ::core::option::Option<bool>,
+    /// Will be populated with the FinalizeSwapResponse once auto-finalization has
+    /// completed.
+    #[prost(message, optional, tag = "3")]
+    pub auto_finalize_swap_response: ::core::option::Option<FinalizeSwapResponse>,
+}
 /// Request struct for the method `get_init`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetInitRequest {}
 /// Response struct for the method `get_init`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetInitResponse {
     #[prost(message, optional, tag = "1")]
     pub init: ::core::option::Option<Init>,
 }
 /// Request struct for the method `get_derived_state`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetDerivedStateRequest {}
 /// Response struct for the method `get_derived_state`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetDerivedStateResponse {
     #[prost(uint64, optional, tag = "1")]
     pub buyer_total_icp_e8s: ::core::option::Option<u64>,
@@ -1711,17 +1468,17 @@ pub struct GetDerivedStateResponse {
     pub cf_neuron_count: ::core::option::Option<u64>,
     #[prost(double, optional, tag = "2")]
     pub sns_tokens_per_icp: ::core::option::Option<f64>,
+    /// Current amount of contributions from direct swap participants.
+    #[prost(uint64, optional, tag = "6")]
+    pub direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Current amount of contributions from the Neurons' Fund.
+    #[prost(uint64, optional, tag = "7")]
+    pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
 /// ICRC-1 Account. See <https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1>
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Icrc1Account {
     #[prost(message, optional, tag = "1")]
     pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
@@ -1741,15 +1498,9 @@ pub struct Icrc1Account {
 /// The surprise existence of the ticket indicates that there is a pending
 /// participation. In this case the user's agent must attempt to perform the same
 /// participation as stated in the ticket before doing anything else.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Ticket {
     /// Unique ID of the ticket
     #[prost(uint64, tag = "1")]
@@ -1767,26 +1518,14 @@ pub struct Ticket {
     pub creation_time: u64,
 }
 /// Request struct for the method `get_open_ticket`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetOpenTicketRequest {}
 /// Response struct for the method `get_open_ticket`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetOpenTicketResponse {
     #[prost(oneof = "get_open_ticket_response::Result", tags = "1, 2")]
     pub result: ::core::option::Option<get_open_ticket_response::Result>,
@@ -1794,15 +1533,9 @@ pub struct GetOpenTicketResponse {
 /// Nested message and enum types in `GetOpenTicketResponse`.
 pub mod get_open_ticket_response {
     /// Request was completed successfully.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Ok {
         /// If there is an open swap ticket for the caller then this field
         /// contains it.
@@ -1810,15 +1543,9 @@ pub mod get_open_ticket_response {
         pub ticket: ::core::option::Option<super::Ticket>,
     }
     /// Request was not successful, and no ticket was creatd.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Err {
         #[prost(enumeration = "err::Type", optional, tag = "1")]
         pub error_type: ::core::option::Option<i32>,
@@ -1858,17 +1585,20 @@ pub mod get_open_ticket_response {
                     Type::SaleClosed => "TYPE_SALE_CLOSED",
                 }
             }
+            /// Creates an enum from field names used in the ProtoBuf definition.
+            pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+                match value {
+                    "TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+                    "TYPE_SALE_NOT_OPEN" => Some(Self::SaleNotOpen),
+                    "TYPE_SALE_CLOSED" => Some(Self::SaleClosed),
+                    _ => None,
+                }
+            }
         }
     }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
         #[prost(message, tag = "1")]
         Ok(Ok),
@@ -1877,15 +1607,9 @@ pub mod get_open_ticket_response {
     }
 }
 /// Request struct for the method `new_sale_ticket`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewSaleTicketRequest {
     /// The user-set amount of the ticket in ICP e8s
     #[prost(uint64, tag = "1")]
@@ -1895,15 +1619,9 @@ pub struct NewSaleTicketRequest {
     pub subaccount: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Response struct for the method `new_sale_ticket`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewSaleTicketResponse {
     #[prost(oneof = "new_sale_ticket_response::Result", tags = "1, 2")]
     pub result: ::core::option::Option<new_sale_ticket_response::Result>,
@@ -1911,30 +1629,18 @@ pub struct NewSaleTicketResponse {
 /// Nested message and enum types in `NewSaleTicketResponse`.
 pub mod new_sale_ticket_response {
     /// Request was completed successfully.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Ok {
         /// The created ticket.
         #[prost(message, optional, tag = "1")]
         pub ticket: ::core::option::Option<super::Ticket>,
     }
     /// Request was not successful, and no ticket was creatd.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Err {
         #[prost(enumeration = "err::Type", tag = "1")]
         pub error_type: i32,
@@ -1950,14 +1656,10 @@ pub mod new_sale_ticket_response {
     /// Nested message and enum types in `Err`.
     pub mod err {
         #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            PartialEq,
-            ::prost::Message,
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
         )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
         pub struct InvalidUserAmount {
             #[prost(uint64, tag = "1")]
             pub min_amount_icp_e8s_included: u64,
@@ -2016,17 +1718,24 @@ pub mod new_sale_ticket_response {
                     Type::InvalidPrincipal => "TYPE_INVALID_PRINCIPAL",
                 }
             }
+            /// Creates an enum from field names used in the ProtoBuf definition.
+            pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+                match value {
+                    "TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+                    "TYPE_SALE_NOT_OPEN" => Some(Self::SaleNotOpen),
+                    "TYPE_SALE_CLOSED" => Some(Self::SaleClosed),
+                    "TYPE_TICKET_EXISTS" => Some(Self::TicketExists),
+                    "TYPE_INVALID_USER_AMOUNT" => Some(Self::InvalidUserAmount),
+                    "TYPE_INVALID_SUBACCOUNT" => Some(Self::InvalidSubaccount),
+                    "TYPE_INVALID_PRINCIPAL" => Some(Self::InvalidPrincipal),
+                    _ => None,
+                }
+            }
         }
     }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
         #[prost(message, tag = "1")]
         Ok(Ok),
@@ -2038,15 +1747,9 @@ pub mod new_sale_ticket_response {
 /// paginates over all direct participants in the decentralization swap.
 /// Direct participants are participants who did not participate via the
 /// Neurons' Fund.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListDirectParticipantsRequest {
     /// The limit of the number of Participants returned in each page, in range
     /// [0, 30,000].
@@ -2059,15 +1762,9 @@ pub struct ListDirectParticipantsRequest {
     pub offset: ::core::option::Option<u32>,
 }
 /// Response struct for the method `list_direct_participants`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListDirectParticipantsResponse {
     /// The list of Participants returned from the invocation of
     /// `list_direct_participants`.
@@ -2084,15 +1781,9 @@ pub struct ListDirectParticipantsResponse {
     pub participants: ::prost::alloc::vec::Vec<Participant>,
 }
 /// A direct Participant in the decentralization swap.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Participant {
     /// The PrincipalId of the participant.
     #[prost(message, optional, tag = "1")]
@@ -2104,40 +1795,22 @@ pub struct Participant {
     pub participation: ::core::option::Option<BuyerState>,
 }
 /// Request struct for the method `get_sale_parameters`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSaleParametersRequest {}
 /// Response struct for the method `get_sale_parameters`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSaleParametersResponse {
     #[prost(message, optional, tag = "1")]
     pub params: ::core::option::Option<Params>,
 }
 /// Request struct for the method `list_community_fund_participants`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListCommunityFundParticipantsRequest {
     /// The maximum number of elements that will be in the response.
     /// This is capped at 10_000.
@@ -2148,29 +1821,17 @@ pub struct ListCommunityFundParticipantsRequest {
     pub offset: ::core::option::Option<u64>,
 }
 /// Response struct for the method `list_community_fund_participants`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListCommunityFundParticipantsResponse {
     #[prost(message, repeated, tag = "1")]
     pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
 }
 /// Request for the method `list_sns_neuron_recipes`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListSnsNeuronRecipesRequest {
     /// The maximum number of elements that will be in the response.
     /// This is capped at 10_000.
@@ -2181,42 +1842,24 @@ pub struct ListSnsNeuronRecipesRequest {
     pub offset: ::core::option::Option<u64>,
 }
 /// Response for the method `list_sns_neuron_recipes`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListSnsNeuronRecipesResponse {
     #[prost(message, repeated, tag = "1")]
     pub sns_neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
 }
 /// Request struct for the method `notfiy_payment_failure`
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NotifyPaymentFailureRequest {}
 /// Response for the method `notfiy_payment_failure`
 /// Returns the ticket if a ticket was found for the caller and the ticket
 /// was removed successfully. Returns None if no ticket was found for the caller.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NotifyPaymentFailureResponse {
     #[prost(message, optional, tag = "1")]
     pub ticket: ::core::option::Option<Ticket>,
@@ -2248,8 +1891,10 @@ pub enum Lifecycle {
     /// the swap.
     Pending = 1,
     /// In ADOPTED state, the proposal to start the decentralization swap
-    /// has been adopted, and the swap can be opened after a delay
-    /// specified by params.sale_delay_seconds.
+    /// has been adopted, and the swap will be automatically opened after a delay.
+    /// In the legacy (non-one-proposal) flow, the swap delay is specified by
+    /// params.sale_delay_seconds. In the one-proposal flow, the swap delay is
+    /// specified by `init.swap_start_timestamp_seconds`.
     Adopted = 5,
     /// In OPEN state, prospective buyers can register for the token
     /// swap. The swap will be committed when the target (max) ICP has
@@ -2278,6 +1923,18 @@ impl Lifecycle {
             Lifecycle::Open => "LIFECYCLE_OPEN",
             Lifecycle::Committed => "LIFECYCLE_COMMITTED",
             Lifecycle::Aborted => "LIFECYCLE_ABORTED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "LIFECYCLE_UNSPECIFIED" => Some(Self::Unspecified),
+            "LIFECYCLE_PENDING" => Some(Self::Pending),
+            "LIFECYCLE_ADOPTED" => Some(Self::Adopted),
+            "LIFECYCLE_OPEN" => Some(Self::Open),
+            "LIFECYCLE_COMMITTED" => Some(Self::Committed),
+            "LIFECYCLE_ABORTED" => Some(Self::Aborted),
+            _ => None,
         }
     }
 }

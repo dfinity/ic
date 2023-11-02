@@ -4,9 +4,11 @@ use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Projec
 use dfn_candid::{candid_one, CandidOne};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
-use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_ledger::{
+    InitArgs as LedgerInitArgs, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
@@ -123,14 +125,9 @@ pub struct SnsTestsInitPayloadBuilder {
 #[allow(clippy::new_without_default)]
 impl SnsTestsInitPayloadBuilder {
     pub fn new() -> SnsTestsInitPayloadBuilder {
-        let ledger = LedgerInitArgs {
-            // minting_account will be set when the Governance canister ID is allocated
-            minting_account: Account {
-                owner: Principal::anonymous(),
-                subaccount: None,
-            },
-            initial_balances: vec![],
-            archive_options: ArchiveOptions {
+        let ledger = LedgerInitArgsBuilder::for_tests()
+            .with_minting_account(Principal::anonymous()) // will be set when the Governance canister ID is allocated
+            .with_archive_options(ArchiveOptions {
                 trigger_threshold: 2000,
                 num_blocks_to_archive: 1000,
                 // 1 GB, which gives us 3 GB space when upgrading
@@ -141,15 +138,9 @@ impl SnsTestsInitPayloadBuilder {
                 controller_id: CanisterId::from_u64(0).into(),
                 cycles_for_archive_creation: Some(0),
                 max_transactions_per_response: None,
-            },
-            transfer_fee: DEFAULT_TRANSFER_FEE.get_e8s(),
-            token_symbol: "TKX".to_string(),
-            token_name: "Token Example".to_string(),
-            metadata: vec![],
-            fee_collector_account: None,
-            max_memo_length: None,
-            feature_flags: None,
-        };
+            })
+            .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+            .build();
 
         let swap = SwapInit {
             fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(6360).to_string()],
@@ -191,17 +182,13 @@ impl SnsTestsInitPayloadBuilder {
     }
 
     pub fn with_ledger_account(&mut self, account: Account, icpts: Tokens) -> &mut Self {
-        self.ledger
-            .initial_balances
-            .push((account, icpts.get_e8s()));
+        self.ledger.initial_balances.push((account, icpts.into()));
         self
     }
 
     pub fn with_ledger_accounts(&mut self, accounts: Vec<Account>, tokens: Tokens) -> &mut Self {
         for account in accounts {
-            self.ledger
-                .initial_balances
-                .push((account, tokens.get_e8s()));
+            self.ledger.initial_balances.push((account, tokens.into()));
         }
         self
     }
@@ -234,12 +221,14 @@ impl SnsTestsInitPayloadBuilder {
     }
 
     pub fn build(&mut self) -> SnsCanisterInitPayloads {
+        use num_traits::ToPrimitive;
+
         let governance = self.governance.build();
 
         let ledger = LedgerArgument::Init(self.ledger.clone());
 
         let mut swap = self.swap.clone();
-        swap.transaction_fee_e8s = Some(self.ledger.transfer_fee);
+        swap.transaction_fee_e8s = Some(self.ledger.transfer_fee.0.to_u64().unwrap());
         swap.neuron_minimum_stake_e8s = Some(
             governance
                 .parameters
@@ -405,7 +394,7 @@ impl SnsCanisters<'_> {
                 };
                 ledger
                     .initial_balances
-                    .push((aid, n.cached_neuron_stake_e8s));
+                    .push((aid, n.cached_neuron_stake_e8s.into()));
             }
         }
 

@@ -5,7 +5,7 @@ use dfn_core::println;
 use serde::Serialize;
 
 use crate::mutations::common::{decode_registry_value, encode_or_panic};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_protobuf::registry::firewall::v1::{FirewallRule, FirewallRuleSet};
 use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};

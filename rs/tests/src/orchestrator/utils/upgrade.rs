@@ -76,7 +76,7 @@ pub(crate) async fn fetch_update_file_sha256(
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("SHA256.txt");
 
-    let file_downloader = FileDownloader::new(None);
+    let file_downloader = FileDownloader::new(None).follow_redirects();
     file_downloader
         .download_file(&sha_url, &tmp_file, None)
         .await
@@ -214,7 +214,10 @@ async fn bless_replica_version_with_sha(
 
     info!(
         logger,
-        "Blessing replica version {} with sha256 {}", replica_version, sha256
+        "Blessing replica version {} with sha256 {} and upgrade urls: {:?}",
+        replica_version,
+        sha256,
+        &upgrade_url
     );
 
     let proposal_id = submit_update_elected_replica_versions_proposal(
@@ -256,7 +259,7 @@ pub(crate) async fn bless_public_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
     image_type: UpdateImageType,
-    url_image_type: UpdateImageType, // normaly it is the same as above, unless we want to have bogus url
+    url_image_type: UpdateImageType, // normally it is the same as above, unless we want to have bogus url
     logger: &Logger,
 ) {
     let upgrade_url = get_update_image_url(url_image_type, target_version);
@@ -285,6 +288,7 @@ pub(crate) async fn bless_replica_version_with_urls(
     target_version: &str,
     image_type: UpdateImageType,
     release_package_urls: Vec<String>,
+    sha256: String,
     logger: &Logger,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -294,12 +298,6 @@ pub(crate) async fn bless_replica_version_with_urls(
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
     let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
     info!(logger, "Initial: {:?}", blessed_versions);
-    let sha256 = fetch_update_file_sha256_with_retry(
-        logger,
-        target_version,
-        image_type == UpdateImageType::ImageTest,
-    )
-    .await;
 
     let replica_version = match image_type == UpdateImageType::ImageTest {
         true => ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap(),

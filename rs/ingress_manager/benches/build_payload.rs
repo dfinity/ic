@@ -11,7 +11,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_constants::MAX_INGRESS_TTL;
-use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact},
@@ -33,7 +32,7 @@ use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
-    state::ReplicatedStateBuilder,
+    state::{CanisterStateBuilder, ReplicatedStateBuilder},
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
     FastForwardTimeSource,
@@ -44,24 +43,37 @@ use ic_types::{
     batch::ValidationContext,
     ingress::IngressStatus,
     malicious_flags::MaliciousFlags,
-    Height, NumBytes, RegistryVersion, SubnetId, Time,
+    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
 };
-use rand::Rng;
+use rand::{Rng, RngCore};
 use std::{
     collections::HashSet,
     sync::{Arc, RwLock},
 };
 
 /// Helper to run a single test with dependency setup.
-fn run_test<T>(_test_name: &str, test: T)
+fn run_test<T>(_test_name: &str, canisters: &[CanisterId], test: T)
 where
     T: FnOnce(
         Arc<FastForwardTimeSource>,
         Arc<RwLock<IngressPoolImpl>>,
         &mut IngressManager,
         Arc<dyn RegistryClient>,
+        &[CanisterId],
     ),
 {
+    // build replicated state with enough cycles per canister id
+    let mut replicated_state = ReplicatedStateBuilder::new().with_subnet_id(subnet_test_id(0));
+    for canister_id in canisters {
+        replicated_state = replicated_state.with_canister(
+            CanisterStateBuilder::new()
+                .with_canister_id(*canister_id)
+                .with_cycles(Cycles::new(500_000_000_000)) /* 500 billion cycles */
+                .build(),
+        );
+    }
+    let replicated_state = replicated_state.build();
+
     let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
     ingress_hist_reader
         .expect_get_status_at_height()
@@ -72,10 +84,7 @@ where
     let consensus_pool_cache = Arc::new(MockConsensusCache::new());
     let mut state_manager = MockStateManager::new();
     state_manager.expect_get_state_at().return_const(Ok(
-        ic_interfaces_state_manager::Labeled::new(
-            Height::new(0),
-            Arc::new(ReplicatedStateBuilder::default().build()),
-        ),
+        ic_interfaces_state_manager::Labeled::new(Height::new(0), Arc::new(replicated_state)),
     ));
 
     with_test_pool_config(|pool_config| {
@@ -109,6 +118,7 @@ where
                 MaliciousFlags::default(),
             ),
             registry,
+            canisters,
         )
     })
 }
@@ -117,17 +127,24 @@ where
 /// be considered as valid according to expiry restrictions (not expired & not
 /// too far in the future).
 ///
+/// Also, the number of canisters is roughly `num * 0.1`. So there's 1 canister
+/// for every 10 ingress messages.
+///
 /// Return the mean of all expiry time.
 fn prepare(
     time_source: &dyn TimeSource,
     pool: Arc<RwLock<IngressPoolImpl>>,
     now: Time,
     num: usize,
+    canisters: &[CanisterId],
 ) -> Time {
     let mut changeset = ChangeSet::new();
     let ingress_size = 1024;
     let mut rng = rand::thread_rng();
     let mut pool = pool.write().unwrap();
+
+    let mut canisters = canisters.iter().cycle();
+
     for i in 0..num {
         // Only 10% of them will be considered valid
         let expiry = std::time::Duration::from_millis(
@@ -138,7 +155,7 @@ fn prepare(
             .method_payload(vec![0; ingress_size])
             .nonce(i as u64)
             .expiry_time(now + expiry)
-            .canister_id(IC_00)
+            .canister_id(*canisters.next().unwrap())
             .build();
         let message_id = IngressMessageId::from(&ingress);
         let attribute = IngressMessageAttribute::new(&ingress);
@@ -182,14 +199,22 @@ fn build_payload(criterion: &mut Criterion) {
     group.measurement_time(std::time::Duration::from_secs(10));
     for i in 1..=10 {
         let size = 5000 + 10000 * i;
+        // canister ids iterator
+        let mut rng = rand::thread_rng();
+        let canisters: Vec<CanisterId> = (0..(size / 10))
+            .map(|_| CanisterId::new(PrincipalId::new_user_test_id(rng.next_u64())).unwrap())
+            .collect();
+
         run_test(
             "get_ingress_payload",
+            &canisters,
             |time_source: Arc<FastForwardTimeSource>,
              pool,
              manager: &mut IngressManager,
-             registry| {
+             registry,
+             canisters| {
                 let now = time_source.get_relative_time();
-                let then = prepare(time_source.as_ref(), pool, now, size);
+                let then = prepare(time_source.as_ref(), pool, now, size, canisters);
                 time_source.set_time(then).unwrap();
                 let name = format!("get_ingress_payload({})", size);
                 let byte_limit = registry

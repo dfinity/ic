@@ -17,7 +17,7 @@ use crate::{
 };
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::PageIndex;

@@ -1,15 +1,19 @@
+use crate::driver::{
+    config::NODES_INFO,
+    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+    farm::{Farm, FarmResult, FileId},
+    ic::{InternetComputer, Node},
+    node_software_version::NodeSoftwareVersion,
+    port_allocator::AddrType,
+    resource::AllocatedVm,
+    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+    test_env_api::{
+        HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer,
+        InitialReplicaVersion, NodesInfo,
+    },
+};
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
-use std::convert::Into;
-use std::net::IpAddr;
-use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
-
-use crate::driver::farm::FarmResult;
-use crate::driver::ic::{InternetComputer, Node};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{
-    HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer, NodesInfo,
-};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -19,17 +23,20 @@ use ic_prep_lib::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
-use std::io::Write;
-use std::thread::{self, JoinHandle};
-use url::Url;
-
-use crate::driver::{
-    config::NODES_INFO, driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR, farm::Farm,
-    node_software_version::NodeSoftwareVersion, port_allocator::AddrType, resource::AllocatedVm,
+use std::{
+    collections::BTreeMap,
+    convert::Into,
+    fs::File,
+    io,
+    io::Write,
+    net::{IpAddr, SocketAddr},
+    path::PathBuf,
+    process::Command,
+    thread::{self, JoinHandle},
 };
-
-use crate::driver::farm::FileId;
+use url::Url;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -37,7 +44,6 @@ pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 const CONF_IMG_FNAME: &str = "config_disk.img";
 const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
-const ONCHAIN_OBSERVABILITY_PATH: &str = "onchain_observability_overrides";
 
 fn mk_compressed_img_path() -> std::string::String {
     format!("{}.gz", CONF_IMG_FNAME)
@@ -61,26 +67,31 @@ pub fn init_ic(
         test_env.write_json_object(SOCKS_PROXY_PATH, &socks_proxy)?;
     }
 
-    if let Some(onchain_observability_overrides) = &ic.onchain_observability_overrides {
-        let serialized_overrides = serde_json::to_string(&onchain_observability_overrides)?;
-
-        test_env.write_json_object(ONCHAIN_OBSERVABILITY_PATH, &serialized_overrides)?;
-    }
-
     // In production, this dummy hash is not actually checked and exists
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
-    let initial_replica_version = test_env.get_initial_replica_version()?;
+
+    let replica_version = if ic.with_mainnet_config {
+        let mainnet_nns_revisions_path = "testnet/mainnet_nns_revision.txt".to_string();
+        test_env.read_dependency_to_string(mainnet_nns_revisions_path.clone())?
+    } else {
+        test_env.read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
+    };
+    let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
+    let initial_replica_version = InitialReplicaVersion {
+        version: replica_version.clone(),
+    };
+    initial_replica_version.write_attribute(test_env);
     info!(
         logger,
-        "Replica Version that is passed is: {:?}", &initial_replica_version
+        "Replica Version that is passed is: {:?}", &replica_version
     );
     let initial_replica = ic
         .initial_version
         .clone()
         .unwrap_or_else(|| NodeSoftwareVersion {
-            replica_version: initial_replica_version,
+            replica_version,
             // the following are dummy values, these are not used in production
             replica_url: Url::parse("file:///opt/replica").unwrap(),
             replica_hash: dummy_hash.clone(),
@@ -134,6 +145,7 @@ pub fn init_ic(
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
                 subnet.ssh_backup_access.clone(),
+                subnet.running_state,
             ),
         );
     }
@@ -276,7 +288,7 @@ pub fn create_config_disk_image(
         .arg(local_store_path)
         .arg("--ic_crypto")
         .arg(node.crypto_path())
-        .arg("--journalbeat_tags")
+        .arg("--elasticsearch_tags")
         .arg(format!("system_test {}", group_name));
 
     // If we have a root subnet, specify the correct NNS url.
@@ -305,14 +317,14 @@ pub fn create_config_disk_image(
             .arg(ssh_authorized_pub_keys_dir);
     }
 
-    let journalbeat_hosts: Vec<String> = test_env.get_journalbeat_hosts()?;
+    let elasticsearch_hosts: Vec<String> = test_env.get_elasticsearch_hosts()?;
     info!(
         test_env.logger(),
-        "journal beat hosts are {:?}", journalbeat_hosts
+        "ElasticSearch hosts are {:?}", elasticsearch_hosts
     );
-    if !journalbeat_hosts.is_empty() {
-        cmd.arg("--journalbeat_hosts")
-            .arg(journalbeat_hosts.join(" "));
+    if !elasticsearch_hosts.is_empty() {
+        cmd.arg("--elasticsearch_hosts")
+            .arg(elasticsearch_hosts.join(" "));
     }
 
     let replica_log_debug_overrides: Vec<String> = test_env.get_replica_log_debug_overrides()?;
@@ -341,10 +353,6 @@ pub fn create_config_disk_image(
     // --socks_proxy indicates that a socks proxy is available to the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
         cmd.arg("--socks_proxy").arg(arg);
-    }
-    // --onchain_observability_overrides indicates that system test is overriding the parameters in the adapter config
-    if let Ok(arg) = test_env.read_json_object::<String, _>(ONCHAIN_OBSERVABILITY_PATH) {
-        cmd.arg("--onchain_observability_overrides").arg(arg);
     }
     let key = "PATH";
     let old_path = match std::env::var(key) {
@@ -388,11 +396,9 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
     let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());
     NodeConfiguration {
-        xnet_api: xnet_api.into(),
-        public_api: public_api.into(),
-        p2p_addr: format!("org.internetcomputer.p2p1://{}", p2p_addr)
-            .parse()
-            .expect("can't fail"),
+        xnet_api,
+        public_api,
+        p2p_addr,
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),

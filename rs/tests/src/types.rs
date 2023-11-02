@@ -14,12 +14,6 @@ pub(crate) enum RejectCode {
     CanisterError = 5,
 }
 
-#[derive(CandidType)]
-pub(crate) struct SetControllerArgs {
-    pub canister_id: Principal,
-    pub new_controller: Principal,
-}
-
 #[derive(CandidType, Deserialize)]
 pub(crate) struct CreateCanisterResult {
     pub canister_id: Principal,
@@ -30,7 +24,7 @@ pub(crate) struct CanisterIdRecord {
     pub canister_id: Principal,
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 pub(crate) struct CanisterStatusResult {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,

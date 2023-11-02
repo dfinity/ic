@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -Eeuo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"/../functions.sh
 
@@ -10,7 +10,7 @@ PEM=$NNS_TOOLS_DIR/test_user.pem
 # Upgrade SNS-W to the version we had when we did the original deploy (sns init parameters need to match)
 propose_upgrade_canister_to_version_pem "$NNS_URL" "$NEURON_ID" "$PEM" "sns-wasm" "090276896af7c5eaa9d9dcbb9af45fe957d0a99b"
 
-# Install all the wasms at the verisons they were at to get our deploy latest-version to match
+# Install all the wasms at the versions they were at to get our deploy latest-version to match
 upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" root 1fc0208b9aeed0554b1be2711605e5b54ace9d6a
 upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" governance 090276896af7c5eaa9d9dcbb9af45fe957d0a99b
 upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" ledger 090276896af7c5eaa9d9dcbb9af45fe957d0a99b

@@ -138,27 +138,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         let current_status = state.get_ingress_status(&message_id);
 
         // Guard against an invalid state transition
-        use IngressState::*;
-        use IngressStatus::*;
-        if match (&current_status, &status) {
-            (Unknown, _) => false,
-            (Known { .. }, Unknown) => true,
-            (
-                Known {
-                    state: current_state,
-                    ..
-                },
-                Known { state, .. },
-            ) => !matches!(
-                (&current_state, &state),
-                (Received, Processing)
-                    | (Received, Completed(_))
-                    | (Received, Failed(_))
-                    | (Processing, Processing)
-                    | (Processing, Completed(_))
-                    | (Processing, Failed(_))
-            ),
-        } {
+        if !current_status.is_valid_state_transition(&status) {
             fatal!(
                 self.log,
                 "message (id='{}', current_status='{:?}') cannot be transitioned to '{:?}'",
@@ -167,6 +147,8 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 status
             );
         }
+        use IngressState::*;
+        use IngressStatus::*;
         match &status {
             Known {
                 state: Received, ..
@@ -301,5 +283,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         InsufficientCyclesInComputeAllocation => "Canister does not have enough cycles to increase its compute allocation",
         InsufficientCyclesInMemoryAllocation => "Canister does not have enough cycles to increase its memory allocation",
         InsufficientCyclesInMemoryGrow => "Canister does not have enough cycles to grow memory",
+        ReservedCyclesLimitExceededInMemoryAllocation => "Canister cannot increase memory allocation due to its reserved cycles limit",
+        ReservedCyclesLimitExceededInMemoryGrow => "Canister cannot grow memory due to its reserved cycles limit",
     }
 }

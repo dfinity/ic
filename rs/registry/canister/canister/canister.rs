@@ -33,7 +33,6 @@ use registry_canister::{
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
-        do_add_hostos_version::AddHostOsVersionPayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
@@ -44,11 +43,12 @@ use registry_canister::{
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_retire_replica_version::RetireReplicaVersionPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
+        do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
         do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
-        do_update_nodes_hostos_version::UpdateNodesHostOsVersionPayload,
+        do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -62,7 +62,10 @@ use registry_canister::{
         prepare_canister_migration::PrepareCanisterMigrationPayload,
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
-    pb::v1::{NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage},
+    pb::v1::{
+        GetSubnetForCanisterRequest, GetSubnetForCanisterResponse, NodeProvidersMonthlyXdrRewards,
+        RegistryCanisterStableStorage,
+    },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
     registry_lifecycle,
@@ -383,9 +386,11 @@ fn bless_replica_version() {
 }
 
 #[candid_method(update, rename = "bless_replica_version")]
-fn bless_replica_version_(payload: BlessReplicaVersionPayload) {
-    registry_mut().do_bless_replica_version(payload);
-    recertify_registry();
+fn bless_replica_version_(_payload: BlessReplicaVersionPayload) {
+    panic!(
+        "{}bless_replica_version is deprecated and should no longer be used!",
+        LOG_PREFIX
+    );
 }
 
 #[export_name = "canister_update retire_replica_version"]
@@ -397,9 +402,11 @@ fn retire_replica_version() {
 }
 
 #[candid_method(update, rename = "retire_replica_version")]
-fn retire_replica_version_(payload: RetireReplicaVersionPayload) {
-    registry_mut().do_retire_replica_version(payload);
-    recertify_registry();
+fn retire_replica_version_(_payload: RetireReplicaVersionPayload) {
+    panic!(
+        "{}retire_replica_version is deprecated and should no longer be used!",
+        LOG_PREFIX
+    );
 }
 
 #[export_name = "canister_update update_elected_replica_versions"]
@@ -428,30 +435,30 @@ fn update_subnet_replica_version_(payload: UpdateSubnetReplicaVersionPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update add_hostos_version"]
-fn add_hostos_version() {
-    check_caller_is_governance_and_log("add_hostos_version");
-    over(candid_one, |payload: AddHostOsVersionPayload| {
-        add_hostos_version_(payload)
+#[export_name = "canister_update update_elected_hostos_versions"]
+fn update_elected_hostos_versions() {
+    check_caller_is_governance_and_log("update_elected_hostos_versions");
+    over(candid_one, |payload: UpdateElectedHostosVersionsPayload| {
+        update_elected_hostos_versions_(payload)
     });
 }
 
-#[candid_method(update, rename = "add_hostos_version")]
-fn add_hostos_version_(payload: AddHostOsVersionPayload) {
-    registry_mut().do_add_hostos_version(payload);
+#[candid_method(update, rename = "update_elected_hostos_versions")]
+fn update_elected_hostos_versions_(payload: UpdateElectedHostosVersionsPayload) {
+    registry_mut().do_update_elected_hostos_versions(payload);
     recertify_registry();
 }
 
 #[export_name = "canister_update update_nodes_hostos_version"]
 fn update_nodes_hostos_version() {
     check_caller_is_governance_and_log("update_nodes_hostos_version");
-    over(candid_one, |payload: UpdateNodesHostOsVersionPayload| {
+    over(candid_one, |payload: UpdateNodesHostosVersionPayload| {
         update_nodes_hostos_version_(payload)
     });
 }
 
 #[candid_method(update, rename = "update_nodes_hostos_version")]
-fn update_nodes_hostos_version_(payload: UpdateNodesHostOsVersionPayload) {
+fn update_nodes_hostos_version_(payload: UpdateNodesHostosVersionPayload) {
     registry_mut().do_update_nodes_hostos_version(payload);
     recertify_registry();
 }
@@ -825,6 +832,29 @@ fn get_node_operators_and_dcs_of_node_provider_(
     registry().get_node_operators_and_dcs_of_node_provider(node_provider)
 }
 
+#[export_name = "canister_query get_subnet_for_canister"]
+fn get_subnet_for_canister() {
+    over(
+        candid_one,
+        |arg: GetSubnetForCanisterRequest| -> Result<GetSubnetForCanisterResponse, String> {
+            get_subnet_for_canister_(arg)
+        },
+    )
+}
+
+#[candid_method(query, rename = "get_subnet_for_canister")]
+fn get_subnet_for_canister_(
+    arg: GetSubnetForCanisterRequest,
+) -> Result<GetSubnetForCanisterResponse, String> {
+    let Some(principal) = arg.principal else {
+        return Err("No principal supplied".to_string());
+    };
+
+    registry()
+        .get_subnet_for_canister(&principal)
+        .map_err(|e| e.to_string())
+}
+
 #[export_name = "canister_update add_node"]
 fn add_node() {
     // This method can be called by anyone
@@ -919,7 +949,7 @@ fn http_request() {
 // works.
 //
 // We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unecessary
+// the .wasm; using `candid::export_service` here would involve unnecessary
 // runtime computation
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]

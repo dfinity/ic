@@ -51,17 +51,15 @@ message RegisterDappCanisterRequest {
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
 }
 
-message RegisterDappCanisterResponse {
-}
+message RegisterDappCanisterResponse {}
 
 // This message has an identical message defined in governace.proto, both need to be changed together
 // TODO(NNS1-1589)
 message RegisterDappCanistersRequest {
- repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 }
 
-message RegisterDappCanistersResponse {
-}
+message RegisterDappCanistersResponse {}
 
 // Change control of the listed canisters to the listed principal id.
 // Same proto in governance.proto. TODO(NNS1-1589)

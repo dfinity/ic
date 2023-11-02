@@ -1,5 +1,9 @@
+use crate::known_tags::{BIGNUM, SELF_DESCRIBED};
 use ciborium::value::Value;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
+use num_bigint::BigUint;
+use num_traits::{ToPrimitive, Zero};
+use std::ops::{BitAnd, ShrAssign};
 
 pub type Hash = [u8; 32];
 
@@ -21,27 +25,28 @@ fn hash_value(value: &Value) -> Result<Hash, String> {
             // We need at most ⌈ 128 / 7 ⌉ = 19 bytes to encode a 128 bit
             // integer in LEB128.
             let mut buf = [0u8; 19];
-            let mut n = v;
             let mut i = 0;
+            leb128_encode(v, |byte| {
+                buf[i] = byte;
+                i += 1;
+            });
+            debug_assert!(i > 0);
 
-            loop {
-                let byte = (n & 0x7f) as u8;
-                n >>= 7;
-
-                if n == 0 {
-                    buf[i] = byte;
-                    break;
-                } else {
-                    buf[i] = byte | 0x80;
-                    i += 1;
-                }
-            }
-
-            Ok(Sha256::hash(&buf[..=i]))
+            Ok(Sha256::hash(&buf[..i]))
         }
         Value::Bytes(bytes) => Ok(Sha256::hash(bytes)),
         Value::Text(text) => Ok(Sha256::hash(text.as_bytes())),
-        Value::Tag(_tag, value) => hash_value(value),
+        Value::Tag(SELF_DESCRIBED, value) => hash_value(value),
+        Value::Tag(BIGNUM, value) => {
+            let bytes = value
+                .clone()
+                .into_bytes()
+                .expect("bug: bignum value is not bytes");
+            let mut leb_buf = vec![];
+            let v = BigUint::from_bytes_be(&bytes);
+            leb128_encode(v, |byte| leb_buf.push(byte));
+            Ok(Sha256::hash(&leb_buf[..]))
+        }
         Value::Array(values) => {
             let mut hasher = Sha256::new();
             for v in values.iter() {
@@ -72,6 +77,25 @@ fn hash_value(value: &Value) -> Result<Hash, String> {
     }
 }
 
+fn leb128_encode<N>(mut n: N, mut sink: impl FnMut(u8))
+where
+    N: ShrAssign<u8> + BitAnd<N, Output = N> + From<u8> + Zero + ToPrimitive + Clone,
+{
+    loop {
+        let byte = (n.clone() & N::from(0x7f))
+            .to_u8()
+            .expect("bug: cannot cast to u8");
+        n >>= 7u8;
+
+        if n.is_zero() {
+            sink(byte);
+            break;
+        } else {
+            sink(byte | 0x80);
+        }
+    }
+}
+
 #[test]
 fn check_interface_spec_example() {
     use ciborium::cbor;
@@ -91,16 +115,47 @@ fn check_interface_spec_example() {
 }
 
 #[test]
+fn bignum_leb128_encode() {
+    let mut bytes = vec![];
+    leb128::write::unsigned(&mut bytes, u64::MAX).unwrap();
+
+    let mut bigint_bytes = vec![];
+    leb128_encode(BigUint::from(u64::MAX), |b| bigint_bytes.push(b));
+    assert_eq!(bytes, bigint_bytes);
+}
+
+#[test]
+fn u64_leb128_encode() {
+    let mut bytes = vec![];
+    leb128::write::unsigned(&mut bytes, u64::MAX).unwrap();
+
+    let mut u64_bytes = vec![];
+    leb128_encode(u64::MAX, |b| u64_bytes.push(b));
+    assert_eq!(bytes, u64_bytes);
+}
+
+#[test]
 fn hash_max_u64() {
     use ciborium::value::Integer;
     use std::convert::TryFrom;
 
-    // Currently, the conversion fails for any values above u64::MAX
-    let value = Value::Integer(Integer::try_from(u64::MAX).unwrap());
     let mut bytes = vec![];
     leb128::write::unsigned(&mut bytes, u64::MAX).unwrap();
+    let expected_hash =
+        hash_value(&Value::Bytes(bytes.clone())).expect("failed to hash leb128 bytes");
+
     assert_eq!(
-        hash_value(&value).expect("failed to hash u64::MAX"),
-        hash_value(&Value::Bytes(bytes)).expect("failed to hash leb128 bytes")
+        hash_value(&Value::Integer(Integer::try_from(u64::MAX).unwrap()))
+            .expect("failed to hash u64::MAX"),
+        expected_hash
+    );
+
+    assert_eq!(
+        hash_value(&Value::Tag(
+            BIGNUM,
+            Box::new(Value::Bytes(u64::MAX.to_be_bytes().to_vec()))
+        ))
+        .expect("failed to hash u64::MAX"),
+        expected_hash,
     );
 }

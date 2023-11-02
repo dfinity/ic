@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:wat",
 ]
 
 DEV_DEPENDENCIES = [

@@ -3,7 +3,6 @@
 use super::*;
 use crate::api::CspSigner;
 use crate::imported_test_utils::ed25519::csp_testvec;
-use crate::imported_utilities::sign_utils::user_public_key_from_bytes;
 use crate::key_id::KeyId;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
@@ -22,6 +21,7 @@ use ic_crypto_internal_test_vectors::multi_bls12_381::{
 };
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_secrets_containers::SecretArray;
+use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use rand::Rng;
 use std::collections::HashSet;
@@ -337,9 +337,9 @@ mod verify_ed25519 {
     // entire test vector suite is done at the crypto lib level.
     #[test]
     fn should_correctly_verify() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
-        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
 
         assert_eq!(csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk), Ok(()));
     }
@@ -348,11 +348,11 @@ mod verify_ed25519 {
     /// More extensive tests can be found in the tests of `ic-crypto-internal-basic-sig-ed25519` crate.
     #[test]
     fn should_correctly_verify_batch_consistently_with_non_batched() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
         for batch_size in [1, 2, 3, 4, 5, 10, 20, 50, 100] {
-            let fixtures = Fixture::new_batch(&msg[..], batch_size, &mut rng);
+            let fixtures = Fixture::new_batch(&msg[..], batch_size, rng);
             let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
 
             for csp in fixtures.iter().map(|f| &f.csp) {
@@ -373,24 +373,24 @@ mod verify_ed25519 {
 
     #[test]
     fn should_correctly_verify_with_other_csp() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
-        let Fixture { csp: _, pk, sig } = Fixture::new(&msg[..], &mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp: _, pk, sig } = Fixture::new(&msg[..], rng);
 
         assert_eq!(
-            utils::new_csp(&mut rng).verify(&sig, &msg, AlgorithmId::Ed25519, pk),
+            utils::new_csp(rng).verify(&sig, &msg, AlgorithmId::Ed25519, pk),
             Ok(())
         );
     }
 
     #[test]
     fn should_correctly_verify_batch_with_other_csp() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
-        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, rng);
         let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
-        let csp = utils::new_csp(&mut rng);
+        let csp = utils::new_csp(rng);
 
         assert_eq!(
             csp.verify_batch(&key_sig_pairs[..], &msg[..], AlgorithmId::Ed25519),
@@ -400,10 +400,10 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_under_signature_with_wrong_public_key() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
-        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
-        let Fixture { sig: wrong_sig, .. } = Fixture::new(&msg[..], &mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
+        let Fixture { sig: wrong_sig, .. } = Fixture::new(&msg[..], rng);
         assert_ne!(sig, wrong_sig);
 
         assert_matches!(
@@ -414,16 +414,16 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_batch_under_signature_with_wrong_public_key() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
-        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, rng);
         let mut key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
         let csp = &fixtures[0].csp;
 
-        let Fixture { sig: wrong_sig, .. } = Fixture::new(&msg[..], &mut rng);
+        let Fixture { sig: wrong_sig, .. } = Fixture::new(&msg[..], rng);
 
-        let (_pk, sig) = utils::random_from(&mut key_sig_pairs[..], &mut rng);
+        let (_pk, sig) = utils::random_from(&mut key_sig_pairs[..], rng);
         assert_ne!(*sig, wrong_sig);
         *sig = wrong_sig;
 
@@ -435,9 +435,9 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_under_wrong_message() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
-        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
         let wrong_msg = b"wrong message";
         assert_ne!(msg, wrong_msg);
 
@@ -449,15 +449,15 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_batch_under_wrong_message() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
-        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, rng);
         let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
         let csp = &fixtures[0].csp;
 
         let wrong_msg = loop {
-            let tmp_msg = utils::random_message(&mut rng);
+            let tmp_msg = utils::random_message(rng);
             if tmp_msg != msg {
                 break tmp_msg;
             }
@@ -471,10 +471,10 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_under_wrong_public_key() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
-        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
-        let Fixture { pk: wrong_pk, .. } = Fixture::new(&msg[..], &mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
+        let Fixture { pk: wrong_pk, .. } = Fixture::new(&msg[..], rng);
         assert_ne!(pk, wrong_pk);
 
         assert_matches!(
@@ -485,16 +485,16 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_batch_under_wrong_public_key() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
-        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, rng);
         let mut key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
         let csp = &fixtures[0].csp;
 
-        let Fixture { pk: wrong_pk, .. } = Fixture::new(&msg[..], &mut rng);
+        let Fixture { pk: wrong_pk, .. } = Fixture::new(&msg[..], rng);
 
-        let (pk, _sig) = utils::random_from(&mut key_sig_pairs[..], &mut rng);
+        let (pk, _sig) = utils::random_from(&mut key_sig_pairs[..], rng);
         assert_ne!(*pk, wrong_pk);
         *pk = wrong_pk;
 
@@ -506,9 +506,9 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_if_signature_has_wrong_type() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
-        let Fixture { csp, pk, sig: _ } = Fixture::new(&msg[..], &mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig: _ } = Fixture::new(&msg[..], rng);
         let sig_with_wrong_type =
             CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
 
@@ -520,17 +520,17 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_batch_if_signature_has_wrong_type() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
-        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, rng);
         let mut key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
         let csp = &fixtures[0].csp;
 
         let sig_with_wrong_type =
             CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
 
-        let (_pk, sig) = utils::random_from(&mut key_sig_pairs[..], &mut rng);
+        let (_pk, sig) = utils::random_from(&mut key_sig_pairs[..], rng);
         *sig = sig_with_wrong_type;
 
         assert_matches!(
@@ -541,9 +541,9 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_if_signer_public_key_has_wrong_type() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
-        let Fixture { csp, pk: _, sig } = Fixture::new(&msg[..], &mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk: _, sig } = Fixture::new(&msg[..], rng);
         let pk_with_wrong_type =
             CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
 
@@ -555,17 +555,17 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_batch_if_signer_public_key_has_wrong_type() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
-        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, rng);
         let mut key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
         let csp = &fixtures[0].csp;
 
         let pk_with_wrong_type =
             CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
 
-        let (pk, _sig) = utils::random_from(&mut key_sig_pairs[..], &mut rng);
+        let (pk, _sig) = utils::random_from(&mut key_sig_pairs[..], rng);
         *pk = pk_with_wrong_type;
 
         assert_matches!(
@@ -576,10 +576,10 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_under_wrong_algorithm_id() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
-        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
 
         for wrong_algorithm_id in AlgorithmId::iter().filter(|id| *id != AlgorithmId::Ed25519) {
             assert_matches!(
@@ -591,10 +591,10 @@ mod verify_ed25519 {
 
     #[test]
     fn should_fail_to_verify_batch_under_wrong_algorithm_id() {
-        let mut rng = reproducible_rng();
-        let msg = utils::random_message(&mut rng);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
 
-        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, rng);
         let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
 
         for wrong_algorithm_id in AlgorithmId::iter().filter(|id| *id != AlgorithmId::Ed25519) {
@@ -997,7 +997,7 @@ fn vault_builder_with_different_seeds<const N: usize>() -> [LocalCspVaultBuilder
     TempPublicKeyStore,
 >; N] {
     assert!(N > 0);
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     let mut vault_builders = Vec::with_capacity(N);
     let mut seeds = HashSet::with_capacity(N);
     for _ in 0..N {

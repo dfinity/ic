@@ -57,7 +57,7 @@ fn workload_rps50_many_ticket_participants(env: TestEnv) {
 
 /// This load test requires manual inspection of the resulting workload metrics.
 /// It should not be run regularly as it requires more resources. However, the complementary
-/// test //rs/tests/nns/sns:patment_flow_test excercises the same API and is intended to run
+/// test //rs/tests/nns/sns:patment_flow_test exercises the same API and is intended to run
 /// on regular CI pipelines (pre-master, hourly, nightly).
 ///
 /// Runbook:

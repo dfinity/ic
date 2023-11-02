@@ -93,7 +93,7 @@ fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehaviour) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv, config: Config) {
@@ -171,7 +171,7 @@ async fn fetch_metrics_and_assert(env: &TestEnv, subnet: SubnetSnapshot) {
         ],
     );
     for _ in 0..NUM_RETRIES {
-        match metrics.fetch().await {
+        match metrics.fetch::<u64>().await {
             Ok(result) => {
                 if !(result.contains_key(SIG_SUCC)
                     && result.contains_key(SIG_FAIL)

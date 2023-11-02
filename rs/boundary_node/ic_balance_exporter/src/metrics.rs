@@ -4,7 +4,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use opentelemetry::metrics::Meter;
 use opentelemetry::{
-    metrics::{Counter, ValueRecorder},
+    metrics::{Counter, Histogram},
     KeyValue,
 };
 use tokio::time::Instant;
@@ -14,18 +14,18 @@ use crate::{Load, Run, Scrape, ServiceContext};
 
 pub struct MetricParams {
     pub counter: Counter<u64>,
-    pub recorder: ValueRecorder<f64>,
+    pub recorder: Histogram<f64>,
 }
 
 impl MetricParams {
     pub fn new(meter: &Meter, name: &str) -> Self {
         Self {
             counter: meter
-                .u64_counter(format!("{name}.total"))
-                .with_description(format!("Counts occurences of {name} calls"))
+                .u64_counter(name.to_string())
+                .with_description(format!("Counts occurrences of {name} calls"))
                 .init(),
             recorder: meter
-                .f64_value_recorder(format!("{name}.duration_nsec"))
+                .f64_histogram(format!("{name}.duration_nsec"))
                 .with_description(format!("Records the duration of {name} calls in nsec"))
                 .init(),
         }

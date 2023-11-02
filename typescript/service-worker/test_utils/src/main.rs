@@ -176,7 +176,7 @@ fn create_query_call_fixture_with_invalid_witness() -> QueryCallTestFixture {
 fn create_update_call_fixture() -> UpdateCallTestFixture {
     let tree = LabeledTree::SubTree(flatmap![
         Label::from("request_status") => LabeledTree::SubTree(flatmap![
-            Label::from(hex::decode("431f260d11977d02dcf08077782e0085846b3808b3147a4e12fa9d6905cdd9d8").unwrap()) => LabeledTree::SubTree(flatmap![
+            Label::from(hex::decode("0fbe38256170d6de720e2b270f32779ef33086e8145eac9cfd9bb6a0879a29de").unwrap()) => LabeledTree::SubTree(flatmap![
                 Label::from("reply") => LabeledTree::Leaf(hex::decode("4449444c046d7b6c02007101716d016c03a2f5ed880400c6a4a19806029aa1b2f90c7a01030c68656c6c6f20776f726c642100c800").unwrap()),
                 Label::from("status") => LabeledTree::Leaf(b"replied".to_vec())
             ])

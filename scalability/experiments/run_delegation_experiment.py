@@ -16,7 +16,7 @@ from common.report import EvaluatedSummaries  # noqa
 
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_string("rps", "30", "Comma seperated list of rps rates to test.")
+gflags.DEFINE_string("rps", "30", "Comma separated list of rps rates to test.")
 
 
 def parse_counter_return(r: bytes):
@@ -78,7 +78,7 @@ class DelegationExperiment(IcPyStressExperiment):
                 ),
                 "yellow",
             ),
-            " (successful execution means the ingress message has been succesfully executed by the canister)",
+            " (successful execution means the ingress message has been successfully executed by the canister)",
         )
 
         iteration_uuid = uuid.uuid4()

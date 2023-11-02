@@ -161,6 +161,7 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
     let t = Operation::Transfer {
         from,
         to,
+        spender: None,
         amount,
         fee,
     };
@@ -307,6 +308,7 @@ async fn test_multiple_transfers(
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc1,
+                    spender: None,
                     amount: amount1,
                     fee: *FEE,
                 }),
@@ -316,6 +318,7 @@ async fn test_multiple_transfers(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc1,
                     to: dst_acc2,
+                    spender: None,
                     amount: amount2,
                     fee: *FEE,
                 }),
@@ -325,6 +328,7 @@ async fn test_multiple_transfers(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc2,
                     to: dst_acc3,
+                    spender: None,
                     amount: amount3,
                     fee: *FEE,
                 }),
@@ -403,6 +407,7 @@ async fn test_multiple_transfers_fail(
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc1,
+                    spender: None,
                     amount: amount1,
                     fee: *FEE,
                 }),
@@ -412,6 +417,7 @@ async fn test_multiple_transfers_fail(
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc3,
+                    spender: None,
                     amount: amount3,
                     fee: *FEE,
                 }),
@@ -421,6 +427,7 @@ async fn test_multiple_transfers_fail(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc1,
                     to: dst_acc2,
+                    spender: None,
                     amount: amount2,
                     fee: *FEE,
                 }),

@@ -350,7 +350,7 @@ fn n_node_ids(n: u32) -> BTreeSet<NodeId> {
     set
 }
 
-fn valid_dkg_config_data() -> NiDkgConfigData {
+pub(crate) fn valid_dkg_config_data() -> NiDkgConfigData {
     NiDkgConfigData {
         dkg_id: dkg_id(1),
         max_corrupt_dealers: NumberOfNodes::new(1),

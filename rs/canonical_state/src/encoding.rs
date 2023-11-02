@@ -12,7 +12,7 @@
 
 use crate::CertificationVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::metadata_state::SystemMetadata;
+use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
 use ic_types::{messages::RequestOrResponse, xnet::StreamHeader, PrincipalId};
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -114,6 +114,14 @@ pub fn encode_subnet_canister_ranges(ranges: Option<&Vec<(PrincipalId, Principal
             .unwrap(),
     }
     serializer.into_inner()
+}
+
+/// Encodes a `SubnetMetrics` into canonical CBOR representation.
+pub fn encode_subnet_metrics(
+    metrics: &SubnetMetrics,
+    certification_version: CertificationVersion,
+) -> Vec<u8> {
+    types::SubnetMetrics::proxy_encode((metrics, certification_version)).unwrap()
 }
 
 /// Serializes controllers as a CBOR list.

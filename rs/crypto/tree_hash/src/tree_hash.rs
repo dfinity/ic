@@ -3,20 +3,13 @@
 
 use crate::hasher::Hasher;
 use crate::{
-    flatmap, Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MixedHashTree, Path,
-    TreeHashError, Witness, WitnessGenerator, MAX_HASH_TREE_DEPTH,
+    Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MixedHashTree, Path,
+    TreeHashError, Witness, WitnessGenerationError, WitnessGenerator, MAX_HASH_TREE_DEPTH,
 };
 use std::collections::VecDeque;
-use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Debug;
 use std::iter::Peekable;
-
-#[cfg(test)]
-mod tests;
-
-#[cfg(test)]
-mod test_utils;
 
 const DOMAIN_HASHTREE_LEAF: &str = "ic-hashtree-leaf";
 const DOMAIN_HASHTREE_EMPTY_SUBTREE: &str = "ic-hashtree-empty";
@@ -173,7 +166,7 @@ fn prune_witness_subtree<'a, I>(
     witness: &Witness,
     children: &mut Peekable<I>,
     curr_path: &mut Vec<Label>,
-    witness_depth: usize,
+    witness_depth: u8,
 ) -> Result<(Witness, u64), TreeHashError>
 where
     I: Iterator<Item = (&'a Label, &'a LabeledTree<Vec<u8>>)>,
@@ -281,7 +274,7 @@ fn prune_witness_impl(
     witness: &Witness,
     partial_tree: &LabeledTree<Vec<u8>>,
     curr_path: &mut Vec<Label>,
-    witness_depth: usize,
+    witness_depth: u8,
 ) -> Result<(Witness, u64), TreeHashError> {
     if witness_depth > MAX_HASH_TREE_DEPTH {
         return Err(TreeHashError::TooDeepRecursion {
@@ -497,114 +490,59 @@ pub struct WitnessGeneratorImpl {
     hash_tree: HashTree,
 }
 
-/// Error that a `HashTree` does not represent a [`LabeledTree::SubTree`]
-pub struct HashTreeIsNotALabeledTreeSubTree {}
-
-/// Returns the smallest label in `hash_tree` assuming that it represents a
-/// [`LabeledTree::SubTree`], returns `None` if the tree is inconsistent.
-///
-/// # Errors
-/// * [`HashTreeIsNotALabeledTreeSubTree`] if `hash_tree` does not represent a
-///   [`LabeledTree::SubTree`]
-fn smallest_label_in_subtree(
-    hash_tree: &HashTree,
-) -> Result<Label, HashTreeIsNotALabeledTreeSubTree> {
-    let mut smallest = hash_tree;
-    while let HashTree::Fork { left_tree, .. } = smallest {
-        smallest = left_tree.as_ref()
-    }
-    match smallest {
-        HashTree::Node { label, .. } => Ok(label.to_owned()),
-        _ => Err(HashTreeIsNotALabeledTreeSubTree {}),
-    }
-}
-
-/// Returns the lagest label in `hash_tree` assuming that it represents a
-/// [`LabeledTree::SubTree`].
-///
-/// # Errors
-/// * [`HashTreeIsNotALabeledTreeSubTree`] if `hash_tree` does not represent a
-///   [`LabeledTree::SubTree`]
-fn largest_label_in_subtree(
-    hash_tree: &HashTree,
-) -> Result<Label, HashTreeIsNotALabeledTreeSubTree> {
-    let mut largest = hash_tree;
-    while let HashTree::Fork { right_tree, .. } = largest {
-        largest = right_tree.as_ref()
-    }
-    match largest {
-        HashTree::Node { label, .. } => Ok(label.to_owned()),
-        // Inconsistent HashTree, expected HashTree::Node
-        _ => Err(HashTreeIsNotALabeledTreeSubTree {}),
-    }
-}
-
-// Returns true iff any of the labels in `labels` is within the range defined by
-// the given `hash_tree` interpreted as a [`LabeledTree::SubTree`], i.e., a set
-// of `Fork`s followed by `Node`s.
-///
-/// # Errors
-/// * [`HashTreeIsNotALabeledTreeSubTree`] if `hash_tree` does not represent a
-///   [`LabeledTree::SubTree`]
-fn any_is_in_subtree_range(
-    hash_tree: &HashTree,
-    labels: &[Label],
-) -> Result<bool, HashTreeIsNotALabeledTreeSubTree> {
-    let smallest = smallest_label_in_subtree(hash_tree)?;
-    let largest = largest_label_in_subtree(hash_tree)?;
-    Ok(labels
-        .iter()
-        .any(|label| (smallest <= *label) && (*label <= largest)))
-}
-
-/// Checks whether any of `needed_labels` is missing in the given `map` of
-/// available labels.
-/// Returns the first missing label, if any is indeed missing or `None`
-/// otherwise.
-fn first_missing_label(
-    needed_labels: &[Label],
-    available_labels: &FlatMap<Label, LabeledTree<Digest>>,
-) -> Option<Label> {
-    for label in needed_labels {
-        if available_labels.get(label).is_none() {
-            return Some(label.to_owned());
-        }
-    }
-    None
-}
-
 /// WitnessBuilder abstracts away a specific representation of the witness
 /// structure and allows us to use the same algorithm to construct both
 /// witnesses that don't contain the data (e.g., for XNet) and the ones that do
 /// contain it (e.g., for certified reads).
 pub trait WitnessBuilder {
-    /// Type of the trees that this builder produces.
-    type Tree;
-
     /// Creates a witness for an empty tree.
-    fn make_empty() -> Self::Tree;
+    fn make_empty() -> Self;
 
     /// Constructs a witness for a labeled tree node pointing to the specified
     /// subtree.
-    fn make_node(label: Label, subtree: Self::Tree) -> Self::Tree;
+    fn make_node(label: Label, subtree: Self) -> Self;
 
     /// Constructs a witness for a fork given the witnesses for left and right
     /// subtrees.
-    fn make_fork(lhs: Self::Tree, rhs: Self::Tree) -> Self::Tree;
+    fn make_fork(lhs: Self, rhs: Self) -> Self;
 
     /// Constructs a witness for a leaf containing the specified data.
-    fn make_leaf(data: &[u8]) -> Self::Tree;
+    fn make_leaf(data: &[u8]) -> Self;
 
     /// Constructs a witness that only reveals a subtree hash.
-    fn make_pruned(digest: Digest) -> Self::Tree;
+    fn make_pruned(digest: Digest) -> Self;
 
-    /// Merges two witnesses for the same tree.
-    fn merge_trees(lhs: Self::Tree, lhs: Self::Tree) -> Self::Tree;
+    /// Merges two witnesses produced from the same tree.
+    ///
+    /// Precondition:
+    ///
+    /// ```text
+    ///     ∃ t : Ok(h) = recompute_digest(lhs, t)
+    ///         ∧ Ok(h) = recompute_digest(rhs, t)
+    /// ```
+    ///
+    /// Postcondition:
+    ///
+    /// ```text
+    ///     ∀ t : Ok(h) = recompute_digest(lhs, t)
+    ///         ∧ Ok(h) = recompute_digest(rhs, t)
+    ///         ⇒ recompute_digest(merge(lhs, rhs)) == Ok(h)
+    /// ```
+    ///
+    /// This function errors if the structure of the passed
+    /// [`WitnessBuilder::Tree`]s is inconsistent and produces
+    /// an invalid tree if the precondition is otherwise not met.
+    ///
+    /// # Errors
+    ///
+    /// * If the recursion depth is too large.
+    /// * If `lhs` and `rhs` do not match.
+    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, WitnessGenerationError<Self>>
+    where
+        Self: Sized;
 }
 
 impl WitnessBuilder for Witness {
-    type Tree = Self;
-
     fn make_empty() -> Self {
         Self::Known()
     }
@@ -631,14 +569,70 @@ impl WitnessBuilder for Witness {
         Self::Pruned { digest }
     }
 
-    fn merge_trees(lhs: Self, rhs: Self) -> Self {
-        Self::merge(lhs, rhs)
+    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, WitnessGenerationError<Self>> {
+        fn merge_trees_impl(
+            lhs: Witness,
+            rhs: Witness,
+            depth: u8,
+        ) -> Result<Witness, WitnessGenerationError<Witness>> {
+            use Witness::*;
+
+            if depth > MAX_HASH_TREE_DEPTH {
+                return Err(WitnessGenerationError::<Witness>::TooDeepRecursion(depth));
+            }
+
+            let result = match (lhs, rhs) {
+                (Pruned { digest: l }, Pruned { digest: r }) if l != r => {
+                    return Err(
+                        WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(
+                            Pruned { digest: l },
+                            Pruned { digest: r },
+                        ),
+                    )
+                }
+                (Pruned { .. }, r) => r,
+                (l, Pruned { .. }) => l,
+                (Known(), Known()) => Known(),
+                (
+                    Fork {
+                        left_tree: ll,
+                        right_tree: lr,
+                    },
+                    Fork {
+                        left_tree: rl,
+                        right_tree: rr,
+                    },
+                ) => Fork {
+                    left_tree: Box::new(merge_trees_impl(*ll, *rl, depth + 1)?),
+                    right_tree: Box::new(merge_trees_impl(*lr, *rr, depth + 1)?),
+                },
+                (
+                    Node {
+                        label: ll,
+                        sub_witness: lw,
+                    },
+                    Node {
+                        label: rl,
+                        sub_witness: rw,
+                    },
+                ) if ll == rl => Node {
+                    label: ll,
+                    sub_witness: Box::new(merge_trees_impl(*lw, *rw, depth + 1)?),
+                },
+                (l, r) => {
+                    return Err(
+                        WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(l, r),
+                    )
+                }
+            };
+            Ok(result)
+        }
+
+        merge_trees_impl(lhs, rhs, 1)
     }
 }
 
 impl WitnessBuilder for MixedHashTree {
-    type Tree = Self;
-
     fn make_empty() -> Self {
         Self::Empty
     }
@@ -659,175 +653,310 @@ impl WitnessBuilder for MixedHashTree {
         Self::Pruned(digest)
     }
 
-    fn merge_trees(lhs: Self, rhs: Self) -> Self {
-        Self::merge(lhs, rhs)
-    }
-}
+    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, WitnessGenerationError<Self>> {
+        fn merge_trees_impl(
+            lhs: MixedHashTree,
+            rhs: MixedHashTree,
+            depth: u8,
+        ) -> Result<MixedHashTree, WitnessGenerationError<MixedHashTree>> {
+            use MixedHashTree::*;
 
-/// Errors returned by the [`find_subtree_node`] function
-pub enum FindSubtreeNodeError {
-    HashTreeIsNotALabeledTreeSubTree,
-    LabelNotFound,
-}
+            if depth > MAX_HASH_TREE_DEPTH {
+                return Err(WitnessGenerationError::<MixedHashTree>::TooDeepRecursion(
+                    depth,
+                ));
+            }
 
-/// Finds in the given `hash_tree` (interpreted as a [`LabeledTree::Subtree`],
-/// i.e., a set of `Fork`s followed by `Node`s) a HashTree::Node that contains
-/// the given `target_label`, and returns the corresponding [`HashTree`] of that
-/// node.
-///
-/// # Errors
-/// * [`FindSubtreeNodeError::HashTreeIsNotALabeledTreeSubTree`] if `hash_tree`
-///   does not represent a [`LabeledTree::HashTreeIsNotALabeledTreeSubTree`]
-/// * [`FindSubtreeNodeError::LabelNotFound`] if the label was not found
-//
-// TODO(CRP-426) currently the running time is O((log n)^2); make it O(log(n))
-//     via binary search on the list of all labels in `hash_tree`.
-fn find_subtree_node<'a>(
-    target_label: &Label,
-    hash_tree: &'a HashTree,
-) -> Result<&'a HashTree, FindSubtreeNodeError> {
-    match hash_tree {
-        HashTree::Node {
-            label, hash_tree, ..
-        } => {
-            if target_label == label {
-                Ok(hash_tree.as_ref())
-            } else {
-                // Pre-condition failed, hash tree does not contain the label
-                Err(FindSubtreeNodeError::LabelNotFound)
-            }
-        }
-        HashTree::Fork {
-            left_tree,
-            right_tree,
-            ..
-        } => {
-            let largest_left = largest_label_in_subtree(left_tree)
-                .map_err(|_e| FindSubtreeNodeError::HashTreeIsNotALabeledTreeSubTree)?;
-            if *target_label <= largest_left {
-                find_subtree_node(target_label, left_tree)
-            } else {
-                find_subtree_node(target_label, right_tree)
-            }
-        }
-        HashTree::Leaf { .. } => {
-            // Inconsistent state, unexpectedly reached leaf
-            Err(FindSubtreeNodeError::HashTreeIsNotALabeledTreeSubTree)
-        }
-    }
-}
-
-/// Generates a witness for a HashTree that represents a single
-/// LabeledTree::SubTree node, and uses the given sub_witnesses
-/// for the children of the node (if provided).
-fn witness_for_subtree<Builder: WitnessBuilder>(
-    hash_tree: &HashTree,
-    sub_witnesses: &mut FlatMap<Label, Builder::Tree>,
-) -> Result<Builder::Tree, HashTreeIsNotALabeledTreeSubTree> {
-    if any_is_in_subtree_range(hash_tree, sub_witnesses.keys())? {
-        match hash_tree {
-            HashTree::Fork {
-                // inside HashTree, recurse to subtrees
-                left_tree,
-                right_tree,
-                ..
-            } => {
-                let left_witness = witness_for_subtree::<Builder>(left_tree, sub_witnesses)?;
-                let right_witness = witness_for_subtree::<Builder>(right_tree, sub_witnesses)?;
-                Ok(Builder::make_fork(left_witness, right_witness))
-            }
-            HashTree::Node {
-                // bottom of the HashTree, stop recursion
-                digest,
-                label,
-                ..
-            } => {
-                if let Some(sub_witness) = sub_witnesses.remove(label) {
-                    Ok(Builder::make_node(label.to_owned(), sub_witness))
-                } else {
-                    Ok(Builder::make_pruned(digest.to_owned()))
+            let result = match (lhs, rhs) {
+                (Pruned(l), Pruned(r)) if l != r => {
+                    return Err(
+                        WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(
+                            Pruned(l),
+                            Pruned(r),
+                        ),
+                    )
                 }
-            }
-            HashTree::Leaf { .. } => unreachable!(),
+                (Pruned(_), r) => r,
+                (l, Pruned(_)) => l,
+                (Empty, Empty) => Empty,
+                (Fork(l), Fork(r)) => Fork(Box::new((
+                    merge_trees_impl(l.0, r.0, depth + 1)?,
+                    merge_trees_impl(l.1, r.1, depth + 1)?,
+                ))),
+                (Labeled(label, l), Labeled(rlabel, r)) if label == rlabel => {
+                    Labeled(label, Box::new(merge_trees_impl(*l, *r, depth + 1)?))
+                }
+                (Leaf(l), Leaf(r)) if l == r => Leaf(l),
+                (l, r) => {
+                    return Err(
+                        WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(l, r),
+                    )
+                }
+            };
+
+            Ok(result)
         }
-    } else {
-        Ok(Builder::make_pruned(hash_tree.digest().to_owned()))
+        merge_trees_impl(lhs, rhs, 1)
     }
 }
 
 impl WitnessGeneratorImpl {
-    fn witness_impl<Builder: WitnessBuilder, T: std::convert::AsRef<[u8]> + Debug>(
+    /// Creates a path from the root of the `hash_tree` - representing a subtree
+    /// with `subtre_size` children - to the node at position `pos` pruning all
+    /// children not relevant for the node at position `pos`, and appends
+    /// `subwitness` at the end of the path.
+    ///
+    /// # Preconditions
+    /// * It must apply that `pos < subtree_size`. Otherwise, `subwitness` is
+    ///   plugged into the wrong position. (This is checked via a debug assertion.)
+    /// * It must apply that `subtree_size` is the size of the `hash_tree`
+    ///   interpreted as a subtree, i.e., the number of nodes in the subtree.
+    ///   Otherwise, the `subwitness` is plugged into the wrong position.
+    ///   (This is checked via a debug assertion.)
+    ///
+    /// # Panics
+    /// * If `hash_tree` is not a well-formed subtree, e.g., if it contains forks
+    ///   followed by leaves.
+    /// * If `hash_tree` is empty.
+    fn pruned_for_all_but_pos<Builder: WitnessBuilder>(
+        hash_tree: &HashTree,
+        subwitness: Builder,
+        pos: usize,
+        subtree_size: usize,
+    ) -> Builder {
+        /// Returns the number of leaves in the left subtree for the given tree
+        /// size, where the left subtree is always a full tree. For example, for
+        /// trees of sizes 5 to 8, the result is 4, for trees of sizes 9 to 16,
+        /// the result is 8, etc.s
+        #[inline]
+        fn left_subtree_size(subtree_size: usize) -> usize {
+            match subtree_size {
+                0 => panic!("bug: the tree size must be non-zero"),
+                1 => 1,
+                s => s.next_power_of_two() / 2,
+            }
+        }
+
+        // debug-check preconditions
+        debug_assert!(
+            pos < subtree_size,
+            "pos={pos} >= subtree_size={subtree_size}"
+        );
+        debug_assert_eq!(
+            {
+                let mut v = vec![hash_tree];
+                let mut size = 0;
+                while let Some(t) = v.pop() {
+                    match t {
+                        HashTree::Node {
+                            digest: _,
+                            label: _,
+                            hash_tree: _,
+                        } => size += 1,
+                        HashTree::Fork {
+                            digest: _,
+                            left_tree,
+                            right_tree,
+                        } => {
+                            v.push(left_tree.as_ref());
+                            v.push(right_tree.as_ref());
+                        }
+                        HashTree::Leaf { digest: _ } => {
+                            panic!("bug: a leaf can only exist after a node")
+                        }
+                    }
+                }
+                size
+            },
+            subtree_size,
+            "subtree_size is wrong for the given hash_tree"
+        );
+
+        match hash_tree {
+            HashTree::Node {
+                digest: _,
+                label: _,
+                hash_tree: _,
+            } => {
+                debug_assert_eq!(subtree_size, 1);
+                subwitness
+            }
+            HashTree::Fork {
+                digest: _,
+                left_tree,
+                right_tree,
+            } => {
+                // Compute the size of the left subtree and determine whether
+                // the position falls into that range. If it does, we descend
+                // into the left subtree and in the right subtree otherwise.
+                let left_subtree_size = left_subtree_size(subtree_size);
+                let go_left = pos < left_subtree_size;
+
+                if go_left {
+                    Builder::make_fork(
+                        Self::pruned_for_all_but_pos::<Builder>(
+                            left_tree.as_ref(),
+                            subwitness,
+                            pos,
+                            left_subtree_size,
+                        ),
+                        Builder::make_pruned(right_tree.digest().clone()),
+                    )
+                } else {
+                    Builder::make_fork(
+                        Builder::make_pruned(left_tree.digest().clone()),
+                        Self::pruned_for_all_but_pos::<Builder>(
+                            right_tree.as_ref(),
+                            subwitness,
+                            pos - left_subtree_size,
+                            subtree_size - left_subtree_size,
+                        ),
+                    )
+                }
+            }
+            HashTree::Leaf { digest: _ } => panic!("bug: a leaf can only exist after a node"),
+        }
+    }
+
+    fn flatten_forks<'a>(hash_tree: &'a HashTree, result: &mut Vec<&'a HashTree>) {
+        match hash_tree {
+            HashTree::Leaf { digest: _ } => panic!("bug: passed a leaf to flatten_forks"),
+            HashTree::Node {
+                digest: _,
+                label: _,
+                hash_tree,
+            } => result.push(hash_tree.as_ref()),
+            HashTree::Fork {
+                digest: _,
+                left_tree,
+                right_tree,
+            } => {
+                Self::flatten_forks(left_tree.as_ref(), result);
+                Self::flatten_forks(right_tree.as_ref(), result);
+            }
+        }
+    }
+
+    fn witness_impl<Builder, T>(
         partial_tree: &LabeledTree<T>,
         orig_tree: &LabeledTree<Digest>,
         hash_tree: &HashTree,
-        curr_path: &mut Vec<Label>,
-    ) -> Result<Builder::Tree, TreeHashError> {
-        match partial_tree {
-            LabeledTree::SubTree(children) if children.is_empty() => {
-                // An empty SubTree-node in partial tree is allowed only if
-                // the corresponding node in the original tree is also empty.
+        current_depth: u8,
+    ) -> Result<Builder, WitnessGenerationError<Builder>>
+    where
+        Builder: WitnessBuilder,
+        T: std::convert::AsRef<[u8]> + Debug,
+    {
+        if current_depth > MAX_HASH_TREE_DEPTH {
+            return Err(WitnessGenerationError::TooDeepRecursion(current_depth));
+        }
+
+        let result = match partial_tree {
+            LabeledTree::SubTree(children) => {
                 match orig_tree {
                     LabeledTree::SubTree(orig_children) => {
                         if orig_children.is_empty() {
-                            Ok(Builder::make_empty())
-                        } else {
-                            err_inconsistent_partial_tree(curr_path)
+                            return Ok(Builder::make_empty());
                         }
-                    }
-                    LabeledTree::Leaf(_) => err_inconsistent_partial_tree(curr_path),
-                }
-            }
-            LabeledTree::SubTree(children) if !children.is_empty() => {
-                if let LabeledTree::SubTree(orig_children) = orig_tree {
-                    // check the consistency of the root of `partial_tree` and `orig_tree`
-                    {
-                        let needed_labels: Vec<Label> = children.keys().to_vec();
-                        if let Some(missing_label) =
-                            first_missing_label(&needed_labels, orig_children)
-                        {
-                            // a label from `partial_tree` is missing in the `orig_tree`
-                            curr_path.push(missing_label);
-                            return err_inconsistent_partial_tree(curr_path);
-                        }
-                    }
-                    // Recursively generate sub-witnesses for each child
-                    // of the current LabeledTree::SubTree.
-                    // TODO(CRP-426) remove the multiple traversal of the subtree-HashTree
-                    //   (in find_subtree_node() and in witness_for_subtree()).
-                    let mut sub_witnesses = FlatMap::new();
-                    for label in children.keys() {
-                        curr_path.push(label.to_owned());
-                        let target_node = find_subtree_node(label, hash_tree)
-                            .or_else(|_e| err_inconsistent_partial_tree(curr_path))?;
-                        let sub_witness = Self::witness_impl::<Builder, _>(
-                            children.get(label).expect("Should never panic because label is in the keys"),
-                            orig_children.get(label).expect("Should never panic because an error is returned in case a label is missing"),
-                            target_node,
-                            curr_path,
-                        )?;
-                        if let Err(_err) = sub_witnesses.try_append(label.to_owned(), sub_witness) {
-                            // Tree is not sorted
-                            return err_inconsistent_partial_tree(curr_path);
-                        };
-                        curr_path.pop();
-                    }
 
-                    // `children` is a subset of `orig_children`
-                    witness_for_subtree::<Builder>(hash_tree, &mut sub_witnesses)
-                        .or_else(|_e| err_inconsistent_partial_tree(curr_path))
-                } else {
-                    err_inconsistent_partial_tree(curr_path)
+                        let mut result = Builder::make_pruned(hash_tree.digest().clone());
+
+                        if children.is_empty() {
+                            return Ok(result);
+                        }
+
+                        let mut nodes = Vec::with_capacity(orig_children.len());
+                        Self::flatten_forks(hash_tree, &mut nodes);
+                        debug_assert_eq!(orig_children.len(), nodes.len());
+
+                        // if in target_labels, then descend
+                        // else if borders with >=1 l in target_labels, prune what's under the node
+                        // otherwise, prune the node
+                        for target_label in children.keys() {
+                            match orig_children.keys().binary_search(target_label) {
+                                // Membership witness case.
+                                // Descend into `nodes[target_hash_tree_index]`
+                                // and merge the produced subwitness into `result`.
+                                Ok(target_hash_tree_index) => {
+                                    let target_hash_tree = nodes[target_hash_tree_index];
+                                    let child_witness = Self::witness_impl::<Builder, _>(
+                                        children.get(target_label).expect("Could not get label"),
+                                        orig_children
+                                            .get(target_label)
+                                            .expect("Could not get label"),
+                                        target_hash_tree,
+                                        current_depth + 1,
+                                    )?;
+                                    result = Builder::merge_trees(
+                                        result,
+                                        // `orig_tree` and `hash_tree` are well-formed, since the only way to
+                                        // create a `WitnessGeneratorImpl` is via `try_from` or from a
+                                        // `HashTreeBuilderImpl`, which both ensure the validity. Also,
+                                        // `hash_tree` cannot be empty since this case is handled at the
+                                        // beginning of this function. Therefore, `pruned_for_all_but_pos`
+                                        // cannot panic here and in other places in this function.
+                                        Self::pruned_for_all_but_pos::<Builder>(
+                                            hash_tree,
+                                            Builder::make_node(target_label.clone(), child_witness),
+                                            target_hash_tree_index,
+                                            nodes.len(),
+                                        ),
+                                    )?;
+                                }
+                                // Absence witness case.
+                                // If the label is not present in the original
+                                // tree, we need to include (pruned) subwitness(es) at `target_offset`, e.g.,
+                                // if `target_offset == 0`, we include `nodes[0]`,
+                                // if `target_offset == 1`, we include `nodes[0]` and `nodes[1]`.
+                                Err(target_offset) => {
+                                    let absence_witness_from_node_at = |i: usize| -> Builder {
+                                        let subwitness = Builder::make_node(
+                                            orig_children.keys()[i].clone(),
+                                            Builder::make_pruned(nodes[i].digest().clone()),
+                                        );
+                                        Self::pruned_for_all_but_pos::<Builder>(
+                                            hash_tree,
+                                            subwitness,
+                                            i,
+                                            nodes.len(),
+                                        )
+                                    };
+
+                                    if target_offset == 0 || target_offset == orig_children.len() {
+                                        // Missing label that is smaller than
+                                        // minimum or larger than maximum label in `nodes.
+                                        let offset = target_offset.saturating_sub(1);
+                                        result = Builder::merge_trees(
+                                            result,
+                                            absence_witness_from_node_at(offset),
+                                        )?;
+                                    } else {
+                                        // Missing label between two subsequent
+                                        // labels in `nodes`.
+                                        result = Builder::merge_trees(
+                                            result,
+                                            absence_witness_from_node_at(target_offset - 1),
+                                        )?;
+                                        result = Builder::merge_trees(
+                                            result,
+                                            absence_witness_from_node_at(target_offset),
+                                        )?;
+                                    }
+                                }
+                            }
+                        }
+                        result
+                    }
+                    LabeledTree::Leaf(_) => Builder::make_pruned(hash_tree.digest().clone()),
                 }
             }
-            LabeledTree::SubTree(_) => unreachable!(),
             LabeledTree::Leaf(data) => match orig_tree {
-                LabeledTree::Leaf(_) => Ok(Builder::make_leaf(data.as_ref())),
-                LabeledTree::SubTree(_) => {
-                    // inconsistent structures, not a leaf in the original labeled tree
-                    err_inconsistent_partial_tree(curr_path)
-                }
+                LabeledTree::Leaf(_) => Builder::make_leaf(data.as_ref()),
+                LabeledTree::SubTree(children) if children.is_empty() => Builder::make_empty(),
+                LabeledTree::SubTree(_) => Builder::make_pruned(hash_tree.digest().clone()),
             },
-        }
+        };
+        Ok(result)
     }
 }
 
@@ -837,96 +966,6 @@ impl fmt::Debug for WitnessGeneratorImpl {
         write_labeled_tree(&self.orig_tree, 0, f)?;
         writeln!(f, "***** hash tree:")?;
         write_hash_tree(&self.hash_tree, 0, f)
-    }
-}
-
-fn path_as_string(path: &[Label]) -> String {
-    let mut str = String::new();
-    str.push('[');
-    for label in path {
-        str.push_str(&label.to_string())
-    }
-    str.push(']');
-    str
-}
-
-fn labeled_tree_from_hashtree(
-    hash_tree: &HashTree,
-    curr_path: &mut Vec<Label>,
-) -> Result<LabeledTree<Digest>, TreeHashError> {
-    /// Traverses the first level of labeled Nodes reacheable from the specified
-    /// tree root, recursively converts those into labeled trees and
-    /// collects them into a map indexed by the corresponding label.
-    fn collect_children(
-        tree: &HashTree,
-        path: &mut Vec<Label>,
-        map: &mut FlatMap<Label, LabeledTree<Digest>>,
-    ) -> Result<(), TreeHashError> {
-        match tree {
-            HashTree::Leaf { .. } => Err(TreeHashError::InvalidArgument {
-                info: format!(
-                    "subtree leaf without a node at path {}",
-                    path_as_string(path)
-                ),
-            }),
-
-            HashTree::Node {
-                label, hash_tree, ..
-            } => {
-                path.push(label.clone());
-                let child = labeled_tree_from_hashtree(hash_tree, path)?;
-                path.pop();
-                map.try_append(label.clone(), child)
-                    .map_err(|_| TreeHashError::InvalidArgument {
-                        info: format!(
-                            "non-sorted labels in a subtree at path {}",
-                            path_as_string(path)
-                        ),
-                    })
-            }
-
-            HashTree::Fork {
-                ref left_tree,
-                ref right_tree,
-                ..
-            } => {
-                collect_children(left_tree, path, map)?;
-                collect_children(right_tree, path, map)
-            }
-        }
-    }
-
-    match hash_tree {
-        HashTree::Leaf { digest } => {
-            if *digest == empty_subtree_hash() {
-                Ok(LabeledTree::SubTree(FlatMap::new()))
-            } else {
-                Ok(LabeledTree::Leaf(digest.to_owned()))
-            }
-        }
-        HashTree::Node {
-            label,
-            hash_tree: hash_subtree,
-            ..
-        } => {
-            curr_path.push(label.to_owned());
-            let labeled_subtree = labeled_tree_from_hashtree(hash_subtree, curr_path)?;
-            curr_path.pop();
-            let map = flatmap!(label.to_owned() => labeled_subtree);
-            Ok(LabeledTree::SubTree(map))
-        }
-
-        HashTree::Fork {
-            left_tree,
-            right_tree,
-            ..
-        } => {
-            let mut children = FlatMap::new();
-            collect_children(left_tree, curr_path, &mut children)?;
-            collect_children(right_tree, curr_path, &mut children)?;
-
-            Ok(LabeledTree::SubTree(children))
-        }
     }
 }
 
@@ -971,7 +1010,7 @@ pub struct TooLongPathError;
 /// (currently 127).
 pub fn sparse_labeled_tree_from_paths(paths: &[Path]) -> Result<LabeledTree<()>, TooLongPathError> {
     for path in paths {
-        if path.len() >= MAX_HASH_TREE_DEPTH {
+        if path.len() >= (MAX_HASH_TREE_DEPTH as usize) {
             return Err(TooLongPathError {});
         }
     }
@@ -1025,45 +1064,23 @@ pub fn sparse_labeled_tree_from_paths(paths: &[Path]) -> Result<LabeledTree<()>,
     Ok(root)
 }
 
-impl TryFrom<HashTree> for WitnessGeneratorImpl {
-    type Error = TreeHashError;
-
-    /// Creates a `WitnessGenerator` from a `HashTree`, that must have
-    /// a structure matching a valid `LabeledTree`.
-    /// Returns an error if the given hash tree doesn't match a valid
-    /// `LabeledTree`, e.g. if the hash tree has only some `HashTree::Fork`-
-    /// and `HashTree::Leaf`-elements, but none `HashTree::Node`-elements.
-    fn try_from(hash_tree: HashTree) -> Result<Self, Self::Error> {
-        let mut curr_path = Vec::new();
-        let labeled_tree = labeled_tree_from_hashtree(&hash_tree, &mut curr_path)?;
-        Ok(WitnessGeneratorImpl {
-            orig_tree: labeled_tree,
-            hash_tree,
-        })
-    }
-}
-
 impl WitnessGenerator for WitnessGeneratorImpl {
     fn hash_tree(&self) -> &HashTree {
         &self.hash_tree
     }
 
-    fn witness(&self, partial_tree: &LabeledTree<Vec<u8>>) -> Result<Witness, TreeHashError> {
-        let mut path = Vec::new();
-        Self::witness_impl::<Witness, _>(partial_tree, &self.orig_tree, &self.hash_tree, &mut path)
+    fn witness(
+        &self,
+        partial_tree: &LabeledTree<Vec<u8>>,
+    ) -> Result<Witness, WitnessGenerationError<Witness>> {
+        Self::witness_impl::<Witness, _>(partial_tree, &self.orig_tree, &self.hash_tree, 1)
     }
 
     fn mixed_hash_tree(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
-    ) -> Result<MixedHashTree, TreeHashError> {
-        let mut path = Vec::new();
-        Self::witness_impl::<MixedHashTree, _>(
-            partial_tree,
-            &self.orig_tree,
-            &self.hash_tree,
-            &mut path,
-        )
+    ) -> Result<MixedHashTree, WitnessGenerationError<MixedHashTree>> {
+        Self::witness_impl::<MixedHashTree, _>(partial_tree, &self.orig_tree, &self.hash_tree, 1)
     }
 }
 

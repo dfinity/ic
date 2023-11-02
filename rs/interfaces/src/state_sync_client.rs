@@ -5,8 +5,8 @@ use ic_types::{
 };
 
 pub trait StateSyncClient: Send + Sync {
-    /// Returns the Id of the latest available state or None if no state is available.
-    fn latest_state(&self) -> Option<StateSyncArtifactId>;
+    /// Returns a list of all states available.
+    fn available_states(&self) -> Vec<StateSyncArtifactId>;
     /// Initiates new state sync for the specified Id. Returns None if the state should not be synced.
     /// If `Some(..)` is returned a new state sync is initiated.
     /// Callers of this interface need to uphold the following: `start_state_sync` is not called again

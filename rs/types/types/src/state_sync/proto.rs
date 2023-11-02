@@ -92,7 +92,7 @@ impl TryFrom<pb::Manifest> for Manifest {
             manifest
                 .version
                 .try_into()
-                .map_err(|v| ProxyDecodeError::UnknownStateSyncVersion(v))?,
+                .map_err(ProxyDecodeError::UnknownStateSyncVersion)?,
             manifest
                 .file_table
                 .into_iter()
@@ -115,7 +115,7 @@ impl TryFrom<pb::MetaManifest> for MetaManifest {
             version: meta_manifest
                 .version
                 .try_into()
-                .map_err(|v| ProxyDecodeError::UnknownStateSyncVersion(v))?,
+                .map_err(ProxyDecodeError::UnknownStateSyncVersion)?,
             sub_manifest_hashes: meta_manifest
                 .sub_manifest_hashes
                 .into_iter()

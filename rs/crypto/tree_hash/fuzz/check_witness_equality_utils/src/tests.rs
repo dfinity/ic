@@ -36,14 +36,14 @@ fn get_num_leaves_works_correctly() {
 
 #[test]
 fn try_remove_leaf_removes_leaves_correctly() {
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
 
     let mut empty_tree = subtree!();
-    try_remove_leaf(&mut empty_tree, &mut rng);
+    try_remove_leaf(&mut empty_tree, rng);
     assert_eq!(empty_tree, subtree!());
 
     let mut one_leaf_tree = subtree_empty_values!(b"1");
-    try_remove_leaf(&mut one_leaf_tree, &mut rng);
+    try_remove_leaf(&mut one_leaf_tree, rng);
     assert_eq!(one_leaf_tree, empty_tree);
 
     let mut five_leaf_tree = subtree!(
@@ -56,11 +56,11 @@ fn try_remove_leaf_removes_leaves_correctly() {
     assert_eq!(get_num_leaves(&five_leaf_tree), 5);
 
     for i in 1..=5 {
-        try_remove_leaf(&mut five_leaf_tree, &mut rng);
+        try_remove_leaf(&mut five_leaf_tree, rng);
         assert_eq!(get_num_leaves(&five_leaf_tree), 5 - i);
     }
 
-    try_remove_leaf(&mut five_leaf_tree, &mut rng);
+    try_remove_leaf(&mut five_leaf_tree, rng);
     assert_eq!(get_num_leaves(&five_leaf_tree), 0);
 
     assert_eq!(
@@ -146,7 +146,7 @@ fn remove_leaf_removes_leaves_correctly() {
 }
 
 #[test]
-fn pahts_to_empty_subtrees_returns_correct_paths() {
+fn paths_to_empty_subtrees_returns_correct_paths() {
     let empty_tree = subtree!();
     let empty_tree_paths = paths_to_empty_subtrees(&empty_tree);
     assert_eq!(empty_tree_paths.len(), 0);
@@ -170,10 +170,10 @@ fn pahts_to_empty_subtrees_returns_correct_paths() {
 
 #[test]
 fn try_remove_empty_subtree_removes_empty_substrees_correctly() {
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
 
     let mut empty_tree = subtree!();
-    try_remove_empty_subtree(&mut empty_tree, &mut rng);
+    try_remove_empty_subtree(&mut empty_tree, rng);
     assert_eq!(paths_to_empty_subtrees(&empty_tree).len(), 0);
     assert_eq!(empty_tree, subtree!());
 
@@ -187,10 +187,10 @@ fn try_remove_empty_subtree_removes_empty_substrees_correctly() {
         b"i" => subtree_empty_values!(b"j", b"k")
     );
 
-    try_remove_empty_subtree(&mut two_empty_subtrees, &mut rng);
+    try_remove_empty_subtree(&mut two_empty_subtrees, rng);
     assert_eq!(paths_to_empty_subtrees(&two_empty_subtrees).len(), 1);
 
-    try_remove_empty_subtree(&mut two_empty_subtrees, &mut rng);
+    try_remove_empty_subtree(&mut two_empty_subtrees, rng);
     assert_eq!(paths_to_empty_subtrees(&two_empty_subtrees).len(), 0);
 
     assert_eq!(
@@ -239,12 +239,12 @@ fn remove_empty_subtree_in_path_removes_correct_empty_substrees() {
 
 #[test]
 fn add_subtree_and_leaf_works_correctly() {
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     let mut tree = subtree!();
     for i in 1..100 {
-        add_leaf(&mut tree, &mut rng);
+        add_leaf(&mut tree, rng);
         assert_eq!(get_num_leaves(&tree), i, "{tree:?}");
-        add_empty_subtree(&mut tree, &mut rng);
+        add_empty_subtree(&mut tree, rng);
         assert_eq!(all_subtrees(&tree).len(), i + 1, "{tree:?}");
     }
 }
@@ -394,7 +394,7 @@ fn modify_leaf_modifies_correct_leaf() {
         modify_leaf(t, index, &modify_buffer);
     };
 
-    let mut leaf_values: Vec<Vec<u8>> = (0..=3).into_iter().map(|v| vec![v]).collect();
+    let mut leaf_values: Vec<Vec<u8>> = (0..=3).map(|v| vec![v]).collect();
 
     for i in 0..num_leaves {
         modify_leaf_at_index(&mut tree, i);
@@ -415,12 +415,12 @@ fn modify_leaf_modifies_correct_leaf() {
 
 #[test]
 fn get_num_labels_works_correctly() {
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     let mut tree = subtree!();
     for i in 0..100 {
-        add_leaf(&mut tree, &mut rng);
+        add_leaf(&mut tree, rng);
         assert_eq!(get_num_labels(&tree), 2 * i + 1, "{tree:?}");
-        add_empty_subtree(&mut tree, &mut rng);
+        add_empty_subtree(&mut tree, rng);
         assert_eq!(get_num_labels(&tree), 2 * i + 2, "{tree:?}");
     }
 }
@@ -450,7 +450,7 @@ fn modify_label_modifies_correct_label() {
         modify_label(t, index, &modify_buffer);
     };
 
-    let mut labels: Vec<Vec<u8>> = (b'a'..=b'g').into_iter().map(|label| vec![label]).collect();
+    let mut labels: Vec<Vec<u8>> = (b'a'..=b'g').map(|label| vec![label]).collect();
 
     for i in 0..labels.len() {
         modify_label_at_index(&mut tree, i);
@@ -466,4 +466,82 @@ fn modify_label_modifies_correct_label() {
             )
         );
     }
+}
+
+#[test]
+fn cmp_paths_works_correctly_for_1_depth_trees() {
+    let equal_trees_in_root = vec![
+        subtree!(),
+        LabeledTree::Leaf(vec![]),
+        LabeledTree::Leaf(vec![0u8]),
+    ];
+
+    for t1 in equal_trees_in_root.iter() {
+        for t2 in equal_trees_in_root.iter() {
+            assert_eq!(cmp_paths(t1, t2), Ordering::Equal);
+        }
+    }
+}
+
+#[test]
+fn cmp_paths_works_correctly() {
+    let tree = subtree!(b"a" => subtree_empty_values!(b"b"));
+    assert_eq!(cmp_paths(&tree, &tree), Ordering::Equal);
+    assert_eq!(
+        cmp_paths(&subtree_empty_values!(b"a"), &tree),
+        Ordering::Less
+    );
+    assert_eq!(
+        cmp_paths(&tree, &subtree_empty_values!(b"a")),
+        Ordering::Greater
+    );
+
+    assert_eq!(
+        cmp_paths(&subtree!(b"a" => subtree!()), &tree),
+        Ordering::Less
+    );
+    assert_eq!(
+        cmp_paths(&tree, &subtree!(b"a" => subtree!())),
+        Ordering::Greater
+    );
+
+    assert_eq!(
+        cmp_paths(
+            &tree,
+            &subtree!(b"a" => subtree!(b"b" => subtree_empty_values!(b"c")))
+        ),
+        Ordering::Less
+    );
+    assert_eq!(
+        cmp_paths(
+            &subtree!(b"a" => subtree!(b"b" => subtree_empty_values!(b"c"))),
+            &tree
+        ),
+        Ordering::Greater
+    );
+
+    assert_eq!(
+        cmp_paths(&tree, &subtree!(b"a" => subtree_empty_values!(b"c"))),
+        Ordering::Less
+    );
+    assert_eq!(
+        cmp_paths(&subtree!(b"a" => subtree_empty_values!(b"c")), &tree),
+        Ordering::Greater
+    );
+}
+
+#[test]
+#[should_panic = "bug: path with >1 argument lhs=FlatMap { keys: [a], values: [Leaf([])] } rhs=FlatMap { keys: [a, b], values: [Leaf([]), Leaf([])] }"]
+fn cmp_paths_panics_if_first_argument_is_not_a_path() {
+    let path = subtree_empty_values!(b"a");
+    let not_path = subtree_empty_values!(b"a", b"b");
+    cmp_paths(&path, &not_path);
+}
+
+#[test]
+#[should_panic = "bug: path with >1 argument lhs=FlatMap { keys: [a, b], values: [Leaf([]), Leaf([])] } rhs=FlatMap { keys: [a], values: [Leaf([])] }"]
+fn cmp_paths_panics_if_second_argument_is_not_a_path() {
+    let path = subtree_empty_values!(b"a");
+    let not_path = subtree_empty_values!(b"a", b"b");
+    cmp_paths(&not_path, &path);
 }

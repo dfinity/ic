@@ -12,7 +12,6 @@ use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterCall, CanisterCallOrTask};
 use ic_logger::{error, fatal, warn, ReplicaLogger};
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
@@ -20,9 +19,12 @@ use ic_replicated_state::{
 };
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
-use ic_types::messages::{CallContextId, CallbackId, MessageId, Payload, RejectContext, Response};
+use ic_types::messages::{
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
+    Response,
+};
 use ic_types::methods::{Callback, WasmMethod};
-use ic_types::{Cycles, MemoryAllocation, NumInstructions, Time, UserId};
+use ic_types::{Cycles, NumInstructions, Time, UserId};
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, ExecuteMessageResult, RoundLimits};
@@ -94,18 +96,12 @@ pub(crate) fn action_to_request_response(
     let response_payload_and_refund = match action {
         CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => None,
         CallContextAction::NoResponse { refund } => Some((
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: "No response".to_string(),
-            }),
+            Payload::Reject(RejectContext::new(RejectCode::CanisterError, "No response")),
             refund,
         )),
 
         CallContextAction::Reject { payload, refund } => Some((
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: payload,
-            }),
+            Payload::Reject(RejectContext::new(RejectCode::CanisterReject, payload)),
             refund,
         )),
 
@@ -114,10 +110,7 @@ pub(crate) fn action_to_request_response(
         CallContextAction::Fail { error, refund } => {
             let user_error = error.into_user_error(&canister.canister_id());
             Some((
-                Payload::Reject(RejectContext {
-                    code: user_error.reject_code(),
-                    message: user_error.to_string(),
-                }),
+                Payload::Reject(RejectContext::new(user_error.reject_code(), user_error)),
                 refund,
             ))
         }
@@ -411,16 +404,13 @@ fn try_apply_canister_state_changes(
     subnet_id: SubnetId,
     log: &ReplicaLogger,
 ) -> HypervisorResult<()> {
-    match &system_state.memory_allocation {
-        MemoryAllocation::BestEffort => subnet_available_memory
-            .try_decrement(
-                output.allocated_bytes,
-                output.allocated_message_bytes,
-                NumBytes::from(0),
-            )
-            .map_err(|_| HypervisorError::OutOfMemory)?,
-        MemoryAllocation::Reserved(_) => (),
-    }
+    subnet_available_memory
+        .try_decrement(
+            output.allocated_bytes,
+            output.allocated_message_bytes,
+            NumBytes::from(0),
+        )
+        .map_err(|_| HypervisorError::OutOfMemory)?;
 
     system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
 }
@@ -577,9 +567,9 @@ mod test {
     use ic_types::Time;
 
     #[test]
-    fn test_wasm_result_to_query_response_refunds_correclty() {
+    fn test_wasm_result_to_query_response_refunds_correctly() {
         let scheduler_state = SchedulerState::default();
-        let system_state = SystemState::new_running(
+        let system_state = SystemState::new_running_for_testing(
             CanisterId::from_u64(42),
             CanisterId::from(100u64).into(),
             Cycles::new(1 << 36),

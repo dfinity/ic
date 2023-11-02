@@ -409,7 +409,7 @@ class MoveBlockProposalEvent(ReplicaEvent):
             return [(self.doc.get_node_id(), self.doc.get_subnet_id(), params.block_hash, params.signer)]
 
 
-class ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent(ReplicaEvent):
+class ControlPlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent(ReplicaEvent):
     def __init__(self, doc: EsDoc):
         super().__init__(
             name="ControlPlane__spawn_accept_task__tls_server_handshake_failed",

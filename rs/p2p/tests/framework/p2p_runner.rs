@@ -1,9 +1,8 @@
 use crate::framework::file_tree_artifact_mgr::ArtifactChunkingTestImpl;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::{subnet_config::SubnetConfig, transport::TransportConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
-use ic_icos_sev::Sev;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::Transport;
@@ -14,7 +13,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{setup_consensus_and_p2p, P2PStateSyncClient};
 use ic_test_utilities::{
-    consensus::make_catch_up_package_with_empty_transcript,
+    consensus::{batch::MockBatchPayloadBuilder, make_catch_up_package_with_empty_transcript},
     crypto::fake_tls_handshake::FakeTlsHandshake,
     crypto::CryptoReturningOk,
     message_routing::FakeMessageRouting,
@@ -37,6 +36,15 @@ use tempfile::Builder;
 
 pub const P2P_TEST_END_BARRIER: &str = "TEST_END";
 pub const P2P_TEST_START_BARRIER: &str = "TEST_START";
+
+pub fn get_replica_transport_config() -> TransportConfig {
+    TransportConfig {
+        node_ip: "127.0.0.1".to_string(),
+        listening_port: 0,
+        send_queue_size: 8,
+        ..Default::default()
+    }
+}
 
 /// Setup and execute a test for replica with Mock dependencies.
 /// Currently these components' mocked versions are used:
@@ -68,11 +76,10 @@ fn execute_test(
         let state_manager = Arc::new(FakeStateManager::new());
         let node_id = replica_config.node_id;
         let subnet_id = replica_config.subnet_id;
-        let transport_config = get_replica_transport_config(&replica_config, Arc::clone(&registry));
+        let transport_config = get_replica_transport_config();
         info!(log, "Spawning Replica with config {:?}", transport_config);
         let message_router =
             FakeMessageRouting::with_state_manager(Arc::clone(&state_manager) as Arc<_>);
-        let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
         let message_router = Arc::new(message_router);
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
@@ -80,6 +87,8 @@ fn execute_test(
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
         let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
         let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let query_stats_payload_builder = Box::new(query_stats_payload_builder);
         let no_state_sync_client = P2PStateSyncClient::TestClient();
         let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
@@ -107,17 +116,17 @@ fn execute_test(
         )));
 
         let (_, _, p2p_runner) = setup_consensus_and_p2p(
+            &log,
             &metrics_registry,
-            log.clone(),
-            rt_handle,
+            &rt_handle,
             artifact_pool_config,
             transport_config,
             Default::default(),
             node_id,
             subnet_id,
             Some(transport),
+            Arc::clone(&fake_crypto) as Arc<_>,
             Arc::new(FakeTlsHandshake::new()),
-            sev_handshake,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             consensus_pool,
@@ -125,6 +134,7 @@ fn execute_test(
             no_state_sync_client,
             xnet_payload_builder as Arc<_>,
             self_validating_payload_builder as Arc<_>,
+            query_stats_payload_builder,
             message_router as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -231,14 +241,12 @@ fn execute_test_chunking_pool(
         let state_manager = Arc::new(FakeStateManager::new());
         let node_id = replica_config.node_id;
         let subnet_id = replica_config.subnet_id;
-
-        let transport_config = get_replica_transport_config(&replica_config, Arc::clone(&registry));
+        let transport_config = get_replica_transport_config();
         debug!(log, "Spawning Replica with config {:?}", transport_config);
         let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
         ));
 
-        let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
         let message_router =
             FakeMessageRouting::with_state_manager(Arc::clone(&state_manager) as Arc<_>);
         let message_router = Arc::new(message_router);
@@ -246,6 +254,8 @@ fn execute_test_chunking_pool(
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
         let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
         let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new();
+        let query_stats_payload_builder = Box::new(query_stats_payload_builder);
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let node_pool_dir = test_synchronizer.get_test_group_directory();
@@ -273,17 +283,17 @@ fn execute_test_chunking_pool(
         )));
 
         let (_, _, p2p_runner) = setup_consensus_and_p2p(
+            &log,
             &metrics_registry,
-            log.clone(),
-            rt_handle,
+            &rt_handle,
             artifact_pool_config,
             transport_config,
             Default::default(),
             node_id,
             subnet_id,
             Some(transport),
+            Arc::clone(&fake_crypto) as Arc<_>,
             Arc::new(FakeTlsHandshake::new()),
-            sev_handshake,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             consensus_pool,
@@ -291,6 +301,7 @@ fn execute_test_chunking_pool(
             state_sync_client,
             xnet_payload_builder,
             self_validating_payload_builder,
+            query_stats_payload_builder,
             message_router,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,

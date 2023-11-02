@@ -2,52 +2,71 @@ workspace(
     name = "ic",
 )
 
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+
+http_archive(
+    name = "aspect_rules_sol",
+    sha256 = "4e98a4572cd2c5f9e0a4118be3b8d2f0be148c80779ea9da646d0afabe2d609c",
+    strip_prefix = "rules_sol-0.1.0",
+    url = "https://github.com/aspect-build/rules_sol/releases/download/v0.1.0/rules_sol-v0.1.0.tar.gz",
+)
+
+load("@aspect_rules_sol//sol:repositories.bzl", "rules_sol_dependencies", "sol_register_toolchains")
+
+rules_sol_dependencies()
+
+sol_register_toolchains(
+    name = "solc",
+    sol_version = "0.8.18",
+)
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "66ffd9315665bfaafc96b52278f57c7e2dd09f5ede279ea6d39b2be471e7e3aa",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz",
+    ],
+)
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+
+bazel_skylib_workspace()
 
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "099a9fb96a376ccbbb7d291ed4ecbdfd42f6bc822ab77ae6f1b5cb9e914e94fa",
+    sha256 = "6dc2da7ab4cf5d7bfc7c949776b1b7c733f05e56edc4bcd9022bb249d2e2a996",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.35.0/rules_go-v0.35.0.zip",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.35.0/rules_go-v0.35.0.zip",
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
+        "https://github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
     ],
 )
 
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "448e37e0dbf61d6fa8f00aaa12d191745e14f07c31cabfa731f0c8e8a4f41b97",
+    sha256 = "727f3e4edd96ea20c29e8c2ca9e8d2af724d8c7778e7923a854b2c80952bc405",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.28.0/bazel-gazelle-v0.28.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.28.0/bazel-gazelle-v0.28.0.tar.gz",
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
     ],
 )
 
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
+load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
 go_rules_dependencies()
 
-go_register_toolchains(go_version = "1.19.3")
+go_register_toolchains(go_version = "1.20.5")
 
 gazelle_dependencies(go_repository_default_config = "//:WORKSPACE.bazel")
 
 http_archive(
-    name = "bazel_skylib",
-    sha256 = "f7be3474d42aae265405a592bb7da8e171919d74c16f082a5457840f06054728",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
-        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
-    ],
-)
-
-git_repository(
     name = "rules_rust",
-    commit = "0ebd7aa2ed02bffb545a4980946f1ea9b5f5d347",
-    remote = "https://github.com/dfinity-lab/rules_rust.git",
-    shallow_since = "1679674976 +0000",
+    sha256 = "db89135f4d1eaa047b9f5518ba4037284b43fc87386d08c1d1fe91708e3730ae",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.27.0/rules_rust-v0.27.0.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
@@ -62,8 +81,8 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.66.1",
-        "nightly/2022-12-21",
+        "1.71.1",
+        "nightly/2023-06-01",
     ],
 )
 
@@ -231,7 +250,38 @@ container_pull(
     name = "ubuntu_base",
     digest = "sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
     registry = "docker.io",
-    repository = "ubuntu:latest",
+    repository = "ubuntu",
+)
+
+container_pull(
+    name = "coredns",
+    digest = "sha256:be7652ce0b43b1339f3d14d9b14af9f588578011092c1f7893bd55432d83a378",
+    registry = "docker.io",
+    repository = "coredns/coredns",
+    tag = "1.10.1",
+)
+
+container_pull(
+    name = "pebble",
+    digest = "sha256:fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258",
+    registry = "docker.io",
+    repository = "letsencrypt/pebble",
+    tag = "v2.3.1",
+)
+
+container_pull(
+    name = "python3",
+    digest = "sha256:0a56f24afa1fc7f518aa690cb8c7be661225e40b157d9bb8c6ef402164d9faa7",
+    registry = "docker.io",
+    repository = "python",
+    tag = "3-alpine",
+)
+
+container_pull(
+    name = "alpine_openssl",
+    digest = "sha256:cf89651f07a33d2faf4499f72e6f8b0ee2542cd40735d51c7e75b8965c17af0e",
+    registry = "docker.io",
+    repository = "alpine/openssl",
 )
 
 # This image was built with bazel (bazel build //rs/tests:ubuntu_test_runtime_image)
@@ -300,20 +350,16 @@ cc_binary(
 
 http_archive(
     name = "buildifier_prebuilt",
-    sha256 = "0450069a99db3d414eff738dd8ad4c0969928af13dc8614adbd1c603a835caad",
-    strip_prefix = "buildifier-prebuilt-0.4.0",
+    sha256 = "72b5bb0853aac597cce6482ee6c62513318e7f2c0050bc7c319d75d03d8a3875",
+    strip_prefix = "buildifier-prebuilt-6.3.3",
     urls = [
-        "http://github.com/keith/buildifier-prebuilt/archive/0.4.0.tar.gz",
+        "http://github.com/keith/buildifier-prebuilt/archive/6.3.3.tar.gz",
     ],
 )
 
 load("@buildifier_prebuilt//:deps.bzl", "buildifier_prebuilt_deps")
 
 buildifier_prebuilt_deps()
-
-load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
-
-bazel_skylib_workspace()
 
 load("@buildifier_prebuilt//:defs.bzl", "buildifier_prebuilt_register_toolchains")
 
@@ -331,6 +377,22 @@ new_git_repository(
 load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
 
 rosetta_cli_repository(name = "rosetta-cli")
+
+# Closure compiler for JavaScript
+http_archive(
+    name = "io_bazel_rules_closure",
+    sha256 = "a3bef45d4d052adfd7b0146efdfe55989753adbb66e1f4fa4fa8c4f9df4f8196",
+    strip_prefix = "rules_closure-4326045ee6c941f12518a2ad5ad990504cf3df9d",
+    urls = [
+        "https://github.com/bazelbuild/rules_closure/archive/4326045ee6c941f12518a2ad5ad990504cf3df9d.zip",
+    ],
+)
+
+load("@io_bazel_rules_closure//closure:repositories.bzl", "rules_closure_dependencies", "rules_closure_toolchains")
+
+rules_closure_dependencies()
+
+rules_closure_toolchains()
 
 # NodeJS dependencies
 
@@ -394,6 +456,11 @@ load("//pre-commit:candid.bzl", "candid")
 
 candid(name = "candid")
 
+# dfx binary for haskell linting
+load("//bazel:dfx.bzl", "dfx")
+
+dfx(name = "dfx")
+
 load("//bazel:jq.bzl", "jq_repository")
 
 jq_repository(name = "jq")
@@ -434,17 +501,6 @@ new_git_repository(
     )""",
     commit = "4f77306bb63151631d84f58dedf67958eb9911b9",
     remote = "https://github.com/WebAssembly/testsuite.git",
-)
-
-http_archive(
-    name = "ic-hs",
-    build_file_content = """
-package(default_visibility = ["//visibility:public"])
-filegroup(name = "artifacts", srcs = glob(["build/*"]), visibility = ["//visibility:public"])
-exports_files(["test-data"])
-      """,
-    sha256 = "988c16a9186586e17ac555aacd743f30e2ad7dc8d95a379c4e3caa265d38abb6",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-7ccc1820-x86_64-linux.tar.gz"],
 )
 
 # Deployed NNS canisters
@@ -566,49 +622,58 @@ http_file(
     url = "https://download.dfinity.systems/ic/9bb8f35cccd013b38657c67964c39d48fac6353f/canisters/ic-icrc1-index.wasm.gz",
 )
 
+# Asset canister
+
+http_file(
+    name = "asset_canister",
+    downloaded_file_path = "assetstorage.wasm.gz",
+    sha256 = "1286960c50eb7a773cfb5fdd77cc238588f39e21f189cc3eb0f35199a99b9c7e",
+    url = "https://github.com/dfinity/sdk/raw/0.14.2/src/distributed/assetstorage.wasm.gz",
+)
+
 # Bitcoin canister
 
 http_file(
     name = "btc_canister",
     downloaded_file_path = "ic-btc-canister.wasm.gz",
-    sha256 = "3df5c5875aacfb3a2b3a680300d69d85e81eef56cd6c1f2e650290c8f422f193",
-    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2023-07-06/ic-btc-canister.wasm.gz",
+    sha256 = "8cc43d3f40bb734a0c87f42ae19eee70c360f2d66a0c88c631f0f0e785505133",
+    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2023-06-12/ic-btc-canister.wasm.gz",
 )
 
 # Internet Identity canister (test build)
 
 http_file(
-    name = "ii_test_canister",
-    downloaded_file_path = "internet_identity_test.wasm",
-    sha256 = "5f179b2e8bdd637043a223a8ee1be6563ffa699dec071f84c8f8487a9dc8d54c",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-01-16/internet_identity_test.wasm",
+    name = "ii_dev_canister",
+    downloaded_file_path = "internet_identity_dev.wasm.gz",
+    sha256 = "f8594235c4f715bce683ccef5f18484bedc97bbd27c4043c0f5276c2c3c67d53",
+    url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-07-21/internet_identity_dev.wasm.gz",
 )
 
 # NNS frontend dapp canister
 
 http_file(
     name = "nns_dapp_canister",
-    downloaded_file_path = "nns_dapp_canister.wasm",
+    downloaded_file_path = "nns_dapp_canister.wasm.gz",
     sha256 = "6af3470ef980b01eb427bdecde7d7c2c440a8c444f6c1fd6e7a39b251eceaf7a",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/nns-dapp.wasm",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/nns-dapp.wasm.gz",
 )
 
 # SNS aggregator canister
 
 http_file(
     name = "sns_aggregator",
-    downloaded_file_path = "sns_aggregator_dev.wasm",
+    downloaded_file_path = "sns_aggregator_dev.wasm.gz",
     sha256 = "fb50fbd91ca28373a1dd9207dee7cab22b5d73fde66fe1cc8a9dac63b9549da1",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm.gz",
 )
 
 # Import Python rules
 
 http_archive(
     name = "rules_python",
-    sha256 = "8c15896f6686beb5c631a4459a3aa8392daccaab805ea899c9d14215074b60ef",
-    strip_prefix = "rules_python-0.17.3",
-    url = "https://github.com/bazelbuild/rules_python/archive/refs/tags/0.17.3.tar.gz",
+    sha256 = "5868e73107a8e85d8f323806e60cad7283f34b32163ea6ff1020cf27abef6036",
+    strip_prefix = "rules_python-0.25.0",
+    url = "https://github.com/bazelbuild/rules_python/releases/download/0.25.0/rules_python-0.25.0.tar.gz",
 )
 
 load("@rules_python//python:repositories.bzl", "python_register_toolchains")
@@ -638,4 +703,268 @@ http_file(
     name = "ic-icrc1-ledger-first-version.wasm.gz",
     sha256 = "7af4f7308c883c286d4a5c0448b6bd03bd4d8bffebd58c4fc7114761ad652932",
     url = "https://download.dfinity.systems/ic/0456f740295aabdd287811f1ed51829082b3df01/canisters/ic-icrc1-ledger.wasm.gz",
+)
+
+# Haskell toolchain for spec_compliance tests
+
+http_archive(
+    name = "rules_haskell",
+    sha256 = "ebc5309d1617492b7edb63cded5d5cec4c32f146f2dee2935ae133f036e441f4",
+    strip_prefix = "rules_haskell-9d29e14b313123a0735abd0989c620d754500452",
+    url = "https://github.com/tweag/rules_haskell/archive/9d29e14b313123a0735abd0989c620d754500452.tar.gz",
+)
+
+http_archive(
+    name = "rules_sh",
+    sha256 = "d4ad015a8e72e92a5c171efa760524502e098cd927ae800dfad03b02dad2299a",
+    strip_prefix = "rules_sh-06170f1fbff23f900bc04dfbdb75ed1acf2b8c42",
+    urls = ["https://github.com/tweag/rules_sh/archive/06170f1fbff23f900bc04dfbdb75ed1acf2b8c42.tar.gz"],
+)
+
+load(
+    "@rules_haskell//haskell:toolchain.bzl",
+    "rules_haskell_toolchains",
+)
+
+rules_haskell_toolchains(
+    version = "9.6.2",
+)
+
+load(
+    "@rules_haskell//haskell:cabal.bzl",
+    "stack_snapshot",
+)
+
+#
+# Run this command to regenerate lock file after changing the rule above:
+# bazel run @stackage-unpinned//:pin
+#
+stack_snapshot(
+    name = "stackage",
+    components = {
+        "attoparsec": [
+            "lib",
+            "lib:attoparsec-internal",
+        ],
+    },
+    components_dependencies = {
+        "attoparsec": """{"lib:attoparsec": ["lib:attoparsec-internal"]}""",
+    },
+    packages = [
+        "QuickCheck",
+        "aeson",
+        "array",
+        "asn1-encoding",
+        "asn1-types",
+        "async",
+        "atomic-write",
+        "base",
+        "base16",
+        "base32",
+        "base64-bytestring",
+        "binary",
+        "bytes",
+        "bytestring",
+        "case-insensitive",
+        "cborg",
+        "cereal",
+        "conduit",
+        "constraints",
+        "containers",
+        "crypton-connection",
+        "crypton-x509",
+        "crypton-x509-store",
+        "crypton-x509-validation",
+        "cryptonite",
+        "data-default-class",
+        "deepseq",
+        "digest",
+        "directory",
+        "dlist",
+        "ed25519",
+        "either",
+        "entropy",
+        "file-embed",
+        "filepath",
+        "hashable",
+        "hex-text",
+        "hspec",
+        "http-client",
+        "http-client-tls",
+        "http-types",
+        "leb128-cereal",
+        "megaparsec",
+        "memory",
+        "mtl",
+        "murmur3",
+        "network",
+        "network-uri",
+        "optparse-applicative",
+        "parallel",
+        "parser-combinators",
+        "prettyprinter",
+        "primitive",
+        "process",
+        "quickcheck-io",
+        "random",
+        "row-types",
+        "safe",
+        "scientific",
+        "secp256k1-haskell",
+        "serialise",
+        "split",
+        "splitmix",
+        "string-conversions",
+        "tasty",
+        "tasty-ant-xml",
+        "tasty-html",
+        "tasty-hunit",
+        "tasty-quickcheck",
+        "tasty-rerun",
+        "template-haskell",
+        "temporary",
+        "text",
+        "time",
+        "tls",
+        "transformers",
+        "uglymemo",
+        "unordered-containers",
+        "utf8-string",
+        "vector",
+        "wai",
+        "wai-cors",
+        "wai-extra",
+        "warp",
+        "wide-word",
+        "word8",
+        "zlib",
+    ],
+    snapshot = "nightly-2023-07-29",
+    stack_snapshot_json = "//:stackage_snapshot.json",
+)
+
+http_archive(
+    name = "haskell-candid",
+    sha256 = "df5116a59502da272d261a772cd7019486f9ddc47361d43a195316ccb8500f84",
+    strip_prefix = "haskell-candid-a682fca78f5770d3ec0c1184ecf7de866dc5ae77",
+    urls = ["https://github.com/nomeata/haskell-candid/archive/a682fca78f5770d3ec0c1184ecf7de866dc5ae77.tar.gz"],
+)
+
+http_archive(
+    name = "miracl-core",
+    build_file_content = """
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
+py_binary(
+    name = "generate",
+    srcs = ["c/config64.py"],
+    main = "c/config64.py",
+    data = [],
+    deps = [],
+)
+run_binary(
+    name = "cbits",
+    srcs = glob(["c/*.c", "c/*.h"]),
+    outs = [
+      "aes.c",
+      "big_384_58.c",
+      "bls_BLS12381.c",
+      "ecp2_BLS12381.c",
+      "ecp_BLS12381.c",
+      "fp12_BLS12381.c",
+      "fp2_BLS12381.c",
+      "fp4_BLS12381.c",
+      "fp_BLS12381.c",
+      "gcm.c",
+      "hash.c",
+      "hmac.c",
+      "newhope.c",
+      "oct.c",
+      "pair_BLS12381.c",
+      "randapi.c",
+      "rand.c",
+      "rom_curve_BLS12381.c",
+      "rom_field_BLS12381.c",
+      "share.c",
+      "arch.h",
+      "big_384_58.h",
+      "bls_BLS12381.h",
+      "config_big_384_58.h",
+      "config_curve_BLS12381.h",
+      "config_field_BLS12381.h",
+      "core.h",
+      "ecdh_BLS12381.h",
+      "ecp2_BLS12381.h",
+      "ecp_BLS12381.h",
+      "fp12_BLS12381.h",
+      "fp2_BLS12381.h",
+      "fp4_BLS12381.h",
+      "fp_BLS12381.h",
+      "hpke_BLS12381.h",
+      "mpin_BLS12381.h",
+      "newhope.h",
+      "pair_BLS12381.h",
+      "randapi.h",
+      "x509.h",
+    ],
+    args = ["--options=31", "--path=$(location c/arch.h)", "--output-path=$(location arch.h)"],
+    target_compatible_with = ["@platforms//os:linux"],
+    tool = ":generate",
+    visibility = ["//visibility:public"],
+)
+cc_library(
+    name = "lib",
+    srcs = [
+      ":aes.c",
+      ":big_384_58.c",
+      ":bls_BLS12381.c",
+      ":ecp2_BLS12381.c",
+      ":ecp_BLS12381.c",
+      ":fp12_BLS12381.c",
+      ":fp2_BLS12381.c",
+      ":fp4_BLS12381.c",
+      ":fp_BLS12381.c",
+      ":gcm.c",
+      ":hash.c",
+      ":hmac.c",
+      ":newhope.c",
+      ":oct.c",
+      ":pair_BLS12381.c",
+      ":randapi.c",
+      ":rand.c",
+      ":rom_curve_BLS12381.c",
+      ":rom_field_BLS12381.c",
+      ":share.c",
+    ],
+    hdrs = [
+      ":arch.h",
+      ":big_384_58.h",
+      ":bls_BLS12381.h",
+      ":config_big_384_58.h",
+      ":config_curve_BLS12381.h",
+      ":config_field_BLS12381.h",
+      ":core.h",
+      ":ecdh_BLS12381.h",
+      ":ecp2_BLS12381.h",
+      ":ecp_BLS12381.h",
+      ":fp12_BLS12381.h",
+      ":fp2_BLS12381.h",
+      ":fp4_BLS12381.h",
+      ":fp_BLS12381.h",
+      ":hpke_BLS12381.h",
+      ":mpin_BLS12381.h",
+      ":newhope.h",
+      ":pair_BLS12381.h",
+      ":randapi.h",
+      ":x509.h",
+    ],
+    includes = [":cbits"],
+    visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//os:linux"],
+)""",
+    patch_args = ["-p1"],
+    patches = ["//hs/spec_compliance:miracl-core.patch"],
+    sha256 = "b93a14c35f56eca8dddaab95dea94294d51ca680a7d6bb1c1f048e1cd71550cd",
+    strip_prefix = "core-ec77b2817a0e360b1893affe4cfa44d19391efc7",
+    urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
 )

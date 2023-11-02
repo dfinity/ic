@@ -131,7 +131,7 @@ impl CanisterHttpService for CanisterHttp {
         // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
         // we do the requests through the socks proxy. If not we use the default IPv6 route.
         let http_resp = if req.socks_proxy_allowed {
-            // Http request does not implement clone. So we have to manually contruct a clone.
+            // Http request does not implement clone. So we have to manually construct a clone.
             let req_body_clone = req.body.clone();
             let mut http_req = hyper::Request::new(Body::from(req.body));
             *http_req.headers_mut() = headers;
@@ -308,16 +308,16 @@ impl fmt::Display for RequestError {
 }
 
 /// Decides if socks proxy should be used to connect to given Uri. In the following cases we do NOT use the proxy:
-/// 1. If we can't get the necessary infromation from the url to do the dns lookup.
+/// 1. If we can't get the necessary information from the url to do the dns lookup.
 /// 2. If the dns resolution fails.
 /// 3. If we connect to localhost.
-/// 4. If the dns resoultion returns at least a single IPV6.
+/// 4. If the dns resolution returns at least a single IPV6.
 async fn should_use_socks_proxy(url: &Uri) -> bool {
     let host = match url.host() {
         Some(host) => host,
         None => return false,
     };
-    // We use a default port in case no port is specfied becuase `lookup_host` requires us to specify a port.
+    // We use a default port in case no port is specified becuase `lookup_host` requires us to specify a port.
     let port = url.port_u16().unwrap_or(443);
 
     let mut lookup = match tokio::net::lookup_host((host, port)).await {

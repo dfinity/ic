@@ -19,5 +19,14 @@ lint:
   use:
     - DEFAULT
 breaking:
+  ignore:
+    - ic_sns_swap/pb/v1/swap.proto
+    - ic_nns_governance/pb/v1/governance.proto
   use:
     - WIRE
+  except:
+    # Allow renaming of optional scalar types (`buf` implements these as the single
+    # member of a `oneof` whose name is derived from the field name). It will also
+    # allow silently moving a field from one `oneof` to another, but this is highly
+    # unlikely to happen (for starters, it requires two `oneofs` in a message).
+    - FIELD_SAME_ONEOF

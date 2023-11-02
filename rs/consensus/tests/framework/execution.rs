@@ -9,8 +9,8 @@ use ic_types::{artifact::Priority, time::Time};
 use rand::seq::SliceRandom;
 use std::time::Duration;
 
-fn execute_instance<'a, 'b>(
-    instance: &'b ConsensusInstance<'a>,
+fn execute_instance(
+    instance: &ConsensusInstance,
     time_source: &dyn TimeSource,
     use_priority_fn: bool,
     logger: &ReplicaLogger,

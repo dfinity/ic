@@ -105,7 +105,7 @@ fn test_key_recovery() {
         "fetch_utxo_alerts",
         Encode!(&DepositRequest {
             caller: minter_id,
-            txid: [0; 32].into(),
+            txid: [0; 32],
             vout: 0
         })
         .unwrap(),

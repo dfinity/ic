@@ -10,7 +10,7 @@
 //!
 //! The LogReceiver parses out report and failure messages from child processes.
 //!
-//! Every message is preceeded with the length of the messages. All messages are encoded using
+//! Every message is preceded with the length of the messages. All messages are encoded using
 //! `bincode`.
 
 use crate::driver::constants::{PANIC_LOG_PREFIX, SUBREPORT_LOG_PREFIX};
@@ -91,7 +91,7 @@ impl LogSender {
             .expect("[should not fail!] could not serialize LogEvent");
         let msg_len = buf.len() as u64;
         if let Err(e) = stream.write_all(&msg_len.to_be_bytes()) {
-            eprintln!("ERROR: when writing msg. lenth to stream (size: {msg_len}): {e:?}");
+            eprintln!("ERROR: when writing msg. length to stream (size: {msg_len}): {e:?}");
             return;
         }
         if let Err(e) = stream.write_all(&buf[..]) {
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(warn_log_msg.level, slog::Level::Warning.as_usize());
         assert_eq!(warn_log_msg.msg, "hello warn");
 
-        let report_or_failure = rt.block_on(async move { jh.await }).unwrap().unwrap();
+        let report_or_failure = rt.block_on(jh).unwrap().unwrap();
 
         assert_matches!(report_or_failure, Some(ReportOrFailure::Failure(msg)) if msg == "oh, a panic!");
     }
@@ -304,7 +304,7 @@ mod tests {
         // shutdown log_server
         std::mem::drop(subproc_logger);
 
-        let report_or_failure = rt.block_on(async move { jh.await }).unwrap().unwrap();
+        let report_or_failure = rt.block_on(jh).unwrap().unwrap();
         assert_matches!(report_or_failure, Some(ReportOrFailure::Report(msg)) if msg == expected_msg);
     }
 

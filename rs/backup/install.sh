@@ -85,7 +85,6 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "version": 26,
     "push_metrics": ${PUSH_METRICS},
     "metrics_urls": [],
     "network_name": "mercury",
@@ -94,15 +93,16 @@ read -r -d '' CONFIG <<-EOM
     "nns_pem": "${WORK_DIR}/$PUBLIC_KEY_NAME",
     "root_dir": "${ROOT_DIR}",
     "excluded_dirs": [
-        "backups", 
-        "diverged_checkpoints", 
+        "backups",
+        "diverged_checkpoints",
         "diverged_state_markers",
-        "fs_tmp", 
-        "tip", 
+        "fs_tmp",
+        "tip",
         "tmp"
     ],
     "ssh_private_key": "${BACKUP_HOME}/.ssh/id_ed25519_backup",
-    "disk_threshold_warn": 75,
+    "hot_disk_resource_threshold_percentage": 75,
+    "cold_disk_resource_threshold_percentage": 95,
     "slack_token": "<INSERT SLACK TOKEN>",
     "cold_storage": null,
     "blacklisted_nodes": [],
@@ -166,7 +166,7 @@ echo
 echo "Please initialise subnet backups by running this command:"
 echo "${WORK_DIR}/ic-backup --config-file ${WORK_DIR}/config.json5 init"
 echo
-echo "finaly start the backup service with this command:"
+echo "finally start the backup service with this command:"
 echo "sudo systemctl start ic-backup.service"
 echo
 echo "also consider to let it run on a reboot with this command:"

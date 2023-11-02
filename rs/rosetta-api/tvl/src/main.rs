@@ -10,6 +10,7 @@ fn main() {}
 
 // NB: init is only called at first installation, not while upgrading canister.
 #[init]
+#[candid_method(init)]
 fn init(args: TvlArgs) {
     ic_tvl_canister::init(args);
 }
@@ -63,7 +64,7 @@ fn check_candid_interface_compatibility() {
             candid::utils::CandidSource::Text(t) => t.to_string(),
         }
     }
-    fn check_service_compatible(
+    fn check_service_equal(
         new_name: &str,
         new: candid::utils::CandidSource,
         old_name: &str,
@@ -71,7 +72,7 @@ fn check_candid_interface_compatibility() {
     ) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_compatible(new, old) {
+        match candid::utils::service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -91,7 +92,7 @@ fn check_candid_interface_compatibility() {
     // check the public interface against the actual one
     let old_interface =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("tvl.did");
-    check_service_compatible(
+    check_service_equal(
         "actual ledger candid interface",
         candid::utils::CandidSource::Text(&new_interface),
         "declared candid interface in tvl.did file",

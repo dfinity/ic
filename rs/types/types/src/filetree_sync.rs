@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use bincode::{deserialize, serialize};
+use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -28,6 +29,42 @@ pub struct FileTreeSyncArtifact {
     pub id: FileTreeSyncId,
 }
 
+impl From<FileTreeSyncArtifact> for pb::FileTreeSyncArtifact {
+    fn from(value: FileTreeSyncArtifact) -> Self {
+        #[cfg(not(target_family = "unix"))]
+        {
+            _ = value;
+            panic!("This method may only be used on unix.");
+        }
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            Self {
+                absolute_path: value.absolute_path.into_os_string().into_vec(),
+                id: value.id,
+            }
+        }
+    }
+}
+
+impl From<pb::FileTreeSyncArtifact> for FileTreeSyncArtifact {
+    fn from(value: pb::FileTreeSyncArtifact) -> Self {
+        #[cfg(not(target_family = "unix"))]
+        {
+            _ = value;
+            panic!("This method may only be used on unix.");
+        }
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            Self {
+                absolute_path: std::ffi::OsString::from_vec(value.absolute_path).into(),
+                id: value.id,
+            }
+        }
+    }
+}
+
 impl ChunkableArtifact for FileTreeSyncArtifact {
     fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
         let paths = std::fs::read_dir(self.absolute_path).ok()?;
@@ -38,7 +75,6 @@ impl ChunkableArtifact for FileTreeSyncArtifact {
         if chunk_id.get() == CHUNKID_MANIFEST_CHUNK {
             return Some(ArtifactChunk {
                 chunk_id,
-                witness: Default::default(),
                 artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
                     serialize(&count).expect("Binary serialization failed"),
                 ),
@@ -56,7 +92,6 @@ impl ChunkableArtifact for FileTreeSyncArtifact {
 
         Some(ArtifactChunk {
             chunk_id,
-            witness: Default::default(),
             artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
                 serialize(&chunk_id).expect("Binary serialization failed"),
             ),

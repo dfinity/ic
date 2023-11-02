@@ -88,6 +88,9 @@ pub fn access_control_test(env: TestEnv) {
             root_ident_b.sender().unwrap()
         ],
         id_seed: 1,
+        registration_expiration_ttl: None,
+        in_progress_ttl: None,
+        management_task_interval: None,
     })
     .unwrap();
 
@@ -231,6 +234,9 @@ pub fn registration_test(env: TestEnv) {
     let args = Encode!(&InitArg {
         root_principals: vec![root_ident_a.sender().unwrap()],
         id_seed: 1,
+        registration_expiration_ttl: None,
+        in_progress_ttl: None,
+        management_task_interval: None,
     })
     .unwrap();
 
@@ -390,6 +396,9 @@ pub fn task_queue_test(env: TestEnv) {
     let args = Encode!(&InitArg {
         root_principals: vec![root_ident_a.sender().unwrap()],
         id_seed: 1,
+        registration_expiration_ttl: None,
+        in_progress_ttl: None,
+        management_task_interval: None,
     })
     .unwrap();
 
@@ -652,6 +661,9 @@ pub fn certificate_export_test(env: TestEnv) {
     let args = Encode!(&InitArg {
         root_principals: vec![root_ident_a.sender().unwrap()],
         id_seed: 1,
+        registration_expiration_ttl: None,
+        in_progress_ttl: None,
+        management_task_interval: None,
     })
     .unwrap();
 

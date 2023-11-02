@@ -332,6 +332,29 @@ pub trait StateManager: StateReader {
 }
 // end::state-manager-interface[]
 
+/// This component bundles a version of the state with the corresponding hash tree and
+/// certifications.
+pub trait CertifiedStateReader: Send + Sync {
+    type State;
+
+    /// Returns a reference to the underlying state.
+    fn get_state(&self) -> &Self::State;
+
+    /// This method runs the same computation as [StateReader::read_certified_state],
+    /// with three significant differences:
+    ///
+    /// * This method is deterministic.
+    ///
+    /// * This method doesn't return the state because the state is fixed.
+    ///   Use the [get_state] method to access the underlying state.
+    ///
+    /// * This method is not blocking and is safe to use in async environment.
+    fn read_certified_state(
+        &self,
+        paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)>;
+}
+
 /// This component is analogous to the `StateManager` except that it is used to
 /// access State which cannot be checkpointed or snapshotted.
 pub trait StateReader: Send + Sync {
@@ -395,4 +418,9 @@ pub trait StateReader: Send + Sync {
         &self,
         paths: &LabeledTree<()>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)>;
+
+    /// Returns a CertifiedStateReader corresponding to the latest certified state.
+    fn get_certified_state_reader(
+        &self,
+    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>>;
 }

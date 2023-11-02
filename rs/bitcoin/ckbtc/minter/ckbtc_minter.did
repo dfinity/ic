@@ -1,15 +1,38 @@
 // Represents an account on the ckBTC ledger.
 type Account = record { owner : principal; subaccount : opt blob };
 
+type CanisterStatusResponse = record {
+  status : CanisterStatusType;
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+};
+
+type CanisterStatusType = variant { stopped; stopping; running };
+
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+};
+
 type RetrieveBtcArgs = record {
     // The address to which the ckBTC minter should deposit BTC.
-    // Currently, the minter understands only the following types of addresses:
-    //   * P2WPKH addresses (they start with the "bc1q" prefix on the Bitcoin mainnet).
-    //   * P2PKH addresses (they start with the "1" prefix on the Bitcoin mainnet).
-    //   * P2SH addresses (they start with the "3" prefix on the Bitcoin mainnet).
     address : text;
     // The amount of BTC in Satoshis that the client wants to withdraw.
     amount : nat64;
+};
+
+type RetrieveBtcWithApprovalArgs = record {
+    // The address to which the ckBTC minter should deposit BTC.
+    address : text;
+    // The amount of BTC in Satoshis that the client wants to withdraw.
+    amount : nat64;
+    // The subaccount to burn ckBTC from.
+    from_subaccount : opt blob;
 };
 
 type RetrieveBtcError = variant {
@@ -30,6 +53,26 @@ type RetrieveBtcError = variant {
     GenericError : record { error_message : text; error_code : nat64 };
 };
 
+type RetrieveBtcWithApprovalError = variant {
+    // The minter failed to parse the destination address.
+    MalformedAddress : text;
+    // The minter is already processing another retrieval request for the same
+    // principal.
+    AlreadyProcessing;
+    // The withdrawal amount is too low.
+    // The payload contains the minimal withdrawal amount.
+    AmountTooLow : nat64;
+    // The ckBTC balance of the withdrawal account is too low.
+    InsufficientFunds : record { balance : nat64 };
+    // The allowance given to the minter is too low.
+    InsufficientAllowance : record { allowance : nat64 };
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+    // A generic error reserved for future extensions.
+    GenericError : record { error_message : text; error_code : nat64 };
+};
+
 type RetrieveBtcOk = record {
     // Returns the burn transaction index corresponding to the withdrawal.
     // You can use this index to query the withdrawal status.
@@ -42,7 +85,7 @@ type UtxoStatus = variant {
     // the KYT fees. This state is final, retrying [update_balance] call will
     // have no effect on this UTXO.
     ValueTooSmall : Utxo;
-    // The KYT provider considered this UTXO to be tained. This UTXO state is
+    // The KYT provider considered this UTXO to be tainted. This UTXO state is
     // final, retrying [update_balance] call will have no effect on this UTXO.
     Tainted : Utxo;
     // The UTXO passed the KYT check, but the minter failed to mint ckBTC
@@ -120,7 +163,7 @@ type InitArgs = record {
     /// The minter's operation mode.
     mode : Mode;
 
-    /// The fee paid per check by the KYT cansiter.
+    /// The fee paid per check by the KYT canister.
     kyt_fee : opt nat64;
 
     /// The canister id of the KYT canister.
@@ -143,7 +186,7 @@ type UpgradeArgs = record {
     /// If set, overrides the current minter's operation mode.
     mode : opt Mode;
 
-    /// The fee per check by the KYT cansiter.
+    /// The fee per check by the KYT canister.
     kyt_fee : opt nat64;
 
     /// The principal of the KYT canister.
@@ -201,10 +244,18 @@ type MinterInfo = record {
     kyt_fee : nat64;
 };
 
+type ReimbursementReason = variant {
+    CallFailed;
+    TaintedDestination : record {
+        kyt_fee : nat64;
+        kyt_provider: principal;
+    };
+};
+
 type Event = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
-    received_utxos : record { to_account : Account; utxos : vec Utxo };
+    received_utxos : record { to_account : Account; mint_txid : opt nat64; utxos : vec Utxo };
     accepted_retrieve_btc_request : record {
         amount : nat64;
         address : BitcoinAddress;
@@ -244,10 +295,18 @@ type Event = variant {
     retrieve_btc_kyt_failed : record {
         address : text;
         amount : nat64;
+        owner : principal;
         kyt_provider : principal;
         uuid : text;
         block_index : nat64;
     };
+    schedule_deposit_reimbursement : record {
+        account : Account;
+        burn_block_index : nat64;
+        amount : nat64;
+        reason : ReimbursementReason;
+    };
+    reimbursed_failed_deposit : record { burn_block_index : nat64; mint_block_index : nat64 };
 };
 
 type MinterArg = variant {
@@ -306,6 +365,21 @@ service : (minter_arg : MinterArg) -> {
     //   that the [get_withdrawal_account] endpoint returns.
     retrieve_btc : (RetrieveBtcArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcError });
 
+    // Submits a request to convert ckBTC to BTC.
+    //
+    // # Note
+    //
+    // The BTC retrieval process is slow.  Instead of
+    // synchronously waiting for a BTC transaction to settle, this
+    // method returns a request ([block_index]) that the caller can use
+    // to query the request status.
+    //
+    // # Preconditions
+    //
+    // * The caller allowed the minter's principal to spend its funds
+    //   using [icrc2_approve] on the ckBTC ledger.
+    retrieve_btc_with_approval : (RetrieveBtcWithApprovalArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcWithApprovalError });
+
     /// Returns the status of a [retrieve_btc] request.
     retrieve_btc_status : (record { block_index : nat64 }) -> (RetrieveBtcStatus) query;
 
@@ -314,6 +388,8 @@ service : (minter_arg : MinterArg) -> {
     // Section "Minter Information" {{{
     // Returns internal minter parameters.
     get_minter_info : () -> (MinterInfo) query;
+
+    get_canister_status : () -> (CanisterStatusResponse);
     // }}}
 
     // Section "Event log" {{{

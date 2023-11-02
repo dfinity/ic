@@ -2,53 +2,65 @@
 Tools for building IC OS image.
 """
 
-def _docker_tar_impl(ctx):
-    tool = ctx.files._build_docker_save_tool[0]
-    tar_file = ctx.actions.declare_file(ctx.label.name)
-    hash_list_file = ctx.actions.declare_file(ctx.label.name + ".hash-list")
+def _build_container_filesystem_impl(ctx):
+    args = []
+    inputs = []
+    outputs = []
 
-    inputs = [] + ctx.files.dep
-    context_dir = ctx.files.dep[0].dirname
+    output_tar_file = ctx.actions.declare_file(ctx.label.name)
+    args.extend(["--output", output_tar_file.path])
+    outputs.append(output_tar_file)
 
-    arguments = ["--dockerfile", ctx.file.dockerfile.path] if ctx.file.dockerfile else []
-    arguments.extend(["-o", tar_file.path])
-    for arg in ctx.attr.build_args:
-        arguments.extend(["--build-arg", arg])
-    for file, name in ctx.attr.file_build_args.items():
-        arguments.extend(["--file-build-arg", name + "=" + file.files.to_list()[0].path])
-        inputs += file.files.to_list()
-    arguments.extend([context_dir])
+    # All files in the rootfs are inputs.
+    # But only the directory is passed to the script
+    context_dir = ctx.files.context_files[0].dirname
+    inputs += ctx.files.context_files
+    args.extend(["--context-dir", context_dir])
+
+    config_file = ctx.file.config_file
+    inputs.append(config_file)
+    args.extend(["--config-file", config_file.path])
 
     if ctx.file.dockerfile:
         inputs.append(ctx.file.dockerfile)
+        args.extend(["--dockerfile", ctx.file.dockerfile.path])
 
+    # Dir mounts prepared in `gitlab-ci/container/container-run.sh`
+    args.extend(["--tmpfs-container-sys-dir"])
+    args.extend(["--no-cache"])
+
+    tool = ctx.executable._tool
     ctx.actions.run(
         executable = tool.path,
-        arguments = arguments,
+        arguments = args,
         inputs = inputs,
-        outputs = [tar_file, hash_list_file],
+        outputs = outputs,
         tools = [tool],
     )
 
-    return [DefaultInfo(files = depset([tar_file, hash_list_file]), runfiles = ctx.runfiles([tar_file, hash_list_file]))]
+    return [DefaultInfo(
+        files = depset(outputs),
+        runfiles = ctx.runfiles(outputs),
+    )]
 
-docker_tar = rule(
-    implementation = _docker_tar_impl,
+build_container_filesystem = rule(
+    implementation = _build_container_filesystem_impl,
     attrs = {
-        "dep": attr.label_list(
+        # Glob of files from the rootfs
+        "context_files": attr.label_list(
             allow_files = True,
         ),
-        "build_args": attr.string_list(),
-        "file_build_args": attr.label_keyed_string_dict(
-            allow_files = True,
-            mandatory = False,
+        "config_file": attr.label(
+            allow_single_file = True,
         ),
         "dockerfile": attr.label(
             allow_single_file = True,
         ),
-        "_build_docker_save_tool": attr.label(
-            allow_files = True,
-            default = ":docker_tar.py",
+        "_tool": attr.label(
+            default = Label("//toolchains/sysimage:build_container_filesystem_tar.py"),
+            allow_single_file = True,
+            executable = True,
+            cfg = "exec",
         ),
     },
 )

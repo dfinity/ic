@@ -20,7 +20,8 @@ const CHUNK_DOWNLOAD_STATUS_SUCCESS: &str = "success";
 pub(crate) struct StateSyncManagerMetrics {
     pub state_syncs_total: IntCounter,
     pub adverts_received_total: IntCounter,
-    pub latest_state_height_broadcasted: IntGauge,
+    pub highest_state_broadcasted: IntGauge,
+    pub lowest_state_broadcasted: IntGauge,
     pub ongoing_state_sync_metrics: OngoingStateSyncMetrics,
 }
 
@@ -35,9 +36,13 @@ impl StateSyncManagerMetrics {
                 "state_sync_manager_adverts_received_total",
                 "Total number of adverts received.",
             ),
-            latest_state_height_broadcasted: metrics_registry.int_gauge(
-                "state_sync_manager_latest_state_height_broadcasted",
-                "State height that was last broadcasted.",
+            highest_state_broadcasted: metrics_registry.int_gauge(
+                "state_sync_manager_highest_state_broadcasted",
+                "Highest state height broadcasted.",
+            ),
+            lowest_state_broadcasted: metrics_registry.int_gauge(
+                "state_sync_manager_lowest_state_broadcasted",
+                "Lowest state height broadcasted.",
             ),
             ongoing_state_sync_metrics: OngoingStateSyncMetrics::new(metrics_registry),
         }
@@ -46,6 +51,7 @@ impl StateSyncManagerMetrics {
 #[derive(Debug, Clone)]
 pub struct StateSyncManagerHandlerMetrics {
     pub request_duration: HistogramVec,
+    pub compression_ratio: Histogram,
 }
 
 impl StateSyncManagerHandlerMetrics {
@@ -57,6 +63,11 @@ impl StateSyncManagerHandlerMetrics {
                 // 1ms, 10ms, 100ms, 1s
                 exponential_buckets(0.001, 10.0, 4).unwrap(),
                 &[HANDLER_LABEL],
+            ),
+            compression_ratio: metrics_registry.histogram(
+                "state_sync_manager_chunk_compression_ratio",
+                "State sync manager chunk compression ratio.",
+                vec![1.0, 1.25, 1.5, 2.0, 3.0, 5.0, 10.0],
             ),
         }
     }

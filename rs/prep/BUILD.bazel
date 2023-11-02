@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/constants",
     "//rs/crypto",
+    "//rs/nns/common",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/test_utils/ni-dkg",

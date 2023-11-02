@@ -346,17 +346,7 @@ impl Neuron {
                     let new_delay = std::cmp::min(additional_delay, max_dissolve_delay_seconds);
                     self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
                     // We transition from `Dissolved` to `NotDissolving`: reset age.
-                    //
-                    // We set the age to ts as, at this point in
-                    // time, the neuron exited the dissolving
-                    // state and entered the dissolved state.
-                    //
-                    // This way of setting the age of neuron
-                    // transitioning from dissolved to non-dissolving
-                    // creates an incentive to increase the
-                    // dissolve delay of a dissolved neuron
-                    // instead of dissolving it.
-                    self.aging_since_timestamp_seconds = ts;
+                    self.aging_since_timestamp_seconds = now_seconds;
                     Ok(())
                 }
             }
@@ -536,7 +526,7 @@ impl Neuron {
     /// for the voting power calculation.
     ///
     /// It it is determined as the sum of staked tokens and staked maturity
-    /// minus fees occured for rejected proposals made by this neuron.
+    /// minus fees occurred for rejected proposals made by this neuron.
     fn voting_power_stake_e8s(&self) -> u64 {
         self.cached_neuron_stake_e8s
             .saturating_sub(self.neuron_fees_e8s)
@@ -650,7 +640,7 @@ impl Neuron {
                 )
             })?;
 
-        let mut existing_permission = self
+        let existing_permission = self
             .permissions
             .get_mut(existing_permission_position)
             .expect("Expected permission to exist");
@@ -712,6 +702,30 @@ impl Neuron {
                 .cloned()
                 .collect(),
         }
+    }
+
+    /// "NF neurons" are defined as neurons where the NNS governance canister
+    /// has the the `ManagePrincipals` permission and is the only principal that
+    /// does.
+    pub fn is_neurons_fund_controlled(&self) -> bool {
+        let principals_with_manage_principals_permission = self
+            .permissions
+            .iter()
+            .filter_map(|p| {
+                let manage_principals_present = p.permission_type.iter().any(|permission| {
+                    NeuronPermissionType::from_i32(*permission)
+                        == Some(NeuronPermissionType::ManagePrincipals)
+                });
+                if manage_principals_present {
+                    p.principal
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        principals_with_manage_principals_permission
+            == vec![PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)]
     }
 }
 
@@ -781,6 +795,7 @@ impl PartialOrd for NeuronId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pb::v1::neuron::DissolveState;
     use proptest::prelude::proptest;
 
     #[test]
@@ -963,7 +978,7 @@ mod tests {
         }
 
         /// Tests that the voting power is not increased when the neuron meets
-        /// neither bonus criteria (age or disolve delay)
+        /// neither bonus criteria (age or dissolve delay)
         #[test]
         fn test_voting_power_not_eligible_for_boost(
             base_stake in 0u64..1_000_000,
@@ -1064,5 +1079,183 @@ mod tests {
         // The voting power stake should correspond to cached stake - fee + staked maturity
         let voting_power_stake: u64 = neuron.voting_power_stake_e8s();
         assert_eq!(voting_power_stake, 100 - 10 + 50);
+    }
+
+    #[test]
+    fn increase_dissolve_delay_sets_age_correctly_for_dissolved_neurons() {
+        // We set NOW to const in the test since it's shared in the cases and the test impl fn
+        const NOW: u64 = 1000;
+        const MAX_DISSOLVE: u64 = 2000;
+        fn test_increase_dissolve_delay_by_1_on_dissolved_neuron(
+            current_aging_since_timestamp_seconds: u64,
+            current_dissolve_state: Option<DissolveState>,
+        ) {
+            let mut neuron = Neuron {
+                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
+                dissolve_state: current_dissolve_state,
+                ..Default::default()
+            };
+            // precondition, neuron is considered dissolved
+            assert_eq!(neuron.state(NOW), NeuronState::Dissolved);
+
+            neuron
+                .increase_dissolve_delay(NOW, 1, MAX_DISSOLVE)
+                .expect("Dissolve failed");
+
+            // Post-condition - always aging_since_timestamp_seconds = now
+            // always DissolveState::DissolveDelaySeconds(1)
+            assert_eq!(
+                neuron,
+                Neuron {
+                    aging_since_timestamp_seconds: NOW,
+                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
+                    ..Default::default()
+                }
+            );
+        }
+
+        #[rustfmt::skip]
+            let cases = [
+            // These invalid cases ensure that the method actually transforms "now" correctly
+            (0, Some(DissolveState::DissolveDelaySeconds(0))),
+            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
+            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
+            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
+            (0, None),
+            // These are also inconsistent with what should be observed.
+            (NOW + 100, Some(DissolveState::DissolveDelaySeconds(0))),
+            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
+            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
+            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
+            (NOW + 100, None),
+            // Consistent with observations
+            (NOW - 100, Some(DissolveState::DissolveDelaySeconds(0))),
+            (NOW - 100, None),
+            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
+            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
+            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
+        ];
+
+        for (current_aging_since_timestamp_seconds, current_dissolve_state) in cases {
+            test_increase_dissolve_delay_by_1_on_dissolved_neuron(
+                current_aging_since_timestamp_seconds,
+                current_dissolve_state,
+            );
+        }
+    }
+
+    #[test]
+    fn increase_dissolve_delay_does_not_set_age_for_non_dissolving_neurons() {
+        const NOW: u64 = 1000;
+        const MAX_DISSOLVE: u64 = 2000;
+        fn test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
+            current_aging_since_timestamp_seconds: u64,
+            current_dissolve_delay_seconds: u64,
+        ) {
+            let mut non_dissolving_neuron = Neuron {
+                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    current_dissolve_delay_seconds,
+                )),
+                ..Default::default()
+            };
+
+            assert_eq!(non_dissolving_neuron.state(NOW), NeuronState::NotDissolving);
+
+            non_dissolving_neuron
+                .increase_dissolve_delay(NOW, 1, MAX_DISSOLVE)
+                .expect("Dissolve failed");
+
+            assert_eq!(
+                non_dissolving_neuron,
+                Neuron {
+                    // This field should be unaffected
+                    aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
+                    // This field's inner value should increment by 1
+                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                        current_dissolve_delay_seconds + 1
+                    )),
+                    ..Default::default()
+                }
+            );
+        }
+
+        // Test cases
+        for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, 2000] {
+            for current_dissolve_delay_seconds in [1, 10, 100, NOW, 1000, MAX_DISSOLVE - 1] {
+                test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
+                    current_aging_since_timestamp_seconds,
+                    current_dissolve_delay_seconds,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn increase_dissolve_delay_set_age_to_u64_max_for_dissolving_neurons() {
+        const NOW: u64 = 1000;
+        const MAX_DISSOLVE: u64 = 2000;
+        fn test_increase_dissolve_delay_by_1_for_dissolving_neuron(
+            current_aging_since_timestamp_seconds: u64,
+            dissolved_at_timestamp_seconds: u64,
+        ) {
+            let mut neuron = Neuron {
+                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                    dissolved_at_timestamp_seconds,
+                )),
+                ..Default::default()
+            };
+
+            assert_eq!(neuron.state(NOW), NeuronState::Dissolving);
+
+            neuron
+                .increase_dissolve_delay(NOW, 1, MAX_DISSOLVE)
+                .expect("Dissolve failed");
+
+            assert_eq!(
+                neuron,
+                Neuron {
+                    aging_since_timestamp_seconds: u64::MAX,
+                    dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                        dissolved_at_timestamp_seconds + 1
+                    )),
+                    ..Default::default()
+                }
+            );
+        }
+
+        for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, 2000] {
+            for dissolved_at_timestamp_seconds in [NOW + 1, NOW + 1000, NOW + MAX_DISSOLVE - 1] {
+                test_increase_dissolve_delay_by_1_for_dissolving_neuron(
+                    current_aging_since_timestamp_seconds,
+                    dissolved_at_timestamp_seconds,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn neurons_with_governance_controller_are_nf() {
+        let neuron = Neuron {
+            permissions: vec![NeuronPermission {
+                principal: Some(PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)),
+                permission_type: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }],
+            ..Default::default()
+        };
+        assert!(neuron.is_neurons_fund_controlled())
+    }
+
+    #[test]
+    fn neurons_without_governance_controller_are_nf() {
+        let neuron = Neuron {
+            permissions: vec![NeuronPermission {
+                principal: Some(PrincipalId::new_user_test_id(1)),
+                permission_type: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }],
+            ..Default::default()
+        };
+        assert!(!neuron.is_neurons_fund_controlled())
     }
 }

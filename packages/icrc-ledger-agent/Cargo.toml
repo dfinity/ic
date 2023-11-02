@@ -13,4 +13,4 @@ repository = "https://github.com/dfinity/ic"
 [dependencies]
 candid = { workspace = true }
 ic-agent = { workspace = true }
-icrc-ledger-types = { path = "../icrc-ledger-types" }
+icrc-ledger-types = { path = "../icrc-ledger-types", features = ["experimental-api"] }

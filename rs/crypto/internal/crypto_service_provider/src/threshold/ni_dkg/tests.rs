@@ -191,11 +191,11 @@ fn test_ni_dkg_should_work_with_all_players_acting_correctly(
     network_size: usize,
     num_reshares: i32,
 ) {
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let mut state = state_with_transcript(&config, network);
-    threshold_signatures_should_work(&state.network, &config, &state.transcript, &mut rng);
+    threshold_signatures_should_work(&state.network, &config, &state.transcript, rng);
     let public_key = state.public_key();
     // Resharing
     for _ in 0..num_reshares {
@@ -204,9 +204,9 @@ fn test_ni_dkg_should_work_with_all_players_acting_correctly(
             transcript,
             config,
         } = state;
-        let config = MockDkgConfig::from_network(&mut rng, &network, Some((config, transcript)));
+        let config = MockDkgConfig::from_network(rng, &network, Some((config, transcript)));
         state = state_with_transcript(&config, network);
-        threshold_signatures_should_work(&state.network, &config, &state.transcript, &mut rng);
+        threshold_signatures_should_work(&state.network, &config, &state.transcript, rng);
         assert_eq!(public_key, state.public_key());
     }
 }

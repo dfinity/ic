@@ -13,6 +13,15 @@
 #
 # This script compares SHA256SUMS file [diff] and also the actual artifacts [diffoscope]
 
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+GREEN='\033[0;32m'
+NOCOLOR='\033[0m'
+
+echo_red() { echo -e "${RED}${1}${NOCOLOR}"; }
+echo_blue() { echo -e "${BLUE}${1}${NOCOLOR}"; }
+echo_green() { echo -e "${GREEN}${1}${NOCOLOR}"; }
+
 usage() {
     echo -e "Usage: $0 <path-0> <path-1> [<git-revision>]"
     echo -e ""
@@ -30,18 +39,6 @@ usage() {
     echo -e "\t$0 /<sha256>/build-ic/guest-os/update-img /<sha256>/guest-os/update-img [diff/diffoscope]"
     echo -e ""
     echo -e "Note: <sha256>/<sha256'> is git revision and must be full, 40 char string."
-}
-
-diffoscope_check() {
-    if ! which diffoscope; then
-        if grep -q Ubuntu /etc/os-release; then
-            sudo apt-get update && sudo apt-get --no-install-recommends --yes install \
-                "linux-image-$(uname -r)" diffoscope \
-                python3-tlsh libguestfs-tools python3-guestfs squashfs-tools
-        else
-            echo "No diffoscope found!" && exit 1
-        fi
-    fi
 }
 
 alert() {
@@ -97,8 +94,7 @@ if [[ $PATH0 == *".gz" && $PATH1 == *".gz" ]]; then
         "https://download.dfinity.systems/ic/$PATH1" \
         -o "/tmp/$PATH1"
 
-    diffoscope_check
-    diffoscope --html-dir "diffoscope-${VERSION}" "/tmp/$PATH0" "/tmp/$PATH1"
+    diffoscope --text - --html-dir "diffoscope-${VERSION}" "/tmp/$PATH0" "/tmp/$PATH1"
 
     exit 0
 fi
@@ -127,6 +123,9 @@ diff -u "$SHA256SUMS0" "$SHA256SUMS1" || true
 # TODO(IDX-2542)
 sed -i -e '/panics.wasm/d' -e '/ic-rosetta-api/d' -e '/system-tests/d' -e'/prod-test-driver/d' -e'/sns-test-dapp-canister/d' $SHA256SUMS0 $SHA256SUMS1
 
+# ignore *.wasm.did files
+sed -i -e '/.wasm.did/d' $SHA256SUMS0 $SHA256SUMS1
+
 # Most of the time, we only want to check update images so we strip out any
 # disk images. When checking SetupOS, do the opposite.
 SETUPOS_FLAG="${SETUPOS_FLAG:=}"
@@ -138,53 +137,82 @@ fi
 
 if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
     set +x
-    echo -e "\nThis script compares artifacts built from separate CI jobs"
-    set -x
+    echo_green "Investigate with diffoscope [\xF0\x9F\x99\x8F]:\n"
+    if grep -q "img.tar.gz" $SHA256SUMS0; then
+        echo_blue "# Download IC-OS image:\n"
 
-    if grep -q "update-img" $SHA256SUMS0; then
-        echo "Running diffoscope for update-img"
-        diffoscope_check
-
-        ARTIFACT="update-img.tar.gz"
-
-        mkdir -p "$PATH0" "$PATH1" artifacts
-        curl -sfS --retry 5 --retry-delay 10 \
-            "https://download.dfinity.systems/ic/$PATH0/$ARTIFACT" \
-            -o "$PATH0/$ARTIFACT"
-        curl -sfS --retry 5 --retry-delay 10 \
-            "https://download.dfinity.systems/ic/$PATH1/$ARTIFACT" \
-            -o "$PATH1/$ARTIFACT"
-
-        pushd "$PATH0"
-        tar -xzf "$ARTIFACT"
-        popd
-        pushd "$PATH1"
-        tar -xzf "$ARTIFACT"
-        popd
-
-        # we give diffoscope 20min to find the diff
-        TRIGGER_ALERT=false
-        timeout 20m sudo diffoscope \
-            "$PATH0/boot.img" \
-            "$PATH1/boot.img" \
-            --html artifacts/output-boot.html --text - || TRIGGER_ALERT=true
-        timeout 20m sudo diffoscope \
-            "$PATH0/root.img" \
-            "$PATH1/root.img" \
-            --html artifacts/output-root.html --text - || TRIGGER_ALERT=true
-        if [ "$TRIGGER_ALERT" == true ]; then
-            alert
+        if grep -q "update-img.tar.gz" $SHA256SUMS0; then
+            ARTIFACT="update-img.tar.gz"
+        else
+            ARTIFACT="disk-img.tar.gz"
         fi
+
+        echo "rm -rf /tmp/$PATH0 && mkdir -p /tmp/$PATH0"
+        echo "rm -rf /tmp/$PATH1 && mkdir -p /tmp/$PATH1"
+        echo "curl -sfS https://download.dfinity.systems/ic/$PATH0/$ARTIFACT -o /tmp/$PATH0/$ARTIFACT"
+        echo "curl -sfS https://download.dfinity.systems/ic/$PATH1/$ARTIFACT -o /tmp/$PATH1/$ARTIFACT"
+
+        if grep -q "update-img.tar.gz" $SHA256SUMS0; then
+            echo_blue "# Mount IC-OS boot & root image as loop devices:\n"
+            echo "pushd /tmp/$PATH0"
+            echo "tar -xzf $ARTIFACT"
+            echo "DEV00=\$(sudo losetup --show -f -P root.img)"
+            echo "mkdir -p root.img.mnt"
+            echo "sudo mount \$DEV00 root.img.mnt"
+            echo "DEV01=\$(sudo losetup --show -f -P boot.img)"
+            echo "mkdir -p boot.img.mnt"
+            echo "sudo mount \$DEV01 boot.img.mnt"
+            echo "popd"
+
+            echo "pushd /tmp/$PATH1"
+            echo "tar -xzf $ARTIFACT"
+            echo "DEV10=\$(sudo losetup --show -f -P root.img)"
+            echo "mkdir -p root.img.mnt"
+            echo "sudo mount \$DEV10 root.img.mnt"
+            echo "DEV11=\$(sudo losetup --show -f -P boot.img)"
+            echo "mkdir -p boot.img.mnt"
+            echo "sudo mount \$DEV11 boot.img.mnt"
+            echo "popd"
+
+            echo_blue "# Run diffoscope:\n"
+            echo "sudo diffoscope /tmp/$PATH0/root.img.mnt /tmp/$PATH1/root.img.mnt"
+            echo "sudo diffoscope /tmp/$PATH0/boot.img.mnt /tmp/$PATH1/boot.img.mnt"
+
+            echo_blue "# Unmount and detach all loop devices:\n"
+            echo "sudo umount -d \$DEV00 \$DEV01 \$DEV10 \$DEV11"
+        else
+            echo_blue "# Mount IC-OS image partitions as loop devices:\n"
+            # TODO: handle lvm2 partition of host-os image
+            echo "pushd /tmp/$PATH0"
+            echo "tar -xzf $ARTIFACT"
+            echo "DEV0=\$(sudo losetup --show -f -P disk.img)"
+            echo "mkdir -p disk.img.mnt"
+            echo "sudo partx --show -g \$DEV0 | cut -d' ' -f2 | xargs -I{} mkdir -p disk.img.mnt/{}"
+            echo "sudo partx --show -g \$DEV0 | cut -d' ' -f2 | xargs -I{} sudo mount \${DEV0}p{} disk.img.mnt/{}"
+            echo "popd"
+
+            echo "pushd /tmp/$PATH1"
+            echo "tar -xzf $ARTIFACT"
+            echo "DEV1=\$(sudo losetup --show -f -P disk.img)"
+            echo "mkdir -p disk.img.mnt"
+            echo "sudo partx --show -g \$DEV1 | cut -d' ' -f2 | xargs -I{} mkdir -p disk.img.mnt/{}"
+            echo "sudo partx --show -g \$DEV1 | cut -d' ' -f2 | xargs -I{} sudo mount \${DEV1}p{} disk.img.mnt/{}"
+            echo "popd"
+
+            echo_blue "# Run diffoscope:\n"
+            echo "sudo diffoscope /tmp/$PATH0/disk.img.mnt /tmp/$PATH1/disk.img.mnt"
+
+            echo_blue "# Unmount and detach all loop devices:\n"
+            echo "sudo umount -d \${DEV0}p* \${DEV1}p*"
+        fi
+        echo_red "# Instructions above might be outdated and rather serve as a guideline!\n"
     else
-        set +x
-        echo -e "Investigate with diffoscope [\xF0\x9F\x99\x8F]:"
+        echo_blue "# Re-run $0 as shown below:\n"
         echo "  BIN=ic-admin.gz # (specify the right artifact)"
         echo "  $0 /${PATH0}/\$BIN /${PATH1}/\$BIN $VERSION"
-        set -x
-
-        alert
     fi
-
+    alert
+    set -x
 else
     echo "Build Determinism Check Successful"
 fi

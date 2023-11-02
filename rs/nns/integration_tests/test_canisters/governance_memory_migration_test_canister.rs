@@ -141,7 +141,6 @@ fn populate_canister_state() {
 
     let wasm_pages_before_neurons = heap_size_num_pages();
 
-    proto.neurons.reserve(TEST_NUM_NEURONS as usize);
     for i in 0..TEST_NUM_NEURONS {
         proto.neurons.insert(i, allocate_neuron(i));
     }

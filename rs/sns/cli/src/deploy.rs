@@ -10,7 +10,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use candid::{parser::value::IDLValue, Decode, Encode};
+use candid::{types::value::IDLValue, Decode, Encode};
 use serde_json::{json, Value as JsonValue};
 use tempfile::NamedTempFile;
 
@@ -415,6 +415,7 @@ impl DirectSnsDeployerForTests {
             args.initial_cycles_per_canister,
         );
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
+        // TODO[NNS1-2592]: set neurons_fund_participation_constraints to a non-trivial value.
         let sns_canister_payloads =
             match sns_init_payload.build_canister_payloads(&sns_canisters, None, false) {
                 Ok(payload) => payload,
@@ -443,6 +444,7 @@ impl DirectSnsDeployerForTests {
             Some(args.initial_cycles_per_canister),
         );
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
+        // TODO[NNS1-2592]: set neurons_fund_participation_constraints to a non-trivial value.
         let sns_canister_payloads =
             match sns_init_payload.build_canister_payloads(&sns_canisters, None, true) {
                 Ok(payload) => payload,

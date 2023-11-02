@@ -14,7 +14,10 @@ ic-sys = { path = "../sys" }
 ic-utils = { path = "../utils" }
 libc = "0.2.91"
 nix = "0.23.0"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 lazy_static = "1.4.0"
 
 [features]
@@ -24,7 +27,7 @@ sigsegv_handler_checksum = []
 [dev-dependencies]
 ic-types = { path = "../types/types" }
 tempfile = "3.1.0"
-criterion = "0.3"
+criterion = "0.5"
 proptest = "1.0"
 
 [[bench]]

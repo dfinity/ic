@@ -45,14 +45,5 @@
       tc qdisc add dev {{ ic_iface_ipv6 }} parent 20:1 handle 30: sfq
       tc filter add dev {{ ic_iface_ipv6 }} protocol ipv6 parent 1:0 prio 3 u32 match ip6 dport {{ p2p_listen_port }} 0xFFFF flowid 1:3
     fi
-    if [[ -n "{{ ic_iface_ipv4 }}" ]]; then
-      tc qdisc del dev {{ ic_iface_ipv4 }} root || true
-      tc qdisc add dev {{ ic_iface_ipv4 }} root handle 1: prio
-      tc qdisc add dev {{ ic_iface_ipv4 }} parent 1:3 handle 10: tbf rate {{ bandwidth_mbit }}mbit latency 400ms burst 100000
-      tc qdisc add dev {{ ic_iface_ipv4 }} parent 10:1 handle 20: netem delay {{ latency_ms }}ms 5ms drop {{ drops_percentage }}%
-      tc qdisc add dev {{ ic_iface_ipv4 }} parent 20:1 handle 30: sfq
-      tc filter add dev {{ ic_iface_ipv4 }} protocol ipv4 parent 1:0 prio 3 u32 match ip dport {{ xnet_listen_port }} 0xFFFF flowid 1:3
-      tc filter add dev {{ ic_iface_ipv4 }} protocol ipv4 parent 1:0 prio 3 u32 match ip dport {{ api_listen_port }} 0xFFFF flowid 1:3
-    fi
   args:
     executable: /bin/bash

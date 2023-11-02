@@ -109,7 +109,7 @@ fn test_upgrade_canister_proposal_is_successful() {
         // Assert that original_dapp_wasm_hash differs from the hash of
         // the wasm that we're about to install.
         let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
-        let new_dapp_wasm_hash = &ic_crypto_sha::Sha256::hash(&new_dapp_wasm);
+        let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
         assert_ne!(new_dapp_wasm_hash[..], original_dapp_wasm_hash[..]);
 
         // Step 2.b: Make the proposal. (This should get executed right
@@ -257,7 +257,7 @@ fn test_upgrade_canister_proposal_reinstall() {
         // (This should get executed right away,
         // because the proposing neuron is the only neuron.)
         let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
-        let new_dapp_wasm_hash = &ic_crypto_sha::Sha256::hash(&new_dapp_wasm);
+        let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
         let proposal = Proposal {
             title: "Reinstall dapp.".into(),
             action: Some(Action::UpgradeSnsControlledCanister(
@@ -410,7 +410,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
         let new_dapp_wasm =
             Wasm::from_wat("(module (import \"ic0\" \"msg_reply\" (func $msg_reply)))").bytes();
 
-        let new_dapp_wasm_hash = &ic_crypto_sha::Sha256::hash(&new_dapp_wasm);
+        let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
         assert_ne!(new_dapp_wasm_hash[..], original_dapp_wasm_hash[..]);
 
         // Step 2.b: Make the proposal. (This should get executed right

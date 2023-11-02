@@ -13,13 +13,14 @@ pub mod tree_hash;
 use crate::{
     manifest::compute_bundled_manifest,
     state_sync::chunkable::cache::StateSyncCache,
-    tip::{spawn_tip_thread, TipRequest},
+    tip::{spawn_tip_thread, PageMapToFlush, TipRequest},
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
-use ic_canonical_state::{
-    hash_tree::{hash_lazy_tree, HashTree},
-    lazy_tree::{materialize::materialize_partial, LazyTree},
+use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+use ic_canonical_state_tree_hash::{
+    hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
+    lazy_tree::materialize::materialize_partial,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
@@ -29,9 +30,9 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, Labeled, PermanentStateHashError::*, StateHashError,
-    StateManager, StateManagerError, StateManagerResult, StateReader, TransientStateHashError::*,
-    CERT_CERTIFIED, CERT_UNCERTIFIED,
+    CertificationMask, CertificationScope, CertifiedStateReader, Labeled,
+    PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
+    StateManagerResult, StateReader, TransientStateHashError::*, CERT_CERTIFIED, CERT_UNCERTIFIED,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -132,6 +133,8 @@ pub struct StateManagerMetrics {
     tip_handler_queue_length: IntGauge,
     decode_slice_status: IntCounterVec,
     height_update_time_seconds: Histogram,
+    latest_hash_tree_size: IntGauge,
+    latest_hash_tree_max_index: IntGauge,
 }
 
 #[derive(Clone)]
@@ -331,6 +334,16 @@ impl StateManagerMetrics {
             decimal_buckets(0, 2),
         );
 
+        let latest_hash_tree_size = metrics_registry.int_gauge(
+            "state_manager_latest_hash_tree_size",
+            "Number of digests in the latest hash tree.",
+        );
+
+        let latest_hash_tree_max_index = metrics_registry.int_gauge(
+            "state_manager_latest_hash_tree_max_index",
+            "Largest index in the latest hash tree.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -350,6 +363,8 @@ impl StateManagerMetrics {
             tip_handler_queue_length,
             decode_slice_status,
             height_update_time_seconds,
+            latest_hash_tree_size,
+            latest_hash_tree_max_index,
         }
     }
 
@@ -603,6 +618,10 @@ struct CertificationMetadata {
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
+}
+
+fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
+    CryptoHashOfPartialState::from(CryptoHash(d.0.to_vec()))
 }
 
 #[derive(Clone)]
@@ -969,6 +988,7 @@ struct PopulatedMetadata {
 pub enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
+    WasmChunkStore(CanisterId),
 }
 
 impl PageMapType {
@@ -976,6 +996,7 @@ impl PageMapType {
     fn list_all(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
         for (id, canister) in &state.canister_states {
+            result.push(Self::WasmChunkStore(id.to_owned()));
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
                 result.push(Self::StableMemory(id.to_owned()));
@@ -993,6 +1014,7 @@ impl PageMapType {
         match &self {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
+            PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
         }
     }
 
@@ -1009,6 +1031,9 @@ impl PageMapType {
                     .as_ref()
                     .map(|ex| &ex.stable_memory.page_map)
             }),
+            PageMapType::WasmChunkStore(id) => state
+                .canister_state(id)
+                .map(|can| can.system_state.wasm_chunk_store.page_map()),
         }
     }
 
@@ -1025,6 +1050,9 @@ impl PageMapType {
                     .as_mut()
                     .map(|ex| &mut ex.stable_memory.page_map)
             }),
+            PageMapType::WasmChunkStore(id) => state
+                .canister_state_mut(id)
+                .map(|can| can.system_state.wasm_chunk_store.page_map_mut()),
         }
     }
 }
@@ -1318,11 +1346,10 @@ impl StateManagerImpl {
         // Create the file descriptor factory that is used to create files for PageMaps.
         let page_delta_path = state_layout.page_deltas();
         let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
-            Arc::new(PageAllocatorFileDescriptorImpl::new(
-                page_delta_path,
-                config.file_backed_memory_allocator,
-                own_subnet_type,
-            ));
+            Arc::new(PageAllocatorFileDescriptorImpl {
+                root: page_delta_path,
+                file_backed_memory_allocator: config.file_backed_memory_allocator,
+            });
 
         let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
             log.clone(),
@@ -1679,6 +1706,18 @@ impl StateManagerImpl {
         Some((state, certification, hash_tree))
     }
 
+    /// Returns the state hash of the latest state, irrespective of whether that state was
+    /// certified or not. Primarily used for testing.
+    pub fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)> {
+        let states = self.states.read();
+
+        states
+            .certifications_metadata
+            .iter()
+            .next_back()
+            .map(|(h, m)| (*h, m.certified_state_hash.clone()))
+    }
+
     /// Returns the manifest of the latest checkpoint on disk with its
     /// checkpoint layout.
     fn latest_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
@@ -1698,12 +1737,13 @@ impl StateManagerImpl {
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
         state: &ReplicatedState,
-    ) -> CertificationMetadata {
+    ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
-        let hash_tree = hash_lazy_tree(&LazyTree::from(state));
+        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(state))?;
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
+        update_hash_tree_metrics(&hash_tree, metrics);
         metrics
             .checkpoint_op_duration
             .with_label_values(&["hash_tree"])
@@ -1711,11 +1751,11 @@ impl StateManagerImpl {
 
         let certified_state_hash = crypto_hash_of_tree(&hash_tree);
 
-        CertificationMetadata {
+        Ok(CertificationMetadata {
             hash_tree: Some(Arc::new(hash_tree)),
             certified_state_hash,
             certification: None,
-        }
+        })
     }
 
     /// Populates appropriate CertificationsMetadata and StatesMetadata for a StateManager
@@ -1738,7 +1778,8 @@ impl StateManagerImpl {
         for (height, state) in states {
             certifications_metadata.insert(
                 height,
-                Self::compute_certification_metadata(metrics, log, &state),
+                Self::compute_certification_metadata(metrics, log, &state)
+                    .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
             );
 
             let checkpoint_layout = layout.checkpoint(height).unwrap();
@@ -1823,6 +1864,7 @@ impl StateManagerImpl {
     /// during execution from the last flush.
     fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
         self.metrics.checkpoint_metrics.page_map_flushes.inc();
+        let mut pagemaps = Vec::new();
         for entry in PageMapType::list_all(tip_state) {
             if let Some(page_map) = entry.get_mut(tip_state) {
                 // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
@@ -1834,28 +1876,31 @@ impl StateManagerImpl {
                 // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
                 // we have not persisted unflushed deltas before, then there are no relevant pages beyond the ones in the
                 // unlushed delta, and we truncate the file on disk to size 0.
-                if page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas() {
-                    self.tip_channel
-                        .send(TipRequest::TruncatePageMapsPath {
-                            height,
-                            page_map_type: entry,
-                        })
-                        .unwrap();
-                }
-                if !page_map.unflushed_delta_is_empty() {
-                    // Clone and send page map for asynchronous flushing to disc. The unflushed deltas are
-                    // emptied in the original to ensure we don't flush twice.
-                    self.tip_channel
-                        .send(TipRequest::FlushPageMapDelta {
-                            height,
-                            page_map: page_map.clone(),
-                            page_map_type: entry,
-                        })
-                        .unwrap();
+                let truncate =
+                    page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas();
+                let page_map_clone = if !page_map.unflushed_delta_is_empty() {
+                    Some(page_map.clone())
+                } else {
+                    None
+                };
+                if truncate || page_map_clone.is_some() {
+                    pagemaps.push(PageMapToFlush {
+                        page_map_type: entry,
+                        truncate,
+                        page_map: page_map_clone,
+                    });
                 }
                 // We strip empty unflushed deltas to keep has_stripped_unflushed_deltas() correct
                 page_map.strip_unflushed_delta();
             }
+        }
+        if !pagemaps.is_empty() {
+            self.tip_channel
+                .send(TipRequest::FlushPageMapDelta { height, pagemaps })
+                .unwrap();
+            // We flush further when the tip_channel queue is not empty. Meaning we're blind
+            // to a request being processed, so we send Noop to signal for the busy Tip Thread.
+            self.tip_channel.send(TipRequest::Noop).unwrap();
         }
     }
 
@@ -1906,7 +1951,9 @@ impl StateManagerImpl {
             }
         }
 
-        let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state))
+            .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+        update_hash_tree_metrics(&hash_tree, &self.metrics);
         let certification_metadata = CertificationMetadata {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
             hash_tree: Some(Arc::new(hash_tree)),
@@ -2065,15 +2112,19 @@ impl StateManagerImpl {
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
 
-        let min_resident_height = heights_to_keep
+        let min_resident_height: Option<Height> = states
+            .snapshots
             .iter()
-            .min()
-            .unwrap_or(&last_height_to_keep)
-            .min(&last_height_to_keep);
+            .map(|s| s.height)
+            .filter(|h| h.get() != 0)
+            .chain(states.states_metadata.keys().copied())
+            .min();
+        if let Some(min_resident_height) = min_resident_height {
+            self.metrics
+                .min_resident_height
+                .set(min_resident_height.get() as i64);
+        }
 
-        self.metrics
-            .min_resident_height
-            .set(min_resident_height.get() as i64);
         self.metrics
             .max_resident_height
             .set(latest_height.get() as i64);
@@ -2198,7 +2249,7 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["wait_for_manifest"])
+                .with_label_values(&["wait_for_manifest_and_flush"])
                 .start_timer();
             // We need the previous manifest computation to complete because:
             //   1) We need it it speed up the next manifest computation using ManifestDelta
@@ -2207,6 +2258,12 @@ impl StateManagerImpl {
         }
 
         let previous_checkpoint_info = {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["previous_checkpoint_info"])
+                .start_timer();
             let states = self.states.read();
             states
                 .states_metadata
@@ -2229,9 +2286,17 @@ impl StateManagerImpl {
                 })
         };
 
-        // We don't need to persist the deltas to the tip because we
-        // flush deltas before calling this method, see flush_page_maps.
-        strip_page_map_deltas(state, self.get_fd_factory());
+        {
+            // We don't need to persist the deltas to the tip because we
+            // flush deltas before calling this method, see flush_page_maps.
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["strip_page_map_deltas"])
+                .start_timer();
+            strip_page_map_deltas(state, self.get_fd_factory());
+        }
         let result = {
             checkpoint::make_checkpoint(
                 state,
@@ -2242,16 +2307,8 @@ impl StateManagerImpl {
                 self.get_fd_factory(),
             )
         };
-        let elapsed = start.elapsed();
         let (cp_layout, checkpointed_state) = match result {
-            Ok(checkpointed_state) => {
-                info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
-                self.metrics
-                    .checkpoint_op_duration
-                    .with_label_values(&["create"])
-                    .observe(elapsed.as_secs_f64());
-                checkpointed_state
-            }
+            Ok(checkpointed_state) => checkpointed_state,
             Err(CheckpointError::AlreadyExists(_)) => {
                 warn!(
                     self.log,
@@ -2298,13 +2355,27 @@ impl StateManagerImpl {
                 err
             ),
         };
-        switch_to_checkpoint(state, &checkpointed_state);
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["switch_to_checkpoint"])
+                .start_timer();
+            switch_to_checkpoint(state, &checkpointed_state);
+        }
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
         let manifest_delta = if is_nns {
             None
         } else {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["manifest_delta"])
+                .start_timer();
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
                      dirty_pages,
@@ -2321,28 +2392,59 @@ impl StateManagerImpl {
             )
         };
 
-        CreateCheckpointResult {
-            checkpointed_state,
-            state_metadata: StateMetadata {
-                checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                bundled_manifest: None,
-                state_sync_file_group: None,
-            },
-            compute_manifest_request: TipRequest::ComputeManifest {
-                checkpoint_layout: cp_layout,
-                manifest_delta: if is_nns { None } else { manifest_delta },
-                states: self.states.clone(),
-                persist_metadata_guard: self.persist_metadata_guard.clone(),
-            },
-            tip_requests: vec![TipRequest::DefragTip {
-                height,
-                page_map_types: PageMapType::list_all(state),
-            }],
-        }
+        let result = {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["create_checkpoint_result"])
+                .start_timer();
+            CreateCheckpointResult {
+                checkpointed_state,
+                state_metadata: StateMetadata {
+                    checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+                    bundled_manifest: None,
+                    state_sync_file_group: None,
+                },
+                compute_manifest_request: TipRequest::ComputeManifest {
+                    checkpoint_layout: cp_layout,
+                    manifest_delta: if is_nns { None } else { manifest_delta },
+                    states: self.states.clone(),
+                    persist_metadata_guard: self.persist_metadata_guard.clone(),
+                },
+                tip_requests: vec![TipRequest::DefragTip {
+                    height,
+                    page_map_types: PageMapType::list_all(state),
+                }],
+            }
+        };
+
+        let elapsed = start.elapsed();
+        info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
+        self.metrics
+            .checkpoint_op_duration
+            .with_label_values(&["create"])
+            .observe(elapsed.as_secs_f64());
+        result
     }
 
     pub fn test_only_send_wait_to_tip_channel(&self, sender: Sender<()>) {
         self.tip_channel.send(TipRequest::Wait { sender }).unwrap();
+    }
+
+    fn certified_state_reader(&self) -> Option<CertifiedStateReaderImpl> {
+        let read_certified_state_duration_histogram = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["read_certified_state"]);
+
+        let (state, certification, hash_tree) = self.latest_certified_state()?;
+        Some(CertifiedStateReaderImpl {
+            read_certified_state_duration_histogram,
+            state,
+            certification,
+            hash_tree,
+        })
     }
 }
 
@@ -2360,6 +2462,14 @@ fn crypto_hash_of_tree(t: &HashTree) -> CryptoHash {
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
     let h = h.get();
     cached.fetch_max(h, Ordering::Relaxed).max(h)
+}
+
+/// Helper function to set metrics related to hash trees
+fn update_hash_tree_metrics(hash_tree: &HashTree, metrics: &StateManagerMetrics) {
+    metrics.latest_hash_tree_size.set(hash_tree.size() as i64);
+    metrics
+        .latest_hash_tree_max_index
+        .set(hash_tree.max_index() as i64);
 }
 
 impl StateManager for StateManagerImpl {
@@ -2381,33 +2491,31 @@ impl StateManager for StateManagerImpl {
         states
             .states_metadata
             .get(&height)
-            .ok_or_else(
-                || match states.certifications_metadata.iter().rev().next() {
-                    Some((key, _)) => {
-                        if *key < height {
-                            StateHashError::Transient(StateNotCommittedYet(height))
-                        } else {
-                            // If the state is older than the oldest state we still have,
-                            // we report it as having been removed
-                            let oldest_kept = states
-                                .certifications_metadata
-                                .iter()
-                                .next()
-                                .map(|(height, _)| *height)
-                                .unwrap(); // certifications_metadata cannot be empty in this branch
+            .ok_or_else(|| match states.certifications_metadata.iter().next_back() {
+                Some((key, _)) => {
+                    if *key < height {
+                        StateHashError::Transient(StateNotCommittedYet(height))
+                    } else {
+                        // If the state is older than the oldest state we still have,
+                        // we report it as having been removed
+                        let oldest_kept = states
+                            .certifications_metadata
+                            .iter()
+                            .next()
+                            .map(|(height, _)| *height)
+                            .unwrap(); // certifications_metadata cannot be empty in this branch
 
-                            if height < oldest_kept {
-                                // The state might have been not fully certified in addition to
-                                // being removed. We don't know anymore.
-                                StateHashError::Permanent(StateRemoved(height))
-                            } else {
-                                StateHashError::Permanent(StateNotFullyCertified(height))
-                            }
+                        if height < oldest_kept {
+                            // The state might have been not fully certified in addition to
+                            // being removed. We don't know anymore.
+                            StateHashError::Permanent(StateRemoved(height))
+                        } else {
+                            StateHashError::Permanent(StateNotFullyCertified(height))
                         }
                     }
-                    None => StateHashError::Transient(StateNotCommittedYet(height)),
-                },
-            )
+                }
+                None => StateHashError::Transient(StateNotCommittedYet(height)),
+            })
             .map(|metadata| metadata.root_hash().cloned())
             .transpose()
             .unwrap_or(Err(StateHashError::Transient(HashNotComputedYet(height))))
@@ -2434,9 +2542,11 @@ impl StateManager for StateManagerImpl {
             } else {
                 // This code is executed at most once per subnet, no need to
                 // optimize this.
-                let hash_tree = hash_lazy_tree(&LazyTree::from(
+                let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(
                     initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
-                ));
+                ))
+                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+                update_hash_tree_metrics(&hash_tree, &self.metrics);
                 Some(CryptoHashOfPartialState::from(crypto_hash_of_tree(
                     &hash_tree,
                 )))
@@ -2764,7 +2874,7 @@ impl StateManager for StateManagerImpl {
     /// ```text
     ///   removed_states(H) := (0, min(LSH, H))
     ///                        \ { ch | ch ∈ CHS ∧ ch >= OCK }
-    ///                        \ { x | x = max(CH)}
+    ///                        \ { max(CHS) }
     ///  ```
     ///
     /// # Rationale
@@ -2898,7 +3008,8 @@ impl StateManager for StateManagerImpl {
         };
 
         let certification_metadata =
-            Self::compute_certification_metadata(&self.metrics, &self.log, &checkpointed_state);
+            Self::compute_certification_metadata(&self.metrics, &self.log, &checkpointed_state)
+                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
         let mut states = self.states.write();
         #[cfg(debug_assertions)]
@@ -3023,6 +3134,46 @@ impl StateManager for StateManagerImpl {
     }
 }
 
+struct CertifiedStateReaderImpl {
+    certification: Certification,
+    state: Arc<ReplicatedState>,
+    hash_tree: Arc<HashTree>,
+    read_certified_state_duration_histogram: Histogram,
+}
+
+impl CertifiedStateReader for CertifiedStateReaderImpl {
+    type State = ReplicatedState;
+
+    fn get_state(&self) -> &Self::State {
+        &self.state
+    }
+
+    fn read_certified_state(
+        &self,
+        paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        let _timer = self.read_certified_state_duration_histogram.start_timer();
+
+        let mixed_hash_tree = {
+            let lazy_tree = replicated_state_as_lazy_tree(self.get_state());
+            let partial_tree = materialize_partial(&lazy_tree, paths);
+            self.hash_tree.witness::<MixedHashTree>(&partial_tree)
+        }
+        .ok()?;
+
+        debug_assert_eq!(
+            crypto_hash_of_partial_state(&mixed_hash_tree.digest()),
+            self.certification.signed.content.hash,
+            "produced invalid hash tree {:?} for paths {:?}, full hash tree: {:?}",
+            mixed_hash_tree,
+            paths,
+            self.hash_tree
+        );
+
+        Some((mixed_hash_tree, self.certification.clone()))
+    }
+}
+
 impl StateReader for StateManagerImpl {
     type State = ReplicatedState;
 
@@ -3094,20 +3245,17 @@ impl StateReader for StateManagerImpl {
         &self,
         paths: &LabeledTree<()>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
-        let _timer = self
-            .metrics
-            .api_call_duration
-            .with_label_values(&["read_certified_state"])
-            .start_timer();
+        let reader = self.certified_state_reader()?;
+        let (mixed_hash_tree, certification) = reader.read_certified_state(paths)?;
 
-        let (state, certification, hash_tree) = self.latest_certified_state()?;
-        let mixed_hash_tree = {
-            let lazy_tree = LazyTree::from(&*state);
-            let partial_tree = materialize_partial(&lazy_tree, paths)?;
-            hash_tree.witness::<MixedHashTree>(&partial_tree)
-        };
+        Some((reader.state, mixed_hash_tree, certification))
+    }
 
-        Some((state, mixed_hash_tree, certification))
+    fn get_certified_state_reader(
+        &self,
+    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>> {
+        self.certified_state_reader()
+            .map(|reader| Box::new(reader) as Box<_>)
     }
 }
 
@@ -3170,7 +3318,9 @@ impl CertifiedStreamStore for StateManagerImpl {
 
         let witness_partial_tree =
             stream_encoding::stream_slice_partial_tree(remote_subnet, witness_from, to);
-        let witness = hash_tree.witness::<Witness>(&witness_partial_tree);
+        let witness = hash_tree
+            .witness::<Witness>(&witness_partial_tree)
+            .expect("Failed to generate witness.");
 
         Ok(CertifiedStreamSlice {
             payload: stream_encoding::encode_tree(slice_as_tree),
@@ -3437,18 +3587,12 @@ fn maliciously_return_wrong_hash(
 pub struct PageAllocatorFileDescriptorImpl {
     root: PathBuf,
     file_backed_memory_allocator: FlagStatus,
-    subnet_type: SubnetType,
 }
 
 impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
     fn get_fd(&self) -> RawFd {
-        // Only use the file-backed allocator if the feature flag is enabled
-        // and exclude system and verified application subnets for now.
-        let is_excluded_subnet = matches!(
-            self.subnet_type,
-            SubnetType::System | SubnetType::VerifiedApplication
-        );
-        if self.file_backed_memory_allocator == FlagStatus::Enabled && !is_excluded_subnet {
+        // Only use the file-backed allocator if the feature flag is enabled.
+        if self.file_backed_memory_allocator == FlagStatus::Enabled {
             self.get_file_backed_fd()
         } else {
             self.get_memory_backed_fd()
@@ -3457,17 +3601,6 @@ impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
 }
 
 impl PageAllocatorFileDescriptorImpl {
-    pub fn new(
-        root: PathBuf,
-        file_backed_memory_allocator: FlagStatus,
-        subnet_type: SubnetType,
-    ) -> Self {
-        Self {
-            root,
-            file_backed_memory_allocator,
-            subnet_type,
-        }
-    }
     /// Create a file using an unique name to back memory pages
     fn get_file_backed_fd(&self) -> RawFd {
         // create a string uuid

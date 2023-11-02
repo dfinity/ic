@@ -1,6 +1,8 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
+use crate::memo::Status;
 use crate::queries::WithdrawalFee;
+use crate::state::ReimbursementReason;
 use crate::tasks::schedule_after;
 use candid::{CandidType, Deserialize};
 use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
@@ -428,6 +430,35 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
         .collect()
 }
 
+async fn reimburse_failed_kyt() {
+    let try_to_reimburse = state::read_state(|s| s.reimbursement_map.clone());
+    for (burn_block_index, entry) in try_to_reimburse {
+        let (memo_status, kyt_fee) = match entry.reason {
+            ReimbursementReason::TaintedDestination { kyt_fee, .. } => (Status::Rejected, kyt_fee),
+            ReimbursementReason::CallFailed => (Status::CallFailed, 0),
+        };
+        let reimburse_memo = crate::memo::MintMemo::KytFail {
+            kyt_fee: Some(kyt_fee),
+            status: Some(memo_status),
+            associated_burn_index: Some(burn_block_index),
+        };
+        if let Ok(block_index) = crate::updates::update_balance::mint(
+            entry
+                .amount
+                .checked_sub(kyt_fee)
+                .expect("reimburse underflow"),
+            entry.account,
+            crate::memo::encode(&reimburse_memo).into(),
+        )
+        .await
+        {
+            state::mutate_state(|s| {
+                state::audit::reimbursed_failed_deposit(s, burn_block_index, block_index)
+            });
+        }
+    }
+}
+
 async fn finalize_requests() {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
@@ -649,15 +680,15 @@ async fn finalize_requests() {
                     // equality in case the fee computation rules change in the future.
                     log!(P0,
                         "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
-                        new_txid,
+                        &new_txid,
                         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                     );
                     continue;
                 }
                 log!(P0,
                     "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
-                    new_txid,
-                    old_txid,
+                    &new_txid,
+                    &old_txid,
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 let new_tx = state::SubmittedBtcTransaction {
@@ -777,6 +808,7 @@ pub async fn sign_transaction(
         let pkhash = tx::hash160(&pubkey);
 
         let sighash = sighasher.sighash(input, &pkhash);
+
         let sec1_signature =
             management::sign_with_ecdsa(key_name.clone(), DerivationPath::new(path), sighash)
                 .await?;
@@ -1108,6 +1140,7 @@ pub fn timer() {
 
                 submit_pending_requests().await;
                 finalize_requests().await;
+                reimburse_failed_kyt().await;
             });
         }
         TaskType::RefreshFeePercentiles => {

@@ -28,14 +28,14 @@ fn get_ledger_client() -> ICRC1Client<CdkRuntime> {
 async fn create_workers(nb_workers: u32) -> Vec<Principal> {
     let mut workers = vec![];
     for i in 0..nb_workers {
-        let worker_id =
-            ic_cdk::api::management_canister::main::create_canister(CreateCanisterArgument {
-                settings: None,
-            })
-            .await
-            .expect("Error while creating worker canister.")
-            .0
-            .canister_id;
+        let worker_id = ic_cdk::api::management_canister::main::create_canister(
+            CreateCanisterArgument { settings: None },
+            100_000_000_000u128,
+        )
+        .await
+        .expect("Error while creating worker canister.")
+        .0
+        .canister_id;
         ic_cdk::println!(
             "Created worker canister [{}/{}] {}",
             i + 1,

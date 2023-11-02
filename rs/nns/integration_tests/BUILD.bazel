@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,7 +32,7 @@ BASE_DEPENDENCIES = [
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/crypto",
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/nervous_system/common/test_keys",
         "//rs/nervous_system/root",
         "//rs/nns/constants",
@@ -47,6 +47,7 @@ BASE_DEPENDENCIES = [
         "//rs/registry/transport",
         "//rs/rosetta-api/tvl/xrc_mock",
         "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
@@ -64,6 +65,7 @@ BASE_DEPENDENCIES = [
         # "@crate_index//:randomkit",
         "@crate_index//:rustc-hash",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:tokio",
         "@crate_index//:wat",
     ],

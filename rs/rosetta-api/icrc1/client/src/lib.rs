@@ -6,6 +6,8 @@ use ic_ledger_core::block::BlockIndex;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::ToPrimitive;
 
 // Abstraction over the runtime. Implement this in terms of cdk call if you use
@@ -108,6 +110,30 @@ impl<R: Runtime> ICRC1Client<R> {
         let result: Result<Nat, TransferError> = self
             .runtime
             .call(self.ledger_canister_id, "icrc1_transfer", (args,))
+            .await
+            .map(untuple)?;
+        Ok(result.map(nat_to_u64))
+    }
+
+    pub async fn transfer_from(
+        &self,
+        args: TransferFromArgs,
+    ) -> Result<Result<BlockIndex, TransferFromError>, (i32, String)> {
+        let result: Result<Nat, TransferFromError> = self
+            .runtime
+            .call(self.ledger_canister_id, "icrc2_transfer_from", (args,))
+            .await
+            .map(untuple)?;
+        Ok(result.map(nat_to_u64))
+    }
+
+    pub async fn approve(
+        &self,
+        args: ApproveArgs,
+    ) -> Result<Result<BlockIndex, ApproveError>, (i32, String)> {
+        let result: Result<Nat, ApproveError> = self
+            .runtime
+            .call(self.ledger_canister_id, "icrc2_approve", (args,))
             .await
             .map(untuple)?;
         Ok(result.map(nat_to_u64))

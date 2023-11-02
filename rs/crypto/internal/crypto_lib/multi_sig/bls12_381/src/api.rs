@@ -85,7 +85,7 @@ pub fn combine(
 ) -> Result<CombinedSignatureBytes, CryptoError> {
     let signatures: Result<Vec<IndividualSignature>, CryptoError> = signatures
         .iter()
-        .map(|signature_bytes| IndividualSignature::try_from(signature_bytes))
+        .map(IndividualSignature::try_from)
         .collect();
     let signature = crypto::combine_signatures(&signatures?);
     Ok(CombinedSignatureBytes::from(&signature))
@@ -137,7 +137,7 @@ pub fn verify_combined(
     public_keys: &[PublicKeyBytes],
 ) -> Result<(), CryptoError> {
     let public_keys: Result<Vec<PublicKey>, CryptoError> =
-        public_keys.iter().map(|x| PublicKey::try_from(x)).collect();
+        public_keys.iter().map(PublicKey::try_from).collect();
     if crypto::verify_combined_message_signature(
         message,
         &CombinedSignature::try_from(signature)?,

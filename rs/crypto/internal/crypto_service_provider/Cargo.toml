@@ -9,14 +9,12 @@ edition = "2021"
 async-trait = "0.1.41"
 base64 = "0.11"
 hex = "0.4.2"
+ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
 ic-config = { path = "../../../config" }
-ic-crypto-internal-basic-sig-der-utils = { path = "../crypto_lib/basic_sig/der_utils" }
-ic-crypto-internal-basic-sig-cose = { path = "../crypto_lib/basic_sig/cose" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../crypto_lib/basic_sig/rsa_pkcs1" }
-ic-crypto-internal-basic-sig-iccsa = { path = "../crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-logmon = { path = "../logmon" }
 ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_381" }
 ic-crypto-secrets-containers = { path = "../../secrets_containers" }
@@ -27,7 +25,8 @@ ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-tls = { path = "../crypto_lib/tls" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
-ic-crypto-sha = { path = "../../sha" }
+ic-crypto-sha2 = { path = "../../sha2" }
+ic-crypto-standalone-sig-verifier = { path = "../../standalone-sig-verifier" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 ic-crypto-utils-time = { path = "../../utils/time" }
 ic-interfaces = { path = "../../../interfaces" }
@@ -36,25 +35,29 @@ ic-metrics = { path = "../../../monitoring/metrics" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 ic-utils = { path = "../../../utils" }
-openssl = "0.10.55"
 parking_lot = "0.12.1"
-prost = "0.11.0"
+prost = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3"
+rcgen = "0.10.0"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_cbor = "0.11.1"
 simple_asn1 = "0.6.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 stubborn-io = "0.3.2"
 strum = "0.23.0"
 strum_macros = "0.23.0"
 tarpc = { version = "0.32", features = ["full"] }
 tempfile = "3.1.0"
+time = "0.3.20"
 threadpool = "1.8.1"
-tokio = { version = "1.15.0", features = ["full"] }
-tokio-openssl = "0.6.0"
+tokio = { version = "1.32.0", features = ["full"] }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { version = "0.7.4", features = ["codec"] }
+x509-parser = { version = "0.15.1", features = ["verify"] }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
@@ -69,15 +72,17 @@ ic-crypto-test-utils = { path = "../../test_utils" }
 ic-crypto-test-utils-keys = { path = "../../../crypto/test_utils/keys" }
 ic-crypto-test-utils-local-csp-vault = { path = "../../../crypto/test_utils/local_csp_vault" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
-ic-crypto-utils-basic-sig = { path = "../../utils/basic_sig"}
+ic-crypto-utils-basic-sig = { path = "../../utils/basic_sig" }
 ic-test-utilities = { path = "../../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = "1.4.0"
 mockall = "0.7.2"
+openssl = "0.10.55"
 proptest = "1.0"
 proptest-derive = "0.3.0"
+rsa = "0.9"
 slog-async = { version = "2.5", features = ["nested-values"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3"

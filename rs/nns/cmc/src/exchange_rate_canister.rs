@@ -251,7 +251,7 @@ impl std::fmt::Display for GetExchangeRateError {
             GetExchangeRateError::Xrc(error) => {
                 match error {
                     ExchangeRateError::AnonymousPrincipalNotAllowed => {
-                        write!(f, "The XRC does not accept calls from anonymous prinicpals")
+                        write!(f, "The XRC does not accept calls from anonymous principals")
                     }
                     // Note: The CMC is a privileged canister so it will bypass this error.
                     ExchangeRateError::Pending => {

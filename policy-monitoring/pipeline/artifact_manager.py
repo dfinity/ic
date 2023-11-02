@@ -14,7 +14,7 @@ class ArtifactManager:
         self.sig = sig
 
         if artifacts_location.is_absolute():
-            # Use case A: artifacts should be stored under an aboslute path
+            # Use case A: artifacts should be stored under an absolute path
             # If run via Docker, use the following pattern:
             #  docker -v /absolute/path/on/host/artifacts:/artifacts
             #         monpoly_pipeline:latest
@@ -66,7 +66,7 @@ class ArtifactManager:
         eprint(f"Pretty-printing raw logs into '{output_file}' ...")
 
         with open(output_file, "w") as fout:
-            fout.write("[")  # the entire output should respresent a syntactically correct python object, e.g., a list
+            fout.write("[")  # the entire output should represent a syntactically correct python object, e.g., a list
             pp = pprint.PrettyPrinter(indent=2)
             for log in group.logs:
                 raw = pp.pformat(log).strip()  # avoid the \n after the comma

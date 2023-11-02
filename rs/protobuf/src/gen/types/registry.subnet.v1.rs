@@ -285,6 +285,28 @@ pub struct InitialIDkgDealings {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgComplaint {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub raw_complaint: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgOpening {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub raw_opening: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExtendedDerivationPath {
     #[prost(message, optional, tag = "1")]
     pub caller: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
@@ -318,7 +340,7 @@ pub struct GossipConfig {
     /// period for polling the registry for updates 1_000/3_000/30_000
     #[prost(uint32, tag = "7")]
     pub registry_poll_period_ms: u32,
-    /// period for sending a retransmission request    
+    /// period for sending a retransmission request
     ///
     /// config for advert distribution.
     #[prost(uint32, tag = "8")]
@@ -339,9 +361,6 @@ pub struct SubnetFeatures {
     /// Status of the SEV-SNP feature.
     #[prost(enumeration = "SevFeatureStatus", optional, tag = "7")]
     pub sev_status: ::core::option::Option<i32>,
-    /// Controls whether to collect/publish data to the onchain observability canister
-    #[prost(bool, optional, tag = "8")]
-    pub onchain_observability: ::core::option::Option<bool>,
 }
 /// Per subnet ECDSA configuration
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -365,9 +384,19 @@ pub struct EcdsaConfig {
     #[prost(uint64, optional, tag = "6")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum IDkgTranscriptOperation {
     Unspecified = 0,
@@ -396,13 +425,34 @@ impl IDkgTranscriptOperation {
             }
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "I_DKG_TRANSCRIPT_OPERATION_UNSPECIFIED" => Some(Self::Unspecified),
+            "I_DKG_TRANSCRIPT_OPERATION_RANDOM" => Some(Self::Random),
+            "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED" => Some(Self::ReshareOfMasked),
+            "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED" => Some(Self::ReshareOfUnmasked),
+            "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED" => Some(Self::UnmaskedTimesMasked),
+            _ => None,
+        }
+    }
 }
 /// Represents the type of subnet. Subnets of different type might exhibit different
 /// behavior, e.g. being more restrictive in what operations are allowed or privileged
 /// compared to other subnet types.
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum SubnetType {
     Unspecified = 0,
@@ -429,11 +479,31 @@ impl SubnetType {
             SubnetType::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SUBNET_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "SUBNET_TYPE_APPLICATION" => Some(Self::Application),
+            "SUBNET_TYPE_SYSTEM" => Some(Self::System),
+            "SUBNET_TYPE_VERIFIED_APPLICATION" => Some(Self::VerifiedApplication),
+            _ => None,
+        }
+    }
 }
 /// These modes correspond to milestones in the SEV-SNP development plan.
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum SevFeatureStatus {
     /// The SEV-SNP feature is disabled.
@@ -464,7 +534,7 @@ pub enum SevFeatureStatus {
     /// in the loss of all data as the KEK is not passed to the new Guest.
     ///
     /// Warning: transitioning to or from this mode except for SEV_FEATURE_STATUS_SECURE_ENABLED
-    /// will resut in loss of all data.
+    /// will result in loss of all data.
     SecureNoUpgradeEnabled = 3,
     /// The SEV-SNP feature is enabled in secure mode with disk integrity protection.
     ///
@@ -492,6 +562,17 @@ impl SevFeatureStatus {
                 "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED"
             }
             SevFeatureStatus::SecureEnabled => "SEV_FEATURE_STATUS_SECURE_ENABLED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SEV_FEATURE_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "SEV_FEATURE_STATUS_INSECURE_ENABLED" => Some(Self::InsecureEnabled),
+            "SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED" => Some(Self::InsecureIntegrityEnabled),
+            "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED" => Some(Self::SecureNoUpgradeEnabled),
+            "SEV_FEATURE_STATUS_SECURE_ENABLED" => Some(Self::SecureEnabled),
+            _ => None,
         }
     }
 }

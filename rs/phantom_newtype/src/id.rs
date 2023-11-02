@@ -32,13 +32,13 @@ use std::marker::PhantomData;
 /// ```compile_fail
 /// use phantom_newtype::Id;
 ///
-/// struct Recepient {}
+/// struct Recipient {}
 /// struct Message {}
 ///
-/// type RecepientId = Id<Recepient, u64>;
+/// type RecipientId = Id<Recipient, u64>;
 /// type MessageId = Id<Message, u64>;
 ///
-/// assert_eq!(RecepientId::from(15), MessageId::from(15));
+/// assert_eq!(RecipientId::from(15), MessageId::from(15));
 /// ```
 ///
 /// `Id` is cheap to copy if `Repr` is:
@@ -159,7 +159,7 @@ impl<Entity, Repr> Id<Entity, Repr>
 where
     Entity: DisplayerOf<Id<Entity, Repr>>,
 {
-    /// `display` provides a machanism to implement a custom display
+    /// `display` provides a mechanism to implement a custom display
     /// for phantom types.
     ///
     /// ```

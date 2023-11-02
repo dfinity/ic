@@ -45,7 +45,7 @@ message SendTransactionRequest {
   bytes transaction = 2;
 }
 
-message SendTransactionResponse {};
+message SendTransactionResponse {}
 
 // Wraps the different types of requests to the Bitcoin Adapter.
 message BitcoinAdapterRequestWrapper {
@@ -106,4 +106,3 @@ message GetSuccessorsResponseComplete {
   repeated bytes blocks = 1;
   repeated bytes next = 2;
 }
-

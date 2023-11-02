@@ -1,15 +1,9 @@
 /// This struct contains all the parameters necessary to initialize an SNS. All fields are optional
 /// to avoid future candid compatibility problems. However, for the struct to be "valid", all fields
 /// must be populated.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SnsInitPayload {
     /// Fee of a transaction.
     #[prost(uint64, optional, tag = "1")]
@@ -185,6 +179,15 @@ pub struct SnsInitPayload {
     /// The Neurons' Fund participants of this SNS decentralization swap.
     #[prost(message, optional, tag = "35")]
     pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,
+    /// The token_logo for the SNS project represented as a base64 encoded string.
+    #[prost(string, optional, tag = "36")]
+    pub token_logo: ::core::option::Option<::prost::alloc::string::String>,
+    /// Constraints for the Neurons' Fund participation in this swap. These constraints passed from
+    /// the NNS Governance (via SNS-W) to an SNS Swap to determine the Neurons' Fund participation
+    /// amount as a function of the direct participation amount.
+    #[prost(message, optional, tag = "37")]
+    pub neurons_fund_participation_constraints:
+        ::core::option::Option<::ic_sns_swap::pb::v1::NeuronsFundParticipationConstraints>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
@@ -197,15 +200,9 @@ pub mod sns_init_payload {
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        Eq,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum InitialTokenDistribution {
         /// See `FractionalDeveloperVotingPower`
         #[prost(message, tag = "6")]
@@ -227,15 +224,9 @@ pub mod sns_init_payload {
 ///     - swap_distribution.initial_swap_amount_e8s > 0
 ///     - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
 ///     - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FractionalDeveloperVotingPower {
     /// The developer bucket.
     #[prost(message, optional, tag = "1")]
@@ -251,15 +242,9 @@ pub struct FractionalDeveloperVotingPower {
     pub airdrop_distribution: ::core::option::Option<AirdropDistribution>,
 }
 /// The distributions awarded to developers at SNS genesis.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeveloperDistribution {
     /// List of `NeuronDistribution` that specify a Neuron controller and Neuron stake in e8s (10E-8 of a token).
     /// For each entry in the developer_neurons list, a neuron will be created with a voting multiplier applied
@@ -270,15 +255,9 @@ pub struct DeveloperDistribution {
 /// The funds for the SNS' Treasury account on the SNS Ledger. These funds are
 /// in the SNS Ledger at genesis, but unavailable until after the initial swap
 /// has successfully completed.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TreasuryDistribution {
     /// The total token distribution denominated in e8s (10E-8 of a token) of the
     /// treasury bucket.
@@ -287,15 +266,9 @@ pub struct TreasuryDistribution {
 }
 /// The funds for token swaps to decentralize an SNS. These funds are in the
 /// SNS Ledger at genesis.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SwapDistribution {
     /// The total token distribution denominated in e8s (10E-8 of a token) of the
     /// swap bucket. All tokens used in initial_swap_amount_e8s will be
@@ -309,15 +282,9 @@ pub struct SwapDistribution {
     pub initial_swap_amount_e8s: u64,
 }
 /// The distributions airdropped at SNS genesis.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AirdropDistribution {
     /// List of `NeuronDistribution` that specify a Neuron controller and Neuron stake in e8s
     /// (10E-8 of a token). For each entry in the airdrop_neurons list, a neuron will be
@@ -326,15 +293,9 @@ pub struct AirdropDistribution {
     pub airdrop_neurons: ::prost::alloc::vec::Vec<NeuronDistribution>,
 }
 /// A tuple of values used to create a Neuron available at SNS genesis.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronDistribution {
     /// The initial `PrincipalId` given permissions on a neuron available at genesis.
     /// The permissions granted to the controller will be set to the SNS' configured
@@ -368,28 +329,16 @@ pub struct NeuronDistribution {
     pub vesting_period_seconds: ::core::option::Option<u64>,
 }
 /// / A Canister that will be transferred to an SNS.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DappCanisters {
     #[prost(message, repeated, tag = "1")]
     pub canisters: ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronsFundParticipants {
     #[prost(message, repeated, tag = "1")]
     pub participants: ::prost::alloc::vec::Vec<::ic_sns_swap::pb::v1::CfParticipant>,

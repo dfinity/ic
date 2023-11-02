@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -13,16 +13,14 @@ filegroup(
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/governance",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
     "//rs/protobuf",
-    "//rs/registry/canister",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/client",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
@@ -30,15 +28,11 @@ DEPENDENCIES = [
     "//rs/rust_canisters/canister_profiler",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
-    "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "@crate_index//:base64",
     "@crate_index//:build-info",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:comparable",
@@ -69,7 +63,6 @@ BUILD_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/canister_client/sender",
-    "//rs/config",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/common/test_utils",
     "//rs/sns/governance/protobuf_generator:lib",
@@ -77,7 +70,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
     "@crate_index//:futures",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
@@ -224,7 +216,7 @@ rust_test_suite_with_extra_srcs(
         "tests/fixtures/environment_fixture.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(
@@ -233,8 +225,8 @@ generated_files_check(
     data = glob(["src/gen/**"]) + [
         ":protos",
         "//rs/protobuf:protos",
-        "//rs/types/base_types:protos",
         "//rs/rosetta-api/icp_ledger:protos",
+        "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/governance",
     deps = [

@@ -55,12 +55,12 @@ lazy_static! {
             }),
             swap_distribution: Some(src::SwapDistribution {
                 total: Some(pb::Tokens {
-                    e8s: Some(184_088_000),
+                    e8s: Some(1_840_880_000),
                 }),
             }),
         }),
         ledger_parameters: Some(src::LedgerParameters {
-            transaction_fee: Some(pb::Tokens { e8s: Some(111430) }),
+            transaction_fee: Some(pb::Tokens { e8s: Some(11143) }),
             token_name: Some("Most valuable SNS of all time.".to_string()),
             token_symbol: Some("Kanye".to_string()),
             token_logo: Some(pb::Image {
@@ -80,7 +80,7 @@ lazy_static! {
 
             // Neuron Parameters
             // -----------------
-            neuron_minimum_stake: Some(pb::Tokens { e8s: Some(618010) }),
+            neuron_minimum_stake: Some(pb::Tokens { e8s: Some(250_000) }),
 
             neuron_minimum_dissolve_delay_to_vote: Some(pb::Duration {
                 seconds: Some(482538),
@@ -121,21 +121,21 @@ lazy_static! {
                 iso_codes: vec!["CH".to_string()]
             }),
 
-            minimum_participants: Some(500),
+            minimum_participants: Some(50),
             minimum_icp: Some(pb::Tokens {
                 e8s: Some(12_300_000_000),
             }),
             maximum_icp: Some(pb::Tokens {
-                e8s: Some(321_000_000_000),
+                e8s: Some(25_000_000_000),
             }),
             minimum_participant_icp: Some(pb::Tokens {
-                e8s:  Some(150_000_000)
+                e8s:  Some(100_000_000)
             }),
             maximum_participant_icp: Some(pb::Tokens {
-                e8s:  Some(500_000_000)
+                e8s:  Some(10_000_000_000)
             }),
             neuron_basket_construction_parameters: Some(src::NeuronBasketConstructionParameters {
-                count: Some(5),
+                count: Some(2),
                 dissolve_delay_interval: Some(pb::Duration {
                     seconds: Some(10_001),
                 })
@@ -145,6 +145,10 @@ lazy_static! {
             }),
             duration: Some(pb::Duration {
                 seconds: Some(604_800),
+            }),
+
+            neurons_fund_investment_icp: Some(pb::Tokens {
+                e8s: Some(6_100_000_000),
             }),
         })
     };

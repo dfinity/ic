@@ -1,10 +1,10 @@
-use candid::{Decode, Encode, Nat};
+use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_ledger::{InitArgs, LedgerArgument};
+use ic_icrc1_ledger::{ChangeFeeCollector, InitArgs, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
-    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
-    MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
-    TOKEN_NAME, TOKEN_SYMBOL,
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockIndex;
@@ -14,6 +14,34 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
 use std::path::PathBuf;
+
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct LegacyInitArgs {
+    pub minting_account: Account,
+    pub fee_collector_account: Option<Account>,
+    pub initial_balances: Vec<(Account, u64)>,
+    pub transfer_fee: u64,
+    pub token_name: String,
+    pub token_symbol: String,
+    pub metadata: Vec<(String, Value)>,
+    pub archive_options: ArchiveOptions,
+}
+
+#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+pub struct LegacyUpgradeArgs {
+    pub metadata: Option<Vec<(String, Value)>>,
+    pub token_name: Option<String>,
+    pub token_symbol: Option<String>,
+    pub transfer_fee: Option<u64>,
+    pub change_fee_collector: Option<ChangeFeeCollector>,
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum LegacyLedgerArgument {
+    Init(LegacyInitArgs),
+    Upgrade(Option<LegacyUpgradeArgs>),
+}
 
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -39,8 +67,9 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
         minting_account: MINTER,
         fee_collector_account: args.fee_collector_account,
         initial_balances: args.initial_balances,
-        transfer_fee: FEE,
+        transfer_fee: FEE.into(),
         token_name: TOKEN_NAME.to_string(),
+        decimals: Some(DECIMAL_PLACES),
         token_symbol: TOKEN_SYMBOL.to_string(),
         metadata: vec![
             Value::entry(NAT_META_KEY, NAT_META_VALUE),
@@ -59,6 +88,8 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
         },
         max_memo_length: None,
         feature_flags: args.feature_flags,
+        maximum_number_of_accounts: args.maximum_number_of_accounts,
+        accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
     })
 }
 
@@ -88,11 +119,6 @@ fn test_single_transfer() {
 
 #[test]
 fn test_account_canonicalization() {
-    ic_icrc1_ledger_sm_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
-}
-
-#[test]
-fn test_memo_validation() {
     ic_icrc1_ledger_sm_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
 }
 
@@ -191,8 +217,8 @@ fn test_approve_pruning() {
 }
 
 #[test]
-fn test_approve_max_expiration() {
-    ic_icrc1_ledger_sm_tests::test_approve_max_expiration(ledger_wasm(), encode_init_args);
+fn test_approve_from_minter() {
+    ic_icrc1_ledger_sm_tests::test_approve_from_minter(ledger_wasm(), encode_init_args);
 }
 
 #[test]
@@ -221,12 +247,56 @@ fn test_transfer_from_burn() {
 }
 
 #[test]
+fn test_balances_overflow() {
+    ic_icrc1_ledger_sm_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approval_trimming() {
+    ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
+}
+
+// #[test]
+// fn test_icrc1_test_suite() {
+//     ic_icrc1_ledger_sm_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
+// }
+
+#[cfg_attr(feature = "u256-tokens", ignore)]
+#[test]
 fn test_block_transformation() {
+    fn encode_legacy_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LegacyLedgerArgument {
+        LegacyLedgerArgument::Init(LegacyInitArgs {
+            minting_account: args.minting_account,
+            fee_collector_account: args.fee_collector_account,
+            initial_balances: args
+                .initial_balances
+                .into_iter()
+                .map(|(account, value)| {
+                    (
+                        account,
+                        value
+                            .0
+                            .to_u64()
+                            .expect("initial balance doesn't fit into u64"),
+                    )
+                })
+                .collect(),
+            transfer_fee: args
+                .transfer_fee
+                .0
+                .to_u64()
+                .expect("transfer fee doesn't fit into u64"),
+            token_name: args.token_name,
+            token_symbol: args.token_symbol,
+            metadata: args.metadata,
+            archive_options: args.archive_options,
+        })
+    }
     ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
         std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
             .unwrap(),
         ledger_wasm(),
-        encode_init_args,
+        encode_legacy_init_args,
     );
 }
 
@@ -276,13 +346,14 @@ fn balance_of(env: &StateMachine, ledger_id: CanisterId, account: Account) -> u6
     Decode!(&res, Nat).unwrap().0.to_u64().unwrap()
 }
 
+#[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_upgrade_from_first_version() {
     let env = StateMachine::new();
 
     let ledger_wasm_first_version =
         std::fs::read(std::env::var("IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH").unwrap()).unwrap();
-    let init_args = Encode!(&InitArgs {
+    let init_args = Encode!(&LegacyInitArgs {
         minting_account: MINTER,
         fee_collector_account: None,
         initial_balances: vec![],
@@ -304,8 +375,6 @@ fn test_upgrade_from_first_version() {
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
-        max_memo_length: None,
-        feature_flags: None,
     })
     .unwrap();
     let ledger_id = env

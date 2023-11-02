@@ -1,6 +1,8 @@
 load("//ic-os:defs.bzl", "boundary_api_guestos_build")
 load("//ic-os/boundary-api-guestos:defs.bzl", "image_deps")
 
+exports_files(["build_container_filesystem_config.txt"])
+
 # The macro contains several targets.
 # Check
 #       //ic-os/boundary-api-guestos/BUILD.bazel for examples
@@ -8,5 +10,6 @@ load("//ic-os/boundary-api-guestos:defs.bzl", "image_deps")
 boundary_api_guestos_build(
     name = "dev",
     ic_version = "//bazel:rc_only_version.txt",
-    image_deps = image_deps,
+    image_deps_func = image_deps,
+    visibility = ["//visibility:public"],
 )

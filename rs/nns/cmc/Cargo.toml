@@ -10,29 +10,30 @@ build-info = { version = "0.0.26", default-features = false, features = [] }
 
 async-trait = "0.1.42"
 candid = { workspace = true }
-dfn_candid = {path = "../../rust_canisters/dfn_candid"}
-dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
-dfn_core = {path = "../../rust_canisters/dfn_core"}
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
-ic-base-types = {path="../../types/base_types"}
+ic-base-types = { path = "../../types/base_types" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-ic00-types = {path = "../../types/ic00_types"}
+ic-ic00-types = { path = "../../types/ic00_types" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
+ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
-ic-types = {path = "../../types/types"}
+ic-types = { path = "../../types/types" }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-on_wire = {path = "../../rust_canisters/on_wire"}
+on_wire = { path = "../../rust_canisters/on_wire" }
 
 base64 = "0.13.0"
 ic-certified-map = "0.3.1"
 ic-xrc-types = "1.0.0"
-prost = "0.11.0"
+prost = { workspace = true }
 rand = "0.8"
 serde = "1.0"
 serde_cbor = "0.11.2"
@@ -41,7 +42,7 @@ yansi = "0.5.0"
 
 [dev-dependencies]
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-futures = "0.3.13"
+futures = { workspace = true }
 
 [[bin]]
 name = "cycles-minting-canister"
@@ -49,4 +50,5 @@ path = "src/main.rs"
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version="0.0.26", default-features = false, features = [] }
+build-info-build = { version = "0.0.26", default-features = false, features = [
+] }

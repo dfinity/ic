@@ -1,7 +1,9 @@
 //! Payload creation/validation subcomponent
 
 use crate::consensus::{
-    metrics::{PayloadBuilderMetrics, CRITICAL_ERROR_SUBNET_RECORD_ISSUE},
+    metrics::{
+        PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_SUBNET_RECORD_ISSUE,
+    },
     payload::BatchPayloadSectionBuilder,
 };
 use ic_consensus_utils::get_subnet_record;
@@ -14,7 +16,7 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_types::{
@@ -43,6 +45,7 @@ impl PayloadBuilderImpl {
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -51,6 +54,7 @@ impl PayloadBuilderImpl {
             BatchPayloadSectionBuilder::SelfValidating(self_validating_payload_builder),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
+            BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
         ];
 
         Self {
@@ -78,7 +82,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
 
         // To call the section builders in a somewhat fair manner,
         // we call them in a rotation. Note that this is not really fair,
-        // as payload builders that yield a lot always give precendence to the
+        // as payload builders that yield a lot always give precedence to the
         // same next payload builder. This might give an advantage to a particular
         // payload builder.
         let num_sections = self.section_builder.len();
@@ -134,15 +138,28 @@ impl PayloadBuilder for PayloadBuilderImpl {
         for builder in &self.section_builder {
             accumulated_size +=
                 builder.validate_payload(height, batch_payload, context, past_payloads)?;
-            if accumulated_size > max_block_payload_size {
-                return Err(ValidationError::Permanent(
-                    PayloadPermanentError::PayloadTooBig {
-                        expected: max_block_payload_size,
-                        received: accumulated_size,
-                    },
-                ));
-            }
         }
+
+        // Check the combined size of the payloads using a 2x safety margin.
+        // We allow payloads that are bigger than the maximum size but log an error.
+        // And reject outright payloads that are more than twice the maximum size.
+        if accumulated_size > max_block_payload_size {
+            error!(
+                self.logger,
+                "The overall block size is too large, even though the individual payloads are valid: {}",
+                CRITICAL_ERROR_PAYLOAD_TOO_LARGE
+            );
+            self.metrics.critical_error_payload_too_large.inc();
+        }
+        if accumulated_size > max_block_payload_size * 2 {
+            return Err(ValidationError::Permanent(
+                PayloadPermanentError::PayloadTooBig {
+                    expected: max_block_payload_size,
+                    received: accumulated_size,
+                },
+            ));
+        }
+
         Ok(())
     }
 }
@@ -196,7 +213,7 @@ pub(crate) mod test {
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
-        consensus::fake::Fake,
+        consensus::{batch::MockBatchPayloadBuilder, fake::Fake},
         ingress_selector::FakeIngressSelector,
         mock_time,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -218,7 +235,7 @@ pub(crate) mod test {
 
     #[cfg(feature = "proptest")]
     impl PayloadBuilderImpl {
-        /// Return the number of critical errors that have occured.
+        /// Return the number of critical errors that have occurred.
         ///
         /// This is useful for proptests.
         pub(crate) fn count_critical_errors(&self) -> u64 {
@@ -247,6 +264,7 @@ pub(crate) mod test {
             FakeSelfValidatingPayloadBuilder::new().with_responses(responses_from_adapter);
         let canister_http_payload_builder =
             FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -255,6 +273,7 @@ pub(crate) mod test {
             Arc::new(xnet_payload_builder),
             Arc::new(self_validating_payload_builder),
             Arc::new(canister_http_payload_builder),
+            Arc::new(query_stats_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )

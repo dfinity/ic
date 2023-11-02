@@ -9,13 +9,15 @@ use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
     prep_state_directory::IcPrepStateDir,
-    subnet_configuration::SubnetConfig,
+    subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use std::{
     collections::{BTreeMap, HashSet},
+    net::SocketAddr,
     path::PathBuf,
+    str::FromStr,
 };
 use tempfile::TempDir;
 
@@ -38,7 +40,7 @@ fn adding_deleting_values_shows_up_in_diff() {
     let obj = snapshot.as_object_mut().unwrap();
 
     // remove last key (arbitrary choice)
-    let removed_key = obj.keys().rev().next().unwrap().clone();
+    let removed_key = obj.keys().next_back().unwrap().clone();
     assert!(obj.remove(&removed_key).is_some());
 
     let arbitrary_bytes: Vec<u8> = (b'A'..b'z').collect();
@@ -51,7 +53,7 @@ fn adding_deleting_values_shows_up_in_diff() {
     let arbitrary_value = serde_json::to_value(&arbitrary_obj).unwrap();
     obj.insert(new_key.clone(), arbitrary_value);
 
-    let digest = ic_crypto_sha::Sha256::hash(arbitrary_bytes.as_slice());
+    let digest = ic_crypto_sha2::Sha256::hash(arbitrary_bytes.as_slice());
     let digest_hex = digest
         .iter()
         .map(|x| format!("{:02X}", x))
@@ -127,11 +129,9 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
     subnet_nodes.insert(
         NODE_INDEX,
         NodeConfiguration {
-            xnet_api: "http://0.0.0.0:0".parse().expect("can't fail"),
-            public_api: "http://0.0.0.0:8080".parse().expect("can't fail"),
-            p2p_addr: "org.internetcomputer.p2p1://0.0.0.0:0"
-                .parse()
-                .expect("can't fail"),
+            xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
+            public_api: SocketAddr::from_str("0.0.0.0:8080").unwrap(),
+            p2p_addr: SocketAddr::from_str("0.0.0.0:0").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: vec![],
@@ -162,6 +162,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             None,
             vec![],
             vec![],
+            SubnetRunningState::Active,
         ),
     );
 

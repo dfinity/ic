@@ -3,8 +3,8 @@ Hold manifest common to all SetupOS variants.
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
@@ -34,8 +34,7 @@ def image_deps(mode, _malicious = False):
         },
 
         # Set various configuration values
-        "base_image": Label("//ic-os/setupos:rootfs/docker-base." + mode),
-        "docker_context": Label("//ic-os/setupos:rootfs-files"),
+        "container_context_files": Label("//ic-os/setupos:rootfs-files"),
         "partition_table": Label("//ic-os/setupos:partitions.csv"),
         "rootfs_size": "1750M",
         "bootfs_size": "100M",
@@ -45,6 +44,21 @@ def image_deps(mode, _malicious = False):
         # Add any custom partitions to the manifest
         "custom_partitions": lambda: (_custom_partitions)(mode),
     }
+
+    # Add extra files depending on image variant
+    extra_deps = {
+        "dev": {
+            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev:build_container_filesystem_config.txt",
+        },
+        "dev-sev": {
+            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev-sev:build_container_filesystem_config.txt",
+        },
+        "prod": {
+            "build_container_filesystem_config_file": "//ic-os/setupos/envs/prod:build_container_filesystem_config.txt",
+        },
+    }
+
+    deps.update(extra_deps[mode])
 
     return deps
 
@@ -83,7 +97,7 @@ def _custom_partitions(mode):
         Label("//ic-os/setupos:config/ssh_authorized_keys/admin"): "ssh_authorized_keys/admin",
     }
 
-    if mode == "dev":
+    if mode == "dev" or mode == "dev-sev":
         config_dict[Label("//ic-os/setupos:config/node_operator_private_key.pem")] = "node_operator_private_key.pem"
 
     pkg_tar(

@@ -9,7 +9,6 @@ candid = { workspace = true }
 clap = { version = "3.1.6", features = ["derive"] }
 exec = "0.3.1"
 hex = "0.4.2"
-http = "0.2.1"
 ic-async-utils = { path = "../async_utils" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
@@ -18,9 +17,6 @@ ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
-ic-crypto-utils-basic-sig = { path = "../crypto/utils/basic_sig" }
-ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
-ic-crypto-sha = { path = "../crypto/sha" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -37,29 +33,28 @@ ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-replicator = { path = "./registry_replicator" }
-ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 nix = "0.23.0"
-prometheus = { version = "0.12.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = ["process"] }
 rand = "0.8"
-prost = "0.11.0"
+prost = { workspace = true }
 registry-canister = { path = "../registry/canister" }
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { version = "1.0.99", features = ["derive"] }
 serde_cbor = "0.11.1"
-signal-hook = "0.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 strum = "0.23.0"
 strum_macros = "0.23.0"
-tar = "0.4.38"
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 url = "2.1.1"
 
 [dev-dependencies]
-assert_cmd = "0.12"
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }

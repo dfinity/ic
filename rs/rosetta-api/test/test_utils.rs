@@ -190,6 +190,7 @@ impl LedgerAccess for TestLedger {
             let transaction = Operation::Transfer {
                 from,
                 to,
+                spender: None,
                 amount,
                 fee,
             };

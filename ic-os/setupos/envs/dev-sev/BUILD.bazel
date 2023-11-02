@@ -1,6 +1,8 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/setupos:defs.bzl", "image_deps")
 
+exports_files(["build_container_filesystem_config.txt"])
+
 # The macro contains several targets.
 # Check
 #       //ic-os/setupos/BUILD.bazel for examples
@@ -8,7 +10,7 @@ load("//ic-os/setupos:defs.bzl", "image_deps")
 icos_build(
     name = "dev-sev",
     ic_version = "//bazel:rc_only_version.txt",
-    image_deps = image_deps,
+    image_deps_func = image_deps,
     upgrades = False,
     upload_prefix = "setup-os",
     vuln_scan = False,

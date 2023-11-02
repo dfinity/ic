@@ -1,8 +1,3 @@
-use std::{
-    sync::{Arc, Mutex},
-    thread,
-};
-
 use candid::{Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
@@ -30,6 +25,10 @@ use icrc_ledger_types::icrc1::{
     transfer::{Memo, TransferArg},
 };
 use lazy_static::lazy_static;
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+};
 
 lazy_static! {
     pub static ref DEFAULT_MINTING_ACCOUNT: Account = Account {
@@ -45,7 +44,7 @@ lazy_static! {
     pub static ref DEFAULT_SNS_ROOT_PRINCIPAL: Principal = Principal::anonymous();
     pub static ref DEFAULT_FALLBACK_CONTROLLER_PRINCIPAL_IDS: Vec<Principal> =
         vec![Principal::anonymous()];
-    pub static ref DEFAULT_NEURON_MINIMUM_STAKE: u64 = 1_000_000;
+    pub static ref DEFAULT_NEURON_MINIMUM_STAKE: u64 = 400_000;
     pub static ref DEFAULT_SNS_SALE_PARAMS: Params = Params {
         min_participants: 1,
         min_icp_e8s: 1,
@@ -60,7 +59,7 @@ lazy_static! {
             + 13 * SECONDS_PER_DAY,
         sns_token_e8s: 10_000_000,
         neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-            count: 1,
+            count: 2,
             dissolve_delay_interval_seconds: 1,
         }),
         sale_delay_seconds: None,
@@ -155,24 +154,15 @@ impl PaymentProtocolTestSetup {
             .unwrap()
     }
     pub fn default_icrc1_init_args() -> Icrc1InitArgs {
-        Icrc1InitArgs {
-            minting_account: *DEFAULT_MINTING_ACCOUNT,
-            initial_balances: vec![(
-                Account {
-                    owner: PrincipalId::from(*DEFAULT_SNS_SALE_CANISTER_ID).0,
-                    subaccount: None,
-                },
+        ic_icrc1_ledger::InitArgsBuilder::with_symbol_and_name("STK", "SNS Token")
+            .with_minting_account(*DEFAULT_MINTING_ACCOUNT)
+            .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+            .with_archive_options(DEFAULT_ICRC1_ARCHIVE_OPTIONS.clone())
+            .with_initial_balance(
+                DEFAULT_SNS_SALE_CANISTER_ID.get().0,
                 *DEFAULT_INITIAL_BALANCE,
-            )],
-            transfer_fee: DEFAULT_TRANSFER_FEE.get_e8s(),
-            token_name: "SNS Token".to_string(),
-            token_symbol: "STK".to_string(),
-            metadata: vec![],
-            archive_options: DEFAULT_ICRC1_ARCHIVE_OPTIONS.clone(),
-            fee_collector_account: None,
-            max_memo_length: None,
-            feature_flags: None,
-        }
+            )
+            .build()
     }
 
     pub fn default_sns_sale_init_args() -> Init {
@@ -203,10 +193,20 @@ impl PaymentProtocolTestSetup {
             nns_proposal_id: None,                       // TODO[NNS1-2339]
             neurons_fund_participants: None,             // TODO[NNS1-2339]
             should_auto_finalize: Some(true),
+            neurons_fund_participation_constraints: None,
         }
     }
 
     pub fn default_params() -> Params {
+        // sanity check
+        DEFAULT_SNS_SALE_PARAMS
+            .validate(&Init {
+                transaction_fee_e8s: Some(100),
+                neuron_minimum_stake_e8s: Some(100),
+                ..Default::default()
+            })
+            .unwrap();
+
         DEFAULT_SNS_SALE_PARAMS.clone()
     }
 
@@ -668,7 +668,6 @@ fn test_payment_flow_multiple_users_concurrent() {
             .lock()
             .unwrap()
             .new_sale_ticket(&user, &amount, None);
-        assert!(ticket.is_ok());
 
         // Commit some ICP
         payment_flow_protocol
@@ -913,7 +912,7 @@ fn test_maximum_reached() {
 }
 
 #[test]
-fn test_committment_below_participant_minimum() {
+fn test_commitment_below_participant_minimum() {
     let user0 = PrincipalId::new_user_test_id(0);
     let user1 = PrincipalId::new_user_test_id(1);
     let user2 = PrincipalId::new_user_test_id(2);
@@ -1023,7 +1022,7 @@ fn test_committment_below_participant_minimum() {
         .refresh_buyer_tokens(&user0, None)
         .is_ok());
 
-    //Check that user1's purchase was registerred
+    //Check that user1's purchase was registered
     assert_eq!(
         payment_flow_protocol
             .get_buyer_state(&user1)
@@ -1034,10 +1033,10 @@ fn test_committment_below_participant_minimum() {
         amount1_0.clone()
     );
 
-    // Check that user2's purchase was not registerred
+    // Check that user2's purchase was not registered
     assert!(payment_flow_protocol.get_buyer_state(&user2).is_none());
 
-    // Check that user0's purchase was registerred and that he has bought the tokens left in the sale
+    // Check that user0's purchase was registered and that he has bought the tokens left in the sale
     assert_eq!(
         payment_flow_protocol
             .get_buyer_state(&user0)

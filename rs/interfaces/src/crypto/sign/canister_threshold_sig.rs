@@ -242,8 +242,8 @@ pub trait IDkgProtocol {
     ///    is not well formed.
     /// * [`IDkgVerifyDealingPrivateError::UnsupportedAlgorithm`] if the `params.algorithm_id` is not supported
     /// * [`IDkgVerifyDealingPrivateError::InternalError`] if the an internal error occurs.
-    /// * [`IDkgVerifyDealingPrivateError::CspVaultRpcError`] if there is an RPC error reported when
-    ///    connecting with the vault.
+    /// * [`IDkgVerifyDealingPrivateError::TransientInternalError`] if there was a transient internal
+    ///   error, e.g., when communicating with the remote CSP vault.
     fn verify_dealing_private(
         &self,
         params: &IDkgTranscriptParams,
@@ -517,20 +517,60 @@ pub trait IDkgProtocol {
     ) -> Result<(), IDkgRetainKeysError>;
 }
 
-/// A Crypto Component interface to generate ECDSA threshold signature shares.
+/// A Crypto Component interface to generate ECDSA threshold signature shares during the
+/// online phase of the threshold ECDSA protocol. During the offline phase, nodes precompute
+/// quadruples of IDKG transcripts. Each of these quadruples is then used by the nodes to
+/// reply to a single signing request, and then it is discarded.
+///
+/// # Protocol Overview:
+/// The threshold signing protocol is non-interactive, which means that the nodes participating
+/// to the protocol only need to compute a signature share and publish it. Shares can then be
+/// publicly verified by anybody and combined into a single ECDSA signature.
+
 pub trait ThresholdEcdsaSigner {
-    /// Generate a signature share.
+    /// Create a threshold ECDSA signature share.
+    ///
+    /// # Prerequisites
+    /// This method depends on the key material for the IDKG transcripts specified in
+    /// `ThresholdEcdsaSigInputs` to be present in the canister secret key store of the
+    /// crypto component. To initialize this key material the transcripts must be loaded
+    /// using the method [`IDkgProtocol::load_transcript`].
+    ///
+    /// # Errors
+    /// * [`ThresholdEcdsaSignShareError::InternalError`] if there was an internal error creating the
+    ///   signature share, likely due to invalid input.
+    /// * [`ThresholdEcdsaSignShareError::NotAReceiver`] if the caller isn't in the
+    ///   transcripts' receivers. Only receivers can create signature shares.
+    /// * [`ThresholdEcdsaSignShareError::SerializationError`] if there was an error deserializing the
+    ///   transcripts or serializing the signature share.
+    /// * [`ThresholdEcdsaSignShareError::SecretSharesNotFound`] if the secret shares necessary
+    ///   for creating the dealing could not be found in the canister secret key store. Calling
+    ///   [`IDkgProtocol::load_transcript`] may be necessary.
+    /// * [`ThresholdEcdsaSignShareError::TransientInternalError`] if there was a transient internal
+    ///   error, e.g., when communicating with the remote CSP vault.
     fn sign_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
     ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError>;
 }
 
-/// A Crypto Component interface to perform public operations in the ECDSA
-/// threshold signature scheme.
+/// A Crypto Component interface to perform public operations during the online phase of the
+/// threshold ECDSA protocol. During the online phase, nodes compute and advertise shares of
+/// the signatures. These interfaces can be used to verify the shares, combine them into a
+/// single ECDSA signature, and verify the combined signature. All these operations can be
+/// performed publicly and do not require private information.
 pub trait ThresholdEcdsaSigVerifier {
-    /// Verify that the given signature share was correctly created from
-    /// `inputs`.
+    /// Verify a threshold ECDSA signature share.
+    ///
+    /// # Errors
+    /// * [`ThresholdEcdsaVerifySigShareError::InternalError`] if there was an internal error while
+    ///   verifying the signature share, likely due to invalid input.
+    /// * [`ThresholdEcdsaVerifySigShareError::SerializationError`] if there was an error deserializing the
+    ///   transcripts or the signature share.
+    /// * [`ThresholdEcdsaVerifySigShareError::InvalidSignatureShare`] if the signature share is not
+    ///   valid.
+    /// * [`ThresholdEcdsaVerifySigShareError::InvalidArgumentMissingSignerInTranscript`] if the signer
+    ///   was not eligible according to the key transcript.
     fn verify_sig_share(
         &self,
         signer: NodeId,
@@ -538,16 +578,35 @@ pub trait ThresholdEcdsaSigVerifier {
         share: &ThresholdEcdsaSigShare,
     ) -> Result<(), ThresholdEcdsaVerifySigShareError>;
 
-    /// Combine the given signature shares into a conventional ECDSA signature.
+    /// Combine the given threshold ECDSA signature shares into a conventional ECDSA signature.
     ///
     /// The signature is returned as raw bytes.
+    ///
+    /// # Errors
+    /// * [`ThresholdEcdsaCombineSigSharesError::InternalError`] if there was an internal error while
+    ///   combining the signature shares, likely due to invalid input.
+    /// * [`ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold`] if the number
+    ///   of signature shares was not sufficient to reconstruct an ECDSA signature.
+    /// * [`ThresholdEcdsaCombineSigSharesError::SerializationError`] if there was an error deserializing the
+    ///   transcripts or the signature shares.
+    /// * [`ThresholdEcdsaCombineSigSharesError::SignerNotAllowed`] if one or more of the singers were
+    ///   not eligible according to the key transcript.
     fn combine_sig_shares(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
         shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
     ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError>;
 
-    /// Verify that a combined signature was properly created from the inputs.
+    /// Verify a combined ECDSA signature and its consistency with the input. In particular it verifies that
+    /// the signature is computed from the `kappa` transcript, which is the presignature computed in the offline phase
+    /// of the protocol. This helps ensuring each instance of the signing protocol computes fresh signatures.
+    ///
+    /// # Errors
+    /// * [`ThresholdEcdsaVerifyCombinedSignatureError::InternalError`] if there was an internal error while
+    ///   verifying the combined signature, likely due to invalid input.
+    /// * [`ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature`] if the signature is not valid.
+    /// * [`ThresholdEcdsaVerifyCombinedSignatureError::SerializationError`] if there was an error deserializing the
+    ///   transcripts or the signature.
     fn verify_combined_sig(
         &self,
         inputs: &ThresholdEcdsaSigInputs,

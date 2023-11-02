@@ -9,15 +9,15 @@ CONFIG="${CONFIG:=/var/ic/config/config.ini}"
 
 GENERATION=
 
+MINIMUM_CPU_SOCKETS=2
+
 GEN1_CPU_MODEL="AMD EPYC 7302"
 GEN1_CPU_CAPABILITIES=("sev")
-GEN1_CPU_CORES=16
 GEN1_CPU_SOCKETS=2
 GEN1_CPU_THREADS=32
 
 GEN2_CPU_MODEL="AMD EPYC 7..3"
 GEN2_CPU_CAPABILITIES=("sev_snp")
-GEN2_MINIMUM_CPU_CORES=32
 GEN2_MINIMUM_CPU_THREADS=64
 
 # 510 GiB (Gibibyte)
@@ -75,6 +75,13 @@ function check_generation() {
     echo "* Generation" ${GENERATION} "detected"
 }
 
+function check_num_cpus() {
+    local num_cpu_sockets=$(lscpu | grep "Socket(s)" | awk '{print $2}')
+    if [ ${num_cpu_sockets} -ne ${MINIMUM_CPU_SOCKETS} ]; then
+        log_and_reboot_on_error "1" "Number of CPU's (${num_cpu_sockets}) does NOT meet system requirements (${MINIMUM_CPU_SOCKETS})."
+    fi
+}
+
 function verify_gen1_cpu() {
     local cpu="$(lshw -quiet -class cpu -json)"
     log_and_reboot_on_error "${?}" "Unable to fetch CPU information."
@@ -100,7 +107,7 @@ function verify_gen1_cpu() {
         fi
 
         echo "* Verifying CPU capabilities..."
-        for c in ${GEN1_CPU_CAPABILITIES[@]}; do
+        for c in "${GEN1_CPU_CAPABILITIES[@]}"; do
             local capability=$(echo "${cpu}" | jq -r --arg socket "${i}" --arg capability "${c}" '.[] | select(.id==$socket) | .capabilities[$capability]')
             log_and_reboot_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
 
@@ -111,18 +118,11 @@ function verify_gen1_cpu() {
             fi
         done
 
-        local cores=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .configuration.cores')
-        if [ ${cores} -eq ${GEN1_CPU_CORES} ]; then
-            echo "  Number of cores (${cores}/${GEN1_CPU_CORES}) meets system requirements."
+        local num_threads=$(nproc)
+        if [ ${num_threads} -eq ${GEN1_CPU_THREADS} ]; then
+            echo "  Number of threads (${num_threads}/${GEN1_CPU_THREADS}) meets system requirements."
         else
-            log_and_reboot_on_error "1" "Number of cores (${cores}/${GEN1_CPU_CORES}) does NOT meet system requirements."
-        fi
-
-        local threads=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .configuration.threads')
-        if [ ${threads} -eq ${GEN1_CPU_THREADS} ]; then
-            echo "  Number of threads (${threads}/${GEN1_CPU_THREADS}) meets system requirements."
-        else
-            log_and_reboot_on_error "1" "Number of threads (${threads}/${GEN1_CPU_THREADS}) does NOT meet system requirements."
+            log_and_reboot_on_error "1" "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) does NOT meet system requirements."
         fi
     done
 }
@@ -131,8 +131,7 @@ function verify_gen2_cpu() {
     local cpu="$(lshw -quiet -class cpu -json)"
     log_and_reboot_on_error "${?}" "Unable to fetch CPU information."
 
-    local cores=0
-    local threads=0
+    check_num_cpus
 
     for i in $(echo "${cpu}" | jq -r '.[].id'); do
         unit=$(echo ${i} | awk -F ':' '{ print $2 }')
@@ -146,7 +145,7 @@ function verify_gen2_cpu() {
         fi
 
         echo "* Verifying CPU capabilities..."
-        for c in ${GEN2_CPU_CAPABILITIES[@]}; do
+        for c in "${GEN2_CPU_CAPABILITIES[@]}"; do
             local capability=$(echo "${cpu}" | jq -r --arg socket "${i}" --arg capability "${c}" '.[] | select(.id==$socket) | .capabilities[$capability]')
             log_and_reboot_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
 
@@ -156,23 +155,11 @@ function verify_gen2_cpu() {
                 log_and_reboot_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
             fi
         done
-
-        local socket_cores=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .configuration.cores')
-        cores=$((cores + socket_cores))
-
-        local socket_threads=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .configuration.threads')
-        threads=$((threads + socket_threads))
     done
 
-    if [ ${cores} -ge ${GEN2_MINIMUM_CPU_CORES} ]; then
-        echo "  Number of cores (${cores}/${GEN2_MINIMUM_CPU_CORES}) meets system requirements."
-    else
-        log_and_reboot_on_error "1" "Number of cores (${cores}/${GEN2_MINIMUM_CPU_CORES}) does NOT meet system requirements."
-    fi
-    if [ ${threads} -ge ${GEN2_MINIMUM_CPU_THREADS} ]; then
-        echo "  Number of threads (${threads}/${GEN2_MINIMUM_CPU_THREADS}) meets system requirements."
-    else
-        log_and_reboot_on_error "1" "Number of threads (${threads}/${GEN2_MINIMUM_CPU_THREADS}) does NOT meet system requirements."
+    local num_threads=$(nproc)
+    if [ ${num_threads} -lt ${GEN2_MINIMUM_CPU_THREADS} ]; then
+        log_and_reboot_on_error "1" "Number of threads (${num_threads}) does NOT meet system requirements (${GEN2_MINIMUM_CPU_THREADS})"
     fi
 }
 
@@ -203,8 +190,8 @@ function verify_memory() {
 
 function verify_gen1_disks() {
     aggregate_size=0
-    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
-    for drive in $(echo ${large_drives[@]}); do
+    large_drives=($(get_large_drives))
+    for drive in $(echo "${large_drives[@]}"); do
         test -b "/dev/${drive}"
         log_and_reboot_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
 
@@ -230,8 +217,8 @@ function verify_gen1_disks() {
 
 function verify_gen2_disks() {
     aggregate_size=0
-    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
-    for drive in $(echo ${large_drives[@]}); do
+    large_drives=($(get_large_drives))
+    for drive in $(echo "${large_drives[@]}"); do
 
         echo "* Verifying disk ${drive}"
 

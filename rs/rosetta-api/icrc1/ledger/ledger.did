@@ -6,6 +6,52 @@ type Timestamp = nat64;
 type Duration = nat64;
 type Tokens = nat;
 type TxIndex = nat;
+type Allowance = record { allowance : nat; expires_at : opt Timestamp };
+type AllowanceArgs = record { account : Account; spender : Account };
+type Approve = record {
+  fee : opt nat;
+  from : Account;
+  memo : opt blob;
+  created_at_time : opt Timestamp;
+  amount : nat;
+  expected_allowance : opt nat;
+  expires_at : opt Timestamp;
+  spender : Account;
+};
+type ApproveArgs = record {
+  fee : opt nat;
+  memo : opt blob;
+  from_subaccount : opt blob;
+  created_at_time : opt Timestamp;
+  amount : nat;
+  expected_allowance : opt nat;
+  expires_at : opt Timestamp;
+  spender : Account;
+};
+type ApproveError = variant {
+  GenericError : record { message : text; error_code : nat };
+  TemporarilyUnavailable;
+  Duplicate : record { duplicate_of : BlockIndex };
+  BadFee : record { expected_fee : nat };
+  AllowanceChanged : record { current_allowance : nat };
+  CreatedInFuture : record { ledger_time : Timestamp };
+  TooOld;
+  Expired : record { ledger_time : Timestamp };
+  InsufficientFunds : record { balance : nat };
+};
+type ApproveResult = variant { Ok : BlockIndex; Err : ApproveError };
+
+type HttpRequest = record {
+  url : text;
+  method : text;
+  body : blob;
+  headers : vec record { text; text };
+};
+type HttpResponse = record {
+  body : blob;
+  headers : vec record { text; text };
+  status_code : nat16;
+};
 
 type Account = record {
     owner : principal;
@@ -26,7 +72,7 @@ type TransferError = variant {
     BadBurn : record { min_burn_amount : Tokens };
     InsufficientFunds : record { balance : Tokens };
     TooOld;
-    CreatedInFuture : record { ledger_time : nat64 };
+    CreatedInFuture : record { ledger_time : Timestamp };
     TemporarilyUnavailable;
     Duplicate : record { duplicate_of : BlockIndex };
     GenericError : record { error_code : nat; message : text };
@@ -45,17 +91,27 @@ type MetadataValue = variant {
     Blob : blob;
 };
 
+type FeatureFlags = record {
+    icrc2 : bool;
+};
+
 // The initialization parameters of the Ledger
 type InitArgs = record {
     minting_account : Account;
     fee_collector_account : opt Account;
-    transfer_fee : nat64;
+    transfer_fee : nat;
+    decimals : opt nat8;
+    max_memo_length : opt nat16;
     token_symbol : text;
     token_name : text;
     metadata : vec record { text; MetadataValue };
-    initial_balances : vec record { Account; nat64 };
+    initial_balances : vec record { Account; nat };
+    feature_flags : opt FeatureFlags;
+    maximum_number_of_accounts : opt nat64;
+    accounts_overflow_trim_quantity : opt nat64;
     archive_options : record {
         num_blocks_to_archive : nat64;
+        max_transactions_per_response : opt nat64;
         trigger_threshold : nat64;
         max_message_size_bytes : opt nat64;
         cycles_for_archive_creation : opt nat64;
@@ -72,9 +128,12 @@ type UpgradeArgs = record {
     metadata : opt vec record { text; MetadataValue };
     token_symbol : opt text;
     token_name : opt text;
-    transfer_fee : opt nat64;
+    transfer_fee : opt nat;
     change_fee_collector : opt ChangeFeeCollector;
     max_memo_length : opt nat16;
+    feature_flags : opt FeatureFlags;
+    maximum_number_of_accounts: opt nat64;
+    accounts_overflow_trim_quantity: opt nat64;
 };
 
 type LedgerArg = variant {
@@ -150,28 +209,37 @@ type TransactionRange = record {
 type QueryArchiveFn = func (GetTransactionsRequest) -> (TransactionRange) query;
 
 type Transaction = record {
-     kind : text;
-     mint : opt record {
-         amount : nat;
-         to : Account;
-         memo : opt blob;
-         created_at_time : opt nat64;
-     };
-     burn : opt record {
-         amount : nat;
-         from : Account;
-         memo : opt blob;
-         created_at_time : opt nat64;
-     };
-     transfer : opt record {
-         amount : nat;
-         from : Account;
-         to : Account;
-         memo : opt blob;
-         created_at_time : opt nat64;
-         fee : opt nat;
-     };
-     timestamp : nat64;
+  burn : opt Burn;
+  kind : text;
+  mint : opt Mint;
+  approve : opt Approve;
+  timestamp : Timestamp;
+  transfer : opt Transfer;
+};
+
+type Burn = record {
+  from : Account;
+  memo : opt blob;
+  created_at_time : opt Timestamp;
+  amount : nat;
+  spender : opt Account;
+};
+
+type Mint = record {
+  to : Account;
+  memo : opt blob;
+  created_at_time : opt Timestamp;
+  amount : nat;
+};
+
+type Transfer = record {
+  to : Account;
+  fee : opt nat;
+  from : Account;
+  memo : opt blob;
+  created_at_time : opt Timestamp;
+  amount : nat;
+  spender : opt Account;
 };
 
 type Value = variant { 
@@ -260,7 +328,40 @@ type DataCertificate = record {
     hash_tree : blob;
 };
 
+type StandardRecord = record { url : text; name : text };
+
+type TransferFromArgs = record {
+    spender_subaccount : opt Subaccount;
+    from : Account;
+    to : Account;
+    amount : Tokens;
+    fee : opt Tokens;
+    memo : opt blob;
+    created_at_time: opt Timestamp;
+};
+
+type TransferFromResult = variant {
+    Ok : BlockIndex;
+    Err : TransferFromError;
+};
+
+type TransferFromError = variant {
+    BadFee : record { expected_fee : Tokens };
+    BadBurn : record { min_burn_amount : Tokens };
+    InsufficientFunds : record { balance : Tokens };
+    InsufficientAllowance : record { allowance : Tokens };
+    TooOld;
+    CreatedInFuture : record { ledger_time : Timestamp };
+    Duplicate : record { duplicate_of : BlockIndex };
+    TemporarilyUnavailable;
+    GenericError : record { error_code : nat; message : text };
+};
+
 service : (ledger_arg : LedgerArg) -> {
+    get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
+    get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;  
+    get_data_certificate : () -> (DataCertificate) query; 
+
     icrc1_name : () -> (text) query;
     icrc1_symbol : () -> (text) query;
     icrc1_decimals : () -> (nat8) query;
@@ -270,8 +371,9 @@ service : (ledger_arg : LedgerArg) -> {
     icrc1_minting_account : () -> (opt Account) query;
     icrc1_balance_of : (Account) -> (Tokens) query;
     icrc1_transfer : (TransferArg) -> (TransferResult);
-    icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;
-    get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
-    get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;  
-    get_data_certificate : () -> (DataCertificate) query;    
+    icrc1_supported_standards : () -> (vec StandardRecord) query;
+  
+    icrc2_approve : (ApproveArgs) -> (ApproveResult);
+    icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
+    icrc2_transfer_from : (TransferFromArgs) -> (TransferFromResult);
 }

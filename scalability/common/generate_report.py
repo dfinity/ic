@@ -349,7 +349,7 @@ def generate_report(base, githash, timestamp):
     experiment_data = data["experiment"]
     experiment_data["experiment_details"]["rps_max"] = "{:.1f}".format(rps_max)
 
-    # Update experiment.json with rps_max needed by notify_dashboard and verify_perf
+    # Update experiment.json with rps_max
     with open(os.path.join(base, "experiment.json"), "r") as experiment_file:
         j = json.loads(experiment_file.read())
         j["experiment_details"]["rps_max"] = rps_max

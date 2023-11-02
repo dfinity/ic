@@ -11,5 +11,5 @@ universal-canister = { path = "../impl" }
 ic-types = { path = "../../types/types" }
 
 [dev-dependencies]
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-types = { path = "../../types/types" }

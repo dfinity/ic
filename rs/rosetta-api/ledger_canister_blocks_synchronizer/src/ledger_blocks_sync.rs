@@ -497,6 +497,7 @@ mod test {
                 icp_ledger::Operation::Transfer {
                     from,
                     to,
+                    spender: None,
                     amount,
                     fee,
                 }

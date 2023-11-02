@@ -1,5 +1,6 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
+use ic_utils::str::StrEllipsize;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use strum_macros::EnumIter;
@@ -15,7 +16,7 @@ pub enum TryFromError {
 /// of user-facing errors.
 ///
 /// See <https://sdk.dfinity.org/docs/interface-spec/index.html#reject-codes>
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 pub enum RejectCode {
     SysFatal = 1,
     SysTransient = 2,
@@ -107,6 +108,8 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInComputeAllocation => CanisterError,
             InsufficientCyclesInMemoryAllocation => CanisterError,
             InsufficientCyclesInMemoryGrow => CanisterError,
+            ReservedCyclesLimitExceededInMemoryAllocation => CanisterError,
+            ReservedCyclesLimitExceededInMemoryGrow => CanisterError,
         }
     }
 }
@@ -117,7 +120,9 @@ impl From<ErrorCode> for RejectCode {
 /// convention: the most significant digit is the corresponding reject
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
-#[derive(Clone, Copy, Debug, PartialEq, EnumIter, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Clone, Copy, Debug, PartialEq, EnumIter, Eq, Hash, Serialize, Deserialize,
+)]
 pub enum ErrorCode {
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
@@ -165,6 +170,8 @@ pub enum ErrorCode {
     InsufficientCyclesInComputeAllocation = 530,
     InsufficientCyclesInMemoryAllocation = 531,
     InsufficientCyclesInMemoryGrow = 532,
+    ReservedCyclesLimitExceededInMemoryAllocation = 533,
+    ReservedCyclesLimitExceededInMemoryGrow = 534,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -217,15 +224,20 @@ impl TryFrom<u64> for ErrorCode {
             530 => Ok(ErrorCode::InsufficientCyclesInComputeAllocation),
             531 => Ok(ErrorCode::InsufficientCyclesInMemoryAllocation),
             532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
+            533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
+            534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
 }
 
+/// Maximum allowed length for UserError description.
+const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
+
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserError {
     code: ErrorCode,
     description: String,
@@ -247,6 +259,21 @@ impl fmt::Display for UserError {
 
 impl UserError {
     pub fn new<S: ToString>(code: ErrorCode, description: S) -> Self {
+        Self {
+            code,
+            description: description
+                .to_string()
+                .ellipsize(MAX_USER_ERROR_DESCRIPTION_LEN_BYTES, 50),
+        }
+    }
+
+    /// Constructs a `UserError` retaining the original description without truncation.
+    /// This ensures backward compatibility with ingress history.
+    ///
+    /// # Safety
+    ///
+    /// This constructor is specifically intended for state-loading. Avoid usage in other contexts.
+    pub fn from_proto<S: ToString>(code: ErrorCode, description: S) -> Self {
         Self {
             code,
             description: description.to_string(),
@@ -311,7 +338,9 @@ impl UserError {
             | ErrorCode::QueryTimeLimitExceeded
             | ErrorCode::InsufficientCyclesInComputeAllocation
             | ErrorCode::InsufficientCyclesInMemoryAllocation
-            | ErrorCode::InsufficientCyclesInMemoryGrow => false,
+            | ErrorCode::InsufficientCyclesInMemoryGrow
+            | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+            | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow => false,
         }
     }
 

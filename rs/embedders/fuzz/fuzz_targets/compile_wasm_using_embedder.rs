@@ -12,7 +12,7 @@ use wasm_smith::MaybeInvalidModule;
 // string from the template.
 //
 // Given that WASM binaries with a size of up to 30MB are expected for this feature, the payload size
-// (i.e., max_len parameter in libfuzzer) needs to be also ajusted.
+// (i.e., max_len parameter in libfuzzer) needs to be also adjusted.
 //
 // The fuzz test is only compiled but not executed by CI.
 //

@@ -5,8 +5,7 @@ edition = "2021"
 
 [dependencies]
 candid = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
 ic-cdk-macros = { workspace = true }
 ic-cdk = { workspace = true }
-ic-xrc-types = "1.0.0"
+ic-xrc-types = "1.1.0"
 serde = "1.0"

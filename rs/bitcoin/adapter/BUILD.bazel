@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -37,7 +38,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:bitcoincore-rpc",
     "@crate_index//:bitcoind",
+    "@crate_index//:criterion",
     "@crate_index//:ic-btc-interface",
+    "//rs/bitcoin/adapter/test_utils",
     "//rs/bitcoin/client",
     "//rs/bitcoin/types/internal",
     "//rs/interfaces/adapter_client",
@@ -78,6 +81,10 @@ rust_binary(
 rust_test(
     name = "adapter_test",
     crate = ":adapter",
+    data = [
+        "test_data/first_2500_mainnet_headers.json",
+        "test_data/first_2500_testnet_headers.json",
+    ],
     tags = ["requires-network"],
     deps = DEV_DEPENDENCIES,
 )
@@ -96,4 +103,13 @@ rust_test_suite(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["requires-network"],
     deps = [":adapter"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "e2e_bench",
+    testonly = True,
+    srcs = ["benches/e2e.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":adapter"],
 )

@@ -32,7 +32,6 @@ use tower::Service;
 enum TransportTlsHandshakeError {
     DeadlineExceeded,
     Internal(String),
-    InvalidArgument,
 }
 
 const DEFAULT_CHANNEL_ID: usize = 0;
@@ -432,8 +431,7 @@ impl TransportImpl {
         let latest_registry_version = *self.latest_registry_version.read().await;
         let earliest_registry_version = *self.earliest_registry_version.read().await;
         let current_allowed_clients = self.allowed_clients.read().await.clone();
-        let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients)
-            .map_err(|_| TransportTlsHandshakeError::InvalidArgument)?;
+        let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients);
         let (tls_stream, authenticated_peer) = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto.perform_tls_server_handshake(
@@ -504,9 +502,9 @@ impl TransportImpl {
         Ok(tls_stream)
     }
 
-    /// Initilizes a client
+    /// Initializes a client
     pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
-        // Creating the listeners requres that we are within a tokio runtime context.
+        // Creating the listeners requires that we are within a tokio runtime context.
         let _rt_enter_guard = self.rt_handle.enter();
         let server_addr = SocketAddr::new(self.node_ip, self.config.listening_port);
         let tcp_listener = start_tcp_listener(server_addr);

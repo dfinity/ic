@@ -17,7 +17,7 @@ use tokio::{
 use tower_test::mock::Handle;
 
 /// Measure transport throughput from the sender side. Only `transport.send` that return `Ok`
-/// are counted. Because `transport.send` can fail if the queue is full, which we shoudln't
+/// are counted. Because `transport.send` can fail if the queue is full, which we shouldn't
 /// count towards the throughput.
 fn send_bench(criterion: &mut Criterion) {
     // 128B, 1Kb, 10Kb, 100Kb, 1Mb
@@ -104,8 +104,8 @@ fn setup_receive_test_topology(
     let registry_data = RegistryAndDataProvider::new();
 
     let (stop_peer1_tx, mut stop_peer1_rx) = mpsc::channel(1);
-    let msg_conter_peer1 = Arc::new(Notify::new());
-    let msg_conter_peer1_c = msg_conter_peer1.clone();
+    let msg_counter_peer1 = Arc::new(Notify::new());
+    let msg_counter_peer1_c = msg_counter_peer1.clone();
     let peer1_expectations = |mut handle: Handle<TransportEvent, ()>| {
         async move {
             loop {
@@ -114,7 +114,7 @@ fn setup_receive_test_topology(
                     req = handle.next_request() => {
                         match req {
                             Some((TransportEvent::Message(_), resp)) => {
-                                msg_conter_peer1_c.notify_one();
+                                msg_counter_peer1_c.notify_one();
                                 resp.send_response(());
                             }
                             Some((_, resp)) => {
@@ -129,8 +129,8 @@ fn setup_receive_test_topology(
         .boxed()
     };
     let (stop_peer2_tx, mut stop_peer2_rx) = mpsc::channel(1);
-    let msg_conter_peer2 = Arc::new(Notify::new());
-    let msg_conter_peer2_c = msg_conter_peer2.clone();
+    let msg_counter_peer2 = Arc::new(Notify::new());
+    let msg_counter_peer2_c = msg_counter_peer2.clone();
     let peer2_expectations = |mut handle: Handle<TransportEvent, ()>| {
         async move {
             loop {
@@ -139,7 +139,7 @@ fn setup_receive_test_topology(
                     req = handle.next_request() => {
                         match req {
                             Some((TransportEvent::Message(_), resp)) => {
-                                msg_conter_peer2_c.notify_one();
+                                msg_counter_peer2_c.notify_one();
                                 resp.send_response(());
                             }
                             Some((_, resp)) => {
@@ -169,8 +169,8 @@ fn setup_receive_test_topology(
             .add_node(peer1, peer1_expectations)
             .add_node(peer2, peer2_expectations)
             .full_mesh(),
-        (msg_conter_peer1, stop_peer1_tx),
-        (msg_conter_peer2, stop_peer2_tx),
+        (msg_counter_peer1, stop_peer1_tx),
+        (msg_counter_peer2, stop_peer2_tx),
     )
 }
 

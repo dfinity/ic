@@ -113,6 +113,11 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
             .insert(ic_types::crypto::crypto_hash(&artifact.message), artifact);
     }
 
+    /// Removes an unvalidated artifact from the unvalidated section.
+    fn remove(&mut self, id: &DkgMessageId) {
+        self.unvalidated.remove(id);
+    }
+
     /// Applies the provided change set atomically.
     ///
     /// # Panics
@@ -235,7 +240,10 @@ mod test {
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_types::{
-        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::{
+            crypto_hash,
+            threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        },
         signature::BasicSignature,
         NodeId,
     };
@@ -252,6 +260,25 @@ mod test {
             content: dkg::DealingContent::new(NiDkgDealing::dummy_dealing_for_tests(0), dkg_id),
             signature: BasicSignature::fake(node_id),
         }
+    }
+
+    #[test]
+    fn test_dkg_pool_insert_and_remove() {
+        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let message = make_message(Height::from(30), node_test_id(1));
+        let id = crypto_hash(&message);
+
+        // add unvalidated
+        pool.insert(UnvalidatedArtifact {
+            message,
+            peer_id: node_test_id(1),
+            timestamp: mock_time(),
+        });
+        assert!(pool.contains(&id));
+
+        // remove unvalidated
+        pool.remove(&id);
+        assert!(!pool.contains(&id));
     }
 
     #[test]

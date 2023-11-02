@@ -30,7 +30,7 @@ def main():
     parser.add_argument("-v", "--volume_table", help="CSV file describing the volume table", type=str)
     parser.add_argument("-n", "--vg-name", metavar="vg_name", help="Volume Group name to use", type=str)
     parser.add_argument("-u", "--vg-uuid", metavar="vg_uuid", help="UUID to use for Volume Group", type=str)
-    parser.add_argument("-p", "--pv-uuid", metavar="pv_uuid", help="UUID to use for Phisical Volume", type=str)
+    parser.add_argument("-p", "--pv-uuid", metavar="pv_uuid", help="UUID to use for Physical Volume", type=str)
     parser.add_argument(
         "partitions",
         metavar="partition",

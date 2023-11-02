@@ -110,8 +110,8 @@ pub trait FakeContentUpdate {
     fn update_content(&mut self);
 }
 
-impl<T: CryptoHashable + Clone> FakeContentUpdate
-    for Signed<hashed::Hashed<CryptoHashOf<T>, T>, BasicSignature<T>>
+impl<T: CryptoHashable + Clone, S: Signable> FakeContentUpdate
+    for Signed<hashed::Hashed<CryptoHashOf<T>, T>, BasicSignature<S>>
 {
     fn update_content(&mut self) {
         self.content =
@@ -132,13 +132,13 @@ impl<T> FakeContentSigner<T> for Signed<T, BasicSignature<T>> {
     }
 }
 
-impl<T: CryptoHashable> FakeContentSigner<T>
-    for Signed<hashed::Hashed<CryptoHashOf<T>, T>, BasicSignature<T>>
+impl<T: CryptoHashable, S: Signable> FakeContentSigner<T>
+    for Signed<hashed::Hashed<CryptoHashOf<T>, T>, BasicSignature<S>>
 {
     fn fake(
         content: T,
         signer: NodeId,
-    ) -> Signed<hashed::Hashed<CryptoHashOf<T>, T>, BasicSignature<T>> {
+    ) -> Signed<hashed::Hashed<CryptoHashOf<T>, T>, BasicSignature<S>> {
         Signed {
             content: hashed::Hashed::new(ic_types::crypto::crypto_hash, content),
             signature: BasicSignature::fake(signer),
@@ -319,7 +319,7 @@ pub struct FakeVerifier;
 
 impl FakeVerifier {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 

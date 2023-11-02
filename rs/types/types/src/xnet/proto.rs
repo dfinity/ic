@@ -3,12 +3,16 @@
 //! wire format.
 
 use crate::{
-    consensus::certification::{Certification, CertificationContent},
-    crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
+    consensus::certification::{Certification, CertificationContent, CertificationShare},
+    crypto::{
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed, ThresholdSigShare,
+        ThresholdSigShareOf,
+    },
+    node_id_into_protobuf, node_id_try_from_option,
     replica_version::ReplicaVersionParseError,
-    signature::ThresholdSignature,
+    signature::{ThresholdSignature, ThresholdSignatureShare},
     xnet::CertifiedStreamSlice,
-    Height,
+    CryptoHashOfPartialState, Height,
 };
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
@@ -42,6 +46,25 @@ impl<T> TryFrom<pb::ThresholdSignature> for ThresholdSignature<T> {
     }
 }
 
+impl<T> From<ThresholdSignatureShare<T>> for pb::ThresholdSignatureShare {
+    fn from(value: ThresholdSignatureShare<T>) -> Self {
+        Self {
+            signature: value.signature.get().0,
+            signer: Some(node_id_into_protobuf(value.signer)),
+        }
+    }
+}
+impl<T> TryFrom<pb::ThresholdSignatureShare> for ThresholdSignatureShare<T> {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::ThresholdSignatureShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signature: ThresholdSigShareOf::new(ThresholdSigShare(value.signature)),
+            signer: node_id_try_from_option(value.signer)?,
+        })
+    }
+}
+
 impl From<CertificationContent> for pb::CertificationContent {
     fn from(value: CertificationContent) -> Self {
         Self {
@@ -49,6 +72,14 @@ impl From<CertificationContent> for pb::CertificationContent {
         }
     }
 }
+impl From<pb::CertificationContent> for CertificationContent {
+    fn from(value: pb::CertificationContent) -> Self {
+        CertificationContent {
+            hash: CryptoHashOfPartialState::new(CryptoHash(value.hash)),
+        }
+    }
+}
+
 impl From<Certification> for pb::Certification {
     fn from(value: Certification) -> Self {
         Self {
@@ -67,6 +98,29 @@ impl TryFrom<pb::Certification> for Certification {
             signed: Signed {
                 content: try_from_option_field(value.content, "Certification::content")?,
                 signature: try_from_option_field(value.signature, "Certification::signature")?,
+            },
+        })
+    }
+}
+
+impl From<CertificationShare> for pb::CertificationShare {
+    fn from(share: CertificationShare) -> Self {
+        Self {
+            height: share.height.get(),
+            content: Some(share.signed.content.into()),
+            signature: Some(share.signed.signature.into()),
+        }
+    }
+}
+impl TryFrom<pb::CertificationShare> for CertificationShare {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::CertificationShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            height: Height::new(value.height),
+            signed: Signed {
+                content: try_from_option_field(value.content, "CertificationShare::content")?,
+                signature: try_from_option_field(value.signature, "CertificationShare::signature")?,
             },
         })
     }

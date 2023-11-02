@@ -805,7 +805,6 @@ impl WasmExecutor for SandboxedExecutionController {
         canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-        logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let _create_exe_state_timer = self
             .metrics
@@ -916,14 +915,6 @@ impl WasmExecutor for SandboxedExecutionController {
             .sandboxed_execution_replica_create_exe_state_finish_duration
             .start_timer();
         observe_metrics(&self.metrics, &serialized_module.imports_details);
-        if serialized_module.reserved_exports > 0 {
-            info!(
-                logger,
-                "Canister {} has {} reserved exports.",
-                canister_id,
-                serialized_module.reserved_exports
-            );
-        }
 
         cache_opened_wasm(
             &mut wasm_binary.embedder_cache.lock().unwrap(),
@@ -1695,6 +1686,39 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
     }
 }
 
+/// Service responsible for printing the history of a canister's activity when
+/// it unexpectedly exits.
+struct ExitWatcher {
+    logger: ReplicaLogger,
+    backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+}
+
+impl ControllerLauncherService for ExitWatcher {
+    fn sandbox_exited(
+        &self,
+        req: protocol::ctllaunchersvc::SandboxExitedRequest,
+    ) -> ic_canister_sandbox_common::rpc::Call<protocol::ctllaunchersvc::SandboxExitedReply> {
+        let guard = self.backends.lock().unwrap();
+        let sandbox_process = match guard.get(&req.canister_id).unwrap_or_else(|| {
+            panic!(
+                "Sandbox exited for unrecognized canister id {}",
+                req.canister_id,
+            )
+        }) {
+            Backend::Active {
+                sandbox_process, ..
+            } => sandbox_process,
+            Backend::Evicted { .. } | Backend::Empty => {
+                return rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply));
+            }
+        };
+        sandbox_process
+            .history
+            .replay(&self.logger, req.canister_id, sandbox_process.pid);
+        rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs::{self, File};
@@ -1748,7 +1772,7 @@ mod tests {
 
         use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
         let controller = SandboxedExecutionController::new(
-            logger.clone(),
+            logger,
             &MetricsRegistry::new(),
             &EmbeddersConfig::default(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -1764,7 +1788,6 @@ mod tests {
                 PathBuf::new(),
                 canister_id,
                 Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
-                &logger,
             )
             .unwrap();
         let sandbox_pid = match controller
@@ -1793,38 +1816,5 @@ mod tests {
             "History for canister {} with pid {}: CreateExecutionState",
             canister_id, sandbox_pid
         )));
-    }
-}
-
-/// Service responsible for printing the history of a canister's activity when
-/// it unexpectedly exits.
-struct ExitWatcher {
-    logger: ReplicaLogger,
-    backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
-}
-
-impl ControllerLauncherService for ExitWatcher {
-    fn sandbox_exited(
-        &self,
-        req: protocol::ctllaunchersvc::SandboxExitedRequest,
-    ) -> ic_canister_sandbox_common::rpc::Call<protocol::ctllaunchersvc::SandboxExitedReply> {
-        let guard = self.backends.lock().unwrap();
-        let sandbox_process = match guard.get(&req.canister_id).unwrap_or_else(|| {
-            panic!(
-                "Sandbox exited for unrecognized canister id {}",
-                req.canister_id,
-            )
-        }) {
-            Backend::Active {
-                sandbox_process, ..
-            } => sandbox_process,
-            Backend::Evicted { .. } | Backend::Empty => {
-                return rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply));
-            }
-        };
-        sandbox_process
-            .history
-            .replay(&self.logger, req.canister_id, sandbox_process.pid);
-        rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply))
     }
 }

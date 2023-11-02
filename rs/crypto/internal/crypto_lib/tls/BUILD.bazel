@@ -1,33 +1,39 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/secrets_containers",
+    "//rs/types/types",
+    "@crate_index//:rcgen_0_11",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:serde",
+    "@crate_index//:time",
+    "@crate_index//:zeroize",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/node_key_validation",
+    "//rs/protobuf",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "@crate_index//:assert_matches",
+    "@crate_index//:hex",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:x509-parser",
+]
 
 rust_library(
     name = "tls",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_tls",
     version = "0.8.0",
-    deps = [
-        "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-        "//rs/crypto/secrets_containers",
-        "//rs/types/types",
-        "@crate_index//:base64",
-        "@crate_index//:openssl",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:zeroize",
-    ],
+    deps = DEPENDENCIES,
 )
 
-rust_test(
-    name = "ic_crypto_internal_tls_test",
-    crate = ":tls",
-    deps = [
-        "//rs/crypto/test_utils",
-        "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:assert_matches",
-        "@crate_index//:hex",
-        "@crate_index//:serde_cbor",
-    ],
+rust_test_suite(
+    name = "tls_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":tls"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

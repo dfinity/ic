@@ -4,14 +4,12 @@ use ic_backup::{
     cmd::{BackupArgs, SubCommand},
 };
 use slog::{o, Drain};
-use std::sync::Arc;
-use tokio::runtime::Handle;
-use tokio::task::spawn_blocking;
+use std::{io::stdin, sync::Arc};
+use tokio::{runtime::Handle, task::spawn_blocking};
 
 // Here is an example config file:
 //
 // {
-//     "version": 5,
 //     "push_metrics": true,
 //     "backup_instance": "zh1-spm34",
 //     "nns_url": "https://smallXYZ.testnet.dfinity.network",
@@ -26,7 +24,8 @@ use tokio::task::spawn_blocking;
 //         "tmp"
 //     ],
 //     "ssh_private_key": "/home/my_user/.ssh/id_ed25519_backup",
-//     "disk_threshold_warn": 75,
+//     "hot_disk_resource_threshold_percentage": 75,
+//     "cold_disk_resource_threshold_percentage": 95,
 //     "slack_token": "ABCD1234",
 //     "cold_storage": {
 //         "cold_storage_dir": "/var/cold_storage",
@@ -74,7 +73,9 @@ async fn main() {
     let rt = Handle::current();
     spawn_blocking(move || {
         match args.subcmd {
-            Some(SubCommand::Init) => BackupManager::init(log, args.config_file),
+            Some(SubCommand::Init) => {
+                BackupManager::init(&mut stdin().lock(), log, args.config_file)
+            }
             Some(SubCommand::Upgrade) => BackupManager::upgrade(log, args.config_file),
             Some(SubCommand::GetReplicaVersion { subnet_id }) => {
                 BackupManager::get_version(log, args.config_file, subnet_id.0)

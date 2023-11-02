@@ -30,19 +30,14 @@ pub(crate) struct RegistryRecord {
 }
 
 /// The types of RegistryRecorsds that can be serialized to user friendly JSON
-#[derive(Serialize)]
+#[derive(Default, Serialize)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum RegistryValue {
+    #[default]
     Unknown,
     SubnetRecord(SubnetRecord),
     ProvisionalWhitelistRecord(ProvisionalWhitelistRecord),
-}
-
-impl Default for RegistryValue {
-    fn default() -> Self {
-        RegistryValue::Unknown
-    }
 }
 
 /// User-friendly representation of a v1::SubnetRecord. Only difference is that

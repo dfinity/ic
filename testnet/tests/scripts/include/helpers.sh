@@ -274,7 +274,7 @@ XL_subnet_size=55
 small_subnet_finalization_threshold=0.9
 large_subnet_finalization_threshold=0.3
 XL_subnet_finalization_threshold=0.24
-#return treshold value depending on size and index of subnet
+#return threshold value depending on size and index of subnet
 function finalization_rate_threshold() {
     local subnet_id=$1
     local nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0]')

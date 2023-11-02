@@ -41,7 +41,7 @@ impl LedgerClient {
     pub async fn get_account_balance(&self, account: AccountIdentifier) -> Tokens {
         debug!(&self.logger, "[ledger_client] Getting account balance");
         let arg = AccountBalanceArgs { account };
-        let arg = &Encode!(&arg).expect("Error while encoding arg.");
+        let arg = Encode!(&arg).expect("Error while encoding arg.");
         let res = self
             .agent
             .update(&self.ledger_canister_id, "account_balance_dfx")

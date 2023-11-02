@@ -27,7 +27,6 @@ DEPENDENCIES = [
     "//rs/types/ic00_types",
     "//rs/types/types",
     "@crate_index//:base64",
-    "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hex",
@@ -73,9 +72,9 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
+        ":recovery",
         "//rs/canister_sandbox/backend_lib",
         "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
-        ":recovery",
     ],
 )
 

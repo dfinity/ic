@@ -7,7 +7,7 @@ mod test_utils;
 use crate::test_utils::*;
 
 fn verify_data(tag: String, expected: &str, serialized: &[u8]) {
-    let hash = ic_crypto_sha::Sha256::hash(serialized);
+    let hash = ic_crypto_sha2::Sha256::hash(serialized);
     let hex_encoding = hex::encode(&hash[0..8]);
 
     if hex_encoding != expected {
@@ -254,17 +254,17 @@ fn verify_fixed_serialization_continues_to_be_accepted() -> Result<(), Threshold
 
 #[test]
 fn mega_k256_keyset_serialization_is_stable() -> Result<(), ThresholdEcdsaError> {
-    let seed = Seed::from_bytes(b"ic-crypto-k256-keyset-serialization-stabilty-test");
+    let seed = Seed::from_bytes(b"ic-crypto-k256-keyset-serialization-stability-test");
 
-    let (pk, sk) = gen_keypair(EccCurveType::K256, seed)?;
+    let (pk, sk) = gen_keypair(EccCurveType::K256, seed);
 
     assert_eq!(
         hex::encode(sk.serialize()),
-        "3c349a5525f280f2e05c19bf28a79a47909b36f8010aeaed1e93ecceb65522d8"
+        "3ec1862141d91394894af980fff6280d84794a224615bf3ad96caaf416d9471c"
     );
     assert_eq!(
         hex::encode(pk.serialize()),
-        "033648d21ba07d56c189699b75098b23fa8c42d848c7a62fba29239473aba17a24"
+        "0281c5d1fa035eed47bc3149dd91127d99d15121a1be3c22ca268150b4a9997d6f"
     );
 
     let sk_bytes = MEGaPrivateKeyK256Bytes::try_from(&sk).expect("Deserialization failed");
@@ -273,12 +273,12 @@ fn mega_k256_keyset_serialization_is_stable() -> Result<(), ThresholdEcdsaError>
 
     assert_eq!(
         hex::encode(serde_cbor::to_vec(&sk_bytes).unwrap()),
-        "58203c349a5525f280f2e05c19bf28a79a47909b36f8010aeaed1e93ecceb65522d8"
+        "58203ec1862141d91394894af980fff6280d84794a224615bf3ad96caaf416d9471c"
     );
 
     assert_eq!(
         hex::encode(serde_cbor::to_vec(&pk_bytes).unwrap()),
-        "5821033648d21ba07d56c189699b75098b23fa8c42d848c7a62fba29239473aba17a24"
+        "58210281c5d1fa035eed47bc3149dd91127d99d15121a1be3c22ca268150b4a9997d6f"
     );
 
     Ok(())
@@ -286,19 +286,19 @@ fn mega_k256_keyset_serialization_is_stable() -> Result<(), ThresholdEcdsaError>
 
 #[test]
 fn commitment_opening_k256_serialization_is_stable() -> Result<(), ThresholdEcdsaError> {
-    let mut rng =
-        Seed::from_bytes(b"ic-crypto-commitment-opening-serialization-stabilty-test").into_rng();
+    let rng = &mut Seed::from_bytes(b"ic-crypto-commitment-opening-serialization-stability-test")
+        .into_rng();
 
-    let s1 = EccScalar::random(EccCurveType::K256, &mut rng);
-    let s2 = EccScalar::random(EccCurveType::K256, &mut rng);
+    let s1 = EccScalar::random(EccCurveType::K256, rng);
+    let s2 = EccScalar::random(EccCurveType::K256, rng);
 
     assert_eq!(
         hex::encode(s1.serialize()),
-        "aca0809fdcb829ab77d67fad97226932f8df33c60633aedfa17170aac96cbd97"
+        "533db71736dbb11c23fd9a6cd703d37afd5173b943dc932d387dc17c89aaad84"
     );
     assert_eq!(
         hex::encode(s2.serialize()),
-        "39b7c00e8bc8ea37e86a77c8f157c8175fa79aa6dd7340d302b6e484239d1487"
+        "431fb614454b7c1f2ec2bd76832daf4ec6cadaa38bfbfb801a6d209b275af28d"
     );
 
     let s1_bytes = EccScalarBytes::try_from(&s1).expect("Deserialization failed");
@@ -307,12 +307,12 @@ fn commitment_opening_k256_serialization_is_stable() -> Result<(), ThresholdEcds
     let simple = CommitmentOpeningBytes::Simple(s1_bytes.clone());
 
     assert_eq!(hex::encode(serde_cbor::to_vec(&simple).unwrap()),
-               "a16653696d706c65a1644b323536982018ac18a01880189f18dc18b8182918ab187718d6187f18ad189718221869183218f818df183318c606183318ae18df18a11871187018aa18c9186c18bd1897");
+            "a16653696d706c65a1644b32353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884");
 
     let pedersen = CommitmentOpeningBytes::Pedersen(s1_bytes, s2_bytes);
 
     assert_eq!(hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
-               "a168506564657273656e82a1644b323536982018ac18a01880189f18dc18b8182918ab187718d6187f18ad189718221869183218f818df183318c606183318ae18df18a11871187018aa18c9186c18bd1897a1644b3235369820183918b718c00e188b18c818ea183718e8186a187718c818f1185718c817185f18a7189a18a618dd1873184018d30218b618e418841823189d141887");
+            "a168506564657273656e82a1644b32353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884a1644b32353698201843181f18b6141845184b187c181f182e18c218bd18761883182d18af184e18c618ca18da18a3188b18fb18fb1880181a186d1820189b1827185a18f2188d");
 
     Ok(())
 }

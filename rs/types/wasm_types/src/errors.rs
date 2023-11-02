@@ -146,6 +146,7 @@ pub enum WasmInstrumentationError {
         len: usize,
     },
     InvalidExport(String),
+    InvalidFunctionType(String),
 }
 
 impl std::fmt::Display for WasmInstrumentationError {
@@ -167,9 +168,8 @@ impl std::fmt::Display for WasmInstrumentationError {
                 "Wasm module has invalid data segment of {} bytes at {}",
                 len, offset
             ),
-            Self::InvalidExport(err) => {
-                write!(f, "Failed to export: {}", err)
-            }
+            Self::InvalidExport(err) => write!(f, "Failed to export: {}", err),
+            Self::InvalidFunctionType(err) => write!(f, "Invalid function type: {}", err),
         }
     }
 }
@@ -184,6 +184,8 @@ pub enum WasmEngineError {
     FailedToSerializeModule(String),
     FailedToDeserializeModule(String),
     FailedToApplySystemChanges(String),
+    Other(String),
+    Unexpected(String),
 }
 
 impl std::fmt::Display for WasmEngineError {
@@ -209,6 +211,12 @@ impl std::fmt::Display for WasmEngineError {
             }
             Self::FailedToApplySystemChanges(s) => {
                 write!(f, "Failed to apply system changes: {}", s)
+            }
+            Self::Other(s) => {
+                write!(f, "WasmEngineError: {}", s)
+            }
+            Self::Unexpected(s) => {
+                write!(f, "Unexpected WasmEngineError: {}", s)
             }
         }
     }

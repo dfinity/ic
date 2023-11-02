@@ -4,7 +4,7 @@ use canister_test::{Canister, Project, Runtime, Wasm};
 use common::set_up_state_machine_with_nns;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_interfaces_registry::RegistryClient;
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
@@ -32,6 +32,7 @@ use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DappCanistersTransferResult, DeployNewSnsRequest, DeployNewSnsResponse,
     SnsCanisterIds, SnsCanisterType, SnsWasm, SnsWasmError,
 };
+use ic_sns_wasm::sns_wasm::SNS_CANISTER_COUNT_AT_INSTALL;
 use ic_test_utilities::{
     types::ids::canister_test_id, universal_canister::UNIVERSAL_CANISTER_WASM,
 };
@@ -42,7 +43,7 @@ use std::convert::TryFrom;
 pub mod common;
 
 #[test]
-fn test_canisters_are_created_and_installed() {
+fn test_canisters_are_created_and_installed_legacy() {
     // Keeping a test on ReplicaTests for performance comparison
     local_test_on_nns_subnet(|runtime| async move {
         let fake_registry_client = match runtime {
@@ -156,7 +157,7 @@ fn test_canisters_are_created_and_installed() {
             sns_wasm,
             "deploy_new_sns",
             Encode!(&DeployNewSnsRequest {
-                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing())
+                sns_init_payload: Some(SnsInitPayload::with_valid_legacy_values_for_testing())
             })
             .unwrap(),
             EXPECTED_SNS_CREATION_FEE,
@@ -321,7 +322,7 @@ fn test_canisters_are_created_and_installed() {
 /// to simulate failure without creating more sophisticated test harnesses that let us
 /// simulate failures executing basic IC00 operations
 #[test]
-fn test_deploy_cleanup_on_wasm_install_failure() {
+fn test_deploy_cleanup_on_wasm_install_failure_legacy() {
     // The canister id the wallet canister will have.
     let wallet_canister_id = CanisterId::from_u64(11);
 
@@ -346,7 +347,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         &machine,
         wallet_canister,
         SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_values_for_testing(),
+        SnsInitPayload::with_valid_legacy_values_for_testing(),
         EXPECTED_SNS_CREATION_FEE,
     );
 
@@ -387,7 +388,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     // 5_000_000_000_000 cycles are burned creating the canisters before the failure
     assert_eq!(
         machine.cycle_balance(wallet_canister),
-        EXPECTED_SNS_CREATION_FEE - 5 * (ONE_TRILLION as u128)
+        EXPECTED_SNS_CREATION_FEE - SNS_CANISTER_COUNT_AT_INSTALL as u128 * (ONE_TRILLION as u128)
     );
 
     // No canisters should exist above SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 (+1 for the wallet
@@ -400,7 +401,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
 }
 
 #[test]
-fn test_deploy_adds_cycles_to_target_canisters() {
+fn test_deploy_adds_cycles_to_target_canisters_legacy() {
     // The canister id the wallet canister will have.
     let wallet_canister_id = CanisterId::from_u64(11);
 
@@ -420,7 +421,7 @@ fn test_deploy_adds_cycles_to_target_canisters() {
         &machine,
         wallet_canister,
         SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_values_for_testing(),
+        SnsInitPayload::with_valid_legacy_values_for_testing(),
         EXPECTED_SNS_CREATION_FEE,
     );
 

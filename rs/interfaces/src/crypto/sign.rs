@@ -23,10 +23,8 @@
 //! Please refer to the trait documentation for details.
 
 use ic_types::crypto::{
-    BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf, Signable,
-    UserPublicKey,
+    BasicSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf, Signable,
 };
-use ic_types::messages::{Delegation, MessageId, WebAuthnEnvelope};
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet};
@@ -147,70 +145,6 @@ pub trait BasicSigVerifier<T: Signable> {
     ) -> CryptoResult<()>;
 }
 
-/// A Crypto Component interface to verify basic signatures by public key.
-pub trait BasicSigVerifierByPublicKey<T: Signable> {
-    /// Verifies a basic signature using the given `public_key`.
-    ///
-    /// # Errors
-    /// * `CryptoError::MalformedPublicKey`: if the `public_key` is malformed.
-    /// * `CryptoError::MalformedSignature`: if the `signature` is malformed.
-    /// * `CryptoError::AlgorithmNotSupported`: if the signature algorithm is
-    ///   not supported, or if the `public_key` is for an unsupported algorithm.
-    /// * `CryptoError::SignatureVerification`: if the `signature` could not be
-    ///   verified.
-    fn verify_basic_sig_by_public_key(
-        &self,
-        signature: &BasicSigOf<T>,
-        signed_bytes: &T,
-        public_key: &UserPublicKey,
-    ) -> CryptoResult<()>;
-}
-
-/// A Crypto Component interface to verify (ICCSA) canister signatures.
-pub trait CanisterSigVerifier<T: Signable> {
-    /// Verifies an ICCSA canister signature.
-    ///
-    /// # Errors
-    /// * `CryptoError::AlgorithmNotSupported`: if the signature algorithm is
-    ///   not supported for canister signatures.
-    /// * `CryptoError::RegistryClient`: if the registry cannot be accessed at
-    ///   `registry_version`.
-    /// * `CryptoError::RootSubnetPublicKeyNotFound`: if the root subnet id or
-    ///   the root subnet threshold signing public key cannot be found in the
-    ///   registry at `registry_version`.
-    /// * `CryptoError::MalformedPublicKey`: if the root subnet's threshold
-    ///   signing public key is malformed.
-    /// * `CryptoError::MalformedSignature`: if the `signature` is malformed.
-    /// * `CryptoError::SignatureVerification`: if the `signature` could not be
-    ///   verified.
-    fn verify_canister_sig(
-        &self,
-        signature: &CanisterSigOf<T>,
-        signed_bytes: &T,
-        public_key: &UserPublicKey,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<()>;
-}
-
-/// A Crypto Component interface to verify ingress messages.
-pub trait IngressSigVerifier:
-    BasicSigVerifierByPublicKey<WebAuthnEnvelope>
-    + BasicSigVerifierByPublicKey<MessageId>
-    + BasicSigVerifierByPublicKey<Delegation>
-    + CanisterSigVerifier<Delegation>
-    + CanisterSigVerifier<MessageId>
-{
-}
-
-impl<T> IngressSigVerifier for T where
-    T: BasicSigVerifierByPublicKey<WebAuthnEnvelope>
-        + BasicSigVerifierByPublicKey<MessageId>
-        + BasicSigVerifierByPublicKey<Delegation>
-        + CanisterSigVerifier<Delegation>
-        + CanisterSigVerifier<MessageId>
-{
-}
-
 /// A Crypto Component interface to create multi-signatures.
 pub trait MultiSigner<T: Signable> {
     /// Creates an individual multi-signature.
@@ -244,7 +178,7 @@ pub trait MultiSigVerifier<T: Signable> {
     ///   `registry_version`.
     /// * `CryptoError::PublicKeyNotFound`: if the public key cannot be found at
     ///   the given `registry_version`.
-    /// * `CryptoError::MalformedSignature`: if the mutli-signature is
+    /// * `CryptoError::MalformedSignature`: if the multi-signature is
     ///   malformed.
     /// * `CryptoError::MalformedPublicKey`: if the public key obtained from the
     ///   registry is malformed.
@@ -278,7 +212,7 @@ pub trait MultiSigVerifier<T: Signable> {
     ///   `registry_version`.
     /// * `CryptoError::PublicKeyNotFound`: if any of the public keys for the
     ///   signatures cannot be found at the given `registry_version`.
-    /// * `CryptoError::MalformedSignature`: if any of the mutli-signatures is
+    /// * `CryptoError::MalformedSignature`: if any of the multi-signatures is
     ///   malformed.
     /// * `CryptoError::MalformedPublicKey`: if any of the public keys obtained
     ///   from the registry is malformed.

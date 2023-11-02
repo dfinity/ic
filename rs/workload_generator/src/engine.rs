@@ -446,7 +446,7 @@ impl Engine {
                 let mut backoff = backoff::ExponentialBackoff {
                     initial_interval: Duration::from_millis(50),
                     current_interval: Duration::from_millis(50), // Should probably be the same as initial_interval
-                    // See fomula here:
+                    // See formula here:
                     // https://docs.rs/backoff/latest/backoff/
                     randomization_factor: 0.01,
                     multiplier: 1.2,

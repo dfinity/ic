@@ -6,16 +6,16 @@ use rand::Rng;
 fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let ad = rng.gen::<[u8; 32]>();
 
-    let seed = Seed::from_rng(&mut rng);
+    let seed = Seed::from_rng(rng);
 
-    let secret = EccScalar::random(curve, &mut rng);
-    let masking = EccScalar::random(curve, &mut rng);
+    let secret = EccScalar::random(curve, rng);
+    let masking = EccScalar::random(curve, rng);
 
     let pedersen = EccPoint::pedersen(&secret, &masking)?;
-    let simple = EccPoint::mul_by_g(&secret)?;
+    let simple = EccPoint::mul_by_g(&secret);
 
     let proof = zk::ProofOfEqualOpenings::create(seed, &secret, &masking, &ad)?;
 
@@ -33,20 +33,20 @@ fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
 fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let ad = rng.gen::<[u8; 32]>();
 
-    let seed = Seed::from_rng(&mut rng);
+    let seed = Seed::from_rng(rng);
 
-    let lhs = EccScalar::random(curve, &mut rng);
-    let rhs = EccScalar::random(curve, &mut rng);
-    let masking = EccScalar::random(curve, &mut rng);
+    let lhs = EccScalar::random(curve, rng);
+    let rhs = EccScalar::random(curve, rng);
+    let masking = EccScalar::random(curve, rng);
 
     let product = lhs.mul(&rhs)?;
-    let product_masking = EccScalar::random(curve, &mut rng);
+    let product_masking = EccScalar::random(curve, rng);
     let product_c = EccPoint::pedersen(&product, &product_masking)?;
 
-    let lhs_c = EccPoint::mul_by_g(&lhs)?;
+    let lhs_c = EccPoint::mul_by_g(&lhs);
     let rhs_c = EccPoint::pedersen(&rhs, &masking)?;
 
     let proof =
@@ -65,20 +65,20 @@ fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
 fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let ad = rng.gen::<[u8; 32]>();
 
-    let seed = Seed::from_rng(&mut rng);
+    let seed = Seed::from_rng(rng);
 
-    let lhs = EccScalar::random(curve, &mut rng);
-    let rhs = EccScalar::random(curve, &mut rng);
-    let masking = EccScalar::random(curve, &mut rng);
+    let lhs = EccScalar::random(curve, rng);
+    let rhs = EccScalar::random(curve, rng);
+    let masking = EccScalar::random(curve, rng);
 
-    let product = EccScalar::random(curve, &mut rng); // bad product!
-    let product_masking = EccScalar::random(curve, &mut rng);
+    let product = EccScalar::random(curve, rng); // bad product!
+    let product_masking = EccScalar::random(curve, rng);
     let product_c = EccPoint::pedersen(&product, &product_masking)?;
 
-    let lhs_c = EccPoint::mul_by_g(&lhs)?;
+    let lhs_c = EccPoint::mul_by_g(&lhs);
     let rhs_c = EccPoint::pedersen(&rhs, &masking)?;
 
     let proof =
@@ -93,15 +93,15 @@ fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
 fn should_zk_dlog_eq_proof_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let ad = rng.gen::<[u8; 32]>();
 
-    let seed = Seed::from_rng(&mut rng);
+    let seed = Seed::from_rng(rng);
 
     let g = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), "g_domain".as_bytes())?;
     let h = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), "h_domain".as_bytes())?;
 
-    let x = EccScalar::random(curve, &mut rng);
+    let x = EccScalar::random(curve, rng);
     let g_x = g.scalar_mul(&x)?;
     let h_x = h.scalar_mul(&x)?;
 

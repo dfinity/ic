@@ -7,9 +7,9 @@ use ic_error_types::UserError;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgs,
-    Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SetControllerArgs,
-    SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgsV2,
+    Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SignWithECDSAArgs,
+    UninstallCodeArgs, UpdateSettingsArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -67,7 +67,7 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::InstallCode) => {
             // Find the destination canister from the payload.
-            let args = InstallCodeArgs::decode(payload)?;
+            let args = InstallCodeArgsV2::decode(payload)?;
             let canister_id = args.get_canister_id();
             network_topology
                 .routing_table
@@ -75,17 +75,6 @@ pub(super) fn resolve_destination(
                 .map(|subnet_id| subnet_id.get())
                 .ok_or({
                     ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
-                })
-        }
-        Ok(Ic00Method::SetController) => {
-            let args = SetControllerArgs::decode(payload)?;
-            let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::SetController)
                 })
         }
         Ok(Ic00Method::CanisterStatus)
@@ -198,6 +187,15 @@ pub(super) fn resolve_destination(
                 &Some(args.subnet_id),
                 EcdsaSubnetKind::OnlyHoldsKey,
             )
+        }
+        Ok(Ic00Method::UploadChunk)
+        | Ok(Ic00Method::StoredChunks)
+        | Ok(Ic00Method::DeleteChunks)
+        | Ok(Ic00Method::ClearChunkStore) => {
+            Err(ResolveDestinationError::UserError(UserError::new(
+                ic_error_types::ErrorCode::CanisterRejectedMessage,
+                "Chunked upload API is not yet implemented",
+            )))
         }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
@@ -333,6 +331,7 @@ mod tests {
     use ic_replicated_state::SubnetTopology;
     use ic_test_utilities::types::ids::{canister_test_id, node_test_id, subnet_test_id};
     use maplit::btreemap;
+    use serde_bytes::ByteBuf;
 
     use super::*;
 
@@ -394,7 +393,7 @@ mod tests {
     fn ecdsa_sign_req(key_id: EcdsaKeyId) -> Vec<u8> {
         let args = SignWithECDSAArgs {
             message_hash: [1; 32],
-            derivation_path: DerivationPath::new(vec![vec![0; 10]]),
+            derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
             key_id,
         };
         Encode!(&args).unwrap()
@@ -403,7 +402,7 @@ mod tests {
     fn public_key_req(key_id: EcdsaKeyId) -> Vec<u8> {
         let args = ECDSAPublicKeyArgs {
             canister_id: Some(canister_test_id(1)),
-            derivation_path: DerivationPath::new(vec![vec![0; 10]]),
+            derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
             key_id,
         };
         Encode!(&args).unwrap()

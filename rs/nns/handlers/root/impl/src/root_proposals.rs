@@ -268,7 +268,7 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
         // Store the proposal, the current list of principals that can vote,
         // together with the version number and as many votes for 'yes' as the
         // number of nodes the caller's principal operates, in the nns subnetwork.
-        let proposed_wasm_sha = ic_crypto_sha::Sha256::hash(&proposal.wasm_module).to_vec();
+        let proposed_wasm_sha = ic_crypto_sha2::Sha256::hash(&proposal.wasm_module).to_vec();
 
         proposals.borrow_mut().insert(
             caller,

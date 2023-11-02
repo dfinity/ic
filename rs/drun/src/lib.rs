@@ -167,7 +167,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
     // Hardcoded magic values to create a ReplicaConfig that parses.
     let mut subnet_config = SubnetConfig::new(subnet_type);
 
-    // If an intruction limit was specified, update the config with the provided instruction limit.
+    // If an instruction limit was specified, update the config with the provided instruction limit.
     if let Some(instruction_limit) = instruction_limit {
         subnet_config.scheduler_config.max_instructions_per_message =
             NumInstructions::new(instruction_limit);

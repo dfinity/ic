@@ -104,7 +104,7 @@ impl GroupContext {
     /// Returns the path to the setup artifact directory,
     /// ensuring that the directory actually exists and
     /// contains a copy of the configuration files from root_env
-    fn create_setup_dir(&self) -> Result<PathBuf> {
+    fn ensure_setup_dir(&self) -> Result<PathBuf> {
         let root_env_path = self.group_dir.join(constants::ROOT_ENV_DIR);
         let setup_path = self.group_dir.join(constants::GROUP_SETUP_DIR);
         debug!(
@@ -145,19 +145,19 @@ impl GroupContext {
 
     /// Returns the path to the artifact directory for this [test_name],
     /// ensuring that the directory actually exists.
-    fn create_test_dir(&self, test_name: &str) -> Result<PathBuf> {
+    fn ensure_test_dir(&self, test_name: &str) -> Result<PathBuf> {
         let test_path = self.group_dir.join(constants::TESTS_DIR).join(test_name);
         debug!(self.logger, "Ensuring directory {:?} exists ...", test_path);
         self.ensure_dir(test_path.clone()).map(|_| test_path)
     }
 
-    pub fn create_setup_env(&self) -> Result<TestEnv> {
-        let setup_dir = self.create_setup_dir()?;
+    pub fn ensure_setup_env(&self) -> Result<TestEnv> {
+        let setup_dir = self.ensure_setup_dir()?;
         TestEnv::new(setup_dir, self.logger.clone())
     }
 
     pub fn create_test_env(&self, test_name: &str) -> Result<TestEnv> {
-        let target_dir = self.create_test_dir(test_name)?;
+        let target_dir = self.ensure_test_dir(test_name)?;
         if let Some(setup_dir) = self.get_setup_dir() {
             TestEnv::fork_from(
                 setup_dir.as_path(),

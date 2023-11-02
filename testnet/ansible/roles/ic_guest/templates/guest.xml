@@ -133,13 +133,6 @@
       <alias name='net0'/>
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
     </interface>
-    <interface type='bridge'>
-      <source bridge='{{ ipv4_interface }}'/>
-      <target dev='vnet1'/>
-      <model type='virtio'/>
-      <alias name='net1'/>
-      <address type='pci' domain='0x0000' bus='0x02' slot='0x00' function='0x0'/>
-    </interface>
     <serial type='pty'>
       <source path='/dev/pts/3'/>
       <target type='isa-serial' port='0'>

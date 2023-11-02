@@ -6,6 +6,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
+use std::sync::Arc;
 use subtle::Choice;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -298,8 +299,8 @@ impl EccScalar {
     }
 
     pub fn from_seed(curve: EccCurveType, seed: Seed) -> Self {
-        let mut rng = seed.into_rng();
-        Self::random(curve, &mut rng)
+        let rng = &mut seed.into_rng();
+        Self::random(curve, rng)
     }
 
     /// Return true iff self is equal to zero
@@ -416,10 +417,30 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq)]
 pub struct EccPoint {
     point: EccPointInternal,
-    precompute: Option<NafLut>,
+    precompute: Option<Arc<NafLut>>,
+}
+
+impl Zeroize for EccPoint {
+    fn zeroize(&mut self) {
+        self.point.zeroize();
+        self.precompute = None;
+    }
+}
+
+impl Drop for EccPoint {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl PartialEq for EccPoint {
+    fn eq(&self, other: &Self) -> bool {
+        // comparison ignores the precomputed state
+        self.point == other.point
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
@@ -639,7 +660,7 @@ impl EccPoint {
     /// # Errors
     /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
     pub fn precompute(&mut self, window_size: usize) -> ThresholdEcdsaResult<()> {
-        self.precompute = Some(NafLut::new(&self.clone(), window_size)?);
+        self.precompute = Some(Arc::new(NafLut::new(&self.clone(), window_size)?));
         Ok(())
     }
 
@@ -727,7 +748,7 @@ impl EccPoint {
         use subtle::ConstantTimeEq;
         if points.is_empty() {
             return Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                "The input to constant-time select from slice must contain at least one elememt",
+                "The input to constant-time select from slice must contain at least one element",
             )));
         }
         let mut result = Self::identity(points[0].curve_type());
@@ -896,10 +917,11 @@ impl EccPoint {
         Self::mul_2_points(&g, scalar1, &h, scalar2)
     }
 
-    pub fn mul_by_g(scalar: &EccScalar) -> ThresholdEcdsaResult<Self> {
-        let curve_type = scalar.curve_type();
-        let g = Self::generator_g(curve_type);
-        g.scalar_mul(scalar)
+    pub fn mul_by_g(scalar: &EccScalar) -> Self {
+        match scalar {
+            EccScalar::K256(s) => secp256k1::Point::generator().mul(s).into(),
+            EccScalar::P256(s) => secp256r1::Point::generator().mul(s).into(),
+        }
     }
 
     /// Serialize a point in compressed form
@@ -1358,7 +1380,7 @@ pub struct NafLut {
 impl NafLut {
     /// Inclusive bounds of the LUT.
     /// Manually the bounds can be computed as an "all-one" NAF value, e.g.,
-    /// "1 0 1 0 1" for `window_size == 5` (recall that in NAF there can be no adjecent non-zero values)
+    /// "1 0 1 0 1" for `window_size == 5` (recall that in NAF there can be no adjacent non-zero values)
     const BOUND: [usize; 8] = [0, 1, 2, 5, 10, 21, 42, 85];
     pub const MIN_WINDOW_SIZE: usize = 3;
     pub const MAX_WINDOW_SIZE: usize = 7;

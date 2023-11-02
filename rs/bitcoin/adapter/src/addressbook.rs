@@ -145,7 +145,6 @@ impl AddressBook {
             self.known_addresses = self
                 .known_addresses
                 .union(&self.active_addresses)
-                .into_iter()
                 .cloned()
                 .collect();
         }

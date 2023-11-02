@@ -91,7 +91,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         )
         .await;
 
-        assert_eq!(&an1_dc.id, "AN1");
+        assert_eq!(&an1_dc.id, "an1");
         assert_eq!(&an1_dc.region, "BEL");
         assert_eq!(&an1_dc.owner, "Alice");
         assert_eq!(
@@ -108,7 +108,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         )
         .await;
 
-        assert_eq!(&bc1_dc.id, "BC1");
+        assert_eq!(&bc1_dc.id, "bc1");
         assert_eq!(&bc1_dc.region, "CAN");
         assert_eq!(&bc1_dc.owner, "Bob");
         assert!(&bc1_dc.gps.is_none());
@@ -119,7 +119,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         )
         .await;
 
-        assert_eq!(&fm1_dc.id, "FM1");
+        assert_eq!(&fm1_dc.id, "fm1");
         assert_eq!(&fm1_dc.region, "Fremont");
         assert_eq!(&fm1_dc.owner, "Carol");
         assert!(&fm1_dc.gps.is_none());

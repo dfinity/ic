@@ -26,13 +26,11 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
-    "@crate_index//:num-integer",
     "@crate_index//:prometheus",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:rand_chacha_0_3_1",
     "@crate_index//:rayon",
     "@crate_index//:slog",
-    "@crate_index//:strum",
 ]
 
 DEV_DEPENDENCIES = [
@@ -67,6 +65,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
+
 DATA = [
     "//rs/canister_sandbox",
     "//rs/canister_sandbox/sandbox_launcher",
@@ -87,9 +89,7 @@ rust_library(
         "//conditions:default": [],
     }),
     crate_name = "ic_consensus",
-    proc_macro_deps = [
-        "@crate_index//:strum_macros",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
 )

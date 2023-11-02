@@ -3,9 +3,7 @@ pub use crate::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use crate::crypto::threshold_sig::ThresholdSigPublicKey;
 use crate::NumberOfNodes;
-use crate::{
-    Height, IDkgId, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
-};
+use crate::{Height, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId};
 use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
 use ic_protobuf::types::v1 as pb;
@@ -106,22 +104,6 @@ impl TryFrom<i32> for NiDkgTag {
             2 => Ok(NiDkgTag::HighThreshold),
             _ => Err(()),
         }
-    }
-}
-
-/// An ID identifying a DKG epoch.
-///
-/// This is either for interactive DKG (`IDkgId`) or for non-interactive DKG
-/// (`NiDkgId`).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum DkgId {
-    IDkgId(IDkgId),
-    NiDkgId(NiDkgId),
-}
-
-impl fmt::Display for DkgId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self)
     }
 }
 

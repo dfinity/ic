@@ -22,6 +22,12 @@ RUN mkdir -p /boot/config \
              /boot/grub
 COPY etc /etc
 
+# Change permissions on special files as they are copied.
+# See ic-os/guestos/rootfs/Dockerfile for details
+COPY --chmod=644 etc/hosts /etc/hosts
+COPY --chmod=644 etc/hostname /etc/hostname
+COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
@@ -82,7 +88,11 @@ RUN systemctl enable \
     systemd-resolved
 
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump
-RUN faketime "1970-1-1 0" systemd-sysusers
+RUN systemd-sysusers && \
+    # Fix reproducibility issue. Notes in guestos/rootfs/Dockerfile    
+    usermod -p '!!' systemd-timesync && \
+    usermod -p '!!' systemd-coredump
+
 
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
 RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
@@ -128,21 +138,6 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin systemd-journal && \
     adduser admin vsock && \
     adduser admin sudo
-
-# The "journalbeat" account. Used to run journalbeat binary to send logs of the
-# GuestOS.
-RUN addgroup journalbeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Journalbeat" journalbeat && \
-    adduser journalbeat journalbeat && \
-    adduser journalbeat systemd-journal && \
-    chown root:root /etc/journalbeat/*.yml \
-                    /usr/local/bin/journalbeat && \
-    chown journalbeat:journalbeat /var/lib/journalbeat \
-                                  /var/log/journalbeat && \
-    chmod 0755 /etc/journalbeat && \
-    chmod 0750 /var/lib/journalbeat \
-               /var/log/journalbeat && \
-    chmod 0644 /etc/journalbeat/*.yml
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.

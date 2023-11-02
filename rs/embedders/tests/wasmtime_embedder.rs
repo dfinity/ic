@@ -12,10 +12,15 @@ use ic_types::{
 
 #[cfg(test)]
 mod test {
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
     use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-    use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
+    use ic_test_utilities::{
+        universal_canister::{call_args, wasm},
+        wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS,
+    };
+    use ic_test_utilities_execution_environment::ExecutionTestBuilder;
     use ic_types::{methods::WasmClosure, NumBytes, PrincipalId};
 
     use super::*;
@@ -92,13 +97,13 @@ mod test {
             .unwrap();
 
         let instruction_counter = instance.instruction_counter();
-        let system_api = &instance.store_data().system_api;
+        let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
         let call_msg_arg_data_copy_with_3_const = 4;
         let expected_instructions = call_msg_arg_data_copy_with_3_const
             + data_size
-            + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get();
+            + system_api_complexity::overhead::old::MSG_ARG_DATA_COPY.get();
         assert_eq!(instructions_used.get(), expected_instructions);
     }
 
@@ -108,7 +113,7 @@ mod test {
         let call_msg_arg_data_copy_with_3_const = 4;
         let expected_instructions = call_msg_arg_data_copy_with_3_const
             + data_size
-            + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get();
+            + system_api_complexity::overhead::old::MSG_ARG_DATA_COPY.get();
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_wat(
                 format!(
@@ -169,10 +174,10 @@ mod test {
         // The second perf counter will catch on top the second data copy dynamic part.
         let expected_instructions_counter1 = (wasm_call_msg_arg_data_copy_with_3_const
                 + data_size
-                + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get())
+                + system_api_complexity::overhead::old::MSG_ARG_DATA_COPY.get())
                 + wasm_drop_const
                 + wasm_call_performance_counter_with_const
-                + system_api_complexity::overhead::PERFORMANCE_COUNTER.get()
+                + system_api_complexity::overhead::old::PERFORMANCE_COUNTER.get()
                 + wasm_global_set
                 + wasm_drop_const
                 + wasm_drop_const
@@ -181,8 +186,8 @@ mod test {
                 + wasm_global_set;
         // Includes dynamic part for second data copy and performance counter calls
         let expected_instructions_counter2 = expected_instructions_counter1
-            + (data_size + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get())
-            + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
+            + (data_size + system_api_complexity::overhead::old::MSG_ARG_DATA_COPY.get())
+            + system_api_complexity::overhead::old::PERFORMANCE_COUNTER.get();
         let expected_instructions = expected_instructions_counter2;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_wat(
@@ -244,12 +249,77 @@ mod test {
             _ => panic!("Error getting performance_counter2"),
         };
         let instruction_counter = instance.instruction_counter();
-        let system_api = &instance.store_data().system_api;
+        let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
         assert_eq!(performance_counter1, expected_instructions_counter1);
         assert_eq!(performance_counter2, expected_instructions_counter2);
 
         assert_eq!(instructions_used.get(), expected_instructions);
+    }
+
+    #[test]
+    // TODO: RUN-759: The test fails, as the performance counter is not implemented yet.
+    #[ignore]
+    fn test_correctly_report_call_context_performance_counter() {
+        let mut test = ExecutionTestBuilder::new().build();
+        let a_id = test.universal_canister().unwrap();
+        let b_id = test.universal_canister().unwrap();
+
+        let b = wasm().performance_counter(1).reply_int64().build();
+        let a = wasm()
+            // Counter a.0
+            .performance_counter(1)
+            .int64_to_blob()
+            .append_to_global_data()
+            .call_simple(
+                b_id.get(),
+                "update",
+                call_args()
+                    // Counter b.2
+                    .other_side(b.clone())
+                    .on_reply(
+                        wasm()
+                            .message_payload()
+                            .append_to_global_data()
+                            // Counter a.3
+                            .performance_counter(1)
+                            .int64_to_blob()
+                            .append_to_global_data()
+                            .call_simple(
+                                b_id.get(),
+                                "update",
+                                call_args()
+                                    // Counter b.4
+                                    .other_side(b)
+                                    .on_reply(
+                                        wasm()
+                                            .get_global_data()
+                                            .reply_data_append()
+                                            .message_payload()
+                                            .reply_data_append()
+                                            // Counter a.5
+                                            .performance_counter(1)
+                                            .reply_int64(),
+                                    ),
+                            ),
+                    ),
+            )
+            // Counter a.1
+            .performance_counter(1)
+            .int64_to_blob()
+            .append_to_global_data()
+            .build();
+        let result = test.ingress(a_id, "update", a).unwrap();
+
+        let counters = result
+            .bytes()
+            .chunks_exact(std::mem::size_of::<u64>())
+            .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+            .collect::<Vec<_>>();
+
+        assert!(
+            counters[0] < counters[1] && counters[1] < counters[3] && counters[3] < counters[5]
+        );
     }
 
     const CALL_NEW_CALL_PERFORM_WAT: &str = r#"
@@ -266,8 +336,8 @@ mod test {
         (memory 1)
         (func (export "canister_update test_call_perform")
             (call $ic0_call_new
-                (i32.const 0)   (i32.const 10)
-                (i32.const 100) (i32.const 18)
+                (i32.const 0)   (i32.const 0)
+                (i32.const 100) (i32.const 0)
                 (i32.const 11)  (i32.const 0) ;; non-existent function
                 (i32.const 22)  (i32.const 0) ;; non-existent function
             )
@@ -296,22 +366,22 @@ mod test {
             .unwrap();
 
         let instruction_counter = instance.instruction_counter();
-        let system_api = &instance.store_data().system_api;
+        let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-        let call_new_with_8_const = 9;
-        let drop_with_call_perform = 2;
+        let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+        let const_cost = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
+        let drop_cost = instruction_to_cost(&wasmparser::Operator::Drop);
+
+        let call_new_with_8_const = call_cost + 8 * const_cost;
+        let drop_with_call_perform = drop_cost + call_cost;
         let expected_instructions = call_new_with_8_const
             + drop_with_call_perform
-            + system_api_complexity::overhead::CALL_NEW.get()
-            + system_api_complexity::overhead::CALL_PERFORM.get();
+            + system_api_complexity::overhead::old::CALL_NEW.get()
+            + system_api_complexity::overhead::old::CALL_PERFORM.get();
         assert_eq!(instructions_used.get(), expected_instructions);
 
-        let total_cpu_complexity = instance
-            .into_store_data()
-            .system_api
-            .execution_complexity()
-            .cpu;
+        let total_cpu_complexity = system_api.execution_complexity().cpu;
         let expected_cpu_complexity =
             system_api_complexity::cpu::CALL_NEW + system_api_complexity::cpu::CALL_PERFORM;
         assert_eq!(total_cpu_complexity, expected_cpu_complexity);
@@ -556,7 +626,7 @@ mod test {
     #[should_panic(
         expected = "Given number of exported globals 3 is not equal to the number of instance exported globals 2"
     )]
-    fn try_to_set_globals_that_are_more_than_the_instace_globals() {
+    fn try_to_set_globals_that_are_more_than_the_instance_globals() {
         let _instance = WasmtimeInstanceBuilder::new()
             // Module only exports one global, but instrumentation adds a second.
             .with_wat(
@@ -573,7 +643,7 @@ mod test {
     #[should_panic(
         expected = "Given number of exported globals 1 is not equal to the number of instance exported globals 2"
     )]
-    fn try_to_set_globals_that_are_less_than_the_instace_globals() {
+    fn try_to_set_globals_that_are_less_than_the_instance_globals() {
         let _instance = WasmtimeInstanceBuilder::new()
             // Module only exports one global, but instrumentation adds a second.
             .with_wat(

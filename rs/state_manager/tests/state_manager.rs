@@ -1,18 +1,26 @@
-use ic_base_types::NumBytes;
+use ic_certification_version::{CertificationVersion::V11, CURRENT_CERTIFICATION_VERSION};
 use ic_config::state_manager::Config;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{
+    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, MixedHashTree, Path as LabelPath,
+};
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
-use ic_interfaces::{artifact_pool::UnvalidatedArtifact, certification::Verifier};
+use ic_interfaces::artifact_pool::ChangeResult;
+use ic_interfaces::{
+    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
+    certification::Verifier,
+};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
-    ReplicatedState, Stream,
+    page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NetworkTopology, NumWasmPages,
+    PageMap, ReplicatedState, Stream, SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE};
+use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
@@ -29,6 +37,8 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_types::batch::{CanisterQueryStats, ReceivedEpochStats};
+use ic_types::epoch_from_height;
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
     chunkable::{ChunkId, ChunkableArtifact},
@@ -38,7 +48,7 @@ use ic_types::{
     state_sync::{FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK},
     time::Time,
     xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
+    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
 use nix::sys::time::TimeValLike;
 use nix::sys::{
@@ -46,6 +56,7 @@ use nix::sys::{
     time::TimeSpec,
 };
 use proptest::prelude::*;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -56,13 +67,20 @@ use std::{
 
 pub mod common;
 use common::*;
-use ic_registry_subnet_type::SubnetType;
 
 const NUM_THREADS: u32 = 3;
 
 fn make_mutable(path: &Path) -> std::io::Result<()> {
     let mut perms = std::fs::metadata(path)?.permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
+    std::fs::set_permissions(path, perms)?;
+    Ok(())
+}
+
+fn make_readonly(path: &Path) -> std::io::Result<()> {
+    let mut perms = std::fs::metadata(path)?.permissions();
+    perms.set_readonly(true);
     std::fs::set_permissions(path, perms)?;
     Ok(())
 }
@@ -210,13 +228,33 @@ fn skipping_flushing_is_invisible_for_state() {
             recv_wait.recv().unwrap();
             recv_nop.recv().unwrap();
         }
+
+        let wait = || {
+            let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
+            env.state_manager
+                .test_only_send_wait_to_tip_channel(send_wait);
+            recv_wait.recv().unwrap();
+        };
+
         let skips_before = skips(&env);
         env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
         env.execute_ingress(canister_id1, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
         env.execute_ingress(canister_id2, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
 
         // Second inc on canister_id0 to trigger overwriting a previously written page.
         env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
 
         let skips_after = skips(&env);
         if block_tip {
@@ -270,11 +308,11 @@ fn rejoining_node_doesnt_accumulate_states() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifact {
+                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                         message: dst_msg,
                         peer_id: node_test_id(0),
                         timestamp: mock_time(),
-                    }],
+                    })],
                 );
 
                 assert_eq!(
@@ -283,7 +321,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                 );
                 assert_eq!(
                     dst_state_manager.checkpoint_heights(),
-                    (1..=i).into_iter().map(|i| height(i)).collect::<Vec<_>>()
+                    (1..=i).map(|i| height(i)).collect::<Vec<_>>()
                 );
             }
 
@@ -480,6 +518,53 @@ fn starting_height_independent_of_remove_states_below() {
 }
 
 #[test]
+fn query_stats_are_persisted() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let proposer_id: NodeId = node_test_id(42);
+
+        let (curr_height, mut state) = state_manager.take_tip();
+
+        let epoch = epoch_from_height(curr_height);
+        let test_query_stats: CanisterQueryStats = CanisterQueryStats {
+            num_calls: 1337,
+            num_instructions: 100000,
+            ingress_payload_size: 100001,
+            egress_payload_size: 100002,
+        };
+
+        let mut inner = BTreeMap::new();
+        inner.insert(proposer_id, test_query_stats.clone());
+
+        let mut stats = BTreeMap::new();
+        stats.insert(canister_id, inner);
+
+        state.epoch_query_stats = ReceivedEpochStats {
+            epoch: Some(epoch),
+            stats,
+        };
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let state_manager = restart_fn(state_manager, None);
+
+        let (_height, recovered_tip) = state_manager.take_tip();
+
+        let recovered_stats = recovered_tip.epoch_query_stats;
+        assert_eq!(recovered_stats.epoch, Some(epoch));
+        assert_eq!(recovered_stats.stats.len(), 1);
+        assert_eq!(
+            recovered_stats
+                .stats
+                .get(&canister_id)
+                .unwrap()
+                .get(&proposer_id)
+                .unwrap(),
+            &test_query_stats
+        );
+    });
+}
+
+#[test]
 fn stable_memory_is_persisted() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
@@ -581,6 +666,43 @@ fn missing_stable_memory_file_is_handled() {
         let state = recovered.take();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert!(canister_state.execution_state.is_none());
+    });
+}
+
+#[test]
+/// When the chunk store is first deployed, the replicated state won't have
+/// checkpoint files for the Wasm chunk store.
+fn missing_wasm_chunk_store_is_handled() {
+    use ic_state_layout::{CheckpointLayout, RwPolicy};
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        // Since the canister has no execution state, there should be no stable memory
+        // file.
+        let state_layout = state_manager.state_layout();
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout
+                .checkpoint(height(1))
+                .unwrap()
+                .raw_path()
+                .to_path_buf(),
+            height(1),
+        )
+        .unwrap();
+
+        let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+        let canister_wasm_chunk_store = canister_layout.wasm_chunk_store();
+        assert!(canister_wasm_chunk_store.exists());
+        std::fs::remove_file(&canister_wasm_chunk_store).unwrap();
+
+        let state_manager = restart_fn(state_manager, None);
+        let (recovered_height, recovered) = state_manager.take_tip();
+        assert_eq!(height(1), recovered_height);
+
+        assert!(!canister_wasm_chunk_store.exists());
+        state_manager.commit_and_certify(recovered, height(2), CertificationScope::Full);
     });
 }
 
@@ -1669,12 +1791,14 @@ fn delivers_state_adverts_once() {
             hash,
         };
 
-        let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
+        let ChangeResult { adverts, .. } =
+            state_sync.process_changes(time_source.as_ref(), Default::default());
         assert_eq!(adverts.len(), 1);
         assert_eq!(adverts[0].id, id);
         assert!(state_sync.has_artifact(&id));
 
-        let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
+        let ChangeResult { adverts, .. } =
+            state_sync.process_changes(time_source.as_ref(), Default::default());
         assert_eq!(adverts.len(), 0);
         assert!(state_sync.has_artifact(&id));
     });
@@ -1859,11 +1983,11 @@ fn can_do_simple_state_sync_transfer() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
 
             let recovered_state = dst_state_manager
@@ -2064,11 +2188,11 @@ fn can_state_sync_from_cache() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifact {
+                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                         message: dst_msg,
                         peer_id: node_test_id(0),
                         timestamp: mock_time(),
-                    }],
+                    })],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2101,11 +2225,11 @@ fn can_state_sync_from_cache() {
 
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifact {
+                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                         message: dst_msg,
                         peer_id: node_test_id(0),
                         timestamp: mock_time(),
-                    }],
+                    })],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2208,11 +2332,11 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifact {
+                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                         message: dst_msg,
                         peer_id: node_test_id(0),
                         timestamp: mock_time(),
-                    }],
+                    })],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2326,11 +2450,11 @@ fn state_sync_can_reject_invalid_chunks() {
             let dst_msg = pipe_state_sync(msg.clone(), chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
 
             let recovered_state = dst_state_manager
@@ -2385,11 +2509,11 @@ fn can_state_sync_into_existing_checkpoint() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
 
             assert_no_remaining_chunks(dst_metrics);
@@ -2465,11 +2589,11 @@ fn can_group_small_files_in_state_sync() {
 
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
 
             let recovered_state = dst_state_manager
@@ -2523,11 +2647,11 @@ fn can_commit_after_prev_state_is_gone() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
 
             dst_state_manager.remove_states_below(height(2));
@@ -2586,11 +2710,11 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
@@ -2639,11 +2763,11 @@ fn can_state_sync_based_on_old_checkpoint() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
 
             let expected_state = src_state_manager.get_latest_state();
@@ -2800,16 +2924,19 @@ fn can_recover_from_corruption_on_state_sync() {
             let canister_90_memory = canister_90_layout.vmemory_0();
             make_mutable(&canister_90_memory).unwrap();
             std::fs::write(&canister_90_memory, b"Garbage").unwrap();
+            make_readonly(&canister_90_memory).unwrap();
 
             let canister_90_raw_pb = canister_90_layout.canister().raw_path().to_path_buf();
             make_mutable(&canister_90_raw_pb).unwrap();
             write_all_at(&canister_90_raw_pb, b"Garbage", 0).unwrap();
+            make_readonly(&canister_90_raw_pb).unwrap();
 
             let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
 
             let canister_100_memory = canister_100_layout.vmemory_0();
             make_mutable(&canister_100_memory).unwrap();
             write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
+            make_readonly(&canister_100_memory).unwrap();
 
             let canister_100_stable_memory = canister_100_layout.stable_memory_blob();
             make_mutable(&canister_100_stable_memory).unwrap();
@@ -2819,20 +2946,22 @@ fn can_recover_from_corruption_on_state_sync() {
                 PAGE_SIZE as u64,
             )
             .unwrap();
+            make_readonly(&canister_100_stable_memory).unwrap();
 
             let canister_100_raw_pb = canister_100_layout.canister().raw_path().to_path_buf();
             make_mutable(&canister_100_raw_pb).unwrap();
             std::fs::write(&canister_100_raw_pb, b"Garbage").unwrap();
+            make_readonly(&canister_100_raw_pb).unwrap();
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
 
             let expected_state = src_state_manager.get_latest_state();
@@ -2881,11 +3010,11 @@ fn can_commit_below_state_sync() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -2895,7 +3024,7 @@ fn can_commit_below_state_sync() {
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(2));
             assert_eq!(dst_state_manager.latest_state_height(), height(2));
-            // state 1 should be removeable
+            // state 1 should be removable
             dst_state_manager.remove_states_below(height(2));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
             assert_error_counters(dst_metrics);
@@ -2940,11 +3069,11 @@ fn can_state_sync_below_commit() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifact {
+                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                     message: dst_msg,
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
-                }],
+                })],
             );
             assert_eq!(
                 dst_state_manager.checkpoint_heights(),
@@ -2955,7 +3084,7 @@ fn can_state_sync_below_commit() {
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
             assert_eq!(dst_state_manager.latest_state_height(), height(3));
-            // state 1 should be removeable
+            // state 1 should be removable
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
@@ -2993,6 +3122,14 @@ fn can_get_dirty_pages() {
 
     fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
         let canister_state = state.canister_state_mut(&canister_id).unwrap();
+        canister_state
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .update(&[
+                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            ]);
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
@@ -3068,6 +3205,21 @@ fn can_get_dirty_pages() {
             },
             DirtyPageMap {
                 height: height(1),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(80))),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(90))),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
+            },
+            DirtyPageMap {
+                height: height(1),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(100))),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
                 file_type: FileType::WasmBinary(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
@@ -3125,6 +3277,21 @@ fn can_get_dirty_pages() {
             DirtyPageMap {
                 height: height(2),
                 file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(100))),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
+            },
+            DirtyPageMap {
+                height: height(2),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(80))),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(90))),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(100))),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
@@ -3337,7 +3504,118 @@ fn certified_read_can_certify_canister_data() {
 }
 
 #[test]
-fn certified_read_returns_none_for_non_existing_entries() {
+fn certified_read_can_certify_node_public_keys_since_v12() {
+    use LabeledTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, mut state) = state_manager.take_tip();
+
+        let canister_id: CanisterId = canister_test_id(100);
+        insert_dummy_canister(&mut state, canister_id);
+
+        state.metadata.batch_time += std::time::Duration::new(0, 100);
+        let mut subnets = BTreeMap::new();
+
+        let mut node_public_keys: BTreeMap<NodeId, Vec<u8>> = BTreeMap::new();
+        for i in 0..40 {
+            node_public_keys.insert(node_test_id(i), vec![i as u8; 44]);
+        }
+
+        subnets.insert(
+            subnet_test_id(42), // its own subnet id
+            SubnetTopology {
+                public_key: vec![1u8; 133],
+                nodes: node_public_keys.keys().cloned().collect(),
+                subnet_type: SubnetType::System,
+                subnet_features: SubnetFeatures::default(),
+                ecdsa_keys_held: BTreeSet::new(),
+            },
+        );
+
+        let network_topology = NetworkTopology {
+            subnets,
+            nns_subnet_id: subnet_test_id(42),
+            ..Default::default()
+        };
+
+        state.metadata.network_topology = network_topology;
+        state.metadata.node_public_keys = node_public_keys;
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let subnet_id = subnet_test_id(42).get();
+        let node_id = node_test_id(39).get();
+        let path: Vec<&[u8]> = vec![
+            b"subnet",
+            subnet_id.as_ref(),
+            b"node",
+            node_id.as_ref(),
+            b"public_key",
+        ];
+
+        let label_path = LabelPath::new(path.iter().map(label).collect::<Vec<_>>());
+
+        let labeled_tree =
+            sparse_labeled_tree_from_paths(&[label_path]).expect("failed to create labeled tree");
+        let delivered_certification = certify_height(&state_manager, height(1));
+
+        let (_state, mixed_tree, cert) = state_manager
+            .read_certified_state(&labeled_tree)
+            .expect("failed to read certified state");
+        assert_eq!(cert, delivered_certification);
+
+        if CURRENT_CERTIFICATION_VERSION > V11 {
+            assert_eq!(
+                tree_payload(mixed_tree),
+                SubTree(flatmap! {
+                    label("subnet") => SubTree(
+                        flatmap! {
+                            label(subnet_test_id(42).get_ref()) => SubTree(
+                                flatmap!{
+                                    label("node") => SubTree(
+                                        flatmap! {
+                                            label(node_test_id(39).get_ref()) => SubTree(
+                                                flatmap!(label("public_key") => Leaf(vec![39u8; 44]))
+                                            ),
+                                        })
+                            })
+                        })
+                })
+            );
+        } else {
+            assert!(
+                mixed_tree.lookup(&path[..]).is_absent(),
+                "mixed_tree: {:#?}",
+                mixed_tree
+            );
+        }
+    })
+}
+
+#[test]
+fn certified_read_succeeds_for_empty_tree() {
+    use ic_crypto_tree_hash::MixedHashTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {});
+
+        certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+
+        assert!(
+            matches!(&mixed_tree, Pruned(_)),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+    })
+}
+
+#[test]
+fn certified_read_returns_absence_proof_for_non_existing_entries() {
     state_manager_test(|_metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
 
@@ -3361,8 +3639,56 @@ fn certified_read_returns_none_for_non_existing_entries() {
         });
 
         certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
 
-        assert_eq!(None, state_manager.read_certified_state(&path));
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(0).as_bytes()) => LabeledTree::Leaf(())
+                })
+        });
+
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(0).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+    })
+}
+
+#[test]
+fn certified_read_returns_absence_proof_for_non_existing_entries_in_empty_state() {
+    state_manager_test(|_metrics, state_manager| {
+        let (_, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(2).as_bytes()) => LabeledTree::Leaf(())
+                })
+        });
+
+        certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
     })
 }
 
@@ -3425,6 +3751,72 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
                                 label("status") => Leaf(b"processing".to_vec()),
                             })
 
+                    })
+            })
+        );
+    })
+}
+
+#[test]
+fn certified_read_can_produce_proof_of_absence() {
+    use LabeledTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, mut state) = state_manager.take_tip();
+        state.set_ingress_status(
+            message_test_id(1),
+            IngressStatus::Known {
+                receiver: canister_test_id(1).get(),
+                user_id: user_test_id(1),
+                time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
+            },
+            NumBytes::from(u64::MAX),
+        );
+        state.set_ingress_status(
+            message_test_id(3),
+            IngressStatus::Known {
+                receiver: canister_test_id(1).get(),
+                user_id: user_test_id(1),
+                time: mock_time(),
+                state: IngressState::Processing,
+            },
+            NumBytes::from(u64::MAX),
+        );
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(1)) => LabeledTree::Leaf(()),
+                    label(message_test_id(2)) => LabeledTree::Leaf(()),
+                })
+        });
+
+        certify_height(&state_manager, height(1));
+
+        let (_state, mixed_tree, _cert) = state_manager
+            .read_certified_state(&path)
+            .expect("failed to read certified state");
+
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+
+        assert_eq!(
+            tree_payload(mixed_tree),
+            SubTree(flatmap! {
+                label("request_status") =>
+                    SubTree(flatmap! {
+                        label(message_test_id(1)) =>
+                            SubTree(flatmap! {
+                                label("status") => Leaf(b"replied".to_vec()),
+                                label("reply") => Leaf(b"done".to_vec()),
+                            }),
                     })
             })
         );
@@ -3656,7 +4048,9 @@ fn remove_old_diverged_checkpoint() {
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
                     UtimensatFlags::NoFollowSymlink,
-                ) else { return };
+                ) else {
+                    return;
+                };
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
                 let (_, state) = state_manager.take_tip();
@@ -3738,7 +4132,9 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
                     UtimensatFlags::NoFollowSymlink,
-                ) else { return };
+                ) else {
+                    return;
+                };
 
                 panic!();
             }),
@@ -4220,6 +4616,75 @@ fn can_recover_ingress_history() {
         let (_height, state2) = state_manager.take_tip();
         state.metadata.prev_state_hash = state2.metadata.prev_state_hash.clone();
         assert_eq!(state2, state);
+    });
+}
+
+fn assert_directory_is_readonly(path: &Path) {
+    if path.is_dir() {
+        for entry in path.read_dir().unwrap() {
+            assert_directory_is_readonly(&entry.unwrap().path());
+        }
+    } else {
+        assert!(path.metadata().unwrap().permissions().readonly());
+    }
+}
+
+/// Check that all checkpoints in `layout` are readonly in the sense that all non-directories are marked readonly.
+fn assert_checkpoints_are_readonly(layout: &StateLayout) {
+    assert_directory_is_readonly(&layout.checkpoints())
+}
+
+#[test]
+fn checkpoints_are_readonly() {
+    state_manager_test(|_metrics, state_manager| {
+        // We flush the tip channel so that asychronous tip initialization cannot hide the issue
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Add a canister
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[1u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Modify the canister
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[2u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Modify the canister again
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[4u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
     });
 }
 

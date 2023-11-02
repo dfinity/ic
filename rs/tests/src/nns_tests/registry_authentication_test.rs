@@ -168,7 +168,7 @@ pub fn test(env: TestEnv) {
                 &canister,
                 "atomic_mutate",
                 encode_or_panic(&RegistryAtomicMutateRequest {
-                    mutations: vec![upsert("Proprietory Clouds", "Less Good")],
+                    mutations: vec![upsert("Proprietary Clouds", "Less Good")],
                     preconditions: vec![]
                 })
             )

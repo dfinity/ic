@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/constants",
     "//rs/crypto",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/cup_explorer",
@@ -69,8 +69,10 @@ DEPENDENCIES = [
     "//rs/rosetta-api/test_utils",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/rust_canisters/proxy_canister:lib",
     "//rs/rust_canisters/xnet_test",
@@ -95,6 +97,7 @@ DEPENDENCIES = [
     "@crate_index//:bincode",
     "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
+    "@crate_index//:chacha20poly1305",
     "@crate_index//:chrono",
     "@crate_index//:clap",
     "@crate_index//:crossbeam-channel",
@@ -137,7 +140,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
-    "@crate_index//:serde_millis",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
@@ -154,14 +156,16 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-recursion",
     "@crate_index//:async-trait",
+    "@crate_index//:indoc",
 ]
 
-GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev-fixed-version:version.txt"
+GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
-# TODO(IDX-2538): Delete completely when all tests will properly work with synthetic stable ic version.
 GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
 ]
+
+MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
 
 NNS_CANISTER_WASM_PROVIDERS = {
     "registry-canister": {
@@ -231,7 +235,7 @@ def canister_runtime_deps_impl(name, canister_wasm_providers, qualifying_caniste
     Args:
       name: base name to use for the rule providing the canister WASM.
       canister_wasm_providers: dict with (canister names as keys) and (values representing WASM-producing rules, tip-of-branch or mainnet).
-      qualifying_canisters: list of canisters to be qualified for the release, i.e., these shoud be built from the current branch.
+      qualifying_canisters: list of canisters to be qualified for the release, i.e., these should be built from the current branch.
     """
     for cname in qualifying_canisters:
         if cname not in canister_wasm_providers.keys():
@@ -323,7 +327,8 @@ GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
 ]
 
 API_BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/boundary-api-guestos/envs/dev:hash_and_upload_disk-img",
+    "//ic-os/boundary-api-guestos/envs/dev:disk-img.tar.zst.sha256",
+    "//ic-os/boundary-api-guestos/envs/dev:disk-img.tar.zst.cas-url",
     "//ic-os/boundary-api-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
@@ -352,7 +357,14 @@ CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests:http_uvm_config_image",
 ]
 
+CUSTOM_DOMAINS_RUNTIME_DEPS = [
+    "//rs/tests:custom_domains_uvm_config_image",
+    "@asset_canister//file",
+]
+
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
+
+STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync_test_canister"]
 
 def _symlink_dir(ctx):
     dirname = ctx.attr.name
@@ -369,6 +381,26 @@ def _symlink_dir(ctx):
 
 symlink_dir = rule(
     implementation = _symlink_dir,
+    attrs = {
+        "targets": attr.label_keyed_string_dict(allow_files = True),
+    },
+)
+
+def _symlink_dirs(ctx):
+    dirname = ctx.attr.name
+    lns = []
+    for target, childdirname in ctx.attr.targets.items():
+        for file in target[DefaultInfo].files.to_list():
+            ln = ctx.actions.declare_file(dirname + "/" + childdirname + "/" + file.basename)
+            ctx.actions.symlink(
+                output = ln,
+                target_file = file,
+            )
+            lns.append(ln)
+    return [DefaultInfo(files = depset(direct = lns))]
+
+symlink_dirs = rule(
+    implementation = _symlink_dirs,
     attrs = {
         "targets": attr.label_keyed_string_dict(allow_files = True),
     },

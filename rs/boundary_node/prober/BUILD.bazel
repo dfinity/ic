@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:axum",
-    "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:futures",
@@ -15,18 +14,16 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
     "@crate_index//:mockall",
-    "@crate_index//:opentelemetry",
-    "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_0_20_0_metrics",
+    "@crate_index//:opentelemetry_prometheus_0_13_0",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tower",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:wat",
-    "//rs/types/error_types",
 ]
 
 MACRO_DEPENDENCIES = [

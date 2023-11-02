@@ -191,7 +191,7 @@ fn random_subset(
 ) -> BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal> {
     assert!(include <= shares.len());
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let mut result = BTreeMap::new();
 
     let keys = shares.keys().collect::<Vec<_>>();
@@ -224,8 +224,8 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
     let threshold = nodes / 3;
     let number_of_dealings_corrupted = threshold;
 
-    let mut rng = reproducible_rng();
-    let random_seed = Seed::from_rng(&mut rng);
+    let rng = &mut reproducible_rng();
+    let random_seed = Seed::from_rng(rng);
 
     let setup = SignatureProtocolSetup::new(
         EccCurveType::K256,
@@ -284,8 +284,8 @@ fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
     let threshold = (nodes + 2) / 3;
     let number_of_dealings_corrupted = 0;
 
-    let mut rng = reproducible_rng();
-    let random_seed = Seed::from_rng(&mut rng);
+    let rng = &mut reproducible_rng();
+    let random_seed = Seed::from_rng(rng);
 
     let setup = SignatureProtocolSetup::new(
         EccCurveType::K256,

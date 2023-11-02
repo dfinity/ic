@@ -80,14 +80,11 @@ fn run_proptest(
                 &context,
             );
 
-            dbg!(payload_builder.metrics.unique_responses.get());
             assert!(payload_builder.metrics.unique_responses.get() != 0);
-
             assert!(payload.len() <= MAX_PAYLOAD_SIZE_BYTES);
 
             let validation_result =
                 payload_builder.validate_payload(Height::new(height), &payload, &pp, &context);
-            dbg!(&validation_result);
             assert!(validation_result.is_ok());
 
             past_payloads.push(payload);
@@ -146,7 +143,7 @@ fn prop_artifacts(
         })
 }
 
-/// Generate a resonse and metadata supporting that response too
+/// Generate a response and metadata supporting that response too
 fn prop_response_with_shares(
     max_timeout: u64,
     max_size: usize,

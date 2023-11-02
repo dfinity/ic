@@ -32,6 +32,9 @@ type ExportPackage = record {
 type InitArg = record {
     rootPrincipals: vec principal;
     idSeed: nat;
+    registrationExpirationTtl: opt nat64;
+    inProgressTtl: opt nat64;
+    managementTaskInterval: opt nat64;
 };
 
 type CreateRegistrationError = variant {
@@ -83,6 +86,17 @@ type RemoveRegistrationError = variant {
 type RemoveRegistrationResponse = variant {
     Ok;
     Err: RemoveRegistrationError;
+};
+
+type GetCertificateError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type GetCertificateResponse = variant {
+    Ok: EncryptedPair;
+    Err: GetRegistrationError;
 };
 
 type UploadCertificateError = variant {
@@ -195,6 +209,7 @@ service: (InitArg) -> {
     removeRegistration: (Id) -> (RemoveRegistrationResponse);
 
     // Certificates
+    getCertificate: (Id) -> (GetCertificateResponse) query;
     uploadCertificate: (Id, EncryptedPair) -> (UploadCertificateResponse);
     exportCertificates: () -> (ExportCertificatesResponse) query;
     exportCertificatesPaginated: (opt Id, nat64) -> (ExportCertificatesResponse) query;

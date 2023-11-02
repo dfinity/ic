@@ -1,4 +1,5 @@
 /// A tree containing both data and merkle proofs.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MixedHashTree {
     #[prost(oneof = "mixed_hash_tree::TreeEnum", tags = "1, 2, 3, 4, 5")]
@@ -6,6 +7,7 @@ pub struct MixedHashTree {
 }
 /// Nested message and enum types in `MixedHashTree`.
 pub mod mixed_hash_tree {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Fork {
         #[prost(message, optional, boxed, tag = "1")]
@@ -13,6 +15,7 @@ pub mod mixed_hash_tree {
         #[prost(message, optional, boxed, tag = "2")]
         pub right_tree: ::core::option::Option<::prost::alloc::boxed::Box<super::MixedHashTree>>,
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Labeled {
         #[prost(bytes = "vec", tag = "1")]
@@ -20,6 +23,7 @@ pub mod mixed_hash_tree {
         #[prost(message, optional, boxed, tag = "2")]
         pub subtree: ::core::option::Option<::prost::alloc::boxed::Box<super::MixedHashTree>>,
     }
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum TreeEnum {
         #[prost(message, tag = "1")]

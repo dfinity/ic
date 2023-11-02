@@ -3,7 +3,7 @@ use std::time::Instant;
 use anyhow::Error;
 use async_trait::async_trait;
 use opentelemetry::{
-    metrics::{Counter, Meter, ValueRecorder},
+    metrics::{Counter, Histogram, Meter},
     KeyValue,
 };
 use tracing::info;
@@ -13,7 +13,7 @@ use crate::{Entry, List, Reload, Run, Update};
 pub struct MetricParams {
     pub action: String,
     pub counter: Counter<u64>,
-    pub recorder: ValueRecorder<f64>,
+    pub recorder: Histogram<f64>,
 }
 
 impl MetricParams {
@@ -21,11 +21,11 @@ impl MetricParams {
         Self {
             action: action.to_string(),
             counter: meter
-                .u64_counter(format!("{namespace}.{action}.total"))
-                .with_description(format!("Counts occurences of {action} calls"))
+                .u64_counter(format!("{namespace}.{action}"))
+                .with_description(format!("Counts occurrences of {action} calls"))
                 .init(),
             recorder: meter
-                .f64_value_recorder(format!("{namespace}.{action}.duration_sec"))
+                .f64_histogram(format!("{namespace}.{action}.duration_sec"))
                 .with_description(format!("Records the duration of {action} calls in sec"))
                 .init(),
         }

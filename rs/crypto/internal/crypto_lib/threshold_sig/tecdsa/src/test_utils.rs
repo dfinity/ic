@@ -12,8 +12,8 @@ pub fn corrupt_dealing(
 ) -> ThresholdEcdsaResult<IDkgDealingInternal> {
     let curve_type = dealing.commitment.curve_type();
 
-    let mut rng = seed.into_rng();
-    let randomizer = EccScalar::random(curve_type, &mut rng);
+    let rng = &mut seed.into_rng();
+    let randomizer = EccScalar::random(curve_type, rng);
 
     let ciphertext = match &dealing.ciphertext {
         MEGaCiphertext::Single(c) => {

@@ -36,6 +36,7 @@ num-traits = {version = "0.2.15"}
 
 
 [dev-dependencies]
+hex = "0.4.2"
 ic-icrc1-ledger-sm-tests = { path = "../../icrc1/ledger/sm-tests" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

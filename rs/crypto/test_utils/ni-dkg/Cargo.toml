@@ -6,9 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
 ic-protobuf = { path = "../../../protobuf" }
@@ -18,6 +20,7 @@ ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
 rand = "0.8"
+rand_chacha = "0.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
 
 [dev-dependencies]

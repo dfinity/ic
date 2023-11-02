@@ -53,15 +53,7 @@ unsafe fn listener_from_systemd_socket(socket_fds: i32) -> tokio::net::UnixListe
 /// To ensure safety caller needs to ensure that the FD(3) exists and only consumed once.
 pub unsafe fn incoming_from_first_systemd_socket(
 ) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
-    const SOCKET_FD: i32 = 3; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
-    let uds = listener_from_systemd_socket(SOCKET_FD);
-    async_stream::stream! {
-        loop {
-            let item = uds.accept().map_ok(|(st, _)| UnixStream(st)).await;
-
-            yield item;
-        }
-    }
+    incoming_from_nth_systemd_socket(1)
 }
 
 /// incoming_from_second_systemd_socket() takes the second FD(4) passed by systemd. It does not check if
@@ -71,15 +63,7 @@ pub unsafe fn incoming_from_first_systemd_socket(
 ///  To ensure safety caller needs to ensure that the FD(4) exists and only consumed once.
 pub unsafe fn incoming_from_second_systemd_socket(
 ) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
-    const SOCKET_FD: i32 = 4; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
-    let uds = listener_from_systemd_socket(SOCKET_FD);
-    async_stream::stream! {
-        loop {
-            let item = uds.accept().map_ok(|(st, _)| UnixStream(st)).await;
-
-            yield item;
-        }
-    }
+    incoming_from_nth_systemd_socket(2)
 }
 
 /// # Safety

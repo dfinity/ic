@@ -27,7 +27,7 @@ rmp-serde = "0.14.3"
 integer-encoding = "=1.0.8"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.5"
 
 [build-dependencies]
 capnpc = "0.12"

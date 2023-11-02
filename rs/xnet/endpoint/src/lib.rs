@@ -12,13 +12,10 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_registry_client_helpers::node::NodeRegistry;
-use ic_types::{
-    registry::connection_endpoint::ConnectionEndpoint, xnet::StreamIndex, NodeId, PrincipalId,
-    SubnetId,
-};
+use ic_types::{xnet::StreamIndex, NodeId, PrincipalId, SubnetId};
 use prometheus::{Histogram, HistogramVec};
 use serde::Serialize;
-use std::convert::{Infallible, TryFrom};
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -599,7 +596,7 @@ impl XNetEndpointConfig {
     fn try_from(registry: Arc<dyn RegistryClient>, node_id: NodeId) -> Option<XNetEndpointConfig> {
         let version = registry.get_latest_version();
         let node_record = registry
-            .get_transport_info(node_id, version)
+            .get_node_record(node_id, version)
             .unwrap_or_else(|e| {
                 panic!(
                     "Could not retrieve registry record for node {}: {}",
@@ -614,10 +611,10 @@ impl XNetEndpointConfig {
             return None;
         }
 
-        let endpoint = ConnectionEndpoint::try_from(endpoint.clone())
-            .unwrap_or_else(|e| panic!("Node {} XNet endpoint [{:?}]: {}", node_id, endpoint, e));
-
-        let address = SocketAddr::from(&endpoint);
+        let address: SocketAddr = SocketAddr::new(
+            endpoint.ip_addr.parse().unwrap(),
+            u16::try_from(endpoint.port).unwrap(),
+        );
 
         Some(XNetEndpointConfig { address })
     }

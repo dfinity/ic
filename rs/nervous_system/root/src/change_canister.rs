@@ -1,7 +1,7 @@
 use crate::LOG_PREFIX;
-use candid::{CandidType, Deserialize, Encode};
+use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -264,7 +264,7 @@ pub async fn install_code(proposal: ChangeCanisterProposal) -> ic_cdk::api::call
     // the callee traps! Use the public cdk instead, which does not have this
     // issue.
     ic_cdk::api::call::call(
-        ic_cdk::export::Principal::try_from(IC_00.get().as_slice()).unwrap(),
+        Principal::try_from(IC_00.get().as_slice()).unwrap(),
         "install_code",
         (&install_code_args,),
     )

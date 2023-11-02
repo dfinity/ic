@@ -8,10 +8,10 @@ bincode = "1.2.1"
 candid = { workspace = true }
 erased-serde = "0.3.11"
 maplit = "1.0.2"
-prost = "0.11.0"
+prost = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-slog = {version = "2.5", features = ["nested-values"]}
+slog = { version = "2.5", features = ["nested-values"] }
 
 [dev-dependencies]
 hex = "0.4.2"

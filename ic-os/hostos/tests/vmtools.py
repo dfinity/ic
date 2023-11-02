@@ -386,7 +386,7 @@ class StaticNamePool(object):
         """
         Locks an available name.
 
-        Returns the next availabel name from the pool.
+        Returns the next available name from the pool.
         """
         if self.index < len(self.names):
             name = self.names[self.index]
@@ -501,7 +501,7 @@ class LockFileNamePool(object):
 
         Tries to get exclusive lock for specified name
         in pool. Returns descriptor of opened file if
-        successful. Retuns None if file is locked already.
+        successful. Returns None if file is locked already.
 
         Post-condition:
         - named file exists

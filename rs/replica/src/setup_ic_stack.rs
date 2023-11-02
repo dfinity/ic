@@ -11,9 +11,8 @@ use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
-use ic_icos_sev::Sev;
 use ic_interfaces::{
-    artifact_manager::JoinGuard, artifact_pool::UnvalidatedArtifact,
+    artifact_manager::JoinGuard, artifact_pool::UnvalidatedArtifactEvent,
     execution_environment::QueryHandler, time_source::SysTimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
@@ -28,11 +27,10 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::{setup_consensus_and_p2p, P2PStateSyncClient};
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
-use ic_types::{consensus::CatchUpPackage, messages::SignedIngress, NodeId, SubnetId};
+use ic_types::{artifact_kind::IngressArtifact, consensus::CatchUpPackage, NodeId, SubnetId};
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
-
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
     std::fs::create_dir_all(&config.artifact_pool.consensus_pool_path).unwrap_or_else(|err| {
@@ -48,9 +46,10 @@ fn create_consensus_pool_dir(config: &Config) {
 pub fn construct_ic_stack(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-    rt_handle: tokio::runtime::Handle,
-    rt_handle_http: tokio::runtime::Handle,
-    rt_handle_xnet: tokio::runtime::Handle,
+    rt_handle_main: &tokio::runtime::Handle,
+    rt_handle_p2p: &tokio::runtime::Handle,
+    rt_handle_http: &tokio::runtime::Handle,
+    rt_handle_xnet: &tokio::runtime::Handle,
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
@@ -64,7 +63,7 @@ pub fn construct_ic_stack(
     Arc<dyn QueryHandler<State = ReplicatedState>>,
     Vec<Box<dyn JoinGuard>>,
     // TODO: remove this return value since it is used only in tests
-    Sender<UnvalidatedArtifact<SignedIngress>>,
+    Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
     XNetEndpoint,
 )> {
     // Determine the correct catch-up package.
@@ -156,6 +155,7 @@ pub fn construct_ic_stack(
         subnet_id,
         subnet_config.cycles_account_manager_config,
     ));
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
         metrics_registry,
@@ -214,7 +214,7 @@ pub fn construct_ic_stack(
         Arc::clone(&certified_stream_store) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        rt_handle_xnet,
+        rt_handle_xnet.clone(),
         node_id,
         subnet_id,
         metrics_registry,
@@ -227,7 +227,7 @@ pub fn construct_ic_stack(
     } = setup_bitcoin_adapter_clients(
         log.clone(),
         metrics_registry,
-        rt_handle.clone(),
+        rt_handle_main.clone(),
         config.adapters_config.clone(),
     );
     let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
@@ -241,7 +241,7 @@ pub fn construct_ic_stack(
     ));
     // ---------- HTTPS OUTCALLS DEPS FOLLOW ----------
     let canister_http_adapter_client = setup_canister_http_client(
-        rt_handle.clone(),
+        rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
         execution_services.anonymous_query_handler,
@@ -250,14 +250,13 @@ pub fn construct_ic_stack(
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
-    let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
     let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
         LocalStoreImpl::new(config.registry_client.local_store.clone()),
     );
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
+        log,
         metrics_registry,
-        log.clone(),
-        rt_handle,
+        rt_handle_p2p,
         artifact_pool_config,
         config.transport,
         config.malicious_behaviour.malicious_flags.clone(),
@@ -265,7 +264,7 @@ pub fn construct_ic_stack(
         subnet_id,
         None,
         Arc::clone(&crypto) as Arc<_>,
-        sev_handshake,
+        Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         consensus_pool,
@@ -273,6 +272,7 @@ pub fn construct_ic_stack(
         P2PStateSyncClient::Client(state_sync),
         xnet_payload_builder,
         self_validating_payload_builder,
+        execution_services.query_stats_payload_builder,
         message_router,
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
@@ -288,7 +288,7 @@ pub fn construct_ic_stack(
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
-        rt_handle_http,
+        rt_handle_http.clone(),
         metrics_registry,
         config.http_handler.clone(),
         execution_services.ingress_filter,
@@ -297,6 +297,7 @@ pub fn construct_ic_stack(
         ingress_tx.clone(),
         time_source,
         Arc::clone(&state_manager) as Arc<_>,
+        Arc::clone(&crypto) as Arc<_>,
         registry,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
@@ -307,7 +308,7 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     Ok((

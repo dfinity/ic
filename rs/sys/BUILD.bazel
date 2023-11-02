@@ -8,7 +8,7 @@ rust_library(
     crate_name = "ic_sys",
     version = "0.8.0",
     deps = [
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/phantom_newtype",
         "@crate_index//:hex",
         "@crate_index//:lazy_static",

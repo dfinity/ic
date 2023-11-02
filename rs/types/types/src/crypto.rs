@@ -16,13 +16,15 @@ pub use sign::{Signable, SignableMock};
 pub mod error;
 pub mod threshold_sig;
 
-use crate::crypto::threshold_sig::ni_dkg::DkgId;
+use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use crate::registry::RegistryClientError;
 use crate::{CountBytes, NodeId, RegistryVersion, SubnetId};
 use core::fmt::Formatter;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use phantom_newtype::Id;
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -122,6 +124,7 @@ impl FromStr for KeyPurpose {
     Serialize,
 )]
 #[cfg_attr(all(test, not(target_arch = "wasm32")), derive(Arbitrary))]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 #[allow(non_camel_case_types)]
 #[strum(serialize_all = "snake_case")]
 pub enum AlgorithmId {
@@ -144,9 +147,9 @@ pub enum AlgorithmId {
     MegaSecp256k1 = 16,
 }
 
-impl AlgorithmId {
-    pub fn as_u8(&self) -> u8 {
-        u8::try_from(*self as isize).expect("could not convert AlgorithmId to u8")
+impl From<AlgorithmId> for u8 {
+    fn from(value: AlgorithmId) -> Self {
+        u8::try_from(value as isize).expect("could not convert AlgorithmId to u8")
     }
 }
 
@@ -307,7 +310,7 @@ pub enum CryptoError {
     RegistryClient(RegistryClientError),
     /// Threshold signature data store did not contain the expected data (public
     /// coefficients and node indices)
-    ThresholdSigDataNotFound { dkg_id: DkgId },
+    ThresholdSigDataNotFound { dkg_id: NiDkgId },
     /// DKG transcript for given subnet ID not found at given registry version.
     DkgTranscriptNotFound {
         subnet_id: SubnetId,

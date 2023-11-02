@@ -11,8 +11,8 @@ use ic_ledger_core::{
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{
-    AccountIdentifier, ApprovalKey, Block, LedgerBalances, Memo, Operation, PaymentError,
-    Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, ApprovalKey, Block, FeatureFlags, LedgerBalances, Memo, Operation,
+    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -30,11 +30,11 @@ mod tests;
 
 lazy_static! {
     pub static ref LEDGER: RwLock<Ledger> = RwLock::new(Ledger::default());
-    // Maximum inter-canister message size in bytes
+    // Maximum inter-canister message size in bytes.
     pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(1024 * 1024);
 }
 
-// Wasm bytecode of an Archive Node
+// Wasm bytecode of an Archive Node.
 pub const ARCHIVE_NODE_BYTECODE: &[u8] =
     std::include_bytes!(std::env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
 
@@ -55,7 +55,7 @@ fn default_transfer_fee() -> Tokens {
     DEFAULT_TRANSFER_FEE
 }
 
-//this is only for deserialization from previous version of the ledger
+// This is only for deserialization from previous version of the ledger.
 fn unknown_token() -> String {
     "???".to_string()
 }
@@ -66,14 +66,14 @@ pub struct Ledger {
     #[serde(default)]
     pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier, Tokens>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
-    // A cap on the maximum number of accounts
+    // A cap on the maximum number of accounts.
     pub maximum_number_of_accounts: usize,
     // When maximum number of accounts is exceeded, a specified number of
-    // accounts with lowest balances are removed
+    // accounts with lowest balances are removed.
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
     pub icrc1_minting_account: Option<Account>,
-    // This is a set of BlockIndexs that have been notified
+    // This is a set of BlockIndices that have been notified.
     #[serde(default)]
     pub blocks_notified: IntMap<()>,
     /// How long transactions are remembered to detect duplicates.
@@ -86,13 +86,13 @@ pub struct Ledger {
     /// index / block timestamp. (Block timestamps are monotonically
     /// non-decreasing, so this is the same.)
     transactions_by_height: VecDeque<TransactionInfo<Transaction>>,
-    /// Used to prevent non-whitelisted canisters from sending tokens
+    /// Used to prevent non-whitelisted canisters from sending tokens.
     send_whitelist: HashSet<CanisterId>,
     /// Maximum number of transactions which ledger will accept
     /// within the transaction_window.
     #[serde(default = "default_max_transactions_in_window")]
     max_transactions_in_window: usize,
-    /// The fee to pay to perform a transfer
+    /// The fee to pay to perform a transfer.
     #[serde(default = "default_transfer_fee")]
     pub transfer_fee: Tokens,
 
@@ -102,12 +102,15 @@ pub struct Ledger {
     /// Token name
     #[serde(default = "unknown_token")]
     pub token_name: String,
+
+    #[serde(default)]
+    pub feature_flags: FeatureFlags,
 }
 
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
     type Approvals = AllowanceTable<ApprovalKey, Self::AccountId, Tokens>;
-    type BalancesStore = HashMap<AccountIdentifier, Tokens>;
+    type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
@@ -219,6 +222,7 @@ impl Default for Ledger {
             transfer_fee: DEFAULT_TRANSFER_FEE,
             token_symbol: unknown_token(),
             token_name: unknown_token(),
+            feature_flags: FeatureFlags::default(),
         }
     }
 }
@@ -233,7 +237,7 @@ impl Ledger {
     /// See Ledger::max_transactions_in_window
     const DEFAULT_MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
 
-    /// This creates a block and adds it to the ledger
+    /// This creates a block and adds it to the ledger.
     pub fn add_payment(
         &mut self,
         memo: Memo,
@@ -256,7 +260,6 @@ impl Ledger {
             Operation::Mint { .. } => Tokens::from_e8s(0),
             Operation::Burn { .. } => Tokens::from_e8s(0),
             Operation::Approve { .. } => self.transfer_fee,
-            Operation::TransferFrom { .. } => self.transfer_fee,
         };
         core_ledger::apply_transaction(
             self,
@@ -302,7 +305,7 @@ impl Ledger {
     }
 
     /// This adds a pre created block to the ledger. This should only be used
-    /// during canister migration or upgrade
+    /// during canister migration or upgrade.
     pub fn add_block(&mut self, block: Block) -> Result<BlockIndex, String> {
         icp_ledger::apply_operation(self, &block.transaction.operation, block.timestamp)
             .map_err(|e| format!("failed to execute transfer {:?}: {:?}", block, e))?;
@@ -321,6 +324,9 @@ impl Ledger {
         transfer_fee: Option<Tokens>,
         token_symbol: Option<String>,
         token_name: Option<String>,
+        feature_flags: Option<FeatureFlags>,
+        maximum_number_of_accounts: Option<usize>,
+        accounts_overflow_trim_quantity: Option<usize>,
     ) {
         self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
@@ -344,6 +350,15 @@ impl Ledger {
         self.send_whitelist = send_whitelist;
         if let Some(transfer_fee) = transfer_fee {
             self.transfer_fee = transfer_fee;
+        }
+        if let Some(feature_flags) = feature_flags {
+            self.feature_flags = feature_flags;
+        }
+        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
+            self.maximum_number_of_accounts = maximum_number_of_accounts;
+        }
+        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
+            self.accounts_overflow_trim_quantity = accounts_overflow_trim_quantity;
         }
     }
 
@@ -395,8 +410,8 @@ impl Ledger {
         !principal_id.is_anonymous()
     }
 
-    /// Check if it's allowed to notify this canister
-    /// Currently we reuse whitelist for that
+    /// Check if it's allowed to notify this canister.
+    /// Currently we reuse whitelist for that.
     pub fn can_be_notified(&self, canister_id: &CanisterId) -> bool {
         LEDGER.read().unwrap().send_whitelist.contains(canister_id)
     }
@@ -426,6 +441,9 @@ impl Ledger {
                 );
             }
             self.icrc1_minting_account = Some(icrc1_minting_account);
+        }
+        if let Some(feature_flags) = args.feature_flags {
+            self.feature_flags = feature_flags;
         }
     }
 }

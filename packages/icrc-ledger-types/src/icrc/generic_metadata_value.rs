@@ -40,6 +40,12 @@ impl From<u128> for MetadataValue {
     }
 }
 
+impl From<Nat> for MetadataValue {
+    fn from(n: Nat) -> Self {
+        MetadataValue::Nat(n)
+    }
+}
+
 impl From<String> for MetadataValue {
     fn from(s: String) -> Self {
         MetadataValue::Text(s)

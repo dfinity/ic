@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 /// A Random Oracle (based on XMD)
 ///
-/// Consumes inputs of various types and constructs an unambigious
+/// Consumes inputs of various types and constructs an unambiguous
 /// input which is provided to a random oracle, producing an output of
 /// the desired type: an elliptic curve point, an elliptic curve
 /// scalar, or a bytestring.

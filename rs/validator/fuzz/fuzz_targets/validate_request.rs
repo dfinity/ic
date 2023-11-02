@@ -12,15 +12,8 @@ use ic_types::time::GENESIS;
 use ic_validator_ingress_message::IngressMessageVerifier;
 use ic_validator_ingress_message::RequestValidationError;
 use ic_validator_ingress_message::{HttpRequestVerifier, TimeProvider};
-use lazy_static::lazy_static;
 use libfuzzer_sys::{fuzz_target, Corpus};
 use std::ops::RangeInclusive;
-
-lazy_static! {
-    static ref VERIFIER: IngressMessageVerifier = IngressMessageVerifier::builder()
-        .with_time_provider(TimeProvider::Constant(GENESIS))
-        .build();
-}
 
 fuzz_target!(|content: AnonymousContent| -> Corpus {
     let (call_content, query_content, read_content) = (
@@ -45,9 +38,12 @@ fuzz_target!(|content: AnonymousContent| -> Corpus {
             Corpus::Reject
         }
         (Ok(call_request), Ok(query_request), Ok(read_request)) => {
-            let validation_call_request = VERIFIER.validate_request(&call_request);
-            let validation_query_request = VERIFIER.validate_request(&query_request);
-            let validation_read_request = VERIFIER.validate_request(&read_request);
+            let verifier = IngressMessageVerifier::builder()
+                .with_time_provider(TimeProvider::Constant(GENESIS))
+                .build();
+            let validation_call_request = verifier.validate_request(&call_request);
+            let validation_query_request = verifier.validate_request(&query_request);
+            let validation_read_request = verifier.validate_request(&read_request);
             assert_eq_ignoring_timestamps_in_error_messages(
                 &validation_call_request,
                 &validation_query_request,

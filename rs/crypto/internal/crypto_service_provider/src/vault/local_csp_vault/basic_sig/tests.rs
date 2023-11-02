@@ -22,7 +22,8 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
 use mockall::Sequence;
-use rand::{thread_rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use rand_chacha::ChaChaRng;
 use std::io;
 use std::sync::Arc;
@@ -174,7 +175,7 @@ fn should_correctly_sign_compared_to_testvec() {
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.
 
-    let mut rng = thread_rng();
+    let rng = &mut reproducible_rng();
 
     let key_id = rng.gen::<[u8; 32]>();
 
@@ -205,9 +206,9 @@ fn should_correctly_sign_compared_to_testvec() {
 #[test]
 fn should_sign_verifiably_with_generated_node_signing_key() {
     let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let msg_len_in_bytes = rng.gen_range(0..1024);
-    let message = random_message(&mut rng, msg_len_in_bytes);
+    let message = random_message(rng, msg_len_in_bytes);
 
     generate_key_pair_and_sign_and_verify_message(csp_vault, &message);
 }
@@ -239,9 +240,11 @@ fn should_fail_to_sign_with_unsupported_algorithm_id() {
 
 #[test]
 fn should_fail_to_sign_with_non_existent_key() {
-    let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
-    let mut rng = thread_rng();
-    let (_, pk_bytes) = ed25519::keypair_from_rng(&mut rng);
+    let rng = &mut reproducible_rng();
+    let csp_vault = LocalCspVault::builder_for_test()
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .build_into_arc();
+    let (_, pk_bytes) = ed25519::keypair_from_rng(rng);
 
     let key_id = KeyId::try_from(&CspPublicKey::Ed25519(pk_bytes)).unwrap();
     let msg = "some message";
@@ -251,7 +254,10 @@ fn should_fail_to_sign_with_non_existent_key() {
 
 #[test]
 fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
-    let csp_vault = LocalCspVault::builder_for_test().build();
+    let rng = &mut reproducible_rng();
+    let csp_vault = LocalCspVault::builder_for_test()
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .build();
 
     let threshold = NumberOfNodes::from(1);
     let (_pub_coeffs, key_ids) = csp_vault
@@ -262,8 +268,6 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         )
         .expect("failed to generate threshold sig keys");
     let key_id = key_ids[0];
-
-    let mut rng = thread_rng();
     let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 

@@ -1,7 +1,7 @@
 use http::{Method, Response, Uri};
 use hyper::{body::HttpBody as _, client::Client, client::HttpConnector, Body};
 use hyper_tls::HttpsConnector;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
 use std::error::Error;
 use std::fmt;
@@ -22,14 +22,19 @@ pub struct FileDownloader {
     /// This is a timeout that is applied to the downloading each chunk that is
     /// yielded, not to the entire downloading of the file.
     timeout: Duration,
+    allow_redirects: bool,
 }
 
 impl FileDownloader {
     pub fn new(logger: Option<ReplicaLogger>) -> Self {
-        Self::new_with_timeout(logger, Duration::from_secs(15))
+        Self::new_with_timeout(logger, Duration::from_secs(15), false)
     }
 
-    pub fn new_with_timeout(logger: Option<ReplicaLogger>, timeout: Duration) -> Self {
+    pub fn new_with_timeout(
+        logger: Option<ReplicaLogger>,
+        timeout: Duration,
+        allow_redirects: bool,
+    ) -> Self {
         let https = HttpsConnector::new();
         let http_client = Client::builder().build::<_, hyper::Body>(https);
 
@@ -37,7 +42,13 @@ impl FileDownloader {
             http_client,
             logger,
             timeout,
+            allow_redirects,
         }
+    }
+
+    pub fn follow_redirects(mut self) -> FileDownloader {
+        self.allow_redirects = true;
+        self
     }
 
     /// Download a .tar.gz file from `url`, verify its hash if given, and
@@ -136,14 +147,47 @@ impl FileDownloader {
             .map_err(FileDownloadError::from)?;
 
         if response.status().is_success() {
-            Ok(response)
-        } else {
-            Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
-                Method::GET,
-                url,
-                response.status(),
-            )))
+            return Ok(response);
         }
+
+        if response.status().is_redirection() && self.allow_redirects {
+            match response.headers().get(http::header::LOCATION) {
+                Some(url) => {
+                    let url = url.to_str().unwrap();
+                    let url: Uri = url
+                        .parse::<Uri>()
+                        .map_err(|e| FileDownloadError::bad_url(url, e))?;
+                    let response =
+                        tokio::time::timeout(self.timeout, self.http_client.get(url.clone()))
+                            .await
+                            .map_err(|_| FileDownloadError::TimeoutError)?
+                            .map_err(FileDownloadError::from)?;
+                    if response.status().is_success() {
+                        return Ok(response);
+                    }
+                    return Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
+                        Method::GET,
+                        url,
+                        response.status(),
+                    )));
+                }
+                None => {
+                    return Err(FileDownloadError::HttpError(
+                        HttpError::RedirectMissingHeader(
+                            Method::GET,
+                            http::header::LOCATION,
+                            response.status(),
+                        ),
+                    ))
+                }
+            }
+        }
+
+        Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
+            Method::GET,
+            url,
+            response.status(),
+        )))
     }
 
     /// Stream the bytes of a given HTTP response body into the given file
@@ -316,6 +360,11 @@ impl fmt::Display for FileDownloadError {
                 "Received non-success response from endpoint: method: {:?}, uri: {:?}, status_code: {:?}",
                 method.as_str(), uri, status_code
             ),
+            FileDownloadError::HttpError(HttpError::RedirectMissingHeader(method, header, status_code)) => write!(
+                f,
+                "Received a redirect response from endpoint but a header is missing: method: {:?}, header: {:?}, status_code: {:?}",
+                method.as_str(), header, status_code
+            ),
             FileDownloadError::FileHashMismatchError { computed_hash, expected_hash, file_path } =>
                 write!(
                     f,
@@ -350,4 +399,7 @@ pub enum HttpError {
 
     /// A non-success HTTP response was received from the given URI
     NonSuccessResponse(http::Method, http::Uri, http::StatusCode),
+
+    /// A redirect response without a required header
+    RedirectMissingHeader(http::Method, http::HeaderName, http::StatusCode),
 }

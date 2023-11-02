@@ -224,20 +224,35 @@ pub fn install_nns_with_customizations_and_check_progress(
     customizations: NnsCustomizations,
 ) {
     let logger = topology.test_env().logger();
-    // Perfrom IC checks prior to canister installation.
-    // 1. Check that all subnet nodes are healthy.
-    topology.subnets().for_each(|subnet| {
-        subnet.nodes().for_each(|node| {
-            node.await_status_is_healthy()
-                .expect("Node's status endpoint didn't report healthy")
-        })
-    });
+    // Perform IC checks prior to canister installation.
+    info!(logger, "Checking if all subnet nodes are healthy");
+    for subnet in topology.subnets() {
+        if !subnet.raw_subnet_record().is_halted {
+            info!(
+                logger,
+                "Checking if all nodes in subnet {} are healthy", subnet.subnet_id
+            );
+            for node in subnet.nodes() {
+                node.await_status_is_healthy()
+                    .expect("Node's status endpoint didn't report healthy");
+            }
+        } else {
+            info!(
+                logger,
+                "Subnet {} is halted. Not checking if the nodes are healthy", subnet.subnet_id
+            );
+        }
+    }
 
-    // 2. Check that all unassigned nodes (if any) are healthy.
-    topology.unassigned_nodes().for_each(|node| {
+    info!(
+        logger,
+        "Checking if all unassigned nodes (if any) are healthy"
+    );
+    for node in topology.unassigned_nodes() {
         node.await_can_login_as_admin_via_ssh()
             .expect("Timeout while waiting for all unassigned nodes to be healthy");
-    });
+    }
+
     info!(logger, "IC is healthy and ready.");
 
     let nns_node = topology.root_subnet().nodes().next().unwrap();
@@ -248,20 +263,33 @@ pub fn install_nns_with_customizations_and_check_progress(
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 
-    topology.subnets().for_each(|subnet| {
-        if subnet.subnet_id != topology.root_subnet_id() {
-            subnet.nodes().for_each(|node| {
-                // make sure the node is participating in a subnet
+    for subnet in topology
+        .subnets()
+        .filter(|subnet| subnet.subnet_id != topology.root_subnet_id())
+    {
+        if !subnet.raw_subnet_record().is_halted {
+            info!(
+                logger,
+                "Checking if all the nodes are participating in the subnet {}", subnet.subnet_id
+            );
+            for node in subnet.nodes() {
                 cert_state_makes_progress_with_retries(
                     &node.get_public_url(),
                     node.effective_canister_id(),
                     &logger,
-                    secs(600),
-                    secs(10),
+                    /*timeout=*/ secs(600),
+                    /*backoff=*/ secs(2),
                 );
-            });
+            }
+        } else {
+            info!(
+                logger,
+                "Subnet {} is halted. \
+                Not checking if all the nodes are participating in the subnet",
+                subnet.subnet_id,
+            );
         }
-    });
+    }
 }
 
 pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {

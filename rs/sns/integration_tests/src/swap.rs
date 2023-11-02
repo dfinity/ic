@@ -82,7 +82,7 @@ use pretty_assertions::assert_eq;
 use proptest::prelude::*;
 use rand::{thread_rng, Rng, SeedableRng};
 use std::{
-    collections::{hash_map, HashMap, HashSet},
+    collections::{btree_map, HashMap, HashSet},
     time::{Duration, SystemTime},
 };
 const ONE_TRILLION: u128 = 1_000_000_000_000;
@@ -174,7 +174,7 @@ fn generate_community_fund_neurons(neuron_ids: &[u64]) -> Vec<nns_governance_pb:
 ///
 /// TEST_USER2 has 100 ICP that they can use to buy into the swap, as well as
 /// any principal IDs listed in `direct_participant_principal_ids`.
-fn begin_swap(
+fn begin_swap_legacy(
     state_machine: &mut StateMachine,
     direct_participant_principal_ids: &[ic_base_types::PrincipalId],
     additional_nns_neurons: &[nns_governance_pb::Neuron],
@@ -242,10 +242,10 @@ fn begin_swap(
             let neuron_id = neuron.id.as_ref().unwrap().id;
             let entry = builder.governance.proto.neurons.entry(neuron_id);
             match entry {
-                hash_map::Entry::Occupied(_) => {
+                btree_map::Entry::Occupied(_) => {
                     panic!("Neuron ID {} is not unique.", neuron_id);
                 }
-                hash_map::Entry::Vacant(entry) => {
+                btree_map::Entry::Vacant(entry) => {
                     entry.insert(neuron.clone());
                 }
             }
@@ -302,7 +302,8 @@ fn begin_swap(
     let sns_token_e8s = fund_raising_amount_icp_e8s * neuron_basket_count;
 
     // Create, configure, and init SNS canisters.
-    let mut sns_init_payload: SnsInitPayload = SnsInitPayload::with_valid_values_for_testing();
+    let mut sns_init_payload: SnsInitPayload =
+        SnsInitPayload::with_valid_legacy_values_for_testing();
     sns_init_payload.fallback_controller_principal_ids = vec![TEST_USER1_PRINCIPAL.to_string()];
     let fractional_developer_voting_power = FractionalDeveloperVotingPower {
         swap_distribution: Some(SwapDistribution {
@@ -627,8 +628,8 @@ fn stuff_ballot_box(
 }
 
 #[test]
-fn swap_lifecycle_happy_one_neuron() {
-    assert_successful_swap_finalizes_correctly(
+fn swap_lifecycle_happy_one_neuron_legacy() {
+    assert_successful_swap_finalizes_correctly_legacy(
         &generate_principal_ids(1),         // direct_participant_principal_ids
         &[],                                // additional_nns_neurons
         ExplosiveTokens::from_e8s(30 * E8), // planned_community_fund_participation_amount
@@ -638,8 +639,8 @@ fn swap_lifecycle_happy_one_neuron() {
 }
 
 #[test]
-fn swap_lifecycle_happy_two_neurons() {
-    assert_successful_swap_finalizes_correctly(
+fn swap_lifecycle_happy_two_neurons_legacy() {
+    assert_successful_swap_finalizes_correctly_legacy(
         &generate_principal_ids(2),         // direct_participant_principal_ids
         &[],                                // additional_nns_neurons
         ExplosiveTokens::from_e8s(30 * E8), // planned_community_fund_participation_amount
@@ -649,8 +650,8 @@ fn swap_lifecycle_happy_two_neurons() {
 }
 
 #[test]
-fn swap_lifecycle_happy_more_neurons() {
-    assert_successful_swap_finalizes_correctly(
+fn swap_lifecycle_happy_more_neurons_legacy() {
+    assert_successful_swap_finalizes_correctly_legacy(
         &generate_principal_ids(101),       // direct_participant_principal_ids
         &[],                                // additional_nns_neurons
         ExplosiveTokens::from_e8s(10 * E8), // planned_community_fund_participation_amount
@@ -724,7 +725,7 @@ fn swap_due_from_now_timestamp_seconds(state_machine: &StateMachine) -> u64 {
 // Swap should succeed when there are many large Community Fund neurons (i.e. CF
 // neurons with a large amount of maturity), and few small ones.
 #[test]
-fn many_large_community_fund_neurons_and_some_small_ones() {
+fn many_large_community_fund_neurons_and_some_small_ones_legacy() {
     let maturities_e8s = [
         // Large neurons.
         100_000 * E8,
@@ -763,7 +764,7 @@ fn many_large_community_fund_neurons_and_some_small_ones() {
     let planned_community_fund_participation_amount =
         ExplosiveTokens::from_e8s((100..121_u64).sum::<u64>() * E8 / 2);
     let max_community_fund_relative_error = 0.025;
-    assert_successful_swap_finalizes_correctly(
+    assert_successful_swap_finalizes_correctly_legacy(
         &direct_participant_principal_ids,
         &additional_nns_neurons,
         planned_community_fund_participation_amount,
@@ -815,7 +816,7 @@ fn many_small_community_fund_neurons_and_some_large_ones() {
     let planned_community_fund_participation_amount =
         ExplosiveTokens::from_e8s((100..103_u64).sum::<u64>() * E8 / 2);
     let max_community_fund_relative_error = 0.10;
-    assert_successful_swap_finalizes_correctly(
+    assert_successful_swap_finalizes_correctly_legacy(
         &direct_participant_principal_ids,
         &additional_nns_neurons,
         planned_community_fund_participation_amount,
@@ -853,7 +854,7 @@ fn same_principal_can_participate_via_community_fund_and_directly() {
     direct_participant_principal_ids.push(double_participant_principal_id);
     let additional_nns_neurons = [double_participant_neuron];
 
-    assert_successful_swap_finalizes_correctly(
+    assert_successful_swap_finalizes_correctly_legacy(
         &direct_participant_principal_ids,
         &additional_nns_neurons,
         ExplosiveTokens::from_e8s(5 * E8), // planned_community_fund_participation_amount
@@ -1132,7 +1133,7 @@ fn assert_community_fund_can_change_while_proposal_is_being_voted_on_with_specif
     // TODO: Figure out how to make asserts more transparent, but also somehow
     // balance that with the desire to avoid massive amounts of copy n' paste
     // code :/
-    assert_successful_swap_finalizes_correctly(
+    assert_successful_swap_finalizes_correctly_legacy(
         &generate_principal_ids(5), // Some direct participants
         &additional_nns_neurons,
         planned_community_fund_participation_amount,
@@ -1163,7 +1164,7 @@ fn assert_community_fund_can_change_while_proposal_is_being_voted_on_with_specif
 }
 
 #[test]
-fn stake_maturity_does_not_interfere_with_community_fund() {
+fn stake_maturity_does_not_interfere_with_community_fund_legacy() {
     let maturity_staking_principal_id = PrincipalId::new_user_test_id(807614);
 
     // Craft a CF neuron for the maturity staking principal ID.
@@ -1189,7 +1190,7 @@ fn stake_maturity_does_not_interfere_with_community_fund() {
     // standard limit, this test would fail.
     let max_community_fund_relative_error = 0.06;
 
-    assert_successful_swap_finalizes_correctly(
+    assert_successful_swap_finalizes_correctly_legacy(
         &generate_principal_ids(5),        // direct participants
         &[maturity_staking_neuron],        // additional_nns_neurons
         ExplosiveTokens::from_e8s(5 * E8), // planned_community_fund_participation_amount
@@ -1236,7 +1237,7 @@ fn do_nothing_special_before_proposal_is_adopted(_state_machine: &mut StateMachi
 }
 
 #[test]
-fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to_normal_mode_after_sale(
+fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to_normal_mode_after_sale_legacy(
 ) {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachineBuilder::new().with_current_time().build();
@@ -1245,7 +1246,7 @@ fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(70 * E8);
     let neuron_basket_count = 3;
 
-    let sns_canister_ids = begin_swap(
+    let sns_canister_ids = begin_swap_legacy(
         &mut state_machine,
         &direct_participant_principal_ids,
         &[], // additional_nns_neurons
@@ -1493,7 +1494,7 @@ fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to
     }
 }
 
-fn assert_successful_swap_finalizes_correctly(
+fn assert_successful_swap_finalizes_correctly_legacy(
     direct_participant_principal_ids: &[ic_base_types::PrincipalId],
     additional_nns_neurons: &[nns_governance_pb::Neuron],
     planned_community_fund_participation_amount: ExplosiveTokens,
@@ -1523,7 +1524,7 @@ fn assert_successful_swap_finalizes_correctly(
         _fractional_developer_voting_power,
         _dapp_canister_id,
         sns_proposal_id,
-    ) = begin_swap(
+    ) = begin_swap_legacy(
         &mut state_machine,
         direct_participant_principal_ids,
         additional_nns_neurons,
@@ -2160,7 +2161,7 @@ fn assert_successful_swap_finalizes_correctly(
         }
     }
 
-    // Analogous to the previous loop, insepct the source_nns_neuron_id field,
+    // Analogous to the previous loop, inspect the source_nns_neuron_id field,
     // but this time, in non-Community Fund neurons.
     for principal_id in direct_participant_principal_ids {
         let mut sns_neurons = sns_governance_list_neurons(
@@ -2301,7 +2302,7 @@ fn swap_lifecycle_sad() {
         fractional_developer_voting_power,
         dapp_canister_id,
         _sns_proposal_id,
-    ) = begin_swap(
+    ) = begin_swap_legacy(
         &mut state_machine,
         &[], // direct_participant_principal_ids
         &[], // additional_nns_neurons
@@ -2629,7 +2630,7 @@ fn swap_load_test() {
             instructions_consumed_swapping,
             instructions_consumed_finalization,
             time_to_finalize_swap,
-        } = assert_successful_swap_finalizes_correctly(
+        } = assert_successful_swap_finalizes_correctly_legacy(
             &direct_participant_principal_ids,
             &additional_nns_neurons,
             ExplosiveTokens::from_e8s(20 * E8 * additional_nns_neurons.len() as u64),
@@ -2681,6 +2682,7 @@ fn test_upgrade() {
         nns_proposal_id: None,                       // TODO[NNS1-2339]
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
+        neurons_fund_participation_constraints: None,
     })
     .unwrap();
     let canister_id = state_machine
@@ -2709,14 +2711,14 @@ fn test_upgrade() {
 }
 
 #[test]
-fn test_deletion_of_sale_ticket() {
+fn test_deletion_of_sale_ticket_legacy() {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(70 * E8);
     let neuron_basket_count = 3;
-    let sns_canister_ids = begin_swap(
+    let sns_canister_ids = begin_swap_legacy(
         &mut state_machine,
         &direct_participant_principal_ids,
         &[], // additional_nns_neurons
@@ -2781,7 +2783,7 @@ fn test_deletion_of_sale_ticket() {
         .get_e8s()
     );
 
-    //Call refresh buyer tokens. There exists a valid ticket and the refresh call is expected to be successfull --> the ticket should no longer exist afterwards
+    //Call refresh buyer tokens. There exists a valid ticket and the refresh call is expected to be successful --> the ticket should no longer exist afterwards
     let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
@@ -2876,7 +2878,7 @@ fn test_deletion_of_sale_ticket() {
     )
     .is_ok());
 
-    // Refresh tokens so ticket is deleted: Call is successfull and the existing ticket is deleted.
+    // Refresh tokens so ticket is deleted: Call is successful and the existing ticket is deleted.
     let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
@@ -2939,14 +2941,14 @@ fn test_deletion_of_sale_ticket() {
 }
 
 #[test]
-fn test_get_sale_parameters() {
+fn test_get_sale_parameters_legacy() {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
     let neuron_basket_count = 3;
-    let sns_canister_ids = begin_swap(
+    let sns_canister_ids = begin_swap_legacy(
         &mut state_machine,
         &direct_participant_principal_ids,
         &[], // additional_nns_neurons
@@ -2966,14 +2968,14 @@ fn test_get_sale_parameters() {
 }
 
 #[test]
-fn test_list_community_fund_participants() {
+fn test_list_community_fund_participants_legacy() {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
     let neuron_basket_count = 3;
-    let sns_canister_ids = begin_swap(
+    let sns_canister_ids = begin_swap_legacy(
         &mut state_machine,
         &direct_participant_principal_ids,
         &[], // additional_nns_neurons
@@ -3038,11 +3040,12 @@ fn test_last_man_less_than_min() {
                 owner: swap_id.into(),
                 subaccount: None
             },
-            10_000_000
+            Nat::from(10_000_000),
         )],
-        transfer_fee: 10_000,
+        transfer_fee: Nat::from(10_000),
         token_name: "SNS Token".to_string(),
         token_symbol: "STK".to_string(),
+        decimals: None,
         metadata: vec![],
         archive_options: ArchiveOptions {
             trigger_threshold: 1,
@@ -3055,6 +3058,8 @@ fn test_last_man_less_than_min() {
         },
         max_memo_length: None,
         feature_flags: None,
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
     }))
     .unwrap();
     state_machine
@@ -3071,7 +3076,7 @@ fn test_last_man_less_than_min() {
         sns_root_canister_id: Principal::anonymous().to_string(),
         fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
         transaction_fee_e8s: Some(10_000),
-        neuron_minimum_stake_e8s: Some(1_000_000),
+        neuron_minimum_stake_e8s: Some(400_000),
         confirmation_text: None,
         restricted_countries: None,
         min_participants: None,                      // TODO[NNS1-2339]
@@ -3086,6 +3091,7 @@ fn test_last_man_less_than_min() {
         nns_proposal_id: None,                       // TODO[NNS1-2339]
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
+        neurons_fund_participation_constraints: None,
     })
     .unwrap();
     state_machine
@@ -3108,7 +3114,7 @@ fn test_last_man_less_than_min() {
             swap_due_timestamp_seconds: swap_due_from_now_timestamp_seconds(&state_machine),
             sns_token_e8s: 10_000_000,
             neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                count: 1,
+                count: 2,
                 dissolve_delay_interval_seconds: 1,
             }),
             sale_delay_seconds: None,
@@ -3176,7 +3182,7 @@ fn test_last_man_less_than_min() {
 }
 
 #[test]
-fn test_refresh_buyer_token() {
+fn test_refresh_buyer_token_legacy() {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
@@ -3187,7 +3193,7 @@ fn test_refresh_buyer_token() {
     ];
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
     let neuron_basket_count = 3;
-    let sns_canister_ids = begin_swap(
+    let sns_canister_ids = begin_swap_legacy(
         &mut state_machine,
         &direct_participant_principal_ids,
         &[], // additional_nns_neurons

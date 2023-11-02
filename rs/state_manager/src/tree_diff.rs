@@ -262,7 +262,7 @@ fn diff_rose_trees(lhs: &RoseHashTree, rhs: &RoseHashTree) -> Changes {
 mod tests {
     use super::RoseHashTree::Leaf;
     use super::*;
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use proptest::collection::btree_map;
     use proptest::prelude::*;
 
@@ -324,7 +324,7 @@ mod tests {
     }
 
     /// Modify the leaf at the given index. The leaves are counted according to
-    /// their in-order traveral.
+    /// their in-order traversal.
     fn modify_leaf_at_index(t: &mut RoseHashTree, idx: usize, h: Digest) -> Option<(Path, Digest)> {
         fn go_rec(
             t: &mut RoseHashTree,

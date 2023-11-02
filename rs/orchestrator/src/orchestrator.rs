@@ -18,12 +18,13 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
+use ic_sys::utility_command::UtilityCommand;
 use ic_types::{ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::{convert::TryFrom, time::Duration};
+use std::{convert::TryFrom, thread, time::Duration};
 use tokio::sync::watch::{self, Receiver, Sender};
 use tokio::{sync::RwLock, task::JoinHandle};
 
@@ -99,6 +100,21 @@ impl Orchestrator {
             logger,
             "Orchestrator started: version={}, config={:?}", replica_version, config
         );
+        UtilityCommand::notify_host(
+            format!(
+                "node-id {}: starting with version {}",
+                node_id, replica_version
+            )
+            .as_str(),
+            1,
+        );
+
+        let version = replica_version.clone();
+        thread::spawn(move || loop {
+            let message = format!("\nNode-id: {}\nReplica version: {}\n\n", node_id, version);
+            UtilityCommand::notify_host(&message, 1);
+            thread::sleep(Duration::from_secs(15 * 60));
+        });
 
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
@@ -210,6 +226,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
+            cup_provider.clone(),
             logger.clone(),
         );
 

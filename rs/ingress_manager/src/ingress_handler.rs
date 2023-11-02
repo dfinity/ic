@@ -93,7 +93,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
             if let Err(err) = self.request_validator.validate_request(
                 ingress_message.as_ref(),
                 current_time,
-                registry_version,
+                &self.registry_root_of_trust_provider(registry_version),
             ) {
                 debug!(
                     self.log,
@@ -203,13 +203,13 @@ mod tests {
                 let message_id = IngressMessageId::from(&ingress_message);
                 let integrity_hash = ic_types::crypto::crypto_hash(ingress_message.binary()).get();
 
-                let change_set = access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_message.clone(),
                         peer_id: node_test_id(0),
                         timestamp: time,
                     });
-                    ingress_manager.on_state_change(&ingress_pool)
+                    ingress_manager.on_state_change(ingress_pool)
                 });
 
                 let size = ingress_message.count_bytes();
@@ -258,13 +258,13 @@ mod tests {
                     .build();
                 let message_id = IngressMessageId::from(&ingress_message);
 
-                let change_set = access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_message,
                         peer_id: node_test_id(0),
                         timestamp: time,
                     });
-                    ingress_manager.on_state_change(&ingress_pool)
+                    ingress_manager.on_state_change(ingress_pool)
                 });
 
                 let expected_change_action = ChangeAction::RemoveFromUnvalidated(message_id);
@@ -303,16 +303,16 @@ mod tests {
                     .expiry_time(batch_time + MAX_INGRESS_TTL + Duration::from_nanos(1))
                     .nonce(2)
                     .build();
-                let change_set = access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_message,
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_manager.on_state_change(&ingress_pool)
+                    ingress_manager.on_state_change(ingress_pool)
                 });
 
-                // Since we changed to PurgeBelowExpiry insteads of invidivual removal,
+                // Since we changed to PurgeBelowExpiry insteads of individual removal,
                 // It is enough to check if there is PurgeBelowExpiry, and nothing being
                 // moved to validated.
                 assert_eq!(change_set.len(), 1);
@@ -361,15 +361,15 @@ mod tests {
                     .build();
                 let message_id = IngressMessageId::from(&ingress_message);
 
-                let change_set = access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_message,
                         peer_id: node_test_id(0),
                         timestamp: time,
                     });
-                    let change_set = ingress_manager.on_state_change(&ingress_pool);
+                    let change_set = ingress_manager.on_state_change(ingress_pool);
                     ingress_pool.apply_changes(&SysTimeSource::new(), change_set);
-                    ingress_manager.on_state_change(&ingress_pool)
+                    ingress_manager.on_state_change(ingress_pool)
                 });
 
                 let expected_change_action = ChangeAction::RemoveFromValidated(message_id);
@@ -421,7 +421,7 @@ mod tests {
                     .nonce(4)
                     .build();
 
-                let change_set = access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: good_msg.clone(),
                         peer_id: node_test_id(0),
@@ -432,7 +432,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_manager.on_state_change(&ingress_pool)
+                    ingress_manager.on_state_change(ingress_pool)
                 });
 
                 let good_id = IngressMessageId::from(&good_msg);

@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/tree_hash",
+    "//rs/nervous_system/governance",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
@@ -72,8 +73,8 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":cmc.did",
     deps = DEPENDENCIES + [
-        ":cmc",
         ":build_script",
+        ":cmc",
     ],
 )
 

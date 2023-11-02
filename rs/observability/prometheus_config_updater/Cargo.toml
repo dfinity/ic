@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-actix-web = "4"
 anyhow = "1.0.31"
 clap = { version = "3.1.6", features = ["derive"] }
 crossbeam = "0.8.0"
@@ -14,11 +13,6 @@ humantime = "2.0"
 ic-async-utils = { path = "../../async_utils" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
-ic-utils = { path = "../../utils/" }
-ic-registry-local-registry = { path = "../../registry/local_registry" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
-ic-registry-client = { path = "../../registry/client" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 base64 = "0.11.0"
 regex = "1.7.0"
@@ -28,12 +22,11 @@ service-discovery = { path = "../service_discovery" }
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 config_writer_common = { path = "../config_writer_common" }
 ic-config = { path = "../../config" }
 ic-http-endpoints-metrics = { path = "../../http_endpoints/metrics" }
-tokio-test = "*"
 
 [[bin]]
 name = "prometheus_config_updater"

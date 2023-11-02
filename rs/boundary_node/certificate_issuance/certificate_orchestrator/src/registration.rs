@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use std::{cmp::Reverse, time::Duration};
 
 use candid::Principal;
 use certificate_orchestrator_interface::{
@@ -99,11 +99,14 @@ impl Create for Creator {
         });
 
         // Schedule expiration
+        let expiration_delay =
+            Duration::from_secs(REGISTRATION_EXPIRATION_TTL.with(|s| s.borrow().get(&()).unwrap()));
+
         self.expirations.with(|expirations| {
             let mut expirations = expirations.borrow_mut();
             expirations.push(
                 id.to_owned(),
-                Reverse(time() + REGISTRATION_EXPIRATION_TTL.as_nanos() as u64),
+                Reverse(time() + expiration_delay.as_nanos() as u64),
             );
         });
 
@@ -278,11 +281,15 @@ impl Update for Updater {
                         .expirations
                         .with(|exps| exps.borrow().get(id).is_some())
                 {
+                    let expiration_delay = Duration::from_secs(
+                        REGISTRATION_EXPIRATION_TTL.with(|s| s.borrow().get(&()).unwrap()),
+                    );
+
                     self.expirations.with(|exps| {
                         let mut exps = exps.borrow_mut();
                         exps.push(
                             id.to_owned(),
-                            Reverse(time() + REGISTRATION_EXPIRATION_TTL.as_nanos() as u64),
+                            Reverse(time() + expiration_delay.as_nanos() as u64),
                         );
                     });
                 }
@@ -595,6 +602,11 @@ mod tests {
     fn create_ok() -> Result<(), Error> {
         crate::ID_SEED.with(|s| s.borrow_mut().insert((), 0));
 
+        REGISTRATION_EXPIRATION_TTL.with(|s| {
+            let mut s = s.borrow_mut();
+            s.insert((), 60 * 60 * 24 * 3);
+        });
+
         let creator = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
 
         let id = creator.create(
@@ -602,7 +614,7 @@ mod tests {
             &Principal::from_text("aaaaa-aa")?, // canister
         )?;
 
-        // Check regsitration
+        // Check registration
         let reg = REGISTRATIONS
             .with(|regs| regs.borrow().get(&id.to_owned().into()))
             .expect("expected registration to exist but none found");
@@ -670,6 +682,11 @@ mod tests {
             canister: Principal::from_text("aaaaa-aa")?,
             state: State::PendingOrder,
         };
+
+        REGISTRATION_EXPIRATION_TTL.with(|s| {
+            let mut s = s.borrow_mut();
+            s.insert((), 60 * 60 * 24 * 3);
+        });
 
         REGISTRATIONS.with(|regs| regs.borrow_mut().insert("id".to_string().into(), reg));
 

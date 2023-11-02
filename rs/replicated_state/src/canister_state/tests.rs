@@ -6,8 +6,10 @@ use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::{
-    CanisterHistory, CyclesUseCase, MAX_CANISTER_HISTORY_CHANGES,
+    CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
+    MAX_CANISTER_HISTORY_CHANGES,
 };
+use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::CallOrigin;
 use crate::Memory;
 use ic_base_types::NumSeconds;
@@ -16,18 +18,19 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::canister_test_id,
+    ids::message_test_id,
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
-use ic_types::messages::CallContextId;
 use ic_types::{
-    messages::CallbackId,
+    messages::{
+        CallContextId, CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext,
+        MAX_RESPONSE_COUNT_BYTES,
+    },
     methods::{Callback, WasmClosure},
-    Time,
-};
-use ic_types::{
-    messages::MAX_RESPONSE_COUNT_BYTES, nominal_cycles::NominalCycles, xnet::QueueId, CountBytes,
-    Cycles,
+    nominal_cycles::NominalCycles,
+    xnet::QueueId,
+    CountBytes, Cycles, Time,
 };
 use ic_wasm_types::CanisterModule;
 
@@ -67,7 +70,7 @@ struct CanisterStateFixture {
 impl CanisterStateFixture {
     fn new() -> CanisterStateFixture {
         let scheduler_state = SchedulerState::default();
-        let system_state = SystemState::new_running(
+        let system_state = SystemState::new_running_for_testing(
             CANISTER_ID,
             user_test_id(24).get(),
             Cycles::new(1 << 36),
@@ -311,8 +314,8 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
         WasmMetadata::default(),
     ));
     assert!(canister_state.memory_usage().get() > 0);
-    let initial_memory_usage =
-        canister_state.raw_memory_usage() + canister_state.system_state.message_memory_usage();
+    let initial_memory_usage = canister_state.execution_memory_usage()
+        + canister_state.system_state.message_memory_usage();
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     let request = default_input_request();
@@ -328,7 +331,8 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
 
     assert_eq!(
         initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-        canister_state.raw_memory_usage() + canister_state.system_state.message_memory_usage(),
+        canister_state.execution_memory_usage()
+            + canister_state.system_state.message_memory_usage(),
     );
     assert_eq!(
         SUBNET_AVAILABLE_MEMORY - MAX_RESPONSE_COUNT_BYTES as i64,
@@ -763,4 +767,59 @@ fn canister_history_operations() {
         total_num_changes += 1;
         assert_eq!(canister_history.get_total_num_changes(), total_num_changes);
     }
+}
+
+#[test]
+fn drops_aborted_canister_install_after_split() {
+    let mut canister_state = CanisterStateFixture::new().canister_state;
+    canister_state
+        .system_state
+        .task_queue
+        .push_back(ExecutionTask::Heartbeat);
+
+    canister_state
+        .system_state
+        .task_queue
+        .push_back(ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
+            call_id: InstallCodeCallId::new(0),
+            prepaid_execution_cycles: Cycles::from(0u128),
+        });
+
+    // Expected canister state is identical, minus the `AbortedInstallCode` task.
+    let mut expected_state = canister_state.clone();
+    expected_state.system_state.task_queue.pop_back();
+
+    canister_state.drop_in_progress_management_calls_after_split();
+
+    assert_eq!(expected_state, canister_state);
+}
+
+#[test]
+fn reverts_stopping_status_after_split() {
+    let mut canister_state = CanisterStateFixture::new().canister_state;
+    let mut call_context_manager = CallContextManager::default();
+    call_context_manager.new_call_context(
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        Cycles::from(0u128),
+        Time::from_nanos_since_unix_epoch(0),
+    );
+    canister_state.system_state.status = CanisterStatus::Stopping {
+        call_context_manager: call_context_manager.clone(),
+        stop_contexts: vec![StopCanisterContext::Ingress {
+            sender: user_test_id(1),
+            message_id: message_test_id(1),
+            call_id: Some(StopCanisterCallId::new(0)),
+        }],
+    };
+
+    // Expected canister state is identical, except it is `Running`.
+    let mut expected_state = canister_state.clone();
+    expected_state.system_state.status = CanisterStatus::Running {
+        call_context_manager,
+    };
+
+    canister_state.drop_in_progress_management_calls_after_split();
+
+    assert_eq!(expected_state, canister_state);
 }

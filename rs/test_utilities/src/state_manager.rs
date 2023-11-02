@@ -1,13 +1,14 @@
 use crate::types::ids::subnet_test_id;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, Labeled, PermanentStateHashError::*, StateHashError,
-    StateManager, StateManagerError, StateManagerResult, StateReader, TransientStateHashError::*,
-    CERT_ANY, CERT_CERTIFIED, CERT_UNCERTIFIED,
+    CertificationMask, CertificationScope, CertifiedStateReader, Labeled,
+    PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
+    StateManagerResult, StateReader, TransientStateHashError::*, CERT_ANY, CERT_CERTIFIED,
+    CERT_UNCERTIFIED,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
@@ -308,6 +309,12 @@ impl StateReader for FakeStateManager {
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
         None
     }
+
+    fn get_certified_state_reader(
+        &self,
+    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>> {
+        None
+    }
 }
 
 /// Local helper to enable serialization and deserialization of
@@ -602,5 +609,11 @@ impl StateReader for RefMockStateManager {
         paths: &LabeledTree<()>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
         self.mock.read().unwrap().read_certified_state(paths)
+    }
+
+    fn get_certified_state_reader(
+        &self,
+    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>> {
+        self.mock.read().unwrap().get_certified_state_reader()
     }
 }

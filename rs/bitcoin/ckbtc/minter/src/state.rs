@@ -1,8 +1,8 @@
-///! State management module.
-///!
-///! The state is stored in the global thread-level variable `__STATE`.
-///! This module provides utility functions to manage the state. Most
-///! code should use those functions instead of touching `__STATE` directly.
+//! State management module.
+//!
+//! The state is stored in the global thread-level variable `__STATE`.
+//! This module provides utility functions to manage the state. Most
+//! code should use those functions instead of touching `__STATE` directly.
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -56,7 +56,7 @@ thread_local! {
 #[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetrieveBtcRequest {
     /// The amount to convert to BTC.
-    /// The minter withdraws BTC tranfer fees from this amount.
+    /// The minter withdraws BTC transfer fees from this amount.
     pub amount: u64,
     /// The destination BTC address.
     pub address: BitcoinAddress,
@@ -347,6 +347,26 @@ pub struct CkBtcMinterState {
 
     /// UTXOs that the KYT provider considered tainted.
     pub quarantined_utxos: BTreeSet<Utxo>,
+
+    /// Map from burn block index to amount to reimburse because of
+    /// KYT fees.
+    pub reimbursement_map: BTreeMap<u64, ReimburseDepositTask>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+pub struct ReimburseDepositTask {
+    pub account: Account,
+    pub amount: u64,
+    pub reason: ReimbursementReason,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq, Clone, Serialize, candid::CandidType, Copy)]
+pub enum ReimbursementReason {
+    TaintedDestination {
+        kyt_provider: Principal,
+        kyt_fee: u64,
+    },
+    CallFailed,
 }
 
 impl CkBtcMinterState {
@@ -416,6 +436,18 @@ impl CkBtcMinterState {
         }
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
+        }
+    }
+
+    pub fn validate_config(&self) {
+        if self.kyt_fee > self.retrieve_btc_min_amount {
+            ic_cdk::trap("kyt_fee cannot be greater than retrieve_btc_min_amount");
+        }
+        if self.ecdsa_key_name.is_empty() {
+            ic_cdk::trap("ecdsa_key_name is not set");
+        }
+        if self.kyt_principal.is_none() {
+            ic_cdk::trap("KYT principal is not set");
         }
     }
 
@@ -761,7 +793,7 @@ impl CkBtcMinterState {
         Some(last)
     }
 
-    /// Removes a pending retrive_btc request with the specified block index.
+    /// Removes a pending retrieve_btc request with the specified block index.
     fn remove_pending_request(&mut self, block_index: u64) -> Option<RetrieveBtcRequest> {
         match self
             .pending_retrieve_btc_requests
@@ -933,6 +965,24 @@ impl CkBtcMinterState {
         }
     }
 
+    pub fn schedule_deposit_reimbursement(
+        &mut self,
+        burn_block_index: u64,
+        reimburse_deposit_task: ReimburseDepositTask,
+    ) {
+        match reimburse_deposit_task.reason {
+            ReimbursementReason::TaintedDestination {
+                kyt_provider,
+                kyt_fee,
+            } => {
+                *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += kyt_fee;
+            }
+            ReimbursementReason::CallFailed => {}
+        }
+        self.reimbursement_map
+            .insert(burn_block_index, reimburse_deposit_task);
+    }
+
     /// Checks whether the internal state of the minter matches the other state
     /// semantically (the state holds the same data, but maybe in a slightly
     /// different form).
@@ -1090,6 +1140,7 @@ impl From<InitArgs> for CkBtcMinterState {
             checked_utxos: Default::default(),
             ignored_utxos: Default::default(),
             quarantined_utxos: Default::default(),
+            reimbursement_map: Default::default(),
         }
     }
 }

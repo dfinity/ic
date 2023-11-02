@@ -47,8 +47,7 @@ class GitLabQueueMonitor:
         if "GITLAB_TOKEN" not in os.environ:
             raise ValueError("could not find GITLAB_TOKEN in env vars")
 
-        ES_NODES = ["elasticsearch-node-%s.dfinity.systems" % i for i in range(3)]
-        self.es = Elasticsearch(ES_NODES)
+        self.es = Elasticsearch(["https://elasticsearch.testnet.dfinity.network:443"])
         self.dry_run = dry_run
 
         self.gl = Gitlab("https://gitlab.com", private_token=os.getenv("GITLAB_TOKEN"))

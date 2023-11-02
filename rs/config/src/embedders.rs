@@ -64,6 +64,8 @@ pub const STABLE_MEMORY_ACCESSED_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
+    /// If this flag is enabled, then the output of the `debug_print` system-api
+    /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
@@ -86,9 +88,19 @@ impl Default for FeatureFlags {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum MeteringType {
+    Old,
+    New,
+    /// for testing and benchmarking
+    None,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
     pub max_wasm_stack_size: usize,
+
+    /// The number of threads to use for query execution per canister.
     pub query_execution_threads_per_canister: usize,
 
     /// Maximum number of globals allowed in a Wasm module.
@@ -120,6 +132,9 @@ pub struct Config {
 
     /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
+
+    /// Instruction counting strategy
+    pub metering_type: MeteringType,
 
     // Maximum number of stable memory dirty pages that a single message execution
     // is allowed to produce.
@@ -170,6 +185,7 @@ impl Config {
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::const_default(),
+            metering_type: MeteringType::Old,
             stable_memory_dirty_page_limit: NumPages::new(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
             stable_memory_accessed_page_limit: NumPages::new(STABLE_MEMORY_ACCESSED_PAGE_LIMIT),
             min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,

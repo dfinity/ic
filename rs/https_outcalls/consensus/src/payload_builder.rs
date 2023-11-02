@@ -158,23 +158,6 @@ impl CanisterHttpPayloadBuilderImpl {
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
-        let _time = self
-            .metrics
-            .op_duration
-            .with_label_values(&["build"])
-            .start_timer();
-
-        // Check whether feature is enabled, return empty payload if not enabled
-        // or registry unavailable
-        match self.is_enabled(validation_context) {
-            Err(_) => {
-                warn!(self.log, "CanisterHttpPayloadBuilder: Registry unavailable");
-                return CanisterHttpPayload::default();
-            }
-            Ok(false) => return CanisterHttpPayload::default(),
-            Ok(true) => (),
-        }
-
         // Get the threshold value that is needed for consensus
         let threshold = match self
             .membership
@@ -392,12 +375,6 @@ impl CanisterHttpPayloadBuilderImpl {
         validation_context: &ValidationContext,
         delivered_ids: HashSet<CallbackId>,
     ) -> Result<(), CanisterHttpPayloadValidationError> {
-        let _time = self
-            .metrics
-            .op_duration
-            .with_label_values(&["validate"])
-            .start_timer();
-
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
@@ -464,7 +441,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 CanisterHttpTransientValidationError::ConsensusRegistryVersionUnavailable,
             ))?;
 
-        // Check conditions on individual reponses
+        // Check conditions on individual responses
         for response in &payload.responses {
             // Check that response is consistent
             utils::check_response_consistency(response)
@@ -609,6 +586,23 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["build"])
+            .start_timer();
+
+        // Check whether feature is enabled, return empty payload if not enabled
+        // or registry unavailable
+        match self.is_enabled(context) {
+            Err(_) => {
+                warn!(self.log, "CanisterHttpPayloadBuilder: Registry unavailable");
+                return vec![];
+            }
+            Ok(false) => return vec![],
+            Ok(true) => (),
+        }
+
         let max_size = std::cmp::min(
             max_size,
             NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
@@ -625,6 +619,13 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["validate"])
+            .start_timer();
+
+        // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
         }
@@ -684,10 +685,10 @@ impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPaylo
             stats.timeouts += 1;
             (
                 *timeout,
-                Payload::Reject(RejectContext {
-                    code: RejectCode::SysTransient,
-                    message: "Canister http request timed out".to_string(),
-                }),
+                Payload::Reject(RejectContext::new(
+                    RejectCode::SysTransient,
+                    "Canister http request timed out",
+                )),
             )
         });
 
@@ -701,12 +702,12 @@ impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPaylo
                 stats.divergence_responses += 1;
                 (
                     share.content.id,
-                    Payload::Reject(RejectContext {
-                        code: RejectCode::SysTransient,
-                        message: "Canister http responses were different across replicas, \
+                    Payload::Reject(RejectContext::new(
+                        RejectCode::SysTransient,
+                        "Canister http responses were different across replicas, \
                           and no consensus was reached"
                             .to_string(),
-                    }),
+                    )),
                 )
             })
         });

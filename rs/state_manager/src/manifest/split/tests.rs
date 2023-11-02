@@ -12,6 +12,8 @@ const EMPTY_FILE_HASH: [u8; 32] = [
     152, 19, 5, 215, 192, 178, 172, 224, 245, 63, 232, 34, 244, 7, 82, 120, 250, 40, 81, 30, 140,
     52, 231, 15, 55, 253, 132, 37, 175, 101, 155, 54,
 ];
+/// A `Time` constant to be used as the batch time of the state to be split.
+const BATCH_TIME: Time = Time::from_nanos_since_unix_epoch(1234567890);
 
 #[test]
 fn manifest_builder_out_of_order_files() {
@@ -50,7 +52,7 @@ fn manifest_builder_duplicate_files() {
 #[test]
 fn manifest_builder_out_of_order_generated_files() {
     let mut builder = ManifestBuilder::new(CURRENT_STATE_SYNC_VERSION);
-    builder.append_system_metadata(SUBNET_0, SubnetType::Application);
+    builder.append_system_metadata(SUBNET_0, SubnetType::Application, BATCH_TIME);
     builder.append_split_marker(SUBNET_0);
 
     assert_eq!(
@@ -92,6 +94,7 @@ fn split_manifest_unsupported_version() {
             SUBNET_0,
             SUBNET_1,
             SubnetType::Application,
+            BATCH_TIME,
             &RoutingTable::default(),
         ),
         Err(ManifestValidationError::UnsupportedManifestVersion { .. })
@@ -119,6 +122,7 @@ fn split_manifest_unassigned_canister() {
             SUBNET_0,
             SUBNET_1,
             SubnetType::Application,
+            BATCH_TIME,
             &RoutingTable::default(),
         )
     );
@@ -141,6 +145,7 @@ fn split_manifest_state_already_splitting() {
             SUBNET_0,
             SUBNET_1,
             SubnetType::Application,
+            BATCH_TIME,
             &RoutingTable::default(),
         )
     );
@@ -163,6 +168,7 @@ fn split_manifest_unknown_file() {
             SUBNET_0,
             SUBNET_1,
             SubnetType::Application,
+            BATCH_TIME,
             &RoutingTable::default(),
         )
     );
@@ -191,6 +197,7 @@ fn split_manifest_split_marker_last() {
             SUBNET_0,
             SUBNET_1,
             SubnetType::Application,
+            BATCH_TIME,
             &RoutingTable::default(),
         )
     );
@@ -292,6 +299,7 @@ fn split_manifest_3_canisters() {
             SUBNET_0,
             SUBNET_1,
             SubnetType::Application,
+            BATCH_TIME,
             &routing_table,
         )
     );
@@ -367,19 +375,19 @@ fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
-            size_bytes: 48,
+            size_bytes: 60,
             hash: [
-                234, 35, 205, 5, 244, 164, 68, 192, 46, 5, 132, 79, 253, 30, 182, 243, 245, 138,
-                158, 13, 217, 128, 56, 219, 136, 6, 106, 223, 178, 33, 106, 105,
+                0, 59, 124, 93, 105, 33, 114, 248, 233, 111, 33, 166, 192, 190, 94, 235, 64, 125,
+                255, 169, 211, 187, 24, 164, 108, 97, 40, 4, 113, 69, 192, 91,
             ],
         },
         ChunkInfo {
             file_index: 13,
-            size_bytes: 48,
+            size_bytes: 60,
             offset: 0,
             hash: [
-                218, 237, 87, 176, 142, 10, 59, 238, 93, 30, 47, 204, 210, 176, 25, 3, 20, 16, 84,
-                149, 70, 124, 155, 210, 252, 1, 175, 240, 118, 142, 106, 112,
+                58, 217, 55, 115, 188, 39, 252, 195, 43, 182, 93, 108, 38, 156, 109, 252, 196, 34,
+                59, 13, 101, 246, 115, 118, 18, 117, 151, 15, 137, 136, 125, 248,
             ],
         },
     )

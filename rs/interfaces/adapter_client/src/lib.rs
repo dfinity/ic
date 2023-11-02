@@ -10,7 +10,7 @@ pub enum RpcError {
     ConnectionBroken,
     /// The adapter is unavailable at the moment and is not able to serve requests.
     // Likely a transient error. For example in the BTC feature, this error may mean
-    // the adapter is still syncing the header chain up to the lastest checkpoint.
+    // the adapter is still syncing the header chain up to the latest checkpoint.
     // You can retry the operation.
     Unavailable(String),
     /// The adapter request was cancelled by the adapter client. Likely a timeout.

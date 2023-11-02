@@ -36,7 +36,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Constant which controls the upper limit of epochs
 ///
-/// Specifically 2**LAMBDA_T NI-DKG epochs cann occur
+/// Specifically 2**LAMBDA_T NI-DKG epochs can occur
 ///
 /// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
 pub const LAMBDA_T: usize = 32;
@@ -624,7 +624,7 @@ impl SecretKey {
 /// Forward secure ciphertexts
 ///
 /// This is (C,R,S,Z) tuple of section 5.2, with multiple C values,
-/// one for each recipent.
+/// one for each recipient.
 #[derive(Debug)]
 pub struct FsEncryptionCiphertext {
     cc: Vec<[G1Affine; NUM_CHUNKS]>,
@@ -643,7 +643,7 @@ impl FsEncryptionCiphertext {
         let ciphertext_chunks = self
             .cc
             .iter()
-            .map(|cj| G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(cj))
+            .map(G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>)
             .collect();
 
         FsEncryptionCiphertextBytes {

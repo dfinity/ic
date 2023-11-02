@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package types.v1;
+
+import "types/v1/canister_http.proto";
+import "types/v1/consensus.proto";
+import "types/v1/dkg.proto";
+import "types/v1/ecdsa.proto";
+
+message GossipMessage {
+  oneof body {
+    GossipAdvert advert = 1;
+    GossipChunkRequest chunk_request = 2;
+    GossipChunk chunk = 3;
+    ArtifactFilter retransmission_request = 5;
+  }
+  reserved 4;
+}
+
+message GossipAdvert {
+  bytes attribute = 1;
+  uint64 size = 2;
+  bytes artifact_id = 3;
+  bytes integrity_hash = 4;
+}
+
+message GossipChunkRequest {
+  bytes artifact_id = 1;
+  uint32 chunk_id = 2;
+  bytes integrity_hash = 3;
+}
+
+message GossipChunk {
+  GossipChunkRequest request = 6;
+  oneof response {
+    ArtifactChunk chunk = 3;
+    P2PError error = 4;
+  }
+  reserved 1, 2, 5;
+}
+
+enum P2PError {
+  P2P_ERROR_UNSPECIFIED = 0;
+  P2P_ERROR_NOT_FOUND = 1;
+}
+
+message ArtifactFilter {
+  ConsensusMessageFilter consensus_filter = 1;
+  CertificationMessageFilter certification_message_filter = 3;
+  StateSyncFilter state_sync_filter = 4;
+  reserved 2;
+}
+
+message ConsensusMessageFilter {
+  uint64 height = 1;
+}
+
+message CertificationMessageFilter {
+  uint64 height = 1;
+}
+
+message StateSyncFilter {
+  uint64 height = 1;
+}
+
+message FileTreeSyncArtifact {
+  bytes absolute_path = 1; // UNIX-compatible path
+  string id = 2;
+}
+
+message Artifact {
+  oneof kind {
+    types.v1.ConsensusMessage consensus = 1;
+    bytes signed_ingress = 2; // CBOR-encoded signed ingress message
+    types.v1.CertificationMessage certification = 3;
+    types.v1.DkgMessage dkg = 4;
+    types.v1.EcdsaMessage ecdsa = 5;
+    types.v1.CanisterHttpShare http_share = 6;
+    FileTreeSyncArtifact file_tree_sync = 7;
+  }
+}
+
+message ArtifactChunk {
+  oneof data {
+    bytes chunk = 3;
+    Artifact artifact = 4;
+  }
+  reserved 1, 2;
+}

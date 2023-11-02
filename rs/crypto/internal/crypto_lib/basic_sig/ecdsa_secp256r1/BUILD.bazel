@@ -27,7 +27,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
     "@crate_index//:hex",

@@ -109,13 +109,13 @@ impl SendQueueImpl {
         metrics: SendQueueMetrics,
     ) -> Self {
         let (send_end, receive_end) = channel(queue_size);
-        let receieve_end_wrapper = ReceiveEndContainer::new(receive_end);
+        let receive_end_wrapper = ReceiveEndContainer::new(receive_end);
         Self {
             peer_label,
             channel_id: channel_id.to_string(),
             queue_size,
             send_end,
-            receive_end: Arc::new(receieve_end_wrapper),
+            receive_end: Arc::new(receive_end_wrapper),
             metrics,
         }
     }

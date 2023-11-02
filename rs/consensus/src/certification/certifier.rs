@@ -43,7 +43,7 @@ pub struct CertifierImpl {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     metrics: CertifierMetrics,
-    /// The highest height that has been purged. Used to avoid redudant purging.
+    /// The highest height that has been purged. Used to avoid redundant purging.
     highest_purged_height: RefCell<Height>,
     log: ReplicaLogger,
 }

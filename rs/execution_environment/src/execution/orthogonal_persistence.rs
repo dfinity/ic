@@ -118,16 +118,16 @@ impl OrthogonalPersistence {
                 DataSegmentKind::Active {
                     memory_index: _,
                     offset_expr,
-                } => match offset_expr {
-                    Operator::I32Const { value } => {
-                        assert!(value >= 0);
-                        let offset = value as usize;
-                        let length = data_segment.data.len();
-                        let data_segment = DataSegment::new(offset, length);
-                        result.push(data_segment);
-                    }
-                    _ => unimplemented!(),
-                },
+                } => {
+                    let length = data_segment.data.len();
+                    let offset = match offset_expr {
+                        Operator::I32Const { value } => value as usize,
+                        Operator::I64Const { value } => value as usize,
+                        _ => unimplemented!(),
+                    };
+                    let data_segment = DataSegment::new(offset, length);
+                    result.push(data_segment);
+                }
                 DataSegmentKind::Passive => {}
             };
         }

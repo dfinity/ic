@@ -2,10 +2,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-DEPENDENCIES = select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@crate_index//:sha2"],
-    "//conditions:default": ["@crate_index//:openssl"],
-})
+DEPENDENCIES = [
+    "@crate_index//:sha2",
+]
 
 MACRO_DEPENDENCIES = []
 

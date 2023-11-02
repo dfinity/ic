@@ -17,6 +17,11 @@ class DummyFindingDataSource(FindingDataSource):
     ) -> Dict[Tuple[str, str, str, str], Finding]:
         return {}
 
+    def get_deleted_findings(
+        self, repository: str, scanner: str, dependency_id: str
+    ) -> List[Finding]:
+        return []
+
     def commit_has_block_exception(self, commit_type: CommitType, commit_hash: str) -> bool:
         return True
 
@@ -24,6 +29,9 @@ class DummyFindingDataSource(FindingDataSource):
         pass
 
     def delete_finding(self, finding: Finding):
+        pass
+
+    def link_findings(self, finding_a: Finding, finding_b: Finding):
         pass
 
     def get_risk_assessor(self) -> List[User]:

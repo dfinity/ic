@@ -1,57 +1,21 @@
 //! This file contains the helper functions required to setup testing framework.
 
 use crate::types::ids::node_test_id;
-use ic_config::{
-    logger::{default_logtarget, Config as LoggerConfig, LogFormat},
-    transport::TransportConfig,
-};
+use ic_config::logger::{default_logtarget, Config as LoggerConfig, LogFormat};
 use ic_interfaces::artifact_manager::JoinGuard;
-use ic_interfaces_registry::RegistryClient;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
 use ic_registry_keys::make_node_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
-use ic_types::{replica_config::ReplicaConfig, NodeId, RegistryVersion, SubnetId};
+use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::HashMap;
 use std::{fs, fs::File, sync::Arc, thread::sleep, time::Duration};
 
 pub const P2P_SUBNET_ID_DEFAULT: u64 = 0;
 const P2P_TEST_ROOT: &str = "p2p_test";
 const P2P_TEST_STOP: &str = "stop";
-
-// get_node_from_registry
-//
-//    Extracts Node_Info list for a particular subnet from the registry.
-//
-// Parameters
-//    registry       in-memory registry
-//    subnet_id      subnet id whose members are to be looked up
-pub fn get_nodes_from_registry(
-    registry: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-) -> Vec<(NodeId, NodeRecord)> {
-    use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
-    let latest_version = registry.get_latest_version();
-    registry
-        .get_subnet_transport_infos(subnet_id, latest_version)
-        .expect("Could not retrieve subnet transport infos from registry")
-        .expect("Subnet transport information not available at this version.")
-}
-
-// get_peers
-//
-//    Get peer node ids for a replica
-//
-// Parameters
-//    registry_node_list   List of node belonging to a subnet
-//    node_id              node whose peers are to be looked up
-pub fn get_peers(registry_node_list: &[(NodeId, NodeRecord)], node_id: NodeId) -> Vec<NodeId> {
-    let mut node_ids: Vec<_> = registry_node_list.iter().map(|(id, _)| *id).collect();
-    node_ids.retain(|n| (*n).get() != node_id.get());
-    node_ids
-}
 
 // P2PTestContext
 //
@@ -164,7 +128,7 @@ impl P2PTestSynchronizer {
     }
 
     // wait_on_barrier_int
-    // Internal helper funtion providing blocking/non-blocking behavior in case a
+    // Internal helper function providing blocking/non-blocking behavior in case a
     // barrier has not reached
     fn wait_on_barrier_int(&self, barrier_name: String, block: bool) -> Result<(), i32> {
         let mut dir = self.get_test_group_directory();
@@ -201,7 +165,7 @@ impl P2PTestSynchronizer {
     }
 
     // Wait on a named barrier until all replicas in the the test-
-    // group singal the barrier. Calling wait implictly signals the
+    // group signal the barrier. Calling wait implicitly signals the
     // barrier for the calling replica.
     pub fn wait_on_barrier(&self, barrier_name: String) {
         self.wait_on_barrier_int(barrier_name, true)
@@ -209,7 +173,7 @@ impl P2PTestSynchronizer {
     }
 
     // Wait on a named barrier until all replicas in the the test-
-    // group singal the barrier. Calling wait implictly signals the
+    // group signal the barrier. Calling wait implicitly signals the
     // barrier for the calling replica.
     pub fn try_wait_on_barrier(&self, barrier_name: String) -> Result<(), i32> {
         self.wait_on_barrier_int(barrier_name, false)
@@ -243,22 +207,10 @@ pub fn test_group_set_registry(
     );
 
     for node_num in node_nums {
-        let connection_endpoint = Some(ConnectionEndpoint {
-            ip_addr: "127.0.0.1".to_string(),
-            port: node_port_allocation[node_num as usize] as u32,
-            protocol: Protocol::P2p1Tls13 as i32,
-        });
-        let flow_end_point = FlowEndpoint {
-            endpoint: connection_endpoint,
-        };
-        let flow_end_points = vec![flow_end_point];
-
         let node_record = NodeRecord {
-            p2p_flow_endpoints: flow_end_points,
             http: Some(ConnectionEndpoint {
                 ip_addr: "127.0.0.1".to_string(),
                 port: node_num as u32, /* NOTE: this port is not used in any test */
-                protocol: Protocol::Http1 as i32,
             }),
             ..Default::default()
         };
@@ -272,52 +224,6 @@ pub fn test_group_set_registry(
     }
 
     data_provider
-}
-
-//
-// get_replica_transport_config
-//
-//    Setup/Extend a registry for a test-group.
-//
-// Parameters
-//    num_replicas      Number for participating replicas
-//    subnet_id         test group subnet id
-//    registry          registry object that is to be extended
-//
-pub fn get_replica_transport_config(
-    replica_config: &ReplicaConfig,
-    registry: Arc<dyn RegistryClient>,
-) -> TransportConfig {
-    // Match the registry port config to the replica transport config
-    let node_id = replica_config.node_id;
-    let subnet_id = replica_config.subnet_id;
-
-    let node_record = get_nodes_from_registry(registry, subnet_id)
-        .iter()
-        .find_map(|(id, nr)| {
-            if *id == node_id {
-                Some(nr.clone())
-            } else {
-                None
-            }
-        })
-        .expect("Transport information not found in registry");
-
-    // we assume all connection endpoints to have the same settings, so we just pull
-    // out the port of some connection endpoint.
-    let port = node_record.p2p_flow_endpoints[0]
-        .endpoint
-        .as_ref()
-        .expect("p2p flow endpoint not present in node record.")
-        .port;
-    let port = u16::try_from(port).expect("Could not convert u32 to u16");
-
-    TransportConfig {
-        node_ip: "127.0.0.1".to_string(),
-        listening_port: port,
-        send_queue_size: 8,
-        ..Default::default()
-    }
 }
 
 /// Sets up logging for P2P tests.

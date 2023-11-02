@@ -11,10 +11,7 @@ pub use sign::threshold_sig::ni_dkg::{LoadTranscriptResult, NiDkgAlgorithm};
 mod sign;
 
 pub use sign::BasicSigVerifier;
-pub use sign::BasicSigVerifierByPublicKey;
 pub use sign::BasicSigner;
-pub use sign::CanisterSigVerifier;
-pub use sign::IngressSigVerifier;
 pub use sign::MultiSigVerifier;
 pub use sign::MultiSigner;
 pub use sign::ThresholdSigVerifier;
@@ -23,22 +20,25 @@ pub use sign::ThresholdSigner;
 
 pub use sign::canister_threshold_sig::*;
 
-use ic_types::consensus::certification::CertificationContent;
-use ic_types::consensus::dkg as consensus_dkg;
+use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
+    certification::CertificationContent,
+    dkg as consensus_dkg,
     ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent},
-    Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent,
-    RandomBeaconContent, RandomTapeContent,
+    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
-use ic_types::messages::{MessageId, WebAuthnEnvelope};
+use ic_types::{
+    crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
+    messages::{MessageId, QueryResponseHash, WebAuthnEnvelope},
+};
 
 /// The functionality offered by the crypto component
 pub trait Crypto:
     KeyManager
     // Block
-    + BasicSigner<Block>
-    + BasicSigVerifier<Block>
+    + BasicSigner<BlockMetadata>
+    + BasicSigVerifier<BlockMetadata>
     // MessageId
     + BasicSigner<MessageId>
     // Dealing
@@ -74,6 +74,8 @@ pub trait Crypto:
     // CanisterHttpResponse
     + BasicSigner<CanisterHttpResponseMetadata>
     + BasicSigVerifier<CanisterHttpResponseMetadata>
+    // Signed Queries
+    + BasicSigner<QueryResponseHash>
     // RequestId/WebAuthn
     + BasicSigVerifierByPublicKey<MessageId>
     + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
@@ -110,8 +112,8 @@ pub trait ErrorReproducibility {
 // Blanket implementation of Crypto for all types that fulfill requirements
 impl<T> Crypto for T where
     T: KeyManager
-        + BasicSigner<Block>
-        + BasicSigVerifier<Block>
+        + BasicSigner<BlockMetadata>
+        + BasicSigVerifier<BlockMetadata>
         + BasicSigner<MessageId>
         + BasicSigner<consensus_dkg::DealingContent>
         + BasicSigVerifier<consensus_dkg::DealingContent>
@@ -133,6 +135,7 @@ impl<T> Crypto for T where
         + BasicSigVerifier<EcdsaOpeningContent>
         + BasicSigner<CanisterHttpResponseMetadata>
         + BasicSigVerifier<CanisterHttpResponseMetadata>
+        + BasicSigner<QueryResponseHash>
         + IDkgProtocol
         + ThresholdEcdsaSigner
         + ThresholdEcdsaSigVerifier

@@ -115,7 +115,7 @@ impl DerivationPath {
             .path
             .derive_tweak_with_chain_code(&public_key, chain_code)?;
 
-        let new_key = public_key.add_points(&EccPoint::mul_by_g(&offset)?)?;
+        let new_key = public_key.add_points(&EccPoint::mul_by_g(&offset))?;
 
         Ok(ExtendedBip32DerivationOutput::new(new_key, chain_code))
     }
@@ -144,7 +144,7 @@ impl DerivationPath {
 
         let private_key = EccScalar::deserialize(CURVE_TYPE, private_key).unwrap();
 
-        let public_key = EccPoint::mul_by_g(&private_key)?;
+        let public_key = EccPoint::mul_by_g(&private_key);
 
         let (offset, derived_chain_key) = self
             .path

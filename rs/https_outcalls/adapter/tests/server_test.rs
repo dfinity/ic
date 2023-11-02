@@ -2,7 +2,7 @@
 // a self signed certificate.
 // At the moment we use `hyper-tls` which uses OpenSSL. OpenSSL correctly respects the
 // SSL_CERT_FILE variable but on MacOS OpenSSL is symlinked to LibreSSL which ignores
-// the enviroment variables.
+// the environment variables.
 // In the future we want to use rustls (also respects the variables) to stop relying on
 // external libraries for tls. But rustls does not currently support certificates for
 // IP addresses and this is needed for our e2e system tests.
@@ -69,7 +69,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut key_file = std::fs::File::create(key_file_path).unwrap();
         writeln!(key_file, "{}", KEY).unwrap();
 
-        // The Nix environmet with OpenSSL set NIX_SSL_CERT_FILE which seems to take presedence over SSL_CERT_FILE.
+        // The Nix environment with OpenSSL set NIX_SSL_CERT_FILE which seems to take presedence over SSL_CERT_FILE.
         // https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/libraries/openssl/1.1/nix-ssl-cert-file.patch
         // SSL_CERT_FILE is respected by OpenSSL and Rustls.
         // Rustlts: https://github.com/rustls/rustls/issues/540
@@ -128,7 +128,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             .key_path(cert_dir.path().join("key.pem"))
             .bind_ephemeral(([127, 0, 0, 1], 0));
 
-        tokio::spawn(async { fut.await });
+        tokio::spawn(fut);
         format!("localhost:{}", addr.port())
     }
 
@@ -320,7 +320,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         // Test that adapter hits connect timeout when connecting to unreachable host.
         let server_config = Config {
             http_connect_timeout_secs: 1,
-            // Set to high value to make sure connnect timeout kicks in.
+            // Set to high value to make sure connect timeout kicks in.
             http_request_timeout_secs: 6000,
             ..Default::default()
         };

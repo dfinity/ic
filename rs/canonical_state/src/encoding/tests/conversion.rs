@@ -39,9 +39,8 @@ fn convert_stream_header_with_invalid_signals() {
 
 #[test]
 fn roundtrip_conversion_request() {
-    let request = request();
-
     for certification_version in all_supported_versions() {
+        let request = request(certification_version);
         assert_eq!(
             request,
             types::RequestOrResponse::from((&request, certification_version))

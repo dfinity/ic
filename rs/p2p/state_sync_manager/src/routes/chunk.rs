@@ -18,7 +18,10 @@ use ic_types::{
 };
 use prost::Message;
 
-pub const STATE_SYNC_CHUNK_PATH: &str = "/chunk";
+pub const STATE_SYNC_CHUNK_PATH: &str = "/state-sync/chunk";
+
+/// State sync uses 1Mb chunks. To be safe we use 8Mib here same as transport.
+const MAX_CHUNK_SIZE: usize = 8 * 1024 * 1024;
 
 pub(crate) struct StateSyncChunkHandler {
     _log: ReplicaLogger,
@@ -56,20 +59,29 @@ pub(crate) async fn state_sync_chunk_handler(
     let artifact_id: StateSyncArtifactId = id.map(From::from).ok_or(StatusCode::BAD_REQUEST)?;
     let chunk_id = ChunkId::from(chunk_id);
 
-    // TODO: (NET-1442) move this to threadpool
-    let jh = tokio::task::spawn_blocking(move || {
-        state
-            .state_sync
-            .chunk(&artifact_id, chunk_id)
-            .ok_or(StatusCode::NO_CONTENT)
-    });
-    let chunk = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+    let jh =
+        tokio::task::spawn_blocking(
+            move || match state.state_sync.chunk(&artifact_id, chunk_id) {
+                Some(data) => {
+                    let pb_chunk: pb::StateSyncChunkResponse = data.into();
+                    let mut raw = BytesMut::with_capacity(pb_chunk.encoded_len());
+                    pb_chunk.encode(&mut raw).expect("Allocated enough memory");
+                    let raw = raw.freeze();
 
-    let pb_chunk: pb::StateSyncChunkResponse = chunk.into();
-    let mut raw = BytesMut::with_capacity(pb_chunk.encoded_len());
-    pb_chunk.encode(&mut raw).expect("Allocated enough memory");
+                    let compressed = zstd::bulk::compress(&raw, zstd::DEFAULT_COMPRESSION_LEVEL)
+                        .expect("Compression failed");
+                    state
+                        .metrics
+                        .compression_ratio
+                        .observe(raw.len() as f64 / compressed.len() as f64);
+                    Ok(compressed)
+                }
+                None => Err(StatusCode::NO_CONTENT),
+            },
+        );
+    let data = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
 
-    Ok(raw.into())
+    Ok(data.into())
 }
 
 pub(crate) fn build_chunk_handler_request(
@@ -103,7 +115,7 @@ pub(crate) fn parse_chunk_handler_response(
         .expect("Transport attaches peer id");
     match parts.status {
         StatusCode::OK => {
-            let pb = pb::StateSyncChunkResponse::decode(body).map_err(|e| {
+            let decompressed = zstd::bulk::decompress(&body, MAX_CHUNK_SIZE).map_err(|e| {
                 DownloadChunkError::RequestError {
                     peer_id,
                     chunk_id,
@@ -111,9 +123,17 @@ pub(crate) fn parse_chunk_handler_response(
                 }
             })?;
 
+            let pb =
+                pb::StateSyncChunkResponse::decode(Bytes::from(decompressed)).map_err(|e| {
+                    DownloadChunkError::RequestError {
+                        peer_id,
+                        chunk_id,
+                        err: e.to_string(),
+                    }
+                })?;
+
             let chunk = ArtifactChunk {
                 chunk_id,
-                witness: Vec::new(),
                 artifact_chunk_data:
                     ic_types::chunkable::ArtifactChunkData::SemiStructuredChunkData(pb.data),
             };

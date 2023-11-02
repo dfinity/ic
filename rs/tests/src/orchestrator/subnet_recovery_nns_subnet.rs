@@ -117,6 +117,8 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
+        upgrade_image_url: env.get_ic_os_update_img_test_url().ok(),
+        upgrade_image_hash: env.get_ic_os_update_img_test_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),
         upload_node: Some(upload_node.get_ip_addr()),
         next_step: None,

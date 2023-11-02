@@ -11,7 +11,6 @@
 //! * `replica`            -> 9090
 use std::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
-    convert::TryFrom,
     net::{IpAddr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
@@ -19,15 +18,9 @@ use std::{
 };
 
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
-use ic_protobuf::registry::node::v1::{ConnectionEndpoint as pbConnectionEndpoint, NodeRecord};
+use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_registry_local_registry::{LocalRegistry, LocalRegistryError};
-use ic_types::{
-    registry::{
-        connection_endpoint::{ConnectionEndpoint, ConnectionEndpointTryFromProtoError},
-        RegistryClientError,
-    },
-    NodeId, RegistryVersion, SubnetId,
-};
+use ic_types::{registry::RegistryClientError, NodeId, RegistryVersion, SubnetId};
 use thiserror::Error;
 
 pub const REPLICA_JOB_NAME: &str = "replica";
@@ -176,7 +169,7 @@ impl IcServiceDiscoveryImpl {
 
         for subnet_id in subnet_ids {
             let t_infos = reg_client
-                .get_subnet_transport_infos(subnet_id, latest_version)
+                .get_subnet_node_records(subnet_id, latest_version)
                 .map_registry_err(latest_version, "get_subnet_transport_info")?;
 
             for (node_id, node_record) in t_infos {
@@ -195,7 +188,7 @@ impl IcServiceDiscoveryImpl {
         // collect information about unassigned nodes
         for node_id in unassigned_node_ids {
             let node_record = reg_client
-                .get_transport_info(node_id, latest_version)
+                .get_node_record(node_id, latest_version)
                 .map_registry_err(latest_version, "get_transport_info")?;
 
             let socket_addr =
@@ -218,22 +211,7 @@ impl IcServiceDiscoveryImpl {
         node_record: NodeRecord,
     ) -> Result<SocketAddr, IcServiceDiscoveryError> {
         use IcServiceDiscoveryError::*;
-
-        // Derive the prometheus metrics endpoint from the http endpoint.
-        let connection_endpoint =
-            ConnectionEndpoint::try_from(node_record.http.clone().ok_or(NoConnectionEndpoint {
-                node_id,
-                registry_version,
-            })?)
-            .map_err(|source| ConnectionEndpointParseFailed {
-                source,
-                node_id,
-                connection_endpoint: node_record.http.unwrap(),
-                registry_version,
-            })?;
-
-        let mut addr = SocketAddr::from(&connection_endpoint);
-        addr.set_port(9090);
+        let addr = SocketAddr::new(node_record.http.unwrap().ip_addr.parse().unwrap(), 9090);
         // Seen bogus registry entries where the connection endpoint exists
         // but is 0.0.0.0
         if addr.ip().is_unspecified() {
@@ -381,13 +359,6 @@ pub enum IcServiceDiscoveryError {
     #[error("failed to get endpoint for node {node_id}")]
     NoConnectionEndpoint {
         node_id: NodeId,
-        registry_version: RegistryVersion,
-    },
-    #[error("failed to parse {node_id} proto endpoint {connection_endpoint:?}: {source}")]
-    ConnectionEndpointParseFailed {
-        source: ConnectionEndpointTryFromProtoError,
-        node_id: NodeId,
-        connection_endpoint: pbConnectionEndpoint,
         registry_version: RegistryVersion,
     },
     #[error("metrics connection endpoint for {node_id} has 0.0.0.0 addr at {registry_version}")]

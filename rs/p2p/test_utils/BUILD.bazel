@@ -7,17 +7,38 @@ package(default_visibility = [
 DEPENDENCIES = [
     "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces",
+    "//rs/ic_os/sev",
+    "//rs/ic_os/sev_interfaces",
+    "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/p2p/peer_manager",
+    "//rs/p2p/quic_transport",
+    "//rs/p2p/state_sync_manager",
     "//rs/protobuf",
     "//rs/registry/fake",
     "//rs/registry/keys",
+    "//rs/registry/local_registry",
+    "//rs/registry/local_store",
+    "//rs/registry/local_store/artifacts",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:axum",
+    "@crate_index//:bytes",
+    "@crate_index//:either",
+    "@crate_index//:futures",
+    "@crate_index//:mockall",
+    "@crate_index//:quinn",
+    "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:turmoil",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
 ]
 
 rust_library(
@@ -25,6 +46,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_p2p_test_utils",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
 )

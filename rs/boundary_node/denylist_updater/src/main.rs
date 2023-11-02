@@ -23,9 +23,9 @@ use nix::{
     sys::signal::{kill as send_signal, Signal},
     unistd::Pid,
 };
-use opentelemetry::{global, sdk::Resource, KeyValue};
-use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{Encoder, TextEncoder};
+use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider};
+use opentelemetry_prometheus::exporter;
+use prometheus::{labels, Encoder, Registry, TextEncoder};
 use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
 use serde::Deserialize;
 use serde_json as json;
@@ -87,13 +87,16 @@ async fn main() -> Result<(), Error> {
     )
     .expect("failed to set global subscriber");
 
-    let exporter = opentelemetry_prometheus::exporter()
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .init();
-
-    let meter = global::meter(SERVICE_NAME);
-
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    // Metrics
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => SERVICE_NAME.into()}),
+    )
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let meter = provider.meter(SERVICE_NAME);
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     let http_client = reqwest::Client::builder().build()?;
@@ -158,14 +161,14 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
     _: Request<Body>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -440,7 +443,7 @@ impl<RL: List, LL: List, U: Update> Run for Runner<RL, LL, U> {
             .local_lister
             .list()
             .await
-            .context("failed to list local entrie")?;
+            .context("failed to list local entries")?;
 
         if remote_entries != local_entries {
             self.updater

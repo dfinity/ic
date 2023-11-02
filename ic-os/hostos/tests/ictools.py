@@ -225,15 +225,17 @@ def ic_prep(subnets, version, root_subnet=0):
 
     nns_ips = []
     nodes = []
+    node_index = 0
     subnet_index = 0
     node_subnet_index = []
     for subnet in subnets:
         for ipv6 in subnet:
-            node_index = len(nodes)
-            nodes.append("%d-%d-[%s]:4100-[%s]:2497-0-[%s]:8080" % (node_index, subnet_index, ipv6, ipv6, ipv6))
+            nodes.append("--node")
+            nodes.append("idx:%d,subnet_idx:%d,p2p_addr:\"[%s]:4100\",xnet_api:\"[%s]:2497\",public_api:\"[%s]:8080\"" % (node_index, subnet_index, ipv6, ipv6, ipv6))
             if subnet_index == root_subnet:
                 nns_ips.append(ipv6)
             node_subnet_index.append(subnet_index)
+            node_index += 1
         subnet_index += 1
 
     subprocess.run(
@@ -245,11 +247,8 @@ def ic_prep(subnets, version, root_subnet=0):
             version,
             "--dkg-interval-length",
             "10",
-            "--p2p-flows",
-            "1234-1",
             "--nns-subnet-index",
             "%d" % root_subnet,
-            "--nodes",
         ]
         + nodes,
         check=True,

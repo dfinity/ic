@@ -2,7 +2,7 @@ use candid::types::number::Nat;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;

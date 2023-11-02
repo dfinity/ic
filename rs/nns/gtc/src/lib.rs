@@ -328,7 +328,7 @@ pub fn der_encode(public_key: &PublicKey) -> Vec<u8> {
 pub mod test_constants {
     use super::{decode_hex_public_key, public_key_to_gtc_address, public_key_to_principal};
     use ic_base_types::PrincipalId;
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use libsecp256k1::{sign, Message, PublicKey, PublicKeyFormat, SecretKey};
     use std::str::FromStr;
 

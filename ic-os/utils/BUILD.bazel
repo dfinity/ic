@@ -1,7 +1,7 @@
 package(default_visibility = ["//visibility:public"])
 
 cc_binary(
-    name = "infogetty",
+    name = "infogetty_bin",
     srcs = [
         "infogetty-cpp/infogetty.cc",
         "infogetty-cpp/network_info.cc",
@@ -15,8 +15,19 @@ cc_binary(
     ],
 )
 
+genrule(
+    name = "infogetty_cleaned",
+    srcs = ["infogetty_bin"],
+    outs = ["infogetty"],
+    cmd = "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+    executable = True,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
 cc_binary(
-    name = "prestorecon",
+    name = "prestorecon_bin",
     srcs = [
         "prestorecon-cpp/prestorecon.cc",
     ],
@@ -24,6 +35,17 @@ cc_binary(
         "-lselinux",
         "-pthread",
     ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
+genrule(
+    name = "prestorecon_cleaned",
+    srcs = ["prestorecon_bin"],
+    outs = ["prestorecon"],
+    cmd = "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+    executable = True,
     target_compatible_with = [
         "@platforms//os:linux",
     ],

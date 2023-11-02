@@ -1,6 +1,6 @@
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 
 LINUX_ONLY = [
     "sevctl",
@@ -12,7 +12,6 @@ NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
     "ic-https-outcalls-adapter",
-    "ic-onchain-observability-adapter",
     "replica",
 ]
 
@@ -34,7 +33,6 @@ BINARIES = {
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
-    "ic-onchain-observability-adapter": "//rs/monitoring/onchain_observability/adapter:ic-onchain-observability-adapter",
     "ic-nns-init": "//rs/nns/init:ic-nns-init",
     "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
     "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",
@@ -55,34 +53,43 @@ BINARIES = {
     "sevctl": "//rs/ic_os/sevctl:sevctl",
     "sns": "//rs/sns/cli:sns",
     "state-tool": "//rs/state_tool:state-tool",
+    "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
     "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
+    "drun": "//rs/drun:drun",
+    "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
 }
 
 [release_nostrip_binary(
-    name = name,
+    name = name + "_bin",
     binary = BINARIES[name],
-    visibility = [
-        "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs:__subpackages__",
-    ],
 ) for name in BINARIES if name in NO_STRIP]
 
 [release_strip_binary(
-    name = name,
+    name = name + "_bin",
     binary = BINARIES[name],
-    visibility = [
-        "//ic-os/boundary-api-guestos/envs/dev:__pkg__",
-        "//ic-os/boundary-api-guestos/envs/prod:__pkg__",
-        "//ic-os/boundary-guestos/envs/dev:__pkg__",
-        "//ic-os/boundary-guestos/envs/dev-sev:__pkg__",
-        "//ic-os/boundary-guestos/envs/prod:__pkg__",
-        "//ic-os/boundary-guestos/envs/prod-sev:__pkg__",
-        "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs:__subpackages__",
-    ],
 ) for name in BINARIES if name not in NO_STRIP]
+
+[
+    genrule(
+        name = name + "_cleaned",
+        srcs = [name + "_bin"],
+        outs = [name],
+        cmd = select({
+            "@platforms//os:linux": "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+            "@platforms//os:osx": "cp $< $@",
+        }),
+        executable = True,
+        visibility = [
+            "//ic-os/boundary-api-guestos/envs:__subpackages__",
+            "//ic-os/boundary-guestos/envs:__subpackages__",
+            "//ic-os/guestos/envs:__subpackages__",
+            "//ic-os/hostos/envs:__subpackages__",
+        ],
+    )
+    for name in BINARIES
+]
 
 [
     gzip_compress(

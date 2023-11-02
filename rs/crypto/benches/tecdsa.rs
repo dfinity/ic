@@ -2,7 +2,6 @@ use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
 use ic_base_types::{NodeId, PrincipalId};
-use ic_crypto_internal_csp::Csp;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
 use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -20,6 +19,7 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::Randomness;
 use rand::{CryptoRng, Rng, RngCore};
 use std::collections::BTreeMap;
+use strum::IntoEnumIterator;
 
 criterion_main!(benches);
 criterion_group!(benches, crypto_tecdsa_benchmarks);
@@ -35,39 +35,45 @@ fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
             ..TestCase::default()
         },
         TestCase {
+            sample_size: 10,
             num_of_nodes: 13,
             ..TestCase::default()
         },
         TestCase {
             num_of_nodes: 28,
+            sample_size: 10,
             ..TestCase::default()
         },
         TestCase {
             num_of_nodes: 40,
+            sample_size: 10,
             ..TestCase::default()
         },
     ];
 
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
         group
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
-        bench_sign_share(group, &test_case, &mut rng);
-        bench_verify_sig_share(group, &test_case, &mut rng);
-        bench_combine_sig_shares(group, &test_case, &mut rng);
-        bench_verify_combined_sig(group, &test_case, &mut rng);
+        for vault_type in VaultType::iter() {
+            bench_sign_share(group, &test_case, vault_type, rng);
+        }
+        bench_verify_sig_share(group, &test_case, VaultType::default(), rng);
+        bench_combine_sig_shares(group, &test_case, VaultType::default(), rng);
+        bench_verify_combined_sig(group, &test_case, VaultType::default(), rng);
     }
 }
 
 fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let key_transcript = generate_key_transcript(
@@ -79,7 +85,7 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
     );
     let signer = env.nodes.random_receiver(&key_transcript.receivers, rng);
 
-    group.bench_function("sign_share", |bench| {
+    group.bench_function(format!("sign_share_{vault_type:?}"), |bench| {
         bench.iter_batched_ref(
             || {
                 let (derivation_path, hashed_message, seed) = random_sig_inputs(rng);
@@ -117,9 +123,10 @@ fn sign_share(signer: &Node, inputs: &ThresholdEcdsaSigInputs) -> ThresholdEcdsa
 fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let key_transcript = generate_key_transcript(
@@ -130,7 +137,7 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
         rng,
     );
 
-    group.bench_function("verify_sig_share", |bench| {
+    group.bench_function(format!("verify_sig_share_{vault_type:?}"), |bench| {
         bench.iter_batched_ref(
             || {
                 let (derivation_path, hashed_message, seed) = random_sig_inputs(rng);
@@ -180,9 +187,10 @@ fn verify_sig_share(
 fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let key_transcript = generate_key_transcript(
@@ -194,7 +202,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
     );
     let combiner = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
 
-    group.bench_function("combine_sig_shares", |bench| {
+    group.bench_function(format!("combine_sig_shares_{vault_type:?}"), |bench| {
         bench.iter_batched_ref(
             || {
                 let (derivation_path, hashed_message, seed) = random_sig_inputs(rng);
@@ -219,7 +227,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
 }
 
 fn combine_sig_shares<R: Rng + CryptoRng + Sync + Send + 'static>(
-    combiner: &TempCryptoComponentGeneric<Csp, R>,
+    combiner: &TempCryptoComponentGeneric<R>,
     inputs: &ThresholdEcdsaSigInputs,
     shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
 ) -> ThresholdEcdsaCombinedSignature {
@@ -237,9 +245,10 @@ fn combine_sig_shares<R: Rng + CryptoRng + Sync + Send + 'static>(
 fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let key_transcript = generate_key_transcript(
@@ -252,7 +261,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
     let combiner = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
     let verifier = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
 
-    group.bench_function("verify_combined_sig", |bench| {
+    group.bench_function(format!("verify_combined_sig_{vault_type:?}"), |bench| {
         bench.iter_batched_ref(
             || {
                 let (derivation_path, hashed_message, seed) = random_sig_inputs(rng);
@@ -278,7 +287,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
 }
 
 fn verify_combined_sig<R: Rng + CryptoRng + Sync + Send + 'static>(
-    verifier: &TempCryptoComponentGeneric<Csp, R>,
+    verifier: &TempCryptoComponentGeneric<R>,
     inputs: &ThresholdEcdsaSigInputs,
     signature: &ThresholdEcdsaCombinedSignature,
 ) {
@@ -324,12 +333,34 @@ impl Default for TestCase {
 impl TestCase {
     fn new_test_environment<R: Rng + CryptoRng>(
         &self,
+        vault_type: VaultType,
         rng: &mut R,
     ) -> CanisterThresholdSigTestEnvironment {
-        CanisterThresholdSigTestEnvironment::new(self.num_of_nodes, rng)
+        match vault_type {
+            VaultType::Local => CanisterThresholdSigTestEnvironment::new(self.num_of_nodes, rng),
+            VaultType::Remote => {
+                CanisterThresholdSigTestEnvironment::new_with_remote_vault(self.num_of_nodes, rng)
+            }
+        }
     }
 
     fn name(&self) -> String {
         format!("crypto_tecdsa_{}_nodes", self.num_of_nodes,)
+    }
+}
+
+#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+enum VaultType {
+    Local,
+    #[default]
+    Remote,
+}
+
+impl std::fmt::Debug for VaultType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VaultType::Remote => write!(f, "remote_vault"),
+            VaultType::Local => write!(f, "local_vault"),
+        }
     }
 }

@@ -6,9 +6,9 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
-    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallMode,
-    CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId, HttpMethod,
-    TransformContext, TransformFunc,
+    self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
+    CanisterInstallMode, CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId,
+    HttpMethod, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -38,7 +38,52 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = match EmbeddersConfig:
     FlagStatus::Enabled => 2_670_000,
     FlagStatus::Disabled => 1_044_000,
 };
-const TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS: u64 = 30;
+
+// instruction cost of executing inc method on the test canister
+fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
+    use ic_config::embedders::MeteringType;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost as instruction_to_cost_old;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
+
+    let instruction_to_cost = match config.embedders_config.metering_type {
+        MeteringType::New => instruction_to_cost_new,
+        MeteringType::Old => instruction_to_cost_old,
+        MeteringType::None => |_op: &wasmparser::Operator| 0u64,
+    };
+
+    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let cs = instruction_to_cost(&wasmparser::Operator::I32Store {
+        memarg: wasmparser::MemArg {
+            align: 0,
+            max_align: 0,
+            offset: 0,
+            memory: 0,
+        },
+    });
+    let cl = instruction_to_cost(&wasmparser::Operator::I32Load {
+        memarg: wasmparser::MemArg {
+            align: 0,
+            max_align: 0,
+            offset: 0,
+            memory: 0,
+        },
+    });
+    let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
+    let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let csys =
+        ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY_DATA_APPEND
+            .get();
+
+    let cd = if let MeteringType::New = config.embedders_config.metering_type {
+        ic_config::subnet_config::SchedulerConfig::application_subnet()
+            .dirty_page_overhead
+            .get()
+    } else {
+        0
+    };
+
+    5 * cc + cs + cl + ca + 2 * ccall + csys + cd
+}
 
 /// This is a canister that keeps a counter on the heap and exposes various test
 /// methods. Exposed methods:
@@ -149,7 +194,7 @@ const TEST_CANISTER: &str = r#"
     (export "canister_update grow_mem" (func $grow_mem))
 )"#;
 
-const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS: u64 = 0;
+const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS: u64 = 0;
 
 /// This is an empty canister that only exposes canister_heartbeat method.
 const TEST_HEARTBEAT_CANISTER: &str = r#"
@@ -382,7 +427,7 @@ fn simulate_sign_with_ecdsa_cost(
     let canister_id =
         create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
-    // SignWithECDSA is payed with cycles attached to the request.
+    // SignWithECDSA is paid with cycles attached to the request.
     let payment_before = Cycles::new((2 * B).into()) * subnet_size;
     let sign_with_ecdsa = wasm()
         .call_with_cycles(
@@ -435,7 +480,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
     let canister_id =
         create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
-    // HttpRequest is payed with cycles attached to the request.
+    // HttpRequest is paid with cycles attached to the request.
     let payment_before = Cycles::new((20 * B).into()) * subnet_size;
     let http_request = wasm()
         .call_with_cycles(
@@ -445,7 +490,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
                 Encode!(&CanisterHttpRequestArgs {
                     url: "https://".to_string(),
                     max_response_bytes: None,
-                    headers: Vec::new(),
+                    headers: BoundedHttpHeaders::new(vec![]),
                     body: None,
                     method: HttpMethod::GET,
                     transform: Some(TransformContext {
@@ -664,6 +709,9 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
             http_response_per_byte_fee: Cycles::new(0),
+            max_storage_reservation_period: Duration::from_secs(0),
+            default_reserved_balance_limit: CyclesAccountManagerConfig::system_subnet()
+                .default_reserved_balance_limit,
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
@@ -687,6 +735,9 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
+            max_storage_reservation_period: Duration::from_secs(0),
+            default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
+                .default_reserved_balance_limit,
         },
     }
 }
@@ -1067,7 +1118,7 @@ fn test_subnet_size_execute_message_cost() {
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS),
+        NumInstructions::from(inc_instruction_cost(HypervisorConfig::default())),
         reference_subnet_size,
     );
 
@@ -1115,7 +1166,7 @@ fn test_subnet_size_execute_heartbeat_cost() {
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS),
+        NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS),
         reference_subnet_size,
     );
 

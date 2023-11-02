@@ -63,6 +63,7 @@ impl_display_using_debug!(IDkgParamsValidationError);
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InitialIDkgDealingsValidationError {
     DealerNotAllowed { node_id: NodeId },
+    DealersAndReceiversNotDisjoint,
     DeserializationError { error: String },
     InvalidTranscriptOperation,
     MismatchingDealing,

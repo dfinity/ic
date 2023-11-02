@@ -9,7 +9,8 @@ use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_test_utils_keys::public_keys::{
     valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
-    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key, valid_tls_certificate,
+    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+    valid_tls_certificate_and_validation_time,
 };
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_logger::replica_logger::no_op_logger;
@@ -337,7 +338,10 @@ fn should_deserialize_existing_public_key_store() {
         store.idkg_dealing_encryption_pubkeys(),
         vec![(valid_idkg_dealing_encryption_public_key())]
     );
-    assert_eq!(store.tls_certificate(), Some(valid_tls_certificate()));
+    assert_eq!(
+        store.tls_certificate(),
+        Some(valid_tls_certificate_and_validation_time().0)
+    );
 }
 
 fn equal_ignoring_timestamp(left: &Vec<PublicKey>, right: &Vec<PublicKey>) -> bool {

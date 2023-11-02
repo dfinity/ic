@@ -1,6 +1,7 @@
 //! This module implements the ECDSA payload builder.
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::enum_variant_names)]
+#![allow(clippy::result_large_err)]
 
 use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
 use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
@@ -674,7 +675,8 @@ pub(crate) fn create_data_payload_helper(
         curr_interval_registry_version,
         registry_client,
         &log,
-    )? else {
+    )?
+    else {
         return Ok(None);
     };
     let enabled_signing_keys = get_enabled_signing_keys(
@@ -1005,13 +1007,13 @@ pub(crate) fn get_signing_requests<'a>(
                 respondent: ic_types::CanisterId::ic_00(),
                 originator_reply_callback: *callback_id,
                 refund: context.request.payment,
-                response_payload: ic_types::messages::Payload::Reject(RejectContext {
-                    code: RejectCode::CanisterReject,
-                    message: format!(
+                response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterReject,
+                    format!(
                         "Invalid or disabled key_id in signature request: {:?}",
                         context.key_id
                     ),
-                }),
+                )),
             };
             ecdsa_payload.signature_agreements.insert(
                 context.pseudo_random_id,
@@ -1064,10 +1066,10 @@ pub(crate) fn get_signing_requests<'a>(
                     respondent: ic_types::CanisterId::ic_00(),
                     originator_reply_callback: *callback_id,
                     refund: context.request.payment,
-                    response_payload: ic_types::messages::Payload::Reject(RejectContext {
-                        code: RejectCode::CanisterError,
-                        message: "Signature request expired".to_string(),
-                    }),
+                    response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+                        RejectCode::CanisterError,
+                        "Signature request expired",
+                    )),
                 };
                 ecdsa_payload.signature_agreements.insert(
                     context.pseudo_random_id,
@@ -1759,7 +1761,7 @@ pub fn block_chain_cache(
             chain_len,
             start.height(),
             end.height(),
-            chain.tip().0,
+            chain.tip().height(),
             pool_reader.get_notarized_height(),
             pool_reader.get_finalized_height(),
             pool_reader.get_catch_up_height()
@@ -1919,7 +1921,7 @@ mod tests {
     ) -> Block {
         pool.advance_round_normal_operation_n(advance_by - 1);
         let mut block_proposal = pool.make_next_block();
-        let mut block = block_proposal.content.as_mut();
+        let block = block_proposal.content.as_mut();
         block.payload = Payload::new(ic_types::crypto::crypto_hash, block_payload);
         block_proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
         pool.advance_round_with_block(&block_proposal);
@@ -3981,7 +3983,7 @@ mod tests {
             summary.update_refs(new_summary_height); // expected
             assert_eq!(summary, summary_from_proto);
 
-            // Check signature_agreement upgrade compatiblity
+            // Check signature_agreement upgrade compatibility
             summary_proto
                 .signature_agreements
                 .push(pb::CompletedSignature {

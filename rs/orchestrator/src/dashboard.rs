@@ -94,7 +94,7 @@ impl OrchestratorDashboard {
 
     fn get_authorized_keys(&self, account: &str) -> String {
         try_to_get_authorized_keys(account).unwrap_or_else(|e| {
-            let error = format!("Failed to read the keys of the accout {}: {}", account, e);
+            let error = format!("Failed to read the keys of the account {}: {}", account, e);
             warn!(self.logger, "{}", error);
             error
         })

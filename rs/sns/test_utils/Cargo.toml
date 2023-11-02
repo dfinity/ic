@@ -9,11 +9,11 @@ candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-futures = "0.3.8"
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-client = { path = "../../rosetta-api/icrc1/client" }
 ic-icrc1-index = { path = "../../rosetta-api/icrc1/index" }
@@ -42,5 +42,5 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 num-traits = "0.2.14"
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.11.0"
-tokio = { version = "1.17.0", features = ["full"] }
+prost = { workspace = true }
+tokio = { version = "1.32.0", features = ["full"] }

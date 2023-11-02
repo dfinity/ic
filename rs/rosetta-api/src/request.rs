@@ -25,7 +25,7 @@ pub mod transaction_results;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum Request {
-    /// Contains `Send`, `Mint`, and `Burn` operations.
+    /// Contains `Send`, `Mint`, `Approve` and `Burn` operations.
     /// Attempting to serialize or deserialize any Mint, or Burn will error.
     #[serde(rename = "TRANSACTION")]
     #[serde(with = "serde_transfer")]
@@ -98,7 +98,14 @@ impl Request {
                     neuron_index: *neuron_index,
                 })
             }
-            Request::Transfer(icp_ledger::Operation::Transfer { .. }) => Ok(RequestType::Send),
+            Request::Transfer(icp_ledger::Operation::Transfer { spender, .. }) => {
+                if spender.is_some() {
+                    return Err(ApiError::invalid_request(
+                        "TransferFrom operations are not supported through Rosetta",
+                    ));
+                }
+                Ok(RequestType::Send)
+            }
             Request::Transfer(icp_ledger::Operation::Burn { .. }) => Err(
                 ApiError::invalid_request("Burn operations are not supported through Rosetta"),
             ),
@@ -108,11 +115,6 @@ impl Request {
             Request::Transfer(icp_ledger::Operation::Approve { .. }) => Err(
                 ApiError::invalid_request("Approve operations are not supported through Rosetta"),
             ),
-            Request::Transfer(icp_ledger::Operation::TransferFrom { .. }) => {
-                Err(ApiError::invalid_request(
-                    "TransferFrom operations are not supported through Rosetta",
-                ))
-            }
             Request::Spawn(Spawn { neuron_index, .. }) => Ok(RequestType::Spawn {
                 neuron_index: *neuron_index,
             }),
@@ -246,6 +248,7 @@ impl TryFrom<&models::Request> for Request {
                 Ok(Request::Transfer(icp_ledger::Operation::Transfer {
                     from: account,
                     to,
+                    spender: None,
                     amount,
                     fee,
                 }))

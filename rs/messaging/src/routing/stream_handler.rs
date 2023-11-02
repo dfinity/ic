@@ -871,7 +871,7 @@ fn reject_code_for_state_error(err: &StateError) -> RejectCode {
     }
 }
 
-/// Ensures that the given signals are vaild (strictly increasing, before
+/// Ensures that the given signals are valid (strictly increasing, before
 /// `signals_end`).
 fn assert_valid_signals(
     signals_end: StreamIndex,
@@ -881,7 +881,7 @@ fn assert_valid_signals(
     use std::iter::once;
     let shifted = reject_signals.iter().skip(1).chain(once(&signals_end));
     assert!(
-        // Check that signals are stricly monotonic and below signals_end.
+        // Check that signals are strictly monotonic and below signals_end.
         reject_signals.iter().zip(shifted).all(|(x, y)| x < y),
         "Invalid {}: signals_end {}, signals {:?}",
         stream_component,

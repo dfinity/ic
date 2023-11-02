@@ -136,6 +136,21 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
         }
     }
 
+    fn remove(&mut self, id: &CertificationMessageId) {
+        // TODO(CON-1128): this implementation is inefficient as we compute all hashes
+        // every time.
+        match &id.hash {
+            CertificationMessageHash::Certification(hash) => {
+                self.unvalidated_certifications
+                    .retain(id.height, |c| *hash != crypto_hash(c));
+            }
+            CertificationMessageHash::CertificationShare(hash) => {
+                self.unvalidated_shares
+                    .retain(id.height, |s| *hash != crypto_hash(s));
+            }
+        }
+    }
+
     fn apply_changes(
         &mut self,
         _time_source: &dyn TimeSource,
@@ -294,7 +309,7 @@ impl CertificationPool for CertificationPoolImpl {
 
 impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
     fn contains(&self, id: &CertificationMessageId) -> bool {
-        // TODO: this is a very inefficient implementation as we compute all hashes
+        // TODO(CON-1128): this is a very inefficient implementation as we compute all hashes
         // every time.
         match &id.hash {
             CertificationMessageHash::CertificationShare(hash) => {
@@ -417,6 +432,20 @@ mod tests {
         unreachable!("This should be only called on a certification message.");
     }
 
+    fn msg_to_id(msg: &CertificationMessage) -> CertificationMessageId {
+        CertificationMessageId {
+            hash: match msg {
+                CertificationMessage::Certification(c) => {
+                    CertificationMessageHash::Certification(crypto_hash(c))
+                }
+                CertificationMessage::CertificationShare(s) => {
+                    CertificationMessageHash::CertificationShare(crypto_hash(s))
+                }
+            },
+            height: msg.height(),
+        }
+    }
+
     fn to_unvalidated(message: CertificationMessage) -> UnvalidatedArtifact<CertificationMessage> {
         UnvalidatedArtifact::<CertificationMessage> {
             message,
@@ -426,16 +455,22 @@ mod tests {
     }
 
     #[test]
-    fn test_certification_pool_inserts() {
+    fn test_certification_pool_insert_and_remove() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool =
                 CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
-            pool.insert(to_unvalidated(fake_share(1, 0)));
-            pool.insert(to_unvalidated(fake_share(2, 1)));
+            let share1 = fake_share(1, 0);
+            let id1 = msg_to_id(&share1);
+            let share2 = fake_share(2, 1);
+            let id2 = msg_to_id(&share2);
+            pool.insert(to_unvalidated(share1));
+            pool.insert(to_unvalidated(share2));
 
-            pool.insert(to_unvalidated(fake_cert(1)));
-            let mut other = fake_cert(1);
-            if let CertificationMessage::Certification(x) = &mut other {
+            let cert1 = fake_cert(1);
+            let id3 = msg_to_id(&cert1);
+            pool.insert(to_unvalidated(cert1.clone()));
+            let mut cert2 = cert1;
+            if let CertificationMessage::Certification(x) = &mut cert2 {
                 x.signed.signature.signer = NiDkgId {
                     start_block_height: Height::from(10),
                     dealer_subnet: subnet_test_id(0),
@@ -443,7 +478,9 @@ mod tests {
                     target_subnet: NiDkgTargetSubnet::Local,
                 };
             }
-            pool.insert(to_unvalidated(other));
+            let id4 = msg_to_id(&cert2);
+            pool.insert(to_unvalidated(cert2));
+
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(1)).count(),
                 1
@@ -461,6 +498,12 @@ mod tests {
                 pool.all_heights_with_artifacts(),
                 vec![Height::from(1), Height::from(2)]
             );
+
+            for id in [id1, id2, id3, id4] {
+                assert!(pool.contains(&id));
+                pool.remove(&id);
+                assert!(!pool.contains(&id));
+            }
         })
     }
 

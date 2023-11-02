@@ -4,6 +4,8 @@ After=network-online.target
 Wants=network-online.target
 After=setup-control-plane.service
 BindsTo=setup-control-plane.service
+After=setup-nginx.service
+BindsTo=setup-nginx.service
 
 [Service]
 LogRateLimitIntervalSec=1ms

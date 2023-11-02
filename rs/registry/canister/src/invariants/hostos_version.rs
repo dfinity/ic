@@ -3,16 +3,16 @@ use crate::invariants::common::{
     get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
 };
 
-use ic_protobuf::registry::hostos_version::v1::HostOsVersionRecord;
+use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_registry_keys::make_hostos_version_key;
 
 /// A predicate on the HostOS version records contained in a registry
 /// snapshot.
 ///
 /// For each HostOS version that is either referred to in a NodeRecord
-/// or that is contained in a HostOsVersionRecord, the following is checked:
+/// or that is contained in a HostosVersionRecord, the following is checked:
 ///
-/// * The corresponding HostOsVersionRecord exists.
+/// * The corresponding HostosVersionRecord exists.
 /// * Each set URL is well-formed.
 /// * Each set hash is a well-formed hex-encoded SHA256 value.
 pub(crate) fn check_hostos_version_invariants(
@@ -48,7 +48,7 @@ pub(crate) fn check_hostos_version_invariants(
     Ok(())
 }
 
-fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> HostOsVersionRecord {
+fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> HostosVersionRecord {
     get_value_from_snapshot(snapshot, make_hostos_version_key(version.clone()))
         .unwrap_or_else(|| panic!("Could not find HostOS version: {}", version))
 }

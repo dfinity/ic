@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 if ! which jq >/dev/null; then
     echo >&2 "Tool \`jq\` not found.  Please install. \`brew install jq\` or check https://stedolan.github.io/jq/"
@@ -123,10 +123,15 @@ get_nns_canister_code_location() {
 
     IC_REPO=$(repo_root)
     RUST_DIR="$IC_REPO/rs"
+    LEDGER_COMMON="$RUST_DIR/rosetta-api/icp_ledger/src "
+    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_core "
+    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_canister_core "
+    LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger_types"
     # Map of locations
     code_location__registry="$RUST_DIR/registry/canister"
     code_location__governance="$RUST_DIR/nns/governance"
-    code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister $RUST_DIR/rosetta-api/icp_ledger"
+    code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
+    code_location__icp_ledger_archive="$RUST_DIR/rosetta-api/icp_ledger/archive $LEDGER_COMMON"
     code_location__root="$RUST_DIR/nns/handlers/root/impl"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
@@ -249,7 +254,7 @@ test_propose_to_open_sns_token_swap_pem() {
         --swap-due-timestamp-seconds $NOW_PLUS_TWO_DAYS \
         --sns-token-e8s 3000000000000 \
         --target-swap-canister-id "$SWAP_ID" \
-        --neuron-basket-count 1 \
+        --neuron-basket-count 3000 \
         --neuron-basket-dissolve-delay-interval-seconds 100 \
         --proposal-title "Decentralize this SNS" \
         --summary "Decentralize this SNS" \
@@ -274,48 +279,6 @@ nns_proposal_info() {
 }
 
 ### End functions related to SNS deployments
-
-##: published_sns_canister_diff
-## Gets the diff between the mainnet commits of various SNS canisters and IC master.
-## Usage: $1
-##
-## In V1 of this function, the commits are sourced from commits.sh. In the future, these
-## commits will be automatically parsed
-published_sns_canister_diff() {
-    IC_REPO=$(repo_root)
-    git fetch origin master
-
-    source "$NNS_TOOLS_DIR/commits.sh"
-
-    echo "rs/sns/governance changes since $SNS_GOVERNANCE_COMMIT"
-    pretty_git_log "$SNS_GOVERNANCE_COMMIT" "rs/sns/governance"
-
-    echo "rs/sns/root changes since $SNS_ROOT_COMMIT"
-    pretty_git_log "$SNS_ROOT_COMMIT" "rs/sns/root"
-
-    echo "rs/sns/swap changes since $SNS_SWAP_COMMIT"
-    pretty_git_log "$SNS_SWAP_COMMIT" "rs/sns/swap"
-
-    echo "rs/rosetta-api/icrc1/archive changes since $SNS_ARCHIVE_COMMIT"
-    pretty_git_log "$SNS_ARCHIVE_COMMIT" "rs/rosetta-api/icrc1/archive"
-
-    echo "rs/rosetta-api/icrc1/ledger changes since $SNS_LEDGER_COMMIT"
-    pretty_git_log "$SNS_LEDGER_COMMIT" "rs/rosetta-api/icrc1/ledger"
-
-    echo "rs/rosetta-api/icrc1/index changes since $SNS_INDEX_COMMIT"
-    pretty_git_log "$SNS_INDEX_COMMIT" "rs/rosetta-api/icrc1/index"
-
-    echo "rs/nns/sns-wasm since $SNS_WASM_COMMIT"
-    pretty_git_log "$SNS_WASM_COMMIT" "rs/nns/sns-wasm"
-
-    echo "rs/sns/init changes w.r.t. sns-wasm since $SNS_WASM_COMMIT"
-    pretty_git_log "$SNS_WASM_COMMIT" "rs/sns/init"
-    echo
-
-    echo "------------------------------------------------------------------------------------------"
-    echo "If you are publishing a new SNS Version based off of this script, please update commits.sh"
-    echo "------------------------------------------------------------------------------------------"
-}
 
 pretty_git_log() {
     local COMMIT=$1
@@ -490,7 +453,7 @@ sns_w_latest_version() {
 ## List the neurons owned by the current dfx identity
 sns_list_my_neurons() {
 
-    local SNS_URL=$1 # ususally SUBNET_URL
+    local SNS_URL=$1 # usually SUBNET_URL
     local SNS_GOVERNANCE_CANISTER_ID=$2
 
     local IC=$(repo_root)
@@ -500,6 +463,24 @@ sns_list_my_neurons() {
         --candid $GOV_DID \
         $SNS_GOVERNANCE_CANISTER_ID list_neurons \
         "( record { of_principal = opt principal \"$(dfx -q identity get-principal)\"; limit = 100: nat32})"
+
+}
+
+##: sns_list_all_neurons
+## Usage: $1 <SUBNET_URL> <SNS_GOVERNANCE_CANISTER_ID>
+## List all neurons in an SNS
+sns_list_all_neurons() {
+
+    local SNS_URL=$1 # usually SUBNET_URL
+    local SNS_GOVERNANCE_CANISTER_ID=$2
+
+    local IC=$(repo_root)
+    local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
+
+    dfx -q canister --network "${SNS_URL}" call \
+        --candid "${GOV_DID}" \
+        "${SNS_GOVERNANCE_CANISTER_ID}" list_neurons \
+        "( record { of_principal = null; limit = 100: nat32})"
 
 }
 
@@ -605,4 +586,73 @@ sns_get_proposal() {
     dfx -q canister --network $SNS_URL \
         call --candid "$GOV_DID" \
         "$SNS_GOVERNANCE_CANISTER_ID" get_proposal "( record { proposal_id = opt record { id = $PROPOSAL_ID : nat64 }})"
+}
+
+sns_get_archive() {
+    local SUBNET_URL=$1
+    local SNS_LEDGER_CANISTER_ID=$2
+
+    set -e
+    # Unfortunately the ledger .did file does not support this method even though the canister does.
+    # This forces us to use grep & awk instead of jq
+    ARCHIVE_ID=$(dfx canister --network "$SUBNET_URL" call "${SNS_LEDGER_CANISTER_ID}" archives '()' \
+        | grep -o 'principal "[^"]*"' | awk -F '"' '{print $2}')
+    set +e
+
+    echo "${ARCHIVE_ID}"
+}
+
+add_archive_to_sns_canister_ids() {
+    local FILE=$1
+    local ARCHIVE_CANISTER_ID=$2
+
+    jq '. + {"archive_canister_id": "'"$ARCHIVE_CANISTER_ID"'"}' $FILE | sponge $FILE
+}
+
+##: wait_for_proposal_to_execute
+## Waits with a timeout for an NNS Proposal to successfully execute.
+## Usage: $1 <NNS_URL> <PROPOSAL_ID>
+##      NNS_URL: The url to the subnet running the NNS in your testnet.
+##      PROPOSAL_ID: The ID of the proposal
+wait_for_proposal_to_execute() {
+    ensure_variable_set IDL2JSON
+
+    local NNS_URL=$1
+    local PROPOSAL_ID=$2
+
+    for i in {1..20}; do
+        echo "Testing to see if NNS proposal ${PROPOSAL_ID} executed successfully (${i}/20)"
+        EXECUTED=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON | jq -r '.[0].executed_timestamp_seconds')
+        if [[ "${EXECUTED}" != 0 ]]; then
+            print_green "NNS proposal ${PROPOSAL_ID} executed successfully"
+            return 0
+        fi
+        sleep 10
+    done
+
+    print_red "NNS proposal ${PROPOSAL_ID} did not execute successfully"
+    return 1
+}
+
+wait_for_sns_governance_to_be_in_normal_mode() {
+    ensure_variable_set IDL2JSON
+
+    local SUBNET_URL=$1
+    local SNS_GOVERNANCE_CANISTER_ID=$2
+
+    local IC=$(repo_root)
+    local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
+
+    for i in {1..20}; do
+        echo "Testing to see if SNS governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode (${i}/20)"
+        EXECUTED=$(dfx canister --network "$SUBNET_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
+        if [[ "${EXECUTED}" -eq 1 ]]; then
+            print_green "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode"
+            return 0
+        fi
+        sleep 10
+    done
+
+    print_red "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} never reached normal mode"
+    return 1
 }

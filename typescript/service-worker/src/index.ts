@@ -23,6 +23,7 @@ class App {
 
   private async start(): Promise<void> {
     const unsupported = this.unsupported();
+
     if (unsupported) {
       return UnsupportedView.load({ unsupported });
     }

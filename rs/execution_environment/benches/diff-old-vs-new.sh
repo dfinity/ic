@@ -19,20 +19,18 @@
 ## To quickly assess the new changes, run benchmarks just once
 if [ -n "${QUICK}" ]; then
     REPEAT="${REPEAT:=1}"
-    NEW_BENCH_ARGS="${NEW_BENCH_ARGS:---bench execute_* -- --warm-up-time 1  --measurement-time 1 --sample-size 10 --noplot}"
+    NEW_BENCH_ARGS="${NEW_BENCH_ARGS:---warm-up-time 1  --measurement-time 1 --sample-size 10 --noplot}"
 fi
 
 echo "Global script configuration:"
 echo
 printf "%20s %s\n" \
-    "NEW_REPO_DIR :=" "${NEW_REPO_DIR:=$(realpath ../../..)}" \
     "OLD_REPO :=" "${OLD_REPO:=git@gitlab.com:dfinity-lab/public/ic.git}" \
     "OLD_BRANCH :=" "${OLD_BRANCH:=master}" \
+    "OLD_COMMIT :=" "${OLD_COMMIT:=}" \
     "" "" \
-    "NEW_PROFILE :=" "${NEW_PROFILE:=release-lto}" \
-    "NEW_BENCH_ARGS :=" "${NEW_BENCH_ARGS:=--bench execute_*}" \
+    "NEW_BENCH_ARGS :=" "${NEW_BENCH_ARGS:=}" \
     "NEW_NO_CACHE :=" "${NEW_NO_CACHE:=}" \
-    "OLD_PROFILE :=" "${OLD_PROFILE:=release-lto}" \
     "OLD_BENCH_ARGS :=" "${OLD_BENCH_ARGS:=${NEW_BENCH_ARGS}}" \
     "OLD_NO_CACHE :=" "${OLD_NO_CACHE:=}" \
     "" "" \
@@ -42,50 +40,37 @@ printf "%20s %s\n" \
     "IGNORE_OLD_REPORT :=" "${IGNORE_OLD_REPORT:=}"
 echo
 echo "The configuration above could be overridden with environment variables."
-echo "Examples:"
+echo "Example:"
 echo "    OLD_BRANCH=my_branch QUICK=1 IGNORE_OLD_REPORT=1 ${0}"
 echo
 
 ## Other (hidden) options
-BENCHMARK_DIR="${BENCHMARK_DIR:-execution_environment}"
 CACHE_DIR="${CACHE_DIR:-${HOME}/.cache/${0##*/}}"
-WORK_DIR="${WORK_DIR:-${NEW_REPO_DIR}/rs/target/${0##*/}}"
+TMP_DIR="${TMP_DIR:-$(realpath ${0##*/}.tmp/)}"
 
-OLD_REPO_DIR="${OLD_REPO_DIR:-${WORK_DIR}/old-${OLD_BRANCH}}"
-NEW_BENCHMARK_DIR="${NEW_BENCHMARK_DIR:-${NEW_REPO_DIR}/rs/${BENCHMARK_DIR}}"
-NEW_TARGET_DIR="${NEW_TARGET_DIR:-${NEW_REPO_DIR}/rs/target}"
-OLD_BENCHMARK_DIR="${OLD_BENCHMARK_DIR:-${OLD_REPO_DIR}/rs/${BENCHMARK_DIR}}"
-OLD_TARGET_DIR="${OLD_TARGET_DIR:-${OLD_REPO_DIR}/rs/target}"
-OLD_REPORT="${OLD_REPORT:-${OLD_BENCHMARK_DIR}/benches/SYSTEM_API.md}"
+OLD_REPO_DIR="${OLD_REPO_DIR:-${TMP_DIR}/old-${OLD_BRANCH}-${OLD_COMMIT}}"
+OLD_REPORT="${OLD_REPORT:-${OLD_REPO_DIR}/rs/execution_environment/benches/SYSTEM_API.md}"
 
-mkdir -p "${WORK_DIR}" "${CACHE_DIR}"
+mkdir -p "${TMP_DIR}" "${CACHE_DIR}"
 
 ########################################################################
 ## Init and run benchmarks over the local (new) and remote (old) changes
 ########################################################################
 
-## This function is called once to prepare (build) local (new) changes
+## This function is called once to prepare local (new) changes
 init_new() {
     echo "==> Building local (new) changes..."
-    (
-        cd "${NEW_REPO_DIR}/rs"
-        cargo build --profile "${NEW_PROFILE}" --bin canister_sandbox --bin sandbox_launcher \
-            || exit 1
-    )
 }
 
-## This function is called to run remote (old) benchmarks
+## This function is called to run local (new) benchmarks
 run_new() {
-    (
-        cd "${NEW_BENCHMARK_DIR}"
-        SANDBOX_BINARY="${NEW_TARGET_DIR}/${NEW_PROFILE}/canister_sandbox" \
-            LAUNCHER_BINARY="${NEW_TARGET_DIR}/${NEW_PROFILE}/sandbox_launcher" \
-            cargo bench ${FILTER} ${NEW_BENCH_ARGS} \
-            || exit 1
-    )
+    bazel run //rs/execution_environment:execute_inspect_message_bench -- ${FILTER} ${NEW_BENCH_ARGS} \
+        && bazel run //rs/execution_environment:execute_query_bench -- ${FILTER} ${NEW_BENCH_ARGS} \
+        && bazel run //rs/execution_environment:execute_update_bench -- ${FILTER} ${NEW_BENCH_ARGS} \
+        || exit 1
 }
 
-## This function is called once to prepare (clone and build) remote (old) repository
+## This function is called once to prepare remote (old) repository
 init_old() {
     echo "==> Cloning ${OLD_REPO}, branch ${OLD_BRANCH}..."
     if [ -d "${OLD_REPO_DIR}" -a -z "${OLD_NO_CACHE}" ]; then
@@ -95,15 +80,14 @@ init_old() {
     else
         git clone "${OLD_REPO}" --branch "${OLD_BRANCH}" --single-branch --no-tags \
             "${OLD_REPO_DIR}" 2>&1 | sed 's/^/    /'
+        if [ -n "${OLD_COMMIT}" ]; then
+            (
+                cd "${OLD_REPO_DIR}"
+                git checkout "${OLD_COMMIT}"
+            )
+        fi
     fi
-    if [ -n "${IGNORE_OLD_REPORT}" ]; then
-        echo "==> Building remote (old) repo..."
-        (
-            cd "${OLD_REPO_DIR}/rs"
-            cargo build --profile "${OLD_PROFILE}" --bin canister_sandbox --bin sandbox_launcher \
-                || exit 1
-        )
-    else
+    if [ -z "${IGNORE_OLD_REPORT}" ]; then
         echo "==> Using remote (old) report..."
         (
             if [ -s "${OLD_REPORT}" ]; then
@@ -122,9 +106,10 @@ init_old() {
 run_old() {
     (
         cd "${OLD_BENCHMARK_DIR}"
-        SANDBOX_BINARY="${OLD_TARGET_DIR}/${OLD_PROFILE}/canister_sandbox" \
-            LAUNCHER_BINARY="${OLD_TARGET_DIR}/${OLD_PROFILE}/sandbox_launcher" \
-            cargo bench ${FILTER} ${OLD_BENCH_ARGS}
+        bazel run //rs/execution_environment:execute_inspect_message_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
+            && bazel run //rs/execution_environment:execute_query_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
+            && bazel run //rs/execution_environment:execute_update_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
+            || exit 1
     )
 }
 
@@ -263,6 +248,7 @@ calculate_average_speedup() {
             case /G/: return i * 1000 * 1000 * 1000;
             case /ms/: return i / 1000;
             case /us/: return i / 1000 / 1000;
+            case /µs/: return i / 1000 / 1000;
             case /s/: return i / 1;
         }
     }
@@ -277,7 +263,7 @@ calculate_average_speedup() {
             count++;
             printf "| %-42s | %8s | %8s | %+6d% |", $2, $3, $4, speedup;
         }
-        # Print round time ony for throughput
+        # Print round time only for throughput
         # Throughput must be >= 100 elem/s, time must be < 100 s
         if (new < 100) {
             printf "\n";    # skip round time for time table
@@ -305,7 +291,7 @@ init_new
 init_old
 
 ########################################################################
-## Run all the benchmarks 9 times
+## Run all the benchmarks REPEAT times
 ########################################################################
 
 for i in $(seq ${REPEAT}); do
@@ -313,7 +299,8 @@ for i in $(seq ${REPEAT}); do
     if [ -s "${CACHE_DIR}/new-${i}-sum.txt" -a -z "${NEW_NO_CACHE}" ]; then
         echo "    CACHED"
     else
-        run_new \
+        # exit 1
+        run_new 2>&1 \
             | tee "${CACHE_DIR}/new-${i}.txt" \
             | rg --line-buffered "Benchmarking .*: Analyzing" --after-context 3 \
             | tee "${CACHE_DIR}/new-${i}-sum.txt"
@@ -323,7 +310,7 @@ for i in $(seq ${REPEAT}); do
         if [ -s "${CACHE_DIR}/old-${i}-sum.txt" -a -z "${OLD_NO_CACHE}" ]; then
             echo "    CACHED"
         else
-            run_old \
+            run_old 2>&1 \
                 | tee "${CACHE_DIR}/old-${i}.txt" \
                 | rg --line-buffered "Benchmarking .*: Analyzing" --after-context 3 \
                 | tee "${CACHE_DIR}/old-${i}-sum.txt"

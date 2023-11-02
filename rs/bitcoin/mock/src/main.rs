@@ -1,8 +1,9 @@
 use candid::candid_method;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, SendTransactionRequest, Utxo,
+    MillisatoshiPerByte, Network, Utxo,
 };
+use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
 use ic_cdk_macros::{init, update};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
@@ -136,7 +137,12 @@ fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
 #[update]
 fn bitcoin_send_transaction(transaction: SendTransactionRequest) {
     mutate_state(|s| {
-        assert_eq!(transaction.network, s.network.into());
+        let cdk_network = match transaction.network {
+            BitcoinNetwork::Mainnet => Network::Mainnet,
+            BitcoinNetwork::Testnet => Network::Testnet,
+            BitcoinNetwork::Regtest => Network::Regtest,
+        };
+        assert_eq!(cdk_network, s.network);
         if s.is_available {
             s.mempool.insert(ByteBuf::from(transaction.transaction));
         }
@@ -172,7 +178,7 @@ fn check_candid_interface_compatibility() {
         }
     }
 
-    fn check_service_compatible(
+    fn check_service_equal(
         new_name: &str,
         new: candid::utils::CandidSource,
         old_name: &str,
@@ -180,7 +186,7 @@ fn check_candid_interface_compatibility() {
     ) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_compatible(new, old) {
+        match candid::utils::service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -204,7 +210,7 @@ fn check_candid_interface_compatibility() {
     let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("bitcoin_mock.did");
 
-    check_service_compatible(
+    check_service_equal(
         "actual ledger candid interface",
         candid::utils::CandidSource::Text(&new_interface),
         "declared candid interface in bitcoin_mock.did file",

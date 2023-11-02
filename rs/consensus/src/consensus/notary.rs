@@ -156,10 +156,10 @@ impl Notary {
     }
 
     /// Notarize and return a `NotarizationShare` for the given block
-    pub(crate) fn notarize_block<'a>(
+    pub(crate) fn notarize_block(
         &self,
         pool: &PoolReader<'_>,
-        block: &'a Block,
+        block: &Block,
     ) -> Option<NotarizationShare> {
         let registry_version = pool.registry_version(block.height)?;
         let content = NotarizationContent::new(block.height, ic_types::crypto::crypto_hash(block));
@@ -177,10 +177,10 @@ impl Notary {
 
     /// Return true if this node has already published a notarization share
     /// for the given block proposal. Return false otherwise.
-    pub(crate) fn is_proposal_already_notarized_by_me<'a>(
+    pub(crate) fn is_proposal_already_notarized_by_me(
         &self,
         pool: &PoolReader<'_>,
-        proposal: &'a BlockProposal,
+        proposal: &BlockProposal,
     ) -> bool {
         let height = proposal.height();
 

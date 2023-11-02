@@ -10,13 +10,14 @@ byte-unit = "4.0.14"
 crossbeam = "0.8.2"
 hex = "0.4.2"
 http = "0.2.5"
-futures = "0.3.13"
+futures = { workspace = true }
 futures-util = "0.3.13"
 hyper = { version = "0.14.18", features = ["full"] }
 hyper-tls = "0.5.0"
 ic-async-utils = { path = "../../async_utils" }
 ic-certification = { path = "../../certification" }
 ic-config = { path = "../../config" }
+ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
@@ -27,7 +28,6 @@ ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-pprof = { path = "../../monitoring/pprof" }
-ic-backtrace = { path = "../../monitoring/backtrace" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
@@ -35,8 +35,9 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
 native-tls = { version = "0.2.7", features = ["alpn"] }
+phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { version = "0.12.0", features = ["process"] }
-prost = "0.11.0"
+prost = { workspace = true }
 rand = "0.8.3"
 serde = "1.0.99"
 serde_cbor = "0.11.1"
@@ -47,13 +48,17 @@ slog = { version = "2.5.2", features = [
 strum = { version = "0.24", features = ["derive"] }
 tempfile = "3.1.0"
 threadpool = "1.8.1"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 tokio-io-timeout = "1.2.0"
-tower = { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
+tower = { workspace = true }
 url = "2.1.1"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# this library uses libunwind, which is only applicable to Linux
+ic-backtrace = { path = "../../monitoring/backtrace" }
+
 [dev-dependencies]
-bytes = "1.0.1"
+bytes = { workspace = true }
 ic-agent = { workspace = true }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
@@ -66,6 +71,7 @@ mockall = "0.11.4"
 maplit = "1.0.2"
 pretty_assertions = "0.7.1"
 proptest = "1.0.0"
+serde_bytes = "0.11"
 tower-test = "0.4.0"
 
 [features]

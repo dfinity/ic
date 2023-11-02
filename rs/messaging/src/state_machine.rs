@@ -1,4 +1,4 @@
-use crate::message_routing::MessageRoutingMetrics;
+use crate::message_routing::{MessageRoutingMetrics, NodePublicKeys};
 use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, RegistryExecutionSettings, Scheduler,
@@ -10,6 +10,9 @@ use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::{batch::Batch, ExecutionRound};
 use std::sync::Arc;
 
+use self::query_stats::deliver_query_stats;
+
+mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -26,6 +29,7 @@ pub(crate) trait StateMachine: Send {
         batch: Batch,
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
+        node_public_keys: NodePublicKeys,
     ) -> ReplicatedState;
 }
 pub(crate) struct StateMachineImpl {
@@ -71,12 +75,30 @@ impl StateMachine for StateMachineImpl {
         mut batch: Batch,
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
+        node_public_keys: NodePublicKeys,
     ) -> ReplicatedState {
         let phase_timer = Timer::start();
 
-        state.metadata.batch_time = batch.time;
+        // Get query stats from blocks and add them to the state, so that they can be aggregated later.
+        if let Some(query_stats) = &batch.messages.query_stats {
+            deliver_query_stats(&self.log, query_stats, &mut state, batch.batch_number);
+        }
+
+        if batch.time >= state.metadata.batch_time {
+            state.metadata.batch_time = batch.time;
+        } else {
+            // Batch time regressed. This is a bug. (Implicitly) retain the old batch time.
+            self.metrics.observe_batch_time_regression(
+                &self.log,
+                state.metadata.batch_time,
+                batch.time,
+                batch.batch_number,
+            )
+        }
+
         state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
+        state.metadata.node_public_keys = node_public_keys;
         if let Err(message) = state.metadata.init_allocation_ranges_if_empty() {
             self.metrics
                 .observe_no_canister_allocation_range(&self.log, message);
@@ -91,7 +113,7 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out requests.
-        let timed_out_requests = state.time_out_requests(batch.time);
+        let timed_out_requests = state.time_out_requests();
         self.metrics
             .timed_out_requests_total
             .inc_by(timed_out_requests);

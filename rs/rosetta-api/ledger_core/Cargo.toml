@@ -5,21 +5,10 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.53"
 candid = { workspace = true }
-ciborium = { workspace = true }
-hex = "0.4.2"
-ic-base-types = { path = "../../types/base_types" }
-ic-constants = { path = "../../constants" }
-ic-crypto-sha = { path = "../../crypto/sha/" }
-ic-ic00-types = { path = "../../types/ic00_types" }
-ic-utils = { path = "../../utils" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 num-traits = "0.2.12"
 serde = "1.0"
 serde_bytes = "0.11"
 
 [dev-dependencies]
-proptest = "1.0"
-rand = "0.8"

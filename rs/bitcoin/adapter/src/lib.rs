@@ -42,18 +42,21 @@ mod router;
 /// BTC streams (SOCKS and TCP).
 mod rpc_server;
 mod stream;
-mod transaction_manager;
+mod transaction_store;
 
+// This module contains code that is used to return requested blocks to the Bitcoin canister.
+// For security reasons, it expects the returned blocks to be in a BFS order (for example, a
+// malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
 pub use blockchainmanager::BlockchainManager;
 pub use blockchainstate::BlockchainState;
 use common::BlockHeight;
 pub use get_successors_handler::GetSuccessorsHandler;
-pub use router::start_router;
-pub use rpc_server::spawn_grpc_server;
+pub use router::start_main_event_loop;
+pub use rpc_server::start_grpc_server;
 use stream::StreamEvent;
-pub use transaction_manager::TransactionManager;
+pub use transaction_store::TransactionStore;
 
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
@@ -108,7 +111,7 @@ pub trait ProcessEvent {
     ) -> Result<(), ProcessBitcoinNetworkMessageError>;
 }
 
-/// This trait provides an interface for processing messages comming from
+/// This trait provides an interface for processing messages coming from
 /// bitcoin peers.
 /// [StreamEvent](crate::stream::StreamEvent).
 pub trait ProcessBitcoinNetworkMessage {
@@ -157,8 +160,8 @@ pub struct AdapterState {
     /// to unnecessary download bitcoin data.
     /// In a previous iteration we set this value to at least 'idle_seconds' in the past on startup.
     /// This way the adapter would always be in idle when starting since 'elapsed()' is greater than 'idle_seconds'.
-    /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when substracting
-    /// 'idle_seconds' we encountered an underflow and paniced.
+    /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when subtracting
+    /// 'idle_seconds' we encountered an underflow and panicked.
     last_received_at: Arc<RwLock<Option<Instant>>>,
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
@@ -196,17 +199,20 @@ pub fn start_grpc_server_and_router(
     logger: ReplicaLogger,
     adapter_state: AdapterState,
 ) {
-    // TODO: establish what the buffer size should be
-    let (blockchain_manager_tx, blockchain_manager_rx) = channel(10);
-
+    let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(config, metrics_registry)));
-    let get_successors_handler =
-        GetSuccessorsHandler::new(config, blockchain_state.clone(), blockchain_manager_tx);
+    let get_successors_handler = GetSuccessorsHandler::new(
+        config,
+        // The get successor handler should be low latency, and instead of not sharing state and
+        // offloading the computation to an event loop here we directly access the shared state.
+        blockchain_state.clone(),
+        blockchain_manager_tx,
+        metrics_registry,
+    );
 
-    // TODO: we should NOT have an unbounded channel for buffering TransactionManagerRequests.
-    let (transaction_manager_tx, transaction_manager_rx) = channel(10);
+    let (transaction_manager_tx, transaction_manager_rx) = channel(100);
 
-    spawn_grpc_server(
+    start_grpc_server(
         config.clone(),
         logger.clone(),
         adapter_state.clone(),
@@ -215,7 +221,7 @@ pub fn start_grpc_server_and_router(
         metrics_registry,
     );
 
-    start_router(
+    start_main_event_loop(
         config,
         logger,
         blockchain_state,

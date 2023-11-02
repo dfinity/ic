@@ -11,6 +11,5 @@ artifacts/
 **/bin/ic-crypto-csp
 **/bin/ic-btc-adapter
 **/bin/ic-https-outcalls-adapter
-**/bin/ic-onchain-observability-adapter
 **/bin/state-tool
 **/disk.img

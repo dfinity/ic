@@ -35,47 +35,48 @@ impl Default for IngressBuilder {
 }
 
 impl IngressBuilder {
+    /// Create a new `IngressBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Sets the source attribute for an ingress message.
+    /// Sets the `source` field.
     pub fn source(mut self, source: UserId) -> Self {
         self.ingress.source = source;
         self
     }
 
-    /// Sets the receiver attribute for an ingress message.
+    /// Sets the `receiver` field.
     pub fn receiver(mut self, receiver: CanisterId) -> Self {
         self.ingress.receiver = receiver;
         self
     }
 
-    /// Sets the method_name attribute for an ingress message.
+    /// Sets the `method_name` field.
     pub fn method_name<S: ToString>(mut self, method_name: S) -> Self {
         self.ingress.method_name = method_name.to_string();
         self
     }
 
-    /// Sets the method_payload attribute for an ingress message.
+    /// Sets the `method_payload` field.
     pub fn method_payload(mut self, method_payload: Vec<u8>) -> Self {
         self.ingress.method_payload = method_payload;
         self
     }
 
-    /// Sets the message_id attribute for an ingress message.
+    /// Sets the `message_id` field.
     pub fn message_id(mut self, message_id: MessageId) -> Self {
         self.ingress.message_id = message_id;
         self
     }
 
+    /// Sets the `expiry_time` field.
     pub fn expiry_time(mut self, expiry_time: Time) -> Self {
         self.ingress.expiry_time = expiry_time;
         self
     }
 
-    /// Returns the Ingress message that has been constructed by the
-    /// builder.
+    /// Returns the built `Ingress`.
     pub fn build(&self) -> Ingress {
         self.ingress.clone()
     }
@@ -110,31 +111,37 @@ impl SignedIngressBuilder {
         Default::default()
     }
 
+    /// Sets the `sender` field.
     pub fn sender(mut self, user_id: UserId) -> Self {
         self.update.sender = Blob(user_id.get().into_vec());
         self
     }
 
+    /// Sets the `canister_id` field.
     pub fn canister_id(mut self, canister_id: CanisterId) -> Self {
         self.update.canister_id = Blob(canister_id.get().into_vec());
         self
     }
 
+    /// Sets the `method_name` field.
     pub fn method_name<S: ToString>(mut self, method_name: S) -> Self {
         self.update.method_name = method_name.to_string();
         self
     }
 
+    /// Sets the `arg` (i.e. method payload) field.
     pub fn method_payload(mut self, method_payload: Vec<u8>) -> Self {
         self.update.arg = Blob(method_payload);
         self
     }
 
+    /// Sets the `nonce` field.
     pub fn nonce(mut self, nonce: u64) -> Self {
         self.update.nonce = Some(Blob(nonce.to_le_bytes().to_vec()));
         self
     }
 
+    /// Sets the `ingress_expiry` field.
     pub fn expiry_time(mut self, expiry_time: Time) -> Self {
         self.update.ingress_expiry = expiry_time.as_nanos_since_unix_epoch();
         self
@@ -180,6 +187,7 @@ impl SignedIngressBuilder {
         self
     }
 
+    /// Returns the built `SignedIngress`.
     pub fn build(&self) -> SignedIngress {
         // TODO(NNS1-502): Consider panicking if expiry_time_from_now() was not called
 

@@ -34,13 +34,9 @@ impl Value {
     pub fn hash(&self) -> Hash {
         match self {
             Value::Nat(nat) => {
-                let n = nat
-                    .0
-                    .to_u128()
-                    .expect("BUG: blocks cannot contain values larger than u128::MAX");
-                let mut buf = [0u8; INT128_BUF_SIZE];
-                let offset = leb128(&mut buf, n);
-                Sha256::digest(&buf[0..=offset]).into()
+                let mut buf = vec![];
+                nat.encode(&mut buf).expect("bug: cannot encode a Nat");
+                Sha256::digest(&buf).into()
             }
             Value::Nat64(n) => {
                 let mut buf = [0u8; INT128_BUF_SIZE];
@@ -54,7 +50,7 @@ impl Value {
                     .expect("BUG: blocks cannot contain integers that do not fit into the 128-bit representation");
                 let mut buf = [0u8; INT128_BUF_SIZE];
                 //TODO: Int should only use sleb128. Due to CiboriumValue only using Integer this is however not possible right now
-                //      Unsinged Integers should be represented through Nat or Nat65: https://dfinity.atlassian.net/browse/FI-764
+                //      Unsigned Integers should be represented through Nat or Nat65: https://dfinity.atlassian.net/browse/FI-764
                 let offset = match v >= 0 {
                     true => leb128(&mut buf, v as u128),
                     false => sleb128(&mut buf, v),

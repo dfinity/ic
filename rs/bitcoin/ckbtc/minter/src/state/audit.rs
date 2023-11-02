@@ -4,7 +4,9 @@ use super::{
     eventlog::Event, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
     SubmittedBtcTransaction, UtxoCheckStatus,
 };
+use crate::state::ReimburseDepositTask;
 use crate::storage::record_event;
+use crate::ReimbursementReason;
 use candid::Principal;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
@@ -134,4 +136,39 @@ pub fn retrieve_btc_kyt_failed(
         block_index,
     });
     *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
+}
+
+pub fn schedule_deposit_reimbursement(
+    state: &mut CkBtcMinterState,
+    account: Account,
+    amount: u64,
+    reason: ReimbursementReason,
+    burn_block_index: u64,
+) {
+    record_event(&Event::ScheduleDepositReimbursement {
+        account,
+        amount,
+        reason,
+        burn_block_index,
+    });
+    state.schedule_deposit_reimbursement(
+        burn_block_index,
+        ReimburseDepositTask {
+            account,
+            amount,
+            reason,
+        },
+    );
+}
+
+pub fn reimbursed_failed_deposit(
+    state: &mut CkBtcMinterState,
+    burn_block_index: u64,
+    mint_block_index: u64,
+) {
+    record_event(&Event::ReimbursedFailedDeposit {
+        burn_block_index,
+        mint_block_index,
+    });
+    assert_ne!(state.reimbursement_map.remove(&burn_block_index), None);
 }

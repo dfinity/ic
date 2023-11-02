@@ -1,0 +1,16 @@
+[package]
+name = "ic-icrc1-tokens-u64"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2021"
+
+[dependencies]
+candid = { workspace = true }
+ic-ledger-core = { path = "../../ledger_core" }
+ic-stable-structures = { workspace = true }
+num-traits = "0.2"
+serde = "1"
+
+[dev-dependencies]
+ciborium = { workspace = true }
+proptest = "1.0"

@@ -17,6 +17,12 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 
+#[cfg(not(feature = "u256-tokens"))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
+
 const WASM_PAGE_SIZE: u64 = 65536;
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -118,7 +124,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 }
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
-    Block::decode(EncodedBlock::from(bytes))
+    Block::<Tokens>::decode(EncodedBlock::from(bytes))
         .unwrap_or_else(|e| ic_cdk::api::trap(&format!("failed to decode block {}: {}", txid, e)))
         .into()
 }
@@ -302,7 +308,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
@@ -328,7 +333,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     candid::export_service!();
@@ -339,7 +344,7 @@ fn check_candid_interface() {
     let old_interface =
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("archive.did");
 
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

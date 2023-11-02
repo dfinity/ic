@@ -392,7 +392,7 @@ impl CommitmentOpening {
     ///   indicates that there is a corrupted dealing for which we have no openings
     ///   at all.
     /// * `InvalidCiphertext` if the ciphertext could not be decrypted, for example
-    ///   because the proof of possesion was invalid.
+    ///   because the proof of possession was invalid.
     /// * `UnableToReconstruct` if we had sufficient openings but were unable to
     ///   combine them into a share which was consistent with the commitment.
     /// * `UnableToReconstruct`: internal error denoting that the received openings
@@ -515,15 +515,7 @@ impl CommitmentOpening {
         }
 
         Self::combine_openings(&openings, transcript_commitment, receiver_index, curve).map_err(
-            |e| match e {
-                ThresholdEcdsaError::InsufficientOpenings(have, req) => {
-                    IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
-                }
-                e => IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!(
-                    "{:?}",
-                    e
-                )),
-            },
+            |e| IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!("{:?}", e)),
         )
     }
 

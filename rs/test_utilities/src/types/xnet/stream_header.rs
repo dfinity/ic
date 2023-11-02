@@ -18,26 +18,30 @@ impl Default for StreamHeaderBuilder {
 }
 
 impl StreamHeaderBuilder {
+    /// Creates a new `StreamHeaderBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Sets the `begin` field.
     pub fn begin(mut self, begin: StreamIndex) -> Self {
         self.0.begin = begin;
         self
     }
 
+    /// Sets the `end` field.
     pub fn end(mut self, end: StreamIndex) -> Self {
         self.0.end = end;
         self
     }
 
+    /// Sets the `signals_end` field.
     pub fn signals_end(mut self, signals_end: StreamIndex) -> Self {
         self.0.signals_end = signals_end;
         self
     }
 
-    /// Returns the built StreamHeader.
+    /// Returns the built `StreamHeader`.
     pub fn build(self) -> StreamHeader {
         self.0
     }

@@ -10,7 +10,10 @@ use ic_interfaces::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact_kind::IngressArtifact, messages::SignedIngress, NodeId, Time};
+use ic_types::{
+    artifact::IngressMessageId, artifact_kind::IngressArtifact, messages::SignedIngress, NodeId,
+    Time,
+};
 
 pub struct TestIngressPool {
     pub pool: IngressPoolImpl,
@@ -48,6 +51,10 @@ impl IngressPoolThrottler for TestIngressPool {
 impl MutablePool<IngressArtifact, ChangeSet> for TestIngressPool {
     fn insert(&mut self, unvalidated_artifact: UnvalidatedArtifact<SignedIngress>) {
         self.pool.insert(unvalidated_artifact)
+    }
+
+    fn remove(&mut self, id: &IngressMessageId) {
+        self.pool.remove(id)
     }
 
     fn apply_changes(

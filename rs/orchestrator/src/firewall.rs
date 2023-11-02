@@ -1,8 +1,10 @@
-use crate::registry_helper::RegistryHelper;
 use crate::{
+    catch_up_package_provider::CatchUpPackageProvider,
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
+    registry_helper::RegistryHelper,
 };
+
 use ic_config::firewall::{Config as FirewallConfig, FIREWALL_FILE_DEFAULT_PATH};
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
@@ -10,10 +12,14 @@ use ic_registry_keys::FirewallRulesScope;
 use ic_types::NodeId;
 use ic_types::RegistryVersion;
 use ic_utils::fs::write_string_using_tmp_file;
-use std::convert::TryFrom;
-use std::net::IpAddr;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{
+    cmp::{max, min},
+    collections::BTreeSet,
+    convert::TryFrom,
+    net::IpAddr,
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -28,14 +34,15 @@ enum DataSource {
 pub(crate) struct Firewall {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
+    catchup_package_provider: Arc<CatchUpPackageProvider>,
     logger: ReplicaLogger,
     configuration: FirewallConfig,
     source: DataSource,
     compiled_config: String,
     last_applied_version: Arc<RwLock<RegistryVersion>>,
-    // If true, write the file content even if no change was detected in registry, i.e. first time
+    /// If true, write the file content even if no change was detected in registry, i.e. first time
     must_write: bool,
-    // If false, do not update the firewall rules (test mode)
+    /// If false, do not update the firewall rules (test mode)
     enabled: bool,
     node_id: NodeId,
 }
@@ -46,6 +53,7 @@ impl Firewall {
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         firewall_config: FirewallConfig,
+        catchup_package_provider: Arc<CatchUpPackageProvider>,
         logger: ReplicaLogger,
     ) -> Self {
         let config = firewall_config;
@@ -65,6 +73,7 @@ impl Firewall {
         Self {
             registry,
             metrics,
+            catchup_package_provider,
             configuration: config,
             source: DataSource::Config,
             logger,
@@ -98,12 +107,12 @@ impl Firewall {
         }
 
         // Get the subnet ID of this node, if exists
-        let subnet_id_opt = self
+        let subnet_id = self
             .registry
             .get_subnet_id_from_node_id(self.node_id, registry_version)
             .unwrap_or(None);
 
-        // This is the eventual list of rules fetched from the registry. It is build in the order of the priority:
+        // This is the eventual list of rules fetched from the registry. It is built in the order of the priority:
         // Node > Subnet > Replica Nodes > Global
         let mut tcp_rules = Vec::<FirewallRule>::new();
         let mut udp_rules = Vec::<FirewallRule>::new();
@@ -115,7 +124,7 @@ impl Firewall {
         );
 
         // Then we fetch the rules that are specific for the subnet, if one is assigned
-        if let Some(subnet_id) = subnet_id_opt {
+        if let Some(subnet_id) = subnet_id {
             tcp_rules.append(
                 &mut self
                     .fetch_from_registry(registry_version, &FirewallRulesScope::Subnet(subnet_id)),
@@ -149,18 +158,55 @@ impl Firewall {
         // In addition to any explicit firewall rules we might apply, we also ALWAYS whitelist all nodes in the registry
         // on the ports used by the protocol
 
-        // First, get all node IPs (v4 and v6)
-        let node_ips: Vec<IpAddr> = self
-            .registry
-            .get_all_nodes_ip_addresses(self.registry.get_latest_version())
-            .unwrap_or_default();
+        // First, get all the registry versions between the latest CUP and the latest version in the registry inclusive.
+        let registry_versions: Vec<RegistryVersion> = self
+            .catchup_package_provider
+            .get_local_cup()
+            .map(|latest_cup| {
+                let summary = &latest_cup
+                    .content
+                    .block
+                    .get_value()
+                    .payload
+                    .as_ref()
+                    .as_summary();
+
+                let cup_registry_version = summary.get_oldest_registry_version_in_use();
+
+                // Iterate:
+                // - from   min(cup_registry_version, registry_version)
+                // - to     max(cup_registry_version, registry_version).
+                // The `cup_registry_version` is extracted from the latest seen catchup package.
+                // The `registry_version` is the latest registry version known to this node.
+                // In almost any case `registry_version >= cup_registry_version` but there may exist cases where this condition does not hold.
+                // In that case we should at least include our latest local view of the subnet.
+
+                let min_registry_version = min(cup_registry_version, registry_version);
+                let max_registry_version = max(cup_registry_version, registry_version);
+                let registry_version_range =
+                    min_registry_version.get()..=max_registry_version.get();
+
+                registry_version_range.map(RegistryVersion::from).collect()
+            })
+            .unwrap_or_else(|| vec![registry_version]);
+
+        // Get the union of all the node IP addresses from the registry
+        let node_whitelist_ips: BTreeSet<IpAddr> = registry_versions
+            .into_iter()
+            .flat_map(|registry_version| {
+                self.registry
+                    .get_all_nodes_ip_addresses(registry_version)
+                    .unwrap_or_default()
+            })
+            .collect();
+
         // Then split it to v4 and v6 separately
-        let node_ipv4s: Vec<String> = node_ips
+        let node_ipv4s: Vec<String> = node_whitelist_ips
             .iter()
             .filter(|ip| ip.is_ipv4())
             .map(|ip| ip.to_string())
             .collect();
-        let node_ipv6s: Vec<String> = node_ips
+        let node_ipv6s: Vec<String> = node_whitelist_ips
             .iter()
             .filter(|ip| ip.is_ipv6())
             .map(|ip| ip.to_string())
@@ -168,12 +214,12 @@ impl Firewall {
         info!(
             self.logger,
             "Whitelisting {} node IP addresses ({} v4 and {} v6) on the firewall",
-            node_ips.len(),
+            node_whitelist_ips.len(),
             node_ipv4s.len(),
             node_ipv6s.len()
         );
 
-        // Build a single rule to whitelist all v4 and v6 IP addresses of nodes
+        // Build a UDP and TCP rule to whitelist all v4 and v6 IP addresses of nodes.
         let tcp_node_whitelisting_rule = FirewallRule {
             ipv4_prefixes: node_ipv4s.clone(),
             ipv6_prefixes: node_ipv6s.clone(),

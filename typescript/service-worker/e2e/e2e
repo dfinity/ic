@@ -1,0 +1,371 @@
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+PATH="$HOME/bin:$PATH"
+SERVICE_WORKER_E2E_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+SERVICE_WORKER_DIR=$(realpath "${SERVICE_WORKER_E2E_DIR}/..")
+DFX_PATH="$SERVICE_WORKER_E2E_DIR/tmp/dfx"
+DFX_VERSION="0.14.3"
+DFX="$DFX_PATH/dfx"
+MKCERT="$SERVICE_WORKER_E2E_DIR/tmp/mkcert"
+
+: ${NVM_DIR:="$HOME/.nvm"}
+
+#############################################
+# USAGE                                     #
+#############################################
+
+title() {
+    echo "Service worker end-to-end tests."
+}
+
+function usage() {
+    cat << EOF
+
+Usage:
+  $0 [--setup] [--start] [--stop]
+
+Options:
+  --add-dependencies     configures all the required dependencies to build and run the tests.
+  --run-tests            runs the tests against the running replica and deployed containers.
+  --start                starts the replica and containers.
+  --stop                 stops all containers and replica that could have been used for the tests.
+EOF
+}
+
+function help() {
+    cat << EOF
+
+Runs end to end tests for the service worker.
+
+NOTE: This requires a working rust toolchain.
+EOF
+
+}
+
+#############################################
+# SETUP                                     #
+#############################################
+
+function setup_permissions() {
+    echo "> Setting up permissions"
+
+    # cached dfx directories
+    sudo rm -rf ${HOME}/.cache/dfinity/versions/${DFX_VERSION}
+    sudo rm -rf ${HOME}/.local/share/dfx
+}
+
+function setup_networking() {
+    echo "> Setting up networking plugins"
+
+    # add cni plugins
+    sudo apt install podman-machine-cni containernetworking-plugins -y
+}
+
+function setup_nvm() {
+    echo "> Setting up nvm"
+
+    # permanently adds nvm to the bash profile
+    NVM_CONFIG=$(cat <<- EOM
+export NVM_DIR="\$HOME/.nvm"
+[ -s "\$NVM_DIR/nvm.sh" ] && \. "\$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "\$NVM_DIR/bash_completion" ] && \. "\$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+EOM
+)
+
+    if command -v nvm &> /dev/null; then
+        echo "nvm is already available in the environment."
+    elif [[ -s "${NVM_DIR}/nvm.sh" ]]; then
+
+        if [ "$NVM_DIR" != "$HOME/.nvm" ] && [ ! -e "$HOME/.nvm" ]; then
+            ln -s "$NVM_DIR" "$HOME/.nvm"
+        fi
+
+        if ! grep -q "export NVM_DIR=\"\$HOME/.nvm\"" ${HOME}/.bashrc; then
+            echo -e "\n${NVM_CONFIG}" >> ${HOME}/.bashrc
+        fi
+
+        echo "Adding nvm to the environment..."
+        source "${NVM_DIR}/nvm.sh"
+    else
+        echo "Folder does not exist. Installing nvm..."
+        sudo rm -rf ${NVM_DIR}
+        sudo mkdir -p ${NVM_DIR}
+        sudo chmod 755 ${NVM_DIR}
+        sudo chown ubuntu:ubuntu ${NVM_DIR}
+        # Here you can add the nvm installation script
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash
+        # Adds nvm to the current session
+        source "${NVM_DIR}/nvm.sh"
+        echo "nvm added to current environment"
+    fi
+
+    # updates the current node version
+    pushd ${SERVICE_WORKER_DIR}
+
+    nvm install
+    nvm use
+
+    popd # $SERVICE_WORKER_DIR
+}
+
+function setup_dfx() {
+    echo "> Setting up dfx"
+
+    if command -v ${DFX} &> /dev/null; then
+        INSTALLED_DFX_VERSION=$(${DFX} --version 2>&1 | awk '{print $2}')
+        echo "DFX installed and running version ${INSTALLED_DFX_VERSION}"
+        return
+    fi
+
+    # installs dfx
+    mkdir -p ${DFX_PATH}
+    curl -fsSL https://github.com/dfinity/sdk/releases/download/${DFX_VERSION}/dfx-${DFX_VERSION}-x86_64-linux.tar.gz -o ${DFX_PATH}/run.tar.gz
+    tar -zxf ${DFX_PATH}/run.tar.gz -C ${DFX_PATH}
+    chmod +x ${DFX}
+    # makes sure that dfx is setup correctly by fetching its version
+    INSTALLED_DFX_VERSION=$(${DFX} --version 2>&1 | awk '{print $2}')
+    echo "DFX installed and running version ${INSTALLED_DFX_VERSION}"
+}
+
+function setup_certs() {
+    if command -v mkcert &> /dev/null; then
+        echo "mkcert is already available in the environment."
+    else
+        sudo apt install libnss3-tools -y
+
+        curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64 -o ${MKCERT}
+        sudo mv ${MKCERT} /usr/local/bin/mkcert
+        sudo chmod +x /usr/local/bin/mkcert
+    fi
+
+    mkcert -install
+
+    echo "Copying root CA..."
+    mkdir -p ${SERVICE_WORKER_DIR}/certs
+    cp $(mkcert -CAROOT)/* ${SERVICE_WORKER_DIR}/certs/
+
+    pushd ${SERVICE_WORKER_DIR}
+
+    npm run create-ssl-certs
+
+    popd # $SERVICE_WORKER_DIR
+}
+
+#############################################
+# START                                     #
+#############################################
+
+SW_DEV_PACKAGE_FOLDER="dist-dev"
+RUN_SW_PATH_PREFIX="${SERVICE_WORKER_E2E_DIR}/tmp/sw"
+RUN_CURRENT_SW_PATH="${RUN_SW_PATH_PREFIX}/current"
+
+CONTAINER_NGINX_HTML_PATH="/usr/share/nginx/html"
+CONTAINER_SSL_PATH="/etc/ssl"
+CONTAINER_CERT_PATH="${CONTAINER_SSL_PATH}/cert.pem"
+CONTAINER_KEY_PATH="${CONTAINER_SSL_PATH}/key.pem"
+CONTAINER_SW_SRC_PATH="/opt/sw"
+
+function init_node_environment() {
+    if ! command -v nvm &> /dev/null; then
+        source "${NVM_DIR}/nvm.sh"
+    fi
+
+    pushd ${SERVICE_WORKER_DIR}
+
+    # set the correct node environment
+    nvm use
+
+    popd # $SERVICE_WORKER_DIR
+}
+
+function download_sw() {
+    SW_VERSION=$1
+    SW_TARBALL=$(npm view @dfinity/service-worker@${SW_VERSION} dist.tarball)
+    SW_DIR="${RUN_SW_PATH_PREFIX}/${SW_VERSION}"
+
+    echo "Downloading service worker v${SW_VERSION}..."
+    mkdir -p ${SW_DIR}
+    curl -L ${SW_TARBALL} -o ${SW_DIR}/service-worker.tgz
+    tar xfvz ${SW_DIR}/service-worker.tgz -C ${SW_DIR}
+}
+
+function build_current_sw() {
+    echo "Building current service worker..."
+
+    pushd ${SERVICE_WORKER_DIR}
+
+    npm run build-dev
+    mkdir -p ${RUN_CURRENT_SW_PATH}
+    cp ./dist-dev/* ${RUN_CURRENT_SW_PATH}
+
+    popd # $SERVICE_WORKER_DIR
+
+    echo "current sw added to: ${RUN_CURRENT_SW_PATH}"
+}
+
+function prepare() {
+    echo "> Prepare environment to run e2e tests"
+
+    init_node_environment
+
+    # download the service worker files used in the tests
+    LATEST_SW_VERSION=$(npm view @dfinity/service-worker version)
+    PREVIOUS_SW_VERSION=$(npm view @dfinity/service-worker versions --json | jq --raw-output .[-2])
+    BROKEN_UPGRADE_SW_VERSION="1.6.0"
+    BROKEN_DOWNGRADE_SW_VERSION="1.5.2"
+
+    download_sw ${LATEST_SW_VERSION}
+    download_sw ${PREVIOUS_SW_VERSION}
+    download_sw ${BROKEN_UPGRADE_SW_VERSION}
+    download_sw ${BROKEN_DOWNGRADE_SW_VERSION}
+
+    # build the current service worker from the active branch
+    build_current_sw
+
+    echo "starting DFX..."
+    ${DFX} start --background || echo "DFX is already running..."
+}
+
+function start() {
+    echo "> Deploy canisters and create env variables"
+
+    pushd "${SERVICE_WORKER_E2E_DIR}/canister"
+    echo "Deploying canister..."
+    ${DFX} deploy
+
+    echo "Getting canister ID..."
+    CANISTER_ID=$(dfx canister id canister_frontend)
+    popd # $SERVICE_WORKER_E2E_DIR/canister
+
+    pushd "${SERVICE_WORKER_E2E_DIR}"
+
+    echo "Getting DFX replica port..."
+    REPLICA_PORT=$(${DFX} info replica-port)
+    IC_HOST="ic0.local"
+    CANISTER_HOST="${CANISTER_ID}.${IC_HOST}"
+    DFX_HOST="http://localhost:${REPLICA_PORT}"
+
+    echo "Running reverse proxy container..."
+    docker run --rm \
+        --network="host" \
+        -e CANISTER_HOST="${CANISTER_HOST}" \
+        -e CERT_PATH="${CONTAINER_CERT_PATH}" \
+        -e DFX_HOST="${DFX_HOST}" \
+        -e KEY_PATH="${CONTAINER_KEY_PATH}" \
+        -e SW_PATH="${CONTAINER_NGINX_HTML_PATH}" \
+        -v "${RUN_SW_PATH_PREFIX}:${CONTAINER_SW_SRC_PATH}" \
+        -v "${SERVICE_WORKER_DIR}/certs:${CONTAINER_SSL_PATH}" \
+        -v "${SERVICE_WORKER_E2E_DIR}/docker/reverse-proxy:/etc/nginx/templates" \
+        -d \
+        --name sw-reverse-proxy \
+        docker.io/library/nginx:1.25.0
+
+    echo "Building Selenium container..."
+    docker build -f \
+        ${SERVICE_WORKER_E2E_DIR}/docker/selenium/Dockerfile \
+        -t sw-selenium \
+        ..
+
+    echo "Running Selenium container..."
+    docker run --rm \
+        --network="host" \
+        --add-host "${IC_HOST}:127.0.0.1" \
+        --add-host "${CANISTER_HOST}:127.0.0.1" \
+        -d \
+        --name sw-selenium \
+        sw-selenium:latest
+
+    echo "Point WebDriver tests to http://localhost:4444"
+    echo "To see what is happening inside the container, head to http://localhost:7900/?autoconnect=1&resize=scale&password=secret"
+    echo "Canister is running at https://${CANISTER_HOST}"
+
+    cat <<EOF >.env
+BASE_URL=https://${CANISTER_HOST}
+CURRENT_SW_PATH=${CONTAINER_SW_SRC_PATH}/current
+LATEST_SW_PATH=${CONTAINER_SW_SRC_PATH}/${LATEST_SW_VERSION}/package/${SW_DEV_PACKAGE_FOLDER}
+PREVIOUS_SW_PATH=${CONTAINER_SW_SRC_PATH}/${PREVIOUS_SW_VERSION}/package/${SW_DEV_PACKAGE_FOLDER}
+BROKEN_UPGRADE_SW_PATH=${CONTAINER_SW_SRC_PATH}/${BROKEN_UPGRADE_SW_VERSION}/package/${SW_DEV_PACKAGE_FOLDER}
+BROKEN_DOWNGRADE_SW_PATH=${CONTAINER_SW_SRC_PATH}/${BROKEN_DOWNGRADE_SW_VERSION}/package/${SW_DEV_PACKAGE_FOLDER}
+SW_PATH=${CONTAINER_NGINX_HTML_PATH}
+EOF
+
+    popd # $SERVICE_WORKER_E2E_DIR
+}
+
+#############################################
+# STOP                                      #
+#############################################
+
+function stop() {
+    echo "> Stop e2e test environment"
+
+    echo "Stopping DFX..."
+    $DFX stop
+
+    echo "Stopping reverse proxy container..."
+    docker stop sw-reverse-proxy --ignore
+
+    echo "Stopping Selenium container..."
+    docker stop sw-selenium --ignore
+}
+
+#############################################
+# RUN TESTS                                 #
+#############################################
+
+function run_tests() {
+    echo "> Running e2e tests"
+
+    init_node_environment
+
+    pushd ${SERVICE_WORKER_DIR}
+
+    npm run -w e2e test
+
+    popd # $SERVICE_WORKER_DIR
+}
+
+#############################################
+# SCRIPT OPTIONS                            #
+#############################################
+
+while [[ $# -gt 0  ]]
+do
+    case "$1" in
+        -h|--help)
+            title
+            usage
+            help
+            exit 0
+            ;;
+        --add-dependencies)
+            shift
+            setup_permissions; echo
+            setup_networking; echo
+            setup_nvm; echo
+            setup_dfx; echo
+            setup_certs; echo
+            ;;
+        --start)
+            shift
+            prepare; echo
+            start; echo
+            ;;
+        --run-tests)
+            shift
+            run_tests; echo
+            ;;
+        --stop)
+            shift
+            stop; echo
+            ;;
+        *)
+            echo "ERROR: unknown argument $1"
+            usage
+            echo
+            echo "Use 'e2e --help' for more information"
+            exit 1
+            ;;
+    esac
+done

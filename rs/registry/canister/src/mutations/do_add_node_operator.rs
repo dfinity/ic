@@ -72,7 +72,7 @@ impl From<AddNodeOperatorPayload> for NodeOperatorRecord {
             node_operator_principal_id: val.node_operator_principal_id.unwrap().to_vec(),
             node_provider_principal_id: val.node_provider_principal_id.unwrap().to_vec(),
             node_allowance: val.node_allowance,
-            dc_id: val.dc_id,
+            dc_id: val.dc_id.to_lowercase(),
             rewardable_nodes: val.rewardable_nodes,
             ipv6: val.ipv6,
         }

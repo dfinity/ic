@@ -152,7 +152,7 @@ pub struct BlockchainManager {
 
     /// Records outstanding getHeader requests. Used for:
     /// - Check if a header response is solicited.
-    /// - Check if peer is not responding to GetHeader reuqest. In that case remove peer after timeout.
+    /// - Check if peer is not responding to GetHeader request. In that case remove peer after timeout.
     getheaders_requests: HashMap<SocketAddr, GetHeadersRequest>,
 
     /// A flag that is set for each peer when we receive a `inv` message while we have an outstanding `getheaders` request to the same peer.  
@@ -277,7 +277,7 @@ impl BlockchainManager {
             for inv in inventory {
                 if let Inventory::Block(hash) = inv {
                     peer.tip = *hash;
-                    if !blockchain_state.is_block_hash_known(hash) {
+                    if blockchain_state.get_cached_header(hash).is_none() {
                         last_block = Some(hash);
                     }
                 }
@@ -287,7 +287,7 @@ impl BlockchainManager {
         };
 
         if let Some(locators) = maybe_locators {
-            // An entry in `getheaders_requets` indicates that we have an outstanding request. If this is
+            // An entry in `getheaders_requests` indicates that we have an outstanding request. If this is
             // the case we set the catch-up flag to indicate that we need missed some `inv` from this peer.
             if self.getheaders_requests.contains_key(addr) {
                 self.catchup_headers.insert(*addr);
@@ -341,7 +341,7 @@ impl BlockchainManager {
             let mut blockchain_state = self.blockchain.lock().await;
             let prev_tip_height = blockchain_state.get_active_chain_tip().height;
 
-            let (added_headers, maybe_err) = blockchain_state.add_headers(headers);
+            let (block_hashes_of_added_headers, maybe_err) = blockchain_state.add_headers(headers);
             let active_tip = blockchain_state.get_active_chain_tip();
             if prev_tip_height < active_tip.height {
                 info!(
@@ -353,15 +353,9 @@ impl BlockchainManager {
             }
 
             // Update the peer's tip and height to the last
-            let maybe_last_header = if added_headers.last().is_some() {
-                added_headers.last()
-            } else if blockchain_state
-                .get_cached_header(&last_block_hash)
-                .is_some()
-            {
-                blockchain_state.get_cached_header(&last_block_hash)
-            } else {
-                None
+            let maybe_last_header = match block_hashes_of_added_headers.last() {
+                Some(last) => blockchain_state.get_cached_header(last),
+                None => blockchain_state.get_cached_header(&last_block_hash),
             };
 
             if let Some(last) = maybe_last_header {
@@ -440,14 +434,7 @@ impl BlockchainManager {
         );
 
         match self.blockchain.lock().await.add_block(block.clone()) {
-            Ok(block_height) => {
-                trace!(
-                    self.logger,
-                    "Block added to the cache successfully at height = {}",
-                    block_height
-                );
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(err) => {
                 warn!(
                     self.logger,
@@ -468,7 +455,7 @@ impl BlockchainManager {
         let (initial_hash, locator_hashes) = {
             let blockchain = self.blockchain.lock().await;
             (
-                blockchain.genesis().header.block_hash(),
+                blockchain.genesis().block_hash(),
                 blockchain.locator_hashes(),
             )
         };
@@ -634,7 +621,7 @@ impl BlockchainManager {
     }
 
     /// This function is called by the adapter when a new event takes place.
-    /// The event could be receiving "getheaders", "getdata", "inv" messages from bitcion peers.
+    /// The event could be receiving "getheaders", "getdata", "inv" messages from bitcoin peers.
     /// The event could be change in connection status with a bitcoin peer.
     pub async fn process_bitcoin_network_message(
         &mut self,
@@ -781,12 +768,10 @@ fn get_next_block_hash_to_sync(
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::common::test_common::{
-        generate_headers, generate_large_block_blockchain, TestChannel, TestState, BLOCK_1_ENCODED,
-        BLOCK_2_ENCODED,
+    use crate::{
+        common::test_common::{TestChannel, TestState},
+        config::{test::ConfigBuilder, Config},
     };
-    use crate::config::test::ConfigBuilder;
-    use crate::config::Config;
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
     use bitcoin::Network;
@@ -794,6 +779,9 @@ pub mod test {
         network::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
     };
     use hex::FromHex;
+    use ic_btc_adapter_test_utils::{
+        generate_headers, generate_large_block_blockchain, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::net::SocketAddr;
@@ -802,7 +790,7 @@ pub mod test {
     fn create_blockchain_manager(config: &Config) -> (BlockHeader, BlockchainManager) {
         let blockchain_state = BlockchainState::new(config, &MetricsRegistry::default());
         (
-            blockchain_state.genesis().clone().header,
+            *blockchain_state.genesis(),
             BlockchainManager::new(
                 Arc::new(Mutex::new(blockchain_state)),
                 no_op_logger(),
@@ -1617,7 +1605,7 @@ pub mod test {
                 .last()
                 .expect("next_hashes should contain 1 block hash")
         );
-        // Block 5 shoul still be in the cache.
+        // Block 5 should still be in the cache.
         assert!(blockchain_manager
             .blockchain
             .lock()

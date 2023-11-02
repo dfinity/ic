@@ -7,7 +7,7 @@ Runbook::
 1. Instantiate an IC with one applications subnet with the HTTP feature enabled.
 2. Install NNS canisters
 3. Install the proxy canister
-4. Spawn task to continously send http requests.
+4. Spawn task to continuously send http requests.
 5. Kill one of the nodes.
 6. Query proxy canister and verify state is restored.
 
@@ -25,7 +25,9 @@ use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc};
+use ic_ic00_types::{
+    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
@@ -120,7 +122,7 @@ pub fn test(env: TestEnv) {
         );
 
         // Proxy requests store request responses made in a HashMap that
-        // is indexed by url. We generate http requets to httpbin/anything/{n},
+        // is indexed by url. We generate http requests to httpbin/anything/{n},
         // which just returns n. All of these requests will be stored in the proxy
         // canister and we will later check that all of these were successful.
         let mut n = 0;
@@ -135,7 +137,7 @@ pub fn test(env: TestEnv) {
                     RemoteHttpRequest {
                         request: CanisterHttpRequestArgs {
                             url: format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
-                            headers: vec![],
+                            headers: BoundedHttpHeaders::new(vec![]),
                             method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
                             transform: Some(TransformContext {
@@ -207,7 +209,7 @@ pub fn test(env: TestEnv) {
         },
     )
     .expect("Failed to restart killed node.");
-    info!(&logger, "Killed node succesfully recovered.");
+    info!(&logger, "Killed node successfully recovered.");
 
     // Make sure that we do at least one additional backgroundi request. This is needed
     // to make sure that a potential timeout (consensus) issue is collected in the proxy canister.
@@ -221,7 +223,7 @@ pub fn test(env: TestEnv) {
     })
     .expect("Failed to do additional http request after node restart.");
 
-    // Verify that all stored http responses are successfull.
+    // Verify that all stored http responses are successful.
     rt.block_on(async {
         info!(
             &logger,

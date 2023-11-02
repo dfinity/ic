@@ -1,0 +1,295 @@
+# This is cribbed from the sns-testing Github repo. There is no need to keep
+# this in sync with that.
+---
+# It holds that 100000000 e8s = 1 SNS token.
+#
+#
+# SNS LEDGER
+#
+# Fee of a ledger transaction.
+# Default value = 10000
+#
+transaction_fee_e8s: 10000
+#
+# The name of the token issued by the SNS ledger.
+# This field has no default, a value must be provided by the user.
+# Must be a string with a length between 4 and 255 characters.
+#
+# Example: InternetComputerProtocol
+#
+token_name: MyTestnetToken
+#
+# The symbol of the token issued by the SNS Ledger.
+# This field has no default, a value must be provided by the user.
+# Must be a string with a length between 3 and 10 characters.
+#
+# Example: ICP
+#
+token_symbol: MTT
+#
+#
+# SNS GOVERNANCE
+#
+# The cost of making a proposal that is not adopted in e8s.
+# Default value = 100000000
+#
+proposal_reject_cost_e8s: 100000000
+#
+# The minimum amount of SNS Token e8s an SNS Ledger account must have to stake a neuron.
+# Default value = 100000000
+#
+neuron_minimum_stake_e8s: 100000000
+#
+# The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
+# Default value = 15778800
+#
+neuron_minimum_dissolve_delay_to_vote_seconds: 15778800
+#
+# Path to the SNS Project logo on the local filesystem. The path is relative
+# to the configuration file location, unless an absolute path is given.
+# Must have less than 341334 characters, roughly 256Kb.
+#
+logo: ./test.png
+#
+# Url to the dapp controlled by the SNS project.
+# Must be a string of max length = 512.
+#
+url: https://example.com
+#
+# Name of the SNS project. This may differ from the name of the associated token name.
+# Must be a string of max length = 255.
+#
+name: "My Testnet Token"
+#
+# Description of the SNS project.
+# Must be a string of max length = 2000.
+#
+description: "What is the description supposed to be?"
+#
+# The voting reward rate falls quadratically from
+# `initial_reward_rate_basis_points` to `final_reward_rate_basis_points` over
+# the time period defined by `reward_rate_transition_duration_seconds`.
+#
+# The default value is 0. Values of 0 result in the reward rate always being
+# `final_reward_rate_basis_points`. The value used by the NNS is 8 years, or
+# 252460800 seconds.
+#
+#
+reward_rate_transition_duration_seconds: 0
+#
+# The voting reward rate controls how quickly the supply of the SNS token
+# increases. For example, an initial_reward_rate_percentage of `2.0` will cause
+# the supply to increase by at most 2% each year. A higher voting reward rate
+# incentivizes people to participate in governance, but also results in higher
+# inflation.
+#
+# An initial and a final reward rate can be set, to have a higher reward rate at
+# the launch of the SNS, and a lower rate farther into the SNS’s lifetime. The
+# reward rate falls quadratically from the initial rate to the final rate over
+# the course of `reward_rate_transition_duration_seconds`.
+#
+# Setting both `initial_reward_rate_percentage` and `final_reward_rate_percentage`
+# to 0 will result in the system not distributing voting rewards at all.
+#
+# The default value for initial_reward_rate_percentage is 0. The value used
+# by the NNS is 10%.
+# The default value for final_reward_rate_percentage is 0. The value used by
+# the NNS is 5%.
+#
+# These values correspond to
+# `NervousSystemParameters::initial_reward_rate_basis points` and
+# `NervousSystemParameters::final_reward_rate_basis points` in the SNS.
+#
+initial_reward_rate_percentage: 0.0
+final_reward_rate_percentage: 0.0
+#
+# The maximum dissolve delay that a neuron can have.
+#
+# The default value is 252460800 seconds (96 months).
+#
+max_dissolve_delay_seconds: 252460800
+#
+# It is possible to give a higher voting weight to older neurons by setting
+# `max_age_bonus_multiplier` to a value greater than 1. This parameter,
+# `max_neuron_age_seconds_for_age_bonus`, sets the age at which the maximum bonus will
+# be given. All older neurons will be treated as if they are this age. The unit
+# is seconds.
+#
+# The default value is 126230400 seconds (48 months).
+#
+max_neuron_age_seconds_for_age_bonus: 126230400
+#
+# Users with a higher dissolve delay are incentivized to take the long-term
+# interests of the SNS into consideration when voting. To reward this long time
+# commitment, this parameter can be set to a value larger than zero, which will
+# result in neurons having their voting weight increased in proportion to their
+# dissolve delay.
+#
+# If neurons’ dissolve delay is set to `max_dissolve_delay_seconds`, their
+# voting weight will be multiplied by `max_dissolve_delay_bonus_multiplier`.
+#
+# The default value is 2. The value the NNS uses is 2. A value of 1 results in
+# no change in voting weight for neurons with higher dissolve delays.
+# Values below 1 are prohibited.
+#
+# This value corresponds to
+# `NervousSystemParameters::max_dissolve_delay_bonus_percentage` in the SNS.
+#
+max_dissolve_delay_bonus_multiplier: 2.0
+#
+# This is analogous to `max_dissolve_delay_bonus_multiplier`, but controls the
+# additional voting weight given to neurons with more age.
+#
+# If neurons' age is `max_neuron_age_seconds_for_age_bonus` or older, their
+# voting weight will be multiplied by `max_age_bonus_multiplier`.
+#
+# The default value is 1.25. The value the NNS uses is 1.25. A value of 1 results
+# in no change in voting weight for neurons with higher age.
+# Values below 1 are prohibited.
+#
+# This value corresponds to
+# `NervousSystemParameters::max_age_bonus_percentage` in the SNS.
+#
+max_age_bonus_multiplier: 1.25
+#
+# If the decentralization swap fails, control of the dapp canister(s) is set to these
+# principal IDs. In most use cases, this is set to the original set of controller(s) of the dapp.
+# This field has no default, a value must be provided by the user.
+#
+fallback_controller_principal_ids: ["aaaaa-aa"]
+#
+# The initial voting period in seconds of a newly created proposal.
+# (A proposal's voting period may be increased during a proposal's lifecycle due
+# to the wait-for-quiet algorithm.)
+#
+# The default value is 345600 seconds (4 days).
+#
+initial_voting_period_seconds: 345600
+#
+# The wait for quiet algorithm extends the voting period of a proposal when
+# there is a flip in the majority vote during the proposal's voting period.
+#
+# Without this, there could be an incentive to vote right at the end of a
+# proposal's voting period, in order to reduce the chance that people will see
+# the result and vote against.
+#
+# If this value is set to 86400 seconds (1 day), a change in the majority vote
+# during at the end of a proposal's original voting period the voting period
+# being extended by an additional day. Another change at the end of the extended
+# period will cause the voting period to be extended by half a day, and so on.
+#
+# The total extension to the voting period will never be more than twice this
+# value.
+#
+# For more information, see the wiki page on the wait-for-quiet algorithm:
+# https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet
+#
+# The default value is 86400 seconds (1 day).
+#
+wait_for_quiet_deadline_increase_seconds: 86400
+#
+#
+# SNS INITIAL TOKEN DISTRIBUTION
+#
+# This field sets the initial token distribution. Initially, there is only support for
+# the FractionalDeveloperVotingPower strategy. This strategy configures how SNS tokens and neurons
+# are distributed in four "buckets": developer tokens that are given to the original developers of
+# the dapp, airdrop tokens that can be given to any other principals that should have tokens at
+# genesis, treasury tokens that are owned by the SNS governance canister, and swap tokens which
+# are sold in an initial decentralization swap but parts of which can also be reserved for future
+# swaps.
+# All developer and airdrop tokens are distributed to the defined principals at genesis in a basket
+# of neurons called the developer neurons and the airdrop neurons, respectively.
+# If only parts of the swap tokens are sold in the initial decentralization swap, the developer
+# neurons are restricted by a voting power multiplier. This voting power multiplier is calculated as
+# `swap_distribution.initial_swap_amount_e8s / swap_distribution.total_e8s`.
+
+# As more of the swap funds are swapped in future rounds, the voting power
+# multiplier will approach 1.0.
+# The initial token distribution must satisfy the following preconditions to be valid:
+#    - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
+#    - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
+#    - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
+#    - swap_distribution.initial_swap_amount_e8s > 0
+#    - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
+#    - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
+#
+# - developer_distribution has one field:
+#    - developer_neurons: A list of NeuronDistributions that specify the neuron's stake,
+#      controlling principal, a unique memo, and dissolve delay. These neurons will be
+#      available at genesis in PreInitializationSwap mode. The voting power multiplier
+#      is applied to these neurons.
+#
+# - treasury_distribution has one field:
+#    - total_e8s: The total amount of tokens in the treasury bucket.
+#
+# - swap_distribution has two fields:
+#    - total_e8s: The total amount of tokens in the swap bucket. initial_swap_amount_e8s will be
+#      deducted from this total.
+#    - initial_swap_amount_e8s: The initial amount of tokens deposited in the swap canister for
+#      the initial token swap.
+#
+# - airdrop_distribution has one field:
+#    - airdrop_neurons: A list of NeuronDistributions that specify the neuron's stake and
+#      controlling principal. These neurons will be available at genesis in PreInitializationSwap
+#      mode. No voting power multiplier is applied to these neurons.
+#
+# Example:
+# initial_token_distribution:
+#   FractionalDeveloperVotingPower:
+#     developer_distribution:
+#       developer_neurons:
+#         - controller: x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae
+#           stake_e8s: 1500000000
+#           memo: 0
+#           dissolve_delay_seconds: 15780000 # 6 months
+#         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
+#           stake_e8s: 1500000000
+#           memo: 1
+#           dissolve_delay_seconds: 31560000 # 1 year
+#     treasury_distribution:
+#       total_e8s: 5000000000
+#     swap_distribution:
+#       total_e8s: 6000000000
+#       initial_swap_amount_e8s: 3000000000
+#     airdrop_distribution:
+#       airdrop_neurons:
+#         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
+#           stake_e8s: 500000000
+#           memo: 0
+#           dissolve_delay_seconds: 15780000 # 6 months
+#
+initial_token_distribution:
+  FractionalDeveloperVotingPower:
+    developer_distribution:
+      developer_neurons:
+        - controller: aaaaa-aa
+          stake_e8s: 1500000000
+          memo: 0
+          dissolve_delay_seconds: 15780000 # 6 months
+    treasury_distribution:
+      total_e8s: 5000000000
+    swap_distribution:
+      total_e8s: 6000000000
+      initial_swap_amount_e8s: 3000000000
+    airdrop_distribution:
+      airdrop_neurons: []
+#
+#
+# SNS SWAP
+#
+# An optional text that swap participants should confirm before they may
+# participate in the swap. If the field is set, its value should be plain text
+# with at least 1 and at most 1,000 characters.
+#
+# Example: "Please confirm that 2+2=4"
+#
+confirmation_text: ~
+#
+#
+# An optional set of countries that should not participate in the swap. If the
+# field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
+#
+# Example: ["CH", "FR"]
+#
+restricted_countries: ~

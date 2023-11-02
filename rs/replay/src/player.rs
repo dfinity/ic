@@ -40,12 +40,12 @@ use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
+use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     deserialize_get_value_response, serialize_get_changes_since_request,
     serialize_get_value_request,
 };
-use ic_replica::setup::get_subnet_type;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BatchMessages;
@@ -248,12 +248,17 @@ impl Player {
             println!("Failed to set default replica version");
         }
 
-        let subnet_type = get_subnet_type(
-            &log,
-            subnet_id,
-            registry.get_latest_version(),
-            registry.as_ref(),
-        );
+        let subnet_type = match registry.get_subnet_record(subnet_id, registry.get_latest_version())
+        {
+            Ok(Some(record)) => {
+                SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
+            }
+            err => panic!(
+                "Failed to extract subnet type of {:?} from registry: {:?}",
+                subnet_id, err
+            ),
+        };
+
         let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfig::new(subnet_type);
 
@@ -1148,7 +1153,7 @@ fn find_malicious_nodes(
 // 2. If there is exactly one hash with f+1 or more certification shares, ensure that it matches the locally
 //    computed one, otherwise indicate that manual inspection is required.
 // 3. If there are multiple hashes with f+1 or more certification shares, then there is no perfect way to choose
-//    the correct state. Return that manual inspection is required. During this inspeciton:
+//    the correct state. Return that manual inspection is required. During this inspection:
 //    a) Repetitively run the ic-replay tool to produce full states for all hashes with f+1 or more shares.
 //    b) Inspect how these states differ, estimate how bad it would be if certifications for all of them were issued.
 //    c) Decide which of both states is "preferable" to continue the subnet from and recover the subnet from there.
@@ -1321,7 +1326,7 @@ mod tests {
         let verify = |_: &CertificationShare| true;
         let f = 2;
 
-        // Node 7 is malicious and create mutliple shares for height 3. All of its shares shoud be ignored.
+        // Node 7 is malicious and creates multiple shares for height 3. All of its shares should be ignored.
         let shares = vec![
             // Height 1:
             // 3 shares for hash "1"

@@ -183,6 +183,7 @@ fn run_n_rounds_and_collect_hashes(
     mut modifiers: Vec<ConsensusModifier>,
     finish: bool,
 ) -> Vec<CryptoHash> {
+    let rng = &mut ChaChaRng::seed_from_u64(config.random_seed);
     let nodes = config.num_nodes;
     ic_test_utilities::artifact_pool_config::with_test_pool_configs(nodes, |pool_configs| {
         let rounds = config.num_rounds;
@@ -213,7 +214,7 @@ fn run_n_rounds_and_collect_hashes(
             .iter()
             .map(|config| config.node_id)
             .collect();
-        let (registry_client, cup, cryptos) = setup_subnet(subnet_id, &node_ids);
+        let (registry_client, cup, cryptos) = setup_subnet(subnet_id, &node_ids, rng);
         let inst_deps: Vec<_> = replica_configs
             .iter()
             .zip(pool_configs.iter())

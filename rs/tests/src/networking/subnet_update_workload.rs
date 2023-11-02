@@ -58,8 +58,6 @@ const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(30);
 const NNS_DURATION_THRESHOLD: Duration = Duration::from_secs(20);
-// Ratio of requests with duration < DURATION_THRESHOLD should exceed this parameter.
-const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to reading/asserting counter values of the canisters.
 const MAX_CANISTER_READ_RETRIES: u32 = 4;
 const CANISTER_READ_RETRY_WAIT: Duration = Duration::from_secs(10);
@@ -109,8 +107,8 @@ pub fn config(
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_prometheus_config_with_topology();
-    info!(logger, "Step 1: Intalling NNS canisters ...");
+    env.sync_with_prometheus();
+    info!(logger, "Step 1: Installing NNS canisters ...");
     let nns_node = env
         .topology_snapshot()
         .root_subnet()
@@ -207,7 +205,6 @@ pub fn test(
     payload_size_bytes: usize,
     duration: Duration,
     use_boundary_node: bool,
-    min_success_ratio: f64,
 ) {
     let log = env.logger();
     info!(
@@ -330,49 +327,35 @@ pub fn test(
         load_metrics_nns.requests_count_below_threshold(NNS_DURATION_THRESHOLD);
     let requests_count_below_threshold_app =
         load_metrics_app.requests_count_below_threshold(APP_DURATION_THRESHOLD);
-    let requests_ratio_below_threshold_nns =
-        load_metrics_nns.requests_ratio_below_threshold(NNS_DURATION_THRESHOLD);
-    let requests_ratio_below_threshold_app =
-        load_metrics_app.requests_ratio_below_threshold(APP_DURATION_THRESHOLD);
     info!(
         &log,
-        "System subnet: requests below {} sec: requests_count={:?}, requests_ratio={:?}",
+        "System subnet: requests below {} sec: requests_count={:?}",
         NNS_DURATION_THRESHOLD.as_secs(),
         requests_count_below_threshold_nns,
-        requests_ratio_below_threshold_nns,
     );
     info!(
         &log,
-        "Application subnet: requests below {} sec: requests_count={:?}, requests_ratio={:?}",
+        "Application subnet: requests below {} sec: requests_count={:?}",
         APP_DURATION_THRESHOLD.as_secs(),
         requests_count_below_threshold_app,
-        requests_ratio_below_threshold_app,
     );
-    info!(
-        &log,
-        "Minimum expected success ratio is {}\n. Actual values on the subnets: System={}, Application={}",
-        min_success_ratio,
-        load_metrics_nns.success_ratio(),
-        load_metrics_app.success_ratio(),
+    assert_eq!(
+        load_metrics_nns.failure_calls(),
+        0,
+        "Requests failed on the System subnet."
     );
-    assert!(
-        load_metrics_nns.success_ratio() > min_success_ratio,
-        "Too many requests failed on the System subnet."
+    assert_eq!(
+        load_metrics_app.failure_calls(),
+        0,
+        "Requests failed on the Application subnet."
     );
-    assert!(
-        load_metrics_app.success_ratio() > min_success_ratio,
-        "Too many requests failed on the Application subnet."
-    );
-    assert!(requests_ratio_below_threshold_nns
+    let min_expected_counter = rps * duration.as_secs() as usize;
+    assert!(requests_count_below_threshold_nns
         .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
-    assert!(requests_ratio_below_threshold_app
+        .all(|(_, count)| *count as usize == min_expected_counter));
+    assert!(requests_count_below_threshold_app
         .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
-    let min_expected_counter = {
-        let total_requests_count = rps * duration.as_secs() as usize;
-        (min_success_ratio * total_requests_count as f64) as usize
-    };
+        .all(|(_, count)| *count as usize == min_expected_counter));
     info!(
         &log,
         "Step 5: Assert min counter value={} on the canisters has been reached ... ",

@@ -97,6 +97,9 @@ mod update_unassigned_nodes_config;
 mod wait_for_quiet;
 
 #[cfg(test)]
+mod governance_migrations;
+
+#[cfg(test)]
 mod governance_neurons;
 
 #[cfg(test)]
@@ -122,3 +125,12 @@ mod sns_wasm_allowed_principals;
 
 #[cfg(test)]
 mod neuron_following;
+
+#[cfg(test)]
+mod neuron_voting;
+
+#[cfg(test)]
+mod uninstall_canister_by_proposal;
+
+#[cfg(test)]
+mod canister_upgrade;

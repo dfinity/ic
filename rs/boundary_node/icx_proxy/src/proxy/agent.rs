@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::bail;
 use axum::extract::{ConnectInfo, FromRef, State};
+use candid::Principal;
 use hyper::{
     http::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
     Body, Request, Response, StatusCode, Uri,
@@ -17,21 +18,21 @@ use hyper::{
 use ic_agent::{
     agent::{RejectCode, RejectResponse},
     agent_error::HttpErrorPayload,
-    export::Principal,
     Agent, AgentError,
 };
-// use ic_response_verification::MAX_VERIFICATION_VERSION;
+use ic_response_verification::MAX_VERIFICATION_VERSION;
 use ic_utils::interfaces::http_request::HeaderField;
 use ic_utils::{
     call::{AsyncCall, SyncCall},
     interfaces::http_request::HttpRequestCanister,
 };
-use tracing::{enabled, error, info, instrument, trace, Level};
+use tracing::{enabled, error, info, instrument, trace, warn, Level};
 
 use crate::error::ErrorFactory;
 use crate::http;
 use crate::http::request::HttpRequest;
 use crate::http::response::{AgentResponseAny, HttpResponse};
+use crate::metrics::RequestContext;
 use crate::{
     canister_id,
     proxy::{AppState, HandleError, HyperService, REQUEST_BODY_SIZE_LIMIT},
@@ -153,11 +154,15 @@ pub async fn handler<V: Validate, C: HyperService<Body>>(
     uri_canister_id: Option<canister_id::UriHost>,
     host_canister_id: Option<canister_id::HostHeader>,
     query_param_canister_id: Option<canister_id::QueryParam>,
+    referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
+    referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
     request: Request<Body>,
 ) -> Response<Body> {
     let uri_canister_id = uri_canister_id.map(|v| v.0);
     let host_canister_id = host_canister_id.map(|v| v.0);
     let query_param_canister_id = query_param_canister_id.map(|v| v.0);
+    let referer_canister_id = referer_host_canister_id.map(|v| v.0);
+    let referer_query_param_canister_id = referer_query_param_canister_id.map(|v| v.0);
 
     // Read the request body into a Vec
     let (parts, body) = request.into_parts();
@@ -189,7 +194,9 @@ pub async fn handler<V: Validate, C: HyperService<Body>>(
             &mut args.client,
             uri_canister_id
                 .or(host_canister_id)
-                .or(query_param_canister_id),
+                .or(query_param_canister_id)
+                .or(referer_canister_id)
+                .or(referer_query_param_canister_id),
         )
         .await;
 
@@ -235,10 +242,20 @@ async fn process_request_inner(
                     .unwrap())
             }
         }
+
+        #[cfg(feature = "dev_proxy")]
+        Some(_) if request.uri().path().starts_with("/api") => {
+            info!("forwarding");
+            let proxied_request = create_proxied_request(&addr.ip(), replica_uri.clone(), request)?;
+            let response = client.call(proxied_request).await?;
+            let (parts, body) = response.into_parts();
+            return Ok(Response::from_parts(parts, body.into()));
+        }
+
         Some(canister_id) => canister_id,
     };
 
-    trace!(
+    info!(
         "<< {} {} {:?}",
         request.method(),
         request.uri(),
@@ -258,21 +275,18 @@ async fn process_request_inner(
             Err(e) => bail!(e),
         },
     ));
+    info!("<< {} body bytes", http_request.body.len());
 
-    trace!("<<");
     if enabled!(Level::TRACE) {
-        let body = String::from_utf8_lossy(
-            &http_request.body[0..usize::min(http_request.body.len(), MAX_LOG_BODY_SIZE)],
-        );
-        trace!(
-            "<< \"{}\"{}",
-            &body.escape_default(),
-            if body.len() > MAX_LOG_BODY_SIZE {
-                format!("... {} bytes total", body.len())
-            } else {
-                String::new()
-            }
-        );
+        let body = &http_request.body[0..usize::min(http_request.body.len(), MAX_LOG_BODY_SIZE)];
+        let body = String::from_utf8_lossy(body);
+        let body = body.escape_default();
+        let trailing = if http_request.body.len() > MAX_LOG_BODY_SIZE {
+            "..."
+        } else {
+            ""
+        };
+        trace!("<< \"{body}\"{trailing}");
     }
 
     let canister = HttpRequestCanister::create(agent, canister_id);
@@ -287,10 +301,7 @@ async fn process_request_inner(
             http_request.uri.to_string().as_str(),
             header_fields.clone(),
             &http_request.body,
-            // Some(&u16::from(MAX_VERIFICATION_VERSION)),
-            // temporarily force response verification v1 until we are satisifed
-            // that asset canister v0.14.1 has been sufficiently circulated on mainnet
-            Some(&1),
+            Some(&u16::from(MAX_VERIFICATION_VERSION)),
         )
         .call()
         .await;
@@ -341,42 +352,54 @@ async fn process_request_inner(
         }
     }
 
-    let response = response_builder.body(match http_response.streaming_body {
-        Some(body) => body,
-        None => Body::from(http_response.body.clone()),
-    })?;
+    let mut response = response_builder
+        .header(
+            "X-IC-Streaming-Response",
+            http_response.has_streaming_body.to_string(),
+        )
+        .body(match http_response.streaming_body {
+            Some(body) => body,
+            None => Body::from(http_response.body.clone()),
+        })?;
+
+    // Create per-request context
+    let ctx = RequestContext {
+        request_size: http_request.body.len() as u64,
+        streaming_request: http_response.has_streaming_body,
+    };
+
+    // Inject it into response
+    response.extensions_mut().insert(ctx);
+
+    info!(
+        ">> {:?} {} {}",
+        &response.version(),
+        response.status().as_u16(),
+        response.status().to_string(),
+    );
+    if http_response.has_streaming_body {
+        info!(">> streaming body");
+    } else {
+        info!(">> {} body bytes", http_response.body.len());
+    }
 
     if enabled!(Level::TRACE) {
-        trace!(
-            ">> {:?} {} {}",
-            &response.version(),
-            response.status().as_u16(),
-            response.status().to_string()
-        );
-
         for (name, value) in response.headers() {
             let value = String::from_utf8_lossy(value.as_bytes());
-            trace!(">> {}: {}", name, value);
+            trace!(">> {name}: {value}");
         }
-
-        let body = match http_response.has_streaming_body {
-            true => b"... streaming ...".to_vec(),
-            false => http_response.body.clone(),
-        };
-
-        trace!(">>");
-        trace!(
-            ">> \"{}\"{}",
-            String::from_utf8_lossy(&body[..usize::min(MAX_LOG_BODY_SIZE, body.len())])
-                .escape_default(),
-            if http_response.has_streaming_body {
-                "... streaming".to_string()
-            } else if body.len() > MAX_LOG_BODY_SIZE {
-                format!("... {} bytes total", body.len())
+        if !http_response.has_streaming_body {
+            let body =
+                &http_response.body[..usize::min(MAX_LOG_BODY_SIZE, http_response.body.len())];
+            let body = String::from_utf8_lossy(body);
+            let body = body.escape_default();
+            let trailing = if http_response.body.len() > MAX_LOG_BODY_SIZE {
+                "..."
             } else {
-                String::new()
-            }
-        );
+                ""
+            };
+            trace!(">> \"{body}\"{trailing}");
+        }
     }
 
     Ok(response)
@@ -385,40 +408,67 @@ async fn process_request_inner(
 fn handle_result(
     result: Result<(AgentResponseAny,), AgentError>,
 ) -> Result<AgentResponseAny, Result<Response<Body>, anyhow::Error>> {
-    // If the result is a Replica error, returns the 500 code and message. There is no information
-    // leak here because a user could use `dfx` to get the same reply.
-    match result {
-        Ok((http_response,)) => Ok(http_response),
+    use AgentError::{HttpError, ReplicaError, ResponseSizeExceededLimit};
+    use RejectCode::DestinationInvalid;
 
-        Err(AgentError::ReplicaError(RejectResponse {
-            reject_code: RejectCode::DestinationInvalid,
+    let result = match result {
+        Ok((http_response,)) => return Ok(http_response),
+        Err(e) => e,
+    };
+
+    let response = match result {
+        // Turn all `DestinationInvalid`s into 404
+        ReplicaError(RejectResponse {
+            reject_code: DestinationInvalid,
             reject_message,
             ..
-        })) => Err(Ok(Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(reject_message.into())
-            .unwrap())),
+        }) => {
+            warn!("Destination Invalid");
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(reject_message.into())
+                .unwrap()
+        }
 
-        Err(AgentError::ReplicaError(response)) => Err(Ok(Response::builder()
-            .status(StatusCode::BAD_GATEWAY)
-            .body(response.to_string().into())
-            .unwrap())),
+        // If the result is a Replica error, returns the 500 code and message. There is no information
+        // leak here because a user could use `dfx` to get the same reply.
+        ReplicaError(response) => {
+            warn!("Replica Error");
+            Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .body(response.to_string().into())
+                .unwrap()
+        }
 
-        Err(AgentError::HttpError(HttpErrorPayload {
+        // Handle all 451s (denylist)
+        HttpError(HttpErrorPayload {
             status: 451,
             content_type,
             content,
-        })) => Err(Ok(content_type
-            .into_iter()
-            .fold(Response::builder(), |r, c| r.header(CONTENT_TYPE, c))
-            .status(451)
-            .body(content.into())
-            .unwrap())),
+        }) => {
+            warn!("Denylist");
+            content_type
+                .into_iter()
+                .fold(Response::builder(), |r, c| r.header(CONTENT_TYPE, c))
+                .status(451)
+                .body(content.into())
+                .unwrap()
+        }
 
-        Err(AgentError::ResponseSizeExceededLimit()) => Err(Ok(Response::builder()
-            .status(StatusCode::INSUFFICIENT_STORAGE)
-            .body("Response size exceeds limit".into())
-            .unwrap())),
-        Err(e) => Err(Err(e.into())),
-    }
+        ResponseSizeExceededLimit() => {
+            warn!("ResponseSizeExceededLimit");
+            Response::builder()
+                .status(StatusCode::INSUFFICIENT_STORAGE)
+                .body("Response size exceeds limit".into())
+                .unwrap()
+        }
+
+        // Handle all other errors
+        e => {
+            warn!("Other error: {e}");
+            return Err(Err(e.into()));
+        }
+    };
+
+    Err(Ok(response))
 }

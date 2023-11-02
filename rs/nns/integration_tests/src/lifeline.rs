@@ -1,6 +1,8 @@
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
 };
@@ -63,12 +65,10 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             .await
             .expect("getting root canister status failed");
 
-        let root_checksum = root_status
-            .module_hash()
-            .expect("root canister has no hash");
+        let root_checksum = root_status.module_hash.expect("root canister has no hash");
         assert_ne!(
             root_checksum,
-            ic_crypto_sha::Sha256::hash(wasm_module.clone().as_slice())
+            ic_crypto_sha2::Sha256::hash(wasm_module.clone().as_slice())
         );
 
         let funny: u32 = 422557101; // just a funny number I came up with
@@ -86,7 +86,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             },
         );
 
-        let proposal_submission_reponse: ManageNeuronResponse = nns_canisters
+        let proposal_submission_response: ManageNeuronResponse = nns_canisters
             .governance
             .update_from_sender(
                 "manage_neuron",
@@ -104,13 +104,13 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             .expect("submit root upgrade failed");
 
         let proposal_id = if let CommandResponse::MakeProposal(resp) =
-            proposal_submission_reponse.command.as_ref().unwrap()
+            proposal_submission_response.command.as_ref().unwrap()
         {
             ProposalId(resp.proposal_id.unwrap().id)
         } else {
             panic!(
-                "Unexpected proposal submission reponse: {:?}",
-                proposal_submission_reponse
+                "Unexpected proposal submission response: {:?}",
+                proposal_submission_response
             );
         };
 
@@ -154,12 +154,10 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             .await
             .expect("getting root canister status failed");
 
-        let root_checksum = root_status
-            .module_hash()
-            .expect("root canister has no hash");
+        let root_checksum = root_status.module_hash.expect("root canister has no hash");
         assert_eq!(
             root_checksum,
-            ic_crypto_sha::Sha256::hash(wasm_module.as_slice())
+            ic_crypto_sha2::Sha256::hash(wasm_module.as_slice())
         );
 
         let received_magic = nns_canisters
@@ -193,15 +191,13 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             .await
             .expect("getting root canister status failed");
 
-        let root_checksum = root_status
-            .module_hash()
-            .expect("root canister has no hash");
-        assert_ne!(root_checksum, ic_crypto_sha::Sha256::hash(empty_wasm));
+        let root_checksum = root_status.module_hash.expect("root canister has no hash");
+        assert_ne!(root_checksum, ic_crypto_sha2::Sha256::hash(empty_wasm));
 
         let init_arg: &[u8] = &[];
 
         let proposal = create_external_update_proposal_candid(
-            "Proposal to ugprade the root canister",
+            "Proposal to upgrade the root canister",
             "",
             "",
             NnsFunction::NnsRootUpgrade,
@@ -212,7 +208,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             },
         );
 
-        let proposal_submission_reponse: ManageNeuronResponse = nns_canisters
+        let proposal_submission_response: ManageNeuronResponse = nns_canisters
             .governance
             .update_from_sender(
                 "manage_neuron",
@@ -230,13 +226,13 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             .expect("submit root upgrade failed");
 
         let proposal_id = if let CommandResponse::MakeProposal(resp) =
-            proposal_submission_reponse.command.as_ref().unwrap()
+            proposal_submission_response.command.as_ref().unwrap()
         {
             ProposalId(resp.proposal_id.unwrap().id)
         } else {
             panic!(
-                "Unexpected proposal submission reponse: {:?}",
-                proposal_submission_reponse
+                "Unexpected proposal submission response: {:?}",
+                proposal_submission_response
             );
         };
 
@@ -280,10 +276,8 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             .await
             .expect("getting root canister status failed");
 
-        let root_checksum = root_status
-            .module_hash()
-            .expect("root canister has no hash");
-        assert_eq!(root_checksum, ic_crypto_sha::Sha256::hash(empty_wasm));
+        let root_checksum = root_status.module_hash.expect("root canister has no hash");
+        assert_eq!(root_checksum, ic_crypto_sha2::Sha256::hash(empty_wasm));
 
         Ok(())
     });

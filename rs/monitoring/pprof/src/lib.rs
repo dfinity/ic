@@ -54,7 +54,7 @@ fn extract_thread_name(thread_name: &str) -> String {
 /// Collects a CPU profile for the given `duration` by sampling at the given
 /// `frequency`.
 pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, Error> {
-    // ProfilerGuard has a latency of 40-60 miliseconds. Hence we want to run it
+    // ProfilerGuard has a latency of 40-60 milliseconds. Hence we want to run it
     // without blocking the runtime with `spawn_blocking`.
     let guard = spawn_blocking(move || ProfilerGuard::new(frequency))
         .await

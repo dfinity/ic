@@ -1,0 +1,10 @@
+[package]
+name = "ic-crypto-sha2"
+version = "0.8.0"
+edition = "2021"
+
+[dependencies]
+ic-crypto-internal-sha2 = { path = "../internal/crypto_lib/sha2" }
+
+[dev-dependencies]
+openssl = "0.10.55"

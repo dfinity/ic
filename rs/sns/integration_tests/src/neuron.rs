@@ -5,9 +5,11 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
-use ic_crypto_sha::Sha256;
-use ic_ledger_core::tokens::CheckedAdd;
-use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
+use ic_crypto_sha2::Sha256;
+use ic_ledger_core::{
+    tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
+    Tokens,
+};
 use ic_nervous_system_common::{cmc::FakeCmc, i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
@@ -17,7 +19,6 @@ use ic_nns_test_utils::{
     itest_helpers::{forward_call_via_universal_canister, set_up_universal_canister, NnsCanisters},
 };
 use ic_sns_governance::{
-    account_to_proto,
     governance::Governance,
     ledger::ICRC1Ledger,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
@@ -775,7 +776,7 @@ fn test_disburse_maturity_succeeds_to_self() {
         let in_progress = &neuron.disburse_maturity_in_progress[0];
         let target_account = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(in_progress.amount_e8s, earned_maturity_e8s);
-        assert_eq!(target_account, account_to_proto(account_identifier));
+        assert_eq!(target_account, AccountProto::from(account_identifier));
         let now = get_sns_canisters_now_seconds();
         let ts = in_progress.timestamp_of_disbursement_seconds as i64;
         let d_age = now - ts;
@@ -852,7 +853,7 @@ fn test_disburse_maturity_succeeds_to_other_account() {
         assert_eq!(in_progress.amount_e8s, response.amount_disbursed_e8s);
         assert_eq!(
             target_account,
-            account_to_proto(Account {
+            AccountProto::from(Account {
                 owner: maturity_receiver.get_principal_id().0,
                 subaccount: None
             })
@@ -942,107 +943,10 @@ fn test_disburse_maturity_fails_if_no_maturity() {
             manage_neuron_response.command.as_ref().expect("Missing command response"),
             CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
                 if *code == ErrorType::PreconditionFailed as i32 &&
-                   msg.to_lowercase().contains("can't merge an amount less than"),
+                   msg.to_lowercase().contains("can't disburse an amount less than"),
             "{:#?}",
             manage_neuron_response,
         );
-
-        Ok(())
-    });
-}
-
-#[test]
-fn test_disburse_maturity_no_maturity_modulation() {
-    local_test_on_sns_subnet(|runtime| async move {
-        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-        let account_identifier = Account {
-            owner: user.get_principal_id().0,
-            subaccount: None,
-        };
-        let alloc = Tokens::from_tokens(1000).unwrap();
-
-        let sys_params = NervousSystemParameters {
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
-            }),
-            ..NervousSystemParameters::with_default_values()
-        };
-
-        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(account_identifier, alloc)
-            .with_nervous_system_parameters(sys_params.clone())
-            .build();
-
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
-        // Assert that SNS governance does not know any maturity modulation
-        // value. Ofc, that shouldn't be possible, since there is no Cycles
-        // Minting Canister in this test. This is just a sanity test, not a test
-        // of the code under test (called later).
-        assert_eq!(
-            sns_canisters
-                .get_maturity_modulation()
-                .await
-                .maturity_modulation,
-            None,
-        );
-
-        // Stake and claim a neuron capable of making a proposal
-        let neuron_id = sns_canisters
-            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
-            .await;
-
-        let subaccount = neuron_id
-            .subaccount()
-            .expect("Error creating the subaccount");
-
-        let neuron = sns_canisters.get_neuron(&neuron_id).await;
-
-        // No maturity should have been gained as no voting rewards have been distributed
-        assert_eq!(neuron.maturity_e8s_equivalent, 0);
-
-        // Disburse all of the neuron's rewards aka maturity.
-        let ManageNeuronResponse { command } = sns_canisters
-            .governance
-            .update_from_sender(
-                "manage_neuron",
-                candid_one,
-                ManageNeuron {
-                    subaccount: subaccount.to_vec(),
-                    command: Some(Command::DisburseMaturity(DisburseMaturity {
-                        percentage_to_disburse: 100,
-                        to_account: None,
-                    })),
-                },
-                &user,
-            )
-            .await
-            .expect("Error calling the manage_neuron API.");
-
-        match &command {
-            Some(CommandResponse::Error(GovernanceError {
-                error_type,
-                error_message,
-            })) => {
-                assert_eq!(
-                    ErrorType::from_i32(*error_type).unwrap(),
-                    ErrorType::Unavailable,
-                    "{:#?}",
-                    command
-                );
-                assert!(
-                    error_message.to_lowercase().contains("maturity modulation"),
-                    "{:#?}",
-                    command
-                );
-                assert!(error_message.contains("retriev"), "{:#?}", command);
-                assert!(
-                    error_message.contains("Cycles Minting Canister"),
-                    "{:#?}",
-                    command
-                );
-            }
-            _ => panic!("Unexpected response: {:#?}", command),
-        }
 
         Ok(())
     });
@@ -1650,7 +1554,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     );
 
     // Step 3.2: Inspect the neurons. In particular, look at their maturity to
-    // make sure that their propotion of the reward purse is proportional to
+    // make sure that their proportion of the reward purse is proportional to
     // their voting power/reward shares.
     let mut total_observed_rewards_e8s = 0;
     for (neuron, weight) in zip(&neurons, [2, 3, 0]) {

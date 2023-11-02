@@ -1,6 +1,5 @@
 use candid::candid_method;
 use candid::Principal;
-use ic_btc_interface::Txid;
 use ic_canisters_http_types as http;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
 use ic_cdk_macros::{init, post_upgrade, query, update};
@@ -16,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
+use std::fmt;
 
 mod dashboard;
 mod json_rpc;
@@ -169,7 +169,7 @@ pub enum EventKind {
     #[serde(rename = "utxo_check")]
     UtxoCheck {
         #[serde(rename = "txid")]
-        txid: Txid,
+        txid: [u8; 32],
 
         #[serde(rename = "vout")]
         vout: u32,
@@ -321,6 +321,17 @@ fn record_event(kind: EventKind) {
             }))
         })
         .expect("failed to append an event");
+}
+
+pub struct DisplayTxid<'a>(pub &'a [u8]);
+
+impl fmt::Display for DisplayTxid<'_> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0.iter().rev() {
+            write!(fmt, "{:02x}", *b)?
+        }
+        Ok(())
+    }
 }
 
 fn caller_is_maintainer() -> Result<(), String> {
@@ -577,7 +588,6 @@ fn txid_to_bytes(txid: String) -> Vec<u8> {
 }
 
 #[query]
-#[candid_method(query)]
 fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     args.response.headers.clear();
     if args.response.status >= 300u64 {
@@ -591,7 +601,6 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -699,7 +708,7 @@ async fn http_register_tx(
         json_rpc::RegisterTransferRequest {
             network: json_rpc::Network::Bitcoin,
             asset: json_rpc::Asset::Btc,
-            transfer_reference: format!("{}:{}", &req.txid, req.vout),
+            transfer_reference: format!("{}:{}", DisplayTxid(&req.txid), req.vout),
             direction: json_rpc::Direction::Received,
         },
     )
@@ -852,7 +861,7 @@ fn test_key_rotation() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid::utils::{service_equal, CandidSource};
 
     candid::export_service!();
 
@@ -862,7 +871,7 @@ fn check_candid_interface_compatibility() {
     let old_interface =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("kyt.did");
 
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

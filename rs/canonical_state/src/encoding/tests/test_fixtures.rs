@@ -5,9 +5,9 @@ use ic_test_utilities::types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    messages::{CallbackId, Payload, RejectContext, RequestOrResponse},
+    messages::{CallbackId, Payload, RejectContext, RequestMetadata, RequestOrResponse},
     xnet::StreamHeader,
-    Cycles,
+    Cycles, Time,
 };
 use std::collections::VecDeque;
 
@@ -24,7 +24,7 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
     }
 }
 
-pub fn request() -> RequestOrResponse {
+pub fn request(certification_version: CertificationVersion) -> RequestOrResponse {
     RequestBuilder::new()
         .receiver(canister_test_id(1))
         .sender(canister_test_id(2))
@@ -32,6 +32,13 @@ pub fn request() -> RequestOrResponse {
         .payment(Cycles::new(4))
         .method_name("test".to_string())
         .method_payload(vec![6])
+        .metadata(
+            (certification_version >= CertificationVersion::V14).then_some(RequestMetadata {
+                call_tree_depth: Some(1),
+                call_tree_start_time: Some(Time::from_nanos_since_unix_epoch(100_000)),
+                call_subtree_deadline: Some(Time::from_nanos_since_unix_epoch(100_001)),
+            }),
+        )
         .build()
         .into()
 }
@@ -53,10 +60,10 @@ pub fn reject_response() -> RequestOrResponse {
         .respondent(canister_test_id(5))
         .originator_reply_callback(CallbackId::from(4))
         .refund(Cycles::new(3))
-        .response_payload(Payload::Reject(RejectContext {
-            code: RejectCode::SysFatal,
-            message: "Oops".into(),
-        }))
+        .response_payload(Payload::Reject(RejectContext::new(
+            RejectCode::SysFatal,
+            "Oops",
+        )))
         .build()
         .into()
 }

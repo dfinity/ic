@@ -55,7 +55,7 @@ pub trait CspKeyGenerator {
     /// * a random serial,
     /// * the common name of both subject and issuer being the `ToString` form
     ///   of the given `node_id`,
-    /// * validity starting at the time of calling this method, and
+    /// * validity starting 2 minutes before the time of calling this method, and
     /// * validity ending at `not_after`, which must be specified according to
     ///   section 4.1.2.5 in RFC 5280.
     ///

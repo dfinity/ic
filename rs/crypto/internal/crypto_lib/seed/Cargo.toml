@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ic-crypto-sha = { path = "../../../sha" }
+ic-crypto-sha2 = { path = "../../../sha2" }
 ic-types = { path = "../../../../types/types" }
 hex = "0.4"
 rand = "0.8"

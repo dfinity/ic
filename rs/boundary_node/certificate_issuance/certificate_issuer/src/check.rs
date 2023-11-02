@@ -82,9 +82,24 @@ impl Check for Checker {
         let txt_src = format!("_acme-challenge.{}.", name);
 
         match self.resolver.lookup(&txt_src, RecordType::TXT).await {
-            Ok(_) => Err(CheckError::ExistingDnsTxtChallenge {
-                src: txt_src.to_owned(),
-            }),
+            Ok(lookup) => {
+                // If there's no TXT, resolver can also follow a CNAME.
+                if lookup.record_iter().any(|rec| {
+                    !rec.name()
+                        .to_string()
+                        .trim_end_matches('.')
+                        .ends_with(&self.delegation_domain.trim_end_matches('.'))
+                }) {
+                    // There's an existing challenge response. Return error.
+                    Err(CheckError::ExistingDnsTxtChallenge {
+                        src: txt_src.to_owned(),
+                    })
+                } else {
+                    // There's no challenge response, but the resolver followed the CNAME and we have a challenge response under our domain.
+                    // This is ok, as we will just overwrite this record later.
+                    Ok(())
+                }
+            }
             Err(err) => match err.kind() {
                 ResolveErrorKind::NoRecordsFound { .. } => Ok(()),
                 _ => Err(CheckError::UnexpectedError(anyhow!(
@@ -162,6 +177,7 @@ impl Check for Checker {
             method: String::from("GET"),
             url: String::from("/.well-known/ic-domains"),
             headers: vec![],
+            body: vec![],
         };
 
         let (response,) = HttpRequestCanister::create(&self.agent, canister_id)

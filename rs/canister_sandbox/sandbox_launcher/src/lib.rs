@@ -94,7 +94,7 @@ impl LauncherServer {
             match wait() {
                 Err(err) => match err {
                     Errno::ECHILD => {
-                        unreachable!("Launcher recieved ECHILD error");
+                        unreachable!("Launcher received ECHILD error");
                     }
                     _ => unreachable!("Launcher encountered error waiting on children: {}", err),
                 },

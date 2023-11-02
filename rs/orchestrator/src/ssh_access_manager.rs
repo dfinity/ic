@@ -16,7 +16,7 @@ pub(crate) struct SshAccessParameters {
 
 /// Provides function to continuously check the Registry to determine if there
 /// has been a change in the readonly and backup public key sets.If so, updates
-/// the accesss to the node accordingly.
+/// the access to the node accordingly.
 pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,

@@ -72,7 +72,7 @@ pub async fn submit_external_update_proposal_allowing_error(
     let response: ManageNeuronResponse = governance_canister
         .update_from_sender(
             "manage_neuron",
-            dfn_candid::candid_one,
+            candid_one,
             ManageNeuron {
                 id: None,
                 command: Some(Command::MakeProposal(Box::new(proposal))),
@@ -346,7 +346,7 @@ pub async fn upgrade_root_canister_by_proposal(
     wasm: Wasm,
 ) {
     let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(&wasm);
+    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
 
     let proposal_id = submit_external_update_proposal(
         governance,
@@ -369,7 +369,7 @@ pub async fn upgrade_root_canister_by_proposal(
     );
 
     loop {
-        let status: ic_ic00_types::CanisterStatusResult = lifeline
+        let status: CanisterStatusResult = lifeline
             .update_(
                 "canister_status",
                 candid_one,
@@ -377,8 +377,8 @@ pub async fn upgrade_root_canister_by_proposal(
             )
             .await
             .unwrap();
-        if status.module_hash().unwrap().as_slice() == new_module_hash
-            && status.status() == ic_ic00_types::CanisterStatusType::Running
+        if status.module_hash.unwrap().as_slice() == new_module_hash
+            && status.status == CanisterStatusType::Running
         {
             break;
         }
@@ -404,7 +404,7 @@ async fn change_nns_canister_by_proposal(
     arg: Option<Vec<u8>>,
 ) {
     let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(&wasm);
+    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
 
     let status: CanisterStatusResult = root
         .update_(

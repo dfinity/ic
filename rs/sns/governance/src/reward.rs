@@ -173,7 +173,7 @@ impl VotingRewardsParameters {
     /// If Err is returned, it contains a description (for human consumption) of
     /// what makes self defective.
     ///
-    /// All fields are requried.
+    /// All fields are required.
     ///
     /// Each field has a range of allowed values. Those limits are just sanity
     /// checks. All "sensible" values are allowed.

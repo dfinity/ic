@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{EmptyBlob, Payload};
+use ic_ic00_types::{EmptyBlob, Payload, UpgradeOptions};
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
@@ -17,21 +17,26 @@ use maplit::btreeset;
 ////////////////////////////////////////////////////////////////////////
 // Constants and templates
 
-/// Slice size used across tests is 1K instructions
-const MAX_INSTRUCTIONS_PER_SLICE: u64 = 1_000;
+/// Slice size used across tests is 10K instructions
+const MAX_INSTRUCTIONS_PER_SLICE: u64 = 10_000;
 /// Declare local variables for a loop in WAT
 const LOOP_LOCALS_WAT: &str = r#"
-                (local $i i32)
+                (local $limit i64)
 "#;
-/// Declare loop which takes 996 instructions (roughly 1K)
-const LOOP_1K_WAT: &str = r#"
-                (set_local $i (i32.const 0))
+/// Declare loop which takes a bit less than 10K instructions (8K)
+const LOOP_10K_WAT: &str = r#"
+                (local.set $limit
+                    (i64.add (call $performance_counter (i32.const 0)) (i64.const 8000))
+                )
                 (loop $loop
-                    ;; Each iteration loop takes `9 + 6` instructions,
-                    ;; so 110 iterations is 996 instructions.
-                    (if (i32.lt_s (get_local $i) (i32.const 110))
+                    (if (i64.lt_s
+                            (call $performance_counter (i32.const 0))
+                            (local.get $limit))
                         (then
-                            (set_local $i (i32.add (get_local $i) (i32.const 1)))
+                            ;; Too tight loop leads to a complexity limit being reached,
+                            ;; so the following instruction is just to make less performance
+                            ;; counter calls.
+                            (memory.fill (i32.const 0) (i32.const 0) (i32.const 100))
                             (br $loop)
                         )
                     )
@@ -105,7 +110,10 @@ fn module<D: std::fmt::Display>(functions: D) -> String {
     format!(
         r#"
         (module
+            (import "ic0" "performance_counter"
+                (func $performance_counter (param i32) (result i64)))
             {functions}
+            (memory 1)
         )"#
     )
 }
@@ -126,39 +134,39 @@ fn func(function: Function, execution: Execution) -> String {
         Execution::Short => format!(
             r#"({func}
                 {LOOP_LOCALS_WAT}
-                ;; With `slice_instructions_limit` set to 1K, this should
+                ;; With `slice_instructions_limit` set to 10K, this should
                 ;; take 1 round to complete.
-                {LOOP_1K_WAT}
+                {LOOP_10K_WAT}
                 )"#
         ),
         Execution::Long => format!(
             r#"({func}
                 {LOOP_LOCALS_WAT}
-                ;; With `slice_instructions_limit` set to 1K, this should
+                ;; With `slice_instructions_limit` set to 10K, this should
                 ;; take 2 rounds to complete.
-                {LOOP_1K_WAT}
-                {LOOP_1K_WAT}
+                {LOOP_10K_WAT}
+                {LOOP_10K_WAT}
                 )"#
         ),
         Execution::ShortTrap => format!("({func} (unreachable))"),
         Execution::LongTrap => format!(
             r#"({func}
                 {LOOP_LOCALS_WAT}
-                ;; With `slice_instructions_limit` set to 1K, this should
+                ;; With `slice_instructions_limit` set to 10K, this should
                 ;; take 2 rounds to fail.
-                {LOOP_1K_WAT}
-                {LOOP_1K_WAT}
+                {LOOP_10K_WAT}
+                {LOOP_10K_WAT}
                 (unreachable)
                 )"#
         ),
         Execution::VeryLong | Execution::InstructionsLimit => format!(
             r#"({func}
                 {LOOP_LOCALS_WAT}
-                ;; With `slice_instructions_limit` set to 1K, this should
+                ;; With `slice_instructions_limit` set to 10K, this should
                 ;; take 3 rounds to complete.
-                {LOOP_1K_WAT}
-                {LOOP_1K_WAT}
-                {LOOP_1K_WAT}
+                {LOOP_10K_WAT}
+                {LOOP_10K_WAT}
+                {LOOP_10K_WAT}
                 )"#
         ),
     }
@@ -233,6 +241,7 @@ fn upgrade_fails_on_not_enough_cycles() {
         canister_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        Cycles::zero(),
     );
     let canister_id = test
         .canister_from_cycles_and_binary(
@@ -319,6 +328,90 @@ fn upgrade_fails_on_short_pre_upgrade_trap() {
     let result = test.upgrade_canister(canister_id, new_empty_binary());
     assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
     assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn test_install_and_reinstall_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+    let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
+    let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+    // test install
+    assert_eq!(test.install_canister_v2(canister_id, old_binary), Ok(()));
+    // test reinstall
+    let canister_state_before = test.canister_state(canister_id).clone();
+    let result = test.reinstall_canister_v2(canister_id, new_empty_binary());
+    assert_eq!(result, Ok(()));
+    assert_ne!(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+
+    for skip_pre_upgrade in [None, Some(false), Some(true)] {
+        let old_binary = binary(&[(Function::PreUpgrade, Execution::ShortTrap)]);
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        test.install_canister_v2(canister_id, old_binary).unwrap();
+        let canister_state_before = test.canister_state(canister_id).clone();
+
+        let result = test.upgrade_canister_v2(
+            canister_id,
+            new_empty_binary(),
+            Some(UpgradeOptions {
+                skip_pre_upgrade,
+                keep_main_memory: None,
+            }),
+        );
+
+        if skip_pre_upgrade == Some(true) {
+            assert_eq!(result, Ok(()));
+            assert_canister_state_after_ok(
+                &canister_state_before,
+                test.canister_state(canister_id),
+            );
+        } else {
+            assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
+            assert_canister_state_after_err(
+                &canister_state_before,
+                test.canister_state(canister_id),
+            );
+        }
+    }
+}
+
+#[test]
+fn test_upgrade_execution_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+
+    for upgrade_option in [
+        None,
+        Some(UpgradeOptions {
+            skip_pre_upgrade: None,
+            keep_main_memory: None,
+        }),
+        Some(UpgradeOptions {
+            skip_pre_upgrade: Some(false),
+            keep_main_memory: None,
+        }),
+        Some(UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        }),
+    ] {
+        let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        test.install_canister_v2(canister_id, old_binary).unwrap();
+        let canister_state_before = test.canister_state(canister_id).clone();
+
+        let result = test.upgrade_canister_v2(
+            canister_id,
+            binary(&[(Function::PostUpgrade, Execution::ShortTrap)]),
+            upgrade_option,
+        );
+
+        assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
+        assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+    }
 }
 
 #[test]
@@ -897,4 +990,44 @@ fn dts_uninstall_with_aborted_upgrade() {
             canister_id,
         )
     );
+}
+
+#[test]
+fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
+    let mut test = execution_test_with_max_rounds(1);
+    // Create canister with no binary and hence no execution state
+    let canister_id = test.create_canister(1_000_000_000_u64.into());
+    let canister_state_before = test.canister_state(canister_id).clone();
+
+    let result = test.upgrade_canister_v2(
+        canister_id,
+        new_empty_binary(),
+        Some(UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        }),
+    );
+    assert_eq!(
+        result.unwrap_err().code(),
+        ErrorCode::CanisterWasmModuleNotFound
+    );
+    assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn upgrade_with_skip_pre_upgrade_ok_with_no_pre_upgrade() {
+    let mut test = execution_test_with_max_rounds(1);
+    let canister_id = test.canister_from_binary(old_empty_binary()).unwrap();
+    let canister_state_before = test.canister_state(canister_id).clone();
+
+    let result = test.upgrade_canister_v2(
+        canister_id,
+        new_empty_binary(),
+        Some(UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        }),
+    );
+    assert_eq!(result, Ok(()));
+    assert_canister_state_after_ok(&canister_state_before, test.canister_state(canister_id));
 }

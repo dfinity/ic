@@ -4,6 +4,8 @@ Rules to return various information about the workspace, current invocation etc.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 
+FAKE_IC_VERSION = "0000000000000000000000000000000000000000"
+
 def _ic_version_or_git_sha_impl(ctx):
     """
     Returns the file that contatins IC version.

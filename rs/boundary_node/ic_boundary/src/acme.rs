@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
@@ -6,8 +6,7 @@ use instant_acme::{
     Account, Authorization, Challenge, ChallengeType, Identifier, NewOrder, OrderStatus,
 };
 
-use crate::{WithRetry, WithThrottle};
-
+use crate::core::{WithRetry, WithThrottle};
 pub struct OrderHandle(instant_acme::Order);
 
 #[derive(Debug)]
@@ -62,6 +61,7 @@ pub struct Acme {
     account: Account,
 }
 
+#[cfg(feature = "tls")]
 impl Acme {
     pub fn new(account: Account) -> Self {
         Self { account }

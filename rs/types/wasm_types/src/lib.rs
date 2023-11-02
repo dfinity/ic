@@ -58,7 +58,7 @@ pub struct CanisterModule {
 impl CanisterModule {
     pub fn new(bytes: Vec<u8>) -> Self {
         let module = ModuleStorage::Memory(Arc::new(bytes));
-        let module_hash = ic_crypto_sha::Sha256::hash(module.as_slice());
+        let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
         Self {
             module,
             module_hash,
@@ -70,7 +70,7 @@ impl CanisterModule {
         // It should only be necessary to compute the hash here when
         // loading checkpoints written by older replica versions
         let module_hash =
-            module_hash.map_or_else(|| ic_crypto_sha::Sha256::hash(module.as_slice()), |h| h.0);
+            module_hash.map_or_else(|| ic_crypto_sha2::Sha256::hash(module.as_slice()), |h| h.0);
         Ok(Self {
             module,
             module_hash,

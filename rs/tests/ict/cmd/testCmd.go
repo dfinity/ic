@@ -13,11 +13,11 @@ import (
 var DEFAULT_TEST_KEEPALIVE_MINS = 60
 
 type Config struct {
-	isFuzzyMatch bool
-	isDryRun     bool
-	keepAlive    bool
-	filterTests  string
-	farmBaseUrl  string
+	isFuzzyMatch         bool
+	isDryRun             bool
+	keepAlive            bool
+	filterTests          string
+	farmBaseUrl          string
 	requiredHostFeatures string
 }
 
@@ -39,11 +39,7 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 			}
 		}
 		command := []string{"bazel", "test", target, "--config=systest"}
-		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations ..."
-		command = append(command, args[1:]...)
-		if !any_contains_substring(command, "--cache_test_results") {
-			command = append(command, "--cache_test_results=no")
-		}
+		command = append(command, "--cache_test_results=no")
 		if len(cfg.filterTests) > 0 {
 			command = append(command, "--test_arg=--include-tests="+cfg.filterTests)
 		}
@@ -58,6 +54,9 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 			command = append(command, keepAlive)
 			command = append(command, "--test_arg=--debug-keepalive")
 		}
+		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations --test_timeout=20 ..."
+		// Note: arguments provided by the user might override the ones above, i.e. test_timeout, cache_test_results, etc.
+		command = append(command, args[1:]...)
 		// Print Bazel command for debugging puroposes.
 		cmd.Println(CYAN + "Raw Bazel command to be invoked: \n$ " + strings.Join(command, " ") + NC)
 		if cfg.isDryRun {

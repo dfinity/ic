@@ -13,148 +13,151 @@
 //! Response encoding Response<Bytes>:
 //!     - Same as request expect that the header contains a HeaderMap and a Statuscode.
 use axum::body::{Body, BoxBody, HttpBody};
+use bincode::Options;
 use bytes::{Buf, BufMut, Bytes};
-use futures::{SinkExt, StreamExt};
-use http::{
-    request::Parts as RequestParts, response::Parts as ResponseParts, HeaderMap, Request, Response,
-    StatusCode, Uri,
-};
+use http::{Request, Response, StatusCode, Uri};
+use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
-pub(crate) async fn read_request<T: AsyncRead + Unpin>(
-    recv_stream: &mut FramedRead<T, LengthDelimitedCodec>,
-) -> Result<Request<Body>, std::io::Error> {
-    let header = recv_stream
-        .next()
-        .await
-        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))??;
-    let raw_header: WireRequestHeader = bincode::deserialize(&header).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Bincode request wire header deserialization failed: {}", e),
-        )
-    })?;
-    let body = recv_stream
-        .next()
-        .await
-        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))??;
+#[derive(Debug)]
+pub(crate) enum RecvError {
+    RecvRequestFailed { reason: String },
+    SendResponseFailed { reason: String },
+}
 
-    // TODO: Double check if it can not fail.
-    let request = Request::builder()
-        .uri(raw_header.uri)
-        .body(Body::from(body.freeze()))
-        .expect("Building from typed values can not fail");
+impl std::fmt::Display for RecvError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RecvRequestFailed { reason: e } => {
+                write!(f, "Receiving a request failed: {}", e)
+            }
+            Self::SendResponseFailed { reason } => {
+                write!(f, "Sending a response failed: {}", reason)
+            }
+        }
+    }
+}
+
+const MAX_MESSAGE_SIZE_BYTES: usize = 8 * 1024 * 1024;
+
+fn bincode_config() -> impl Options {
+    bincode::DefaultOptions::new()
+        .with_fixint_encoding()
+        .with_limit(MAX_MESSAGE_SIZE_BYTES as u64)
+}
+
+pub(crate) async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, RecvError> {
+    let raw_msg = recv_stream
+        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .map_err(|_| RecvError::RecvRequestFailed {
+            reason: format!(
+                "Recv stream for request contains more than {} bytes",
+                MAX_MESSAGE_SIZE_BYTES
+            ),
+        })?;
+    let msg: WireRequest =
+        bincode_config()
+            .deserialize(&raw_msg)
+            .map_err(|err| RecvError::RecvRequestFailed {
+                reason: format!("Deserializing request failed: {}", err),
+            })?;
+
+    let mut request = Request::new(Body::from(Bytes::copy_from_slice(msg.body)));
+    let _ = std::mem::replace(request.uri_mut(), msg.uri);
     Ok(request)
 }
 
-pub(crate) async fn read_response<T: AsyncRead + Unpin>(
-    recv_stream: &mut FramedRead<T, LengthDelimitedCodec>,
-) -> Result<Response<Bytes>, std::io::Error> {
-    let header = recv_stream
-        .next()
+pub(crate) async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, String> {
+    let raw_msg = recv_stream
+        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
-        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))??;
-    let raw_header: WireResponseHeader = bincode::deserialize(&header).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Bincode response wire header deserialization failed: {}", e),
-        )
-    })?;
-    let body = recv_stream
-        .next()
-        .await
-        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))??;
+        .map_err(|_| {
+            format!(
+                "Recv stream for response contains more than {} bytes",
+                MAX_MESSAGE_SIZE_BYTES
+            )
+        })?;
+    let msg: WireResponse = bincode_config()
+        .deserialize(&raw_msg)
+        .map_err(|err| format!("Deserializing response failed: {}", err))?;
 
-    // TODO: Double check if it can not fail.
-    let response = Response::builder()
-        .status(raw_header.status)
-        .body(body.freeze())
-        .expect("Building from typed values can not fail.");
+    let mut response = Response::new(Bytes::copy_from_slice(msg.body));
+    let _ = std::mem::replace(response.status_mut(), msg.status);
     Ok(response)
 }
 
-pub(crate) async fn write_request<T: AsyncWrite + Unpin>(
-    send_stream: &mut FramedWrite<T, LengthDelimitedCodec>,
+pub(crate) async fn write_request(
+    send_stream: &mut SendStream,
     request: Request<Bytes>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), String> {
     let (parts, body) = request.into_parts();
-    let parts = WireRequestHeader::from(parts);
 
-    let res = bincode::serialize(&parts).expect("serialization should not fail");
-    send_stream.send(Bytes::from(res)).await?;
+    let msg = WireRequest {
+        uri: parts.uri,
+        body: &body,
+    };
 
-    send_stream.send(body).await?;
-
-    Ok(())
+    let res = bincode_config()
+        .serialize(&msg)
+        .map_err(|err| err.to_string())?;
+    send_stream
+        .write_all(&res)
+        .await
+        .map_err(|err| err.to_string())
 }
 
-pub(crate) async fn write_response<T: AsyncWrite + Unpin>(
-    send_stream: &mut FramedWrite<T, LengthDelimitedCodec>,
+pub(crate) async fn write_response(
+    send_stream: &mut SendStream,
     response: Response<BoxBody>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), RecvError> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?
-    let (parts, body) = match to_bytes(body).await {
-        Ok(b) => (WireResponseHeader::from(parts), b),
-        Err(e) => (
-            WireResponseHeader {
-                status: StatusCode::INTERNAL_SERVER_ERROR,
-                headers: http::HeaderMap::new(),
-            },
-            Bytes::from(e.to_string().into_bytes()),
-        ),
+    let b = to_bytes(body)
+        .await
+        .map_err(|err| RecvError::SendResponseFailed {
+            reason: err.to_string(),
+        })?;
+    let msg = WireResponse {
+        status: parts.status,
+        body: &b,
     };
 
-    let res = bincode::serialize(&parts).expect("serialization should not fail");
-    send_stream.send(Bytes::from(res)).await?;
-
-    send_stream.send(body).await?;
-
-    Ok(())
+    let res = bincode_config()
+        .serialize(&msg)
+        .map_err(|err| RecvError::SendResponseFailed {
+            reason: err.to_string(),
+        })?;
+    send_stream
+        .write_all(&res)
+        .await
+        .map_err(|err| RecvError::SendResponseFailed {
+            reason: err.to_string(),
+        })
 }
 
 #[derive(Serialize, Deserialize)]
-struct WireResponseHeader {
+struct WireResponse<'a> {
     #[serde(with = "http_serde::status_code")]
     status: StatusCode,
-    #[serde(with = "http_serde::header_map")]
-    headers: HeaderMap,
-}
-
-impl From<ResponseParts> for WireResponseHeader {
-    fn from(value: ResponseParts) -> Self {
-        Self {
-            status: value.status,
-            headers: value.headers,
-        }
-    }
+    #[serde(with = "serde_bytes")]
+    body: &'a [u8],
 }
 
 #[derive(Serialize, Deserialize)]
-struct WireRequestHeader {
+struct WireRequest<'a> {
     #[serde(with = "http_serde::uri")]
     uri: Uri,
-    #[serde(with = "http_serde::header_map")]
-    headers: HeaderMap,
-}
-
-impl From<RequestParts> for WireRequestHeader {
-    fn from(value: RequestParts) -> Self {
-        Self {
-            uri: value.uri,
-            headers: value.headers,
-        }
-    }
+    #[serde(with = "serde_bytes")]
+    body: &'a [u8],
 }
 
 // Copied from hyper. Used to transform `BoxBodyBytes` to `Bytes`.
 // It might look slow but since in our case the data is fully available
 // the first data() call will immediately return everything.
 // With hyper 1.0 etc. this situation will improve.
-pub(crate) async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
+async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
 where
     T: HttpBody + Unpin,
 {

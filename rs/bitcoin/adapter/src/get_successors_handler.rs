@@ -4,11 +4,13 @@ use std::{
 };
 
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
+use ic_btc_validation::is_beyond_last_checkpoint;
+use ic_metrics::MetricsRegistry;
 use tokio::sync::{mpsc::Sender, Mutex};
 use tonic::{Code, Status};
 
 use crate::{
-    blockchainstate::CachedHeader, common::BlockHeight, config::Config, BlockchainManagerRequest,
+    common::BlockHeight, config::Config, metrics::GetSuccessorMetrics, BlockchainManagerRequest,
     BlockchainState,
 };
 
@@ -23,6 +25,10 @@ const MAX_RESPONSE_SIZE: usize = 2_000_000;
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 
+// Max number of blocks that can be returned in the `GetSuccessorsResponse`.
+// We limit the number of blocks because serializing many blocks to pb can take some time.
+const MAX_BLOCKS_LENGTH: usize = 100;
+
 const BLOCK_HEADER_SIZE: usize = 80;
 
 // The maximum number of bytes the `next` field in a response can take.
@@ -36,7 +42,7 @@ const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GetSuccessorsRequest {
     /// Hash of the most recent stable block in the Bitcoin canister.
     pub anchor: BlockHash,
@@ -44,7 +50,7 @@ pub struct GetSuccessorsRequest {
     pub processed_block_hashes: Vec<BlockHash>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GetSuccessorsResponse {
     /// Blocks found in the block cache.
     pub blocks: Vec<Block>,
@@ -55,8 +61,9 @@ pub struct GetSuccessorsResponse {
 /// server.
 pub struct GetSuccessorsHandler {
     state: Arc<Mutex<BlockchainState>>,
-    command_sender: Sender<BlockchainManagerRequest>,
+    blockchain_manager_tx: Sender<BlockchainManagerRequest>,
     network: Network,
+    metrics: GetSuccessorMetrics,
 }
 
 impl GetSuccessorsHandler {
@@ -65,12 +72,14 @@ impl GetSuccessorsHandler {
     pub fn new(
         config: &Config,
         state: Arc<Mutex<BlockchainState>>,
-        command_sender: Sender<BlockchainManagerRequest>,
+        blockchain_manager_tx: Sender<BlockchainManagerRequest>,
+        metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
             state,
-            command_sender,
+            blockchain_manager_tx,
             network: config.network,
+            metrics: GetSuccessorMetrics::new(metrics_registry),
         }
     }
 
@@ -84,6 +93,10 @@ impl GetSuccessorsHandler {
         &self,
         request: GetSuccessorsRequest,
     ) -> Result<GetSuccessorsResponse, Status> {
+        self.metrics
+            .processed_block_hashes
+            .observe(request.processed_block_hashes.len() as f64);
+
         let response = {
             let state = self.state.lock().await;
             let anchor_height = state
@@ -114,18 +127,20 @@ impl GetSuccessorsHandler {
             );
             GetSuccessorsResponse { blocks, next }
         };
+        self.metrics
+            .response_blocks
+            .observe(response.blocks.len() as f64);
 
         if !response.next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
-            self.command_sender
+            self.blockchain_manager_tx
                 .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
                     response.next.clone(),
                 ))
                 .ok();
         }
-
         // TODO: better handling of full channel as the receivers are never closed.
-        self.command_sender
+        self.blockchain_manager_tx
             .try_send(BlockchainManagerRequest::PruneBlocks(
                 request.anchor,
                 request.processed_block_hashes,
@@ -134,65 +149,6 @@ impl GetSuccessorsHandler {
 
         Ok(response)
     }
-}
-
-/// Bitcoin mainnet checkpoints
-#[rustfmt::skip]
-const BITCOIN: &[(BlockHeight, &str)] = &[
-    (11_111, "0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d",),
-    (33_333, "000000002dd5588a74784eaa7ab0507a18ad16a236e7b1ce69f00d7ddfb5d0a6",),
-    (74_000, "0000000000573993a3c9e41ce34471c079dcf5f52a0e824a81e7f953b8661a20",),
-    (105_000, "00000000000291ce28027faea320c8d2b054b2e0fe44a773f3eefb151d6bdc97",),
-    (134_444, "00000000000005b12ffd4cd315cd34ffd4a594f430ac814c91184a0d42d2b0fe",),
-    (168_000, "000000000000099e61ea72015e79632f216fe6cb33d7899acb35b75c8303b763",),
-    (193_000, "000000000000059f452a5f7340de6682a977387c17010ff6e6c3bd83ca8b1317",),
-    (210_000, "000000000000048b95347e83192f69cf0366076336c639f9b7228e9ba171342e",),
-    (216_116, "00000000000001b4f4b433e81ee46494af945cf96014816a4e2370f11b23df4e",),
-    (225_430, "00000000000001c108384350f74090433e7fcf79a606b8e797f065b130575932",),
-    (250_000, "000000000000003887df1f29024b06fc2200b55f8af8f35453d7be294df2d214",),
-    (279_000, "0000000000000001ae8c72a0b0c301f67e3afca10e819efa9041e458e9bd7e40",),
-    (295_000, "00000000000000004d9b4ef50f0f9d686fd69db2e03af35a100370c64632a983",),
-    (393_216, "00000000000000000390df7d2bdc06b9fcb260b39e3fb15b4bc9f62572553924"),
-    (421_888, "000000000000000004b232ad9492d0729d7f9d6737399ffcdaac1c8160db5ef6"),
-    (438_784, "0000000000000000040d6ef667d7a52caf93d8e0d1e40fd7155c787b42667179"),
-    (451_840, "0000000000000000029103c8ade7786e7379623465c72d71d84624eb9c159bea"),
-    (469_766, "000000000000000000130b2bd812c6a7ae9c02a74fc111806b1dd11e8975da45"),
-    (481_824, "0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893"),
-    (514_048, "00000000000000000022fe630be397a62c58972bb81f0a2d1ae8c968511a4659"),
-    (553_472, "0000000000000000000e06b6698a4f65ab9915f24b23ca2f9d1abf30cc3e9173"),
-    (571_392, "00000000000000000019c18b43077775fc299a6646ab0e9dbbd5770bf6ca392d"),
-    (596_000, "0000000000000000000706f93dc673ca366c810f317e7cfe8d951c0107b65223"),
-    (601_723, "000000000000000000009837f74796532b21d8ccf7def3dcfcb45aa92cd86b9e"),
-    (617_056, "0000000000000000000ca51b293fb2be2fbaf1acc76dcbbbff7e4d7796380b9e"),
-    (632_549, "00000000000000000001bae1b2b73ec3fde475c1ed7fdd382c2c49860ec19920"),
-    (643_700, "00000000000000000002959e9b44507120453344794df09bd1276eb325ed7110"),
-    (667_811, "00000000000000000007888a9d01313d69d6335df46ea33e875ee6832670c596"),
-    (688_888, "0000000000000000000e1e3bd783ce0de7b0cdabf2034723595dbcd5a28cf831"),
-    (704_256, "0000000000000000000465f5acfcd603337994261a4d67a647cb49866c98b538"),
-];
-
-/// Bitcoin testnet checkpoints
-#[rustfmt::skip]
-const TESTNET: &[(BlockHeight, &str)] = &[
-    (546, "000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70")
-];
-
-/// Checks if the block height is higher than the last checkpoint's height.
-/// By being beyond the last checkpoint, we ensure that we have stored
-/// the correct chain up to the height of the last checkpoint.
-pub fn is_beyond_last_checkpoint(network: &Network, height: BlockHeight) -> bool {
-    last_checkpoint(network).map_or(true, |last| last <= height)
-}
-
-pub fn last_checkpoint(network: &Network) -> Option<BlockHeight> {
-    match network {
-        Network::Bitcoin => BITCOIN,
-        Network::Testnet => TESTNET,
-        Network::Signet => &[],
-        Network::Regtest => &[],
-    }
-    .last()
-    .map(|&(height, _)| height)
 }
 
 // Performs a breadth-first search to retrieve blocks from the block cache.
@@ -211,16 +167,15 @@ fn get_successor_blocks(
     let mut successor_blocks = vec![];
     // Block hashes that should be looked at in subsequent breadth-first searches.
     let mut response_block_size: usize = 0;
-    let mut queue: VecDeque<CachedHeader> = state
+    let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.lock().clone())
+        .map(|c| c.children.clone())
         .unwrap_or_default()
         .into_iter()
         .collect();
 
     // Compute the blocks by starting a breadth-first search.
-    while let Some(cached_header) = queue.pop_front() {
-        let block_hash = cached_header.header.block_hash();
+    while let Some(block_hash) = queue.pop_front() {
         if !seen.contains(&block_hash) {
             // Retrieve the block from the cache.
             match state.get_block(&block_hash) {
@@ -228,6 +183,7 @@ fn get_successor_blocks(
                     let block_size = block.size();
                     if response_block_size == 0
                         || (response_block_size + block_size <= MAX_BLOCKS_BYTES
+                            && successor_blocks.len() < MAX_BLOCKS_LENGTH
                             && allow_multiple_blocks)
                     {
                         successor_blocks.push(block.clone());
@@ -244,7 +200,12 @@ fn get_successor_blocks(
             }
         }
 
-        queue.extend(cached_header.children.lock().clone());
+        queue.extend(
+            state
+                .get_cached_header(&block_hash)
+                .map(|header| header.children.clone())
+                .unwrap_or_default(),
+        );
     }
 
     successor_blocks
@@ -262,23 +223,24 @@ fn get_next_headers(
         .copied()
         .chain(blocks.iter().map(|b| b.block_hash()))
         .collect();
-    let mut queue: VecDeque<CachedHeader> = state
+    let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.lock().clone())
+        .map(|c| c.children.clone())
         .unwrap_or_default()
         .into_iter()
         .collect();
     let mut next_headers = vec![];
-    while let Some(cached_header) = queue.pop_front() {
+    while let Some(block_hash) = queue.pop_front() {
         if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
             break;
         }
 
-        let block_hash = cached_header.header.block_hash();
-        if !seen.contains(&block_hash) {
-            next_headers.push(cached_header.header);
+        if let Some(header_node) = state.get_cached_header(&block_hash) {
+            if !seen.contains(&block_hash) {
+                next_headers.push(header_node.header);
+            }
+            queue.extend(header_node.children.clone());
         }
-        queue.extend(cached_header.children.lock().clone());
     }
     next_headers
 }
@@ -301,11 +263,9 @@ mod test {
     use ic_metrics::MetricsRegistry;
     use tokio::sync::{mpsc::channel, Mutex};
 
-    use crate::{
-        common::test_common::{
-            generate_headers, generate_large_block_blockchain, headers_to_hashes,
-        },
-        config::test::ConfigBuilder,
+    use crate::config::test::ConfigBuilder;
+    use ic_btc_adapter_test_utils::{
+        generate_headers, generate_large_block_blockchain, headers_to_hashes,
     };
 
     /// This tests ensures that `BlockchainManager::get_successors(...)` will return relevant blocks
@@ -314,34 +274,36 @@ mod test {
     async fn test_get_successors() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Set up the following chain:
         // |--> 1'---> 2'
         // 0 -> 1 ---> 2 ---> 3 -> 4
         // |--> 1'' -> 2'' -> 3''
         let mut previous_hashes = vec![];
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 4, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 4, &[]);
         previous_hashes.extend(
             main_chain
                 .iter()
                 .map(|h| h.block_hash())
                 .collect::<Vec<_>>(),
         );
-        let side_chain = generate_headers(genesis_hash, genesis.header.time, 2, &previous_hashes);
+        let side_chain = generate_headers(genesis_hash, genesis.time, 2, &previous_hashes);
         previous_hashes.extend(
             side_chain
                 .iter()
                 .map(|h| h.block_hash())
                 .collect::<Vec<_>>(),
         );
-        let side_chain_2 = generate_headers(genesis_hash, genesis.header.time, 3, &previous_hashes);
+        let side_chain_2 = generate_headers(genesis_hash, genesis.time, 3, &previous_hashes);
 
         let main_block_2 = Block {
             header: main_chain[1],
@@ -421,18 +383,19 @@ mod test {
     async fn test_get_successors_wait_header_sync_testnet() {
         let config = ConfigBuilder::new().with_network(Network::Testnet).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Set up the following chain:
         // 0 -> 1 ---> 2 ---> 3 -> 4
         let mut previous_hashes = vec![];
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 4, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 4, &[]);
         previous_hashes.extend(
             main_chain
                 .iter()
@@ -463,18 +426,20 @@ mod test {
     async fn test_get_successors_wait_header_sync_regtest() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
 
         // Set up the following chain:
         // 0 -> 1 -> 2 -> 3 -> 4 -> 5
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 5, &[]);
         let main_block_1 = Block {
             header: main_chain[0],
             txdata: vec![],
@@ -510,18 +475,20 @@ mod test {
     async fn test_get_successors_multiple_blocks() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Set up the following chain:
         // |-> 1'
         // 0 -> 1 -> 2
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 2, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 2, &[]);
         let main_block_1 = Block {
             header: main_chain[0],
             txdata: vec![],
@@ -533,7 +500,7 @@ mod test {
 
         let side_chain = generate_headers(
             genesis_hash,
-            genesis.header.time,
+            genesis.time,
             1,
             &headers_to_hashes(&main_chain),
         );
@@ -575,24 +542,62 @@ mod test {
         );
     }
 
+    /// This tests ensures that `get_successor` returns no more than MAX_BLOCKS_LENGTH blocks.
+    #[tokio::test]
+    async fn test_get_successors_max_num_blocks() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
+        let handler = GetSuccessorsHandler::new(
+            &config,
+            Arc::new(Mutex::new(blockchain_state)),
+            blockchain_manager_tx,
+            &MetricsRegistry::default(),
+        );
+        let main_chain = generate_headers(genesis_hash, genesis.time, 120, &[]);
+        {
+            let mut blockchain = handler.state.lock().await;
+            blockchain.add_headers(&main_chain);
+            for header in main_chain {
+                let block = Block {
+                    header,
+                    txdata: vec![],
+                };
+                blockchain.add_block(block).expect("invalid block");
+            }
+        }
+
+        let request = GetSuccessorsRequest {
+            anchor: genesis_hash,
+            processed_block_hashes: vec![],
+        };
+        let response = handler.get_successors(request).await.unwrap();
+        assert_eq!(response.blocks.len(), MAX_BLOCKS_LENGTH);
+    }
+
     /// This tests ensures that `BlockchainManager::get_successors(...)` returns multiple
     /// blocks from the main chain and a fork. Order should be preserved.
     #[tokio::test]
     async fn test_get_successors_multiple_blocks_out_of_order() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Set up the following chain:
         // |-> 1'
         // 0 -> 1 -> 2
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 2, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 2, &[]);
         let main_block_2 = Block {
             header: main_chain[1],
             txdata: vec![],
@@ -600,7 +605,7 @@ mod test {
 
         let side_chain = generate_headers(
             genesis_hash,
-            genesis.header.time,
+            genesis.time,
             1,
             &headers_to_hashes(&main_chain),
         );
@@ -672,16 +677,18 @@ mod test {
     async fn test_get_successors_large_block() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Generate a blockchain with one large block.
-        let large_blocks = generate_large_block_blockchain(genesis_hash, genesis.header.time, 1);
+        let large_blocks = generate_large_block_blockchain(genesis_hash, genesis.time, 1);
         let large_block = large_blocks.first().cloned().unwrap();
         let headers: Vec<BlockHeader> = large_blocks.iter().map(|b| b.header).collect();
 
@@ -733,16 +740,18 @@ mod test {
     async fn test_get_successors_many_blocks_until_size_cap_is_met() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
 
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 5, &[]);
         let large_blocks =
             generate_large_block_blockchain(main_chain[4].block_hash(), main_chain[4].time, 1);
 

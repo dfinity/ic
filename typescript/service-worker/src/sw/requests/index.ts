@@ -45,13 +45,13 @@ export class RequestProcessor {
       return cachedResponse;
     }
 
-    // maybe check if the response should be denied
-    if (this.url.pathname.startsWith('/_/')) {
-      return this.denyRequestHandler();
-    }
-
     const canisterResolver = await CanisterResolver.setup();
     const gatewayUrl = await canisterResolver.getCurrentGateway();
+
+    // maybe check if the response should be denied
+    if (canisterResolver.isUnderscoreRawCall(this.request, gatewayUrl)) {
+      return this.denyRequestHandler();
+    }
 
     // maybe check if is an api call
     if (canisterResolver.isAPICall(this.request, gatewayUrl)) {

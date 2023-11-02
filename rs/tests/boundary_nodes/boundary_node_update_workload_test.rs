@@ -13,7 +13,6 @@ const APP_SUBNET_SIZE: usize = 4;
 const RPS: usize = 100;
 const PAYLOAD_SIZE_BYTES: usize = 1000;
 const USE_BOUNDARY_NODE: bool = true;
-const MIN_SUCCESS_RATIO: f64 = 0.95;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60);
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(10 * 60);
@@ -38,7 +37,6 @@ fn main() -> Result<()> {
             PAYLOAD_SIZE_BYTES,
             WORKLOAD_RUNTIME,
             USE_BOUNDARY_NODE,
-            MIN_SUCCESS_RATIO,
         )
     };
     SystemTestGroup::new()

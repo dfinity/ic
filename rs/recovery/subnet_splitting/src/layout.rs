@@ -80,8 +80,8 @@ impl Layout {
         self.ic_state_dir(target_subnet).join(CHECKPOINTS)
     }
 
-    pub(crate) fn cup_file(&self, target_subnet: TargetSubnet) -> PathBuf {
-        self.data_dir(target_subnet)
+    pub(crate) fn pre_split_source_cup_file(&self) -> PathBuf {
+        self.data_dir(TargetSubnet::Source)
             .join(CUPS_DIR)
             .join("cup.types.v1.CatchUpPackage.pb")
     }

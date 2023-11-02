@@ -6,7 +6,6 @@ use super::{
 use crate::{CanisterState, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_interfaces::messages::CanisterMessage;
 use ic_test_utilities::{
     mock_time,
     state::arb_num_receivers,
@@ -16,7 +15,10 @@ use ic_test_utilities::{
         messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     },
 };
-use ic_types::{messages::CallbackId, time::expiry_time_from_now};
+use ic_types::{
+    messages::{CallbackId, CanisterMessage},
+    time::expiry_time_from_now,
+};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::convert::TryInto;
@@ -95,7 +97,7 @@ impl CanisterQueuesFixture {
         let local_canisters = maplit::btreemap! {
             self.this => {
                 let scheduler_state = SchedulerState::default();
-                let system_state = SystemState::new_running(
+                let system_state = SystemState::new_running_for_testing(
                     CanisterId::from_u64(42),
                     user_test_id(24).get(),
                     Cycles::new(1 << 36),
@@ -576,7 +578,8 @@ fn test_split_input_schedules() {
     assert_eq!(vec![other_4, other_5], queues.remote_schedule());
 
     // After the split we only have `other_1` (and `this`) on the subnet.
-    let system_state = SystemState::new_running(other_1, other_1.get(), Cycles::zero(), 0.into());
+    let system_state =
+        SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
     let scheduler_state = SchedulerState::new(mock_time());
     let local_canisters = btreemap! {
         other_1 => CanisterState::new(system_state, None, scheduler_state)
@@ -1411,7 +1414,7 @@ fn test_garbage_collect() {
     assert_eq!(CanisterQueues::default(), queues);
 }
 
-/// Tests that even when `garbage_collect()` would otherwis be a no-op, fields
+/// Tests that even when `garbage_collect()` would otherwise be a no-op, fields
 /// are always reset to default.
 #[test]
 fn test_garbage_collect_restores_defaults() {
@@ -1440,10 +1443,7 @@ fn test_reject_subnet_output_request() {
         .sender(this)
         .receiver(IC_00)
         .build();
-    let reject_context = RejectContext {
-        code: ic_error_types::RejectCode::DestinationInvalid,
-        message: "".into(),
-    };
+    let reject_context = RejectContext::new(ic_error_types::RejectCode::DestinationInvalid, "");
 
     let mut queues = CanisterQueues::default();
 
@@ -1809,6 +1809,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     payment: Cycles::from(cycles as u64),
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
+                    metadata: None,
                 }),
                 deadline,
             )
@@ -1818,7 +1819,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
     let local_canisters = maplit::btreemap! {
         local_canister_id => {
             let scheduler_state = SchedulerState::default();
-            let system_state = SystemState::new_running(
+            let system_state = SystemState::new_running_for_testing(
                 CanisterId::from_u64(42),
                 user_test_id(24).get(),
                 Cycles::new(1 << 36),
@@ -1862,7 +1863,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                 refund: Cycles::from(7_u64),
                 response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
                     RejectCode::SysTransient,
-                    "Request timed out.".to_string(),
+                    "Request timed out.",
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
                 ))
             }),

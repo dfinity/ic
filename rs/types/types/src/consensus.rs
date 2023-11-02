@@ -9,6 +9,8 @@ use crate::{
     *,
 };
 use ic_base_types::PrincipalIdError;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
@@ -222,11 +224,13 @@ impl HasCommittee for RandomTapeContent {
 /// Rank is used to indicate the priority of a block maker, where 0 indicates
 /// the highest priority.
 #[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Rank(pub u64);
 
 /// Block is the type that is used to create blocks out of which we build a
 /// block chain
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Block {
     pub version: ReplicaVersion,
     /// the parent block that this block extends, forming a block chain
@@ -277,7 +281,7 @@ impl Block {
     }
 }
 
-impl SignedBytesWithoutDomainSeparator for Block {
+impl SignedBytesWithoutDomainSeparator for BlockMetadata {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
@@ -286,8 +290,26 @@ impl SignedBytesWithoutDomainSeparator for Block {
 /// HashedBlock contains a Block together with its hash
 pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
 
-/// A BlockProposal is a HashedBlock that is signed by the block maker.
-pub type BlockProposal = Signed<HashedBlock, BasicSignature<Block>>;
+/// BlockMetadata contains the version, height and hash of a block
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BlockMetadata {
+    version: ReplicaVersion,
+    height: Height,
+    hash: CryptoHashOf<Block>,
+}
+
+impl From<&HashedBlock> for BlockMetadata {
+    fn from(block: &HashedBlock) -> Self {
+        Self {
+            version: block.version().clone(),
+            height: block.height(),
+            hash: block.get_hash().clone(),
+        }
+    }
+}
+
+/// A BlockProposal is a HashedBlock with BlockMetadata signed by the block maker.
+pub type BlockProposal = Signed<HashedBlock, BasicSignature<BlockMetadata>>;
 
 impl From<&BlockProposal> for pb::BlockProposal {
     fn from(block_proposal: &BlockProposal) -> Self {
@@ -537,6 +559,7 @@ impl TryFrom<pb::FinalizationShare> for FinalizationShare {
 /// which is the previous random beacon, the height, and the replica version
 /// used to create the random beacon.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomBeaconContent {
     pub version: ReplicaVersion,
     pub height: Height,
@@ -765,7 +788,7 @@ impl TryFrom<pb::ConsensusMessage> for ConsensusMessage {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::ConsensusMessage) -> Result<Self, Self::Error> {
         let Some(msg) = value.msg else {
-            return Err(ProxyDecodeError::MissingField("ConsensusMessage::msg"))
+            return Err(ProxyDecodeError::MissingField("ConsensusMessage::msg"));
         };
         Ok(match msg {
             Msg::RandomBeacon(x) => ConsensusMessage::RandomBeacon(x.try_into()?),
@@ -1320,6 +1343,7 @@ impl From<&Block> for pb::Block {
             ingress_payload,
             self_validating_payload,
             canister_http_payload_bytes,
+            query_stats_payload_bytes,
             ecdsa_payload,
         ) = if payload.is_summary() {
             (
@@ -1327,6 +1351,7 @@ impl From<&Block> for pb::Block {
                 None,
                 None,
                 None,
+                vec![],
                 vec![],
                 payload
                     .as_summary()
@@ -1342,6 +1367,7 @@ impl From<&Block> for pb::Block {
                 Some(pb::IngressPayload::from(&batch.ingress)),
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
                 batch.canister_http.clone(),
+                batch.query_stats.clone(),
                 payload.as_data().ecdsa.as_ref().map(|ecdsa| ecdsa.into()),
             )
         };
@@ -1357,8 +1383,8 @@ impl From<&Block> for pb::Block {
             xnet_payload,
             ingress_payload,
             self_validating_payload,
-            canister_http_payload: None,
             canister_http_payload_bytes,
+            query_stats_payload_bytes,
             ecdsa_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1390,6 +1416,7 @@ impl TryFrom<pb::Block> for Block {
                 .transpose()?
                 .unwrap_or_default(),
             canister_http: block.canister_http_payload_bytes,
+            query_stats: block.query_stats_payload_bytes,
         };
         let payload = match dkg_payload {
             dkg::Payload::Summary(summary) => {

@@ -5,12 +5,11 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/constants",
-    "//rs/crypto",
-    "//rs/crypto/sha",
+    "//rs/crypto/interfaces/sig_verification",
+    "//rs/crypto/sha2",
+    "//rs/crypto/standalone-sig-verifier",
     "//rs/crypto/tree_hash",
-    "//rs/interfaces",
     "//rs/types/types",
-    "@crate_index//:chrono",
     "@crate_index//:hex",
     "@crate_index//:thiserror",
 ]
@@ -18,9 +17,11 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/test_utils/root_of_trust",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:base64",
+    "@crate_index//:mockall",
     "@crate_index//:rand_0_8_4",
 ]
 

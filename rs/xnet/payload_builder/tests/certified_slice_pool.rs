@@ -7,6 +7,7 @@ use ic_test_utilities::state::arb_stream_slice;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{metric_vec, HistogramStats};
 use ic_types::{
+    messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
     xnet::{CertifiedStreamSlice, StreamIndex},
     CountBytes, SubnetId,
 };
@@ -419,7 +420,7 @@ proptest! {
             let packed_bytes =
                 slice.payload.len() + slice.merkle_proof.len() + slice.certification.count_bytes();
             let unpacked_bytes = unpacked.count_bytes();
-            assert_almost_equal(packed_bytes, unpacked_bytes, 5, 0);
+            assert_almost_equal(packed_bytes, unpacked_bytes, MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT as usize, 0);
         }
 
         with_test_replica_logger(|log| {

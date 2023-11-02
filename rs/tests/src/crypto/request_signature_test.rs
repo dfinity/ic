@@ -4,7 +4,7 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::util::{agent_with_identity, block_on, random_ed25519_identity, UniversalCanister};
 use ic_agent::export::Principal;
-use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
+use ic_agent::{agent::EnvelopeContent, identity::AnonymousIdentity, Identity, Signature};
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
@@ -445,14 +445,27 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
 }
 
 pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signature {
-    let mut msg = b"\x0Aic-request".to_vec();
-    msg.extend(content.representation_independent_hash());
+    let HttpQueryContent::Query { query: content } = content;
+    let msg = EnvelopeContent::Query {
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
+        canister_id: Principal::from_slice(&content.canister_id),
+        method_name: content.method_name.clone(),
+        arg: content.arg.0.clone(),
+    };
     identity.sign(&msg).unwrap()
 }
 
 pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signature {
-    let mut msg = b"\x0Aic-request".to_vec();
-    msg.extend(content.representation_independent_hash());
+    let HttpCallContent::Call { update: content } = content;
+    let msg = EnvelopeContent::Call {
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
+        canister_id: Principal::from_slice(&content.canister_id),
+        method_name: content.method_name.clone(),
+        arg: content.arg.0.clone(),
+        nonce: content.nonce.clone().map(|blob| blob.0),
+    };
     identity.sign(&msg).unwrap()
 }
 
@@ -507,16 +520,21 @@ impl Identity for EcdsaIdentity {
     fn sender(&self) -> Result<Principal, String> {
         Ok(Principal::self_authenticating(self.public_key_der()))
     }
-
-    fn sign(&self, msg: &[u8]) -> Result<Signature, String> {
-        use ic_crypto_sha::Sha256;
+    fn public_key(&self) -> Option<Vec<u8>> {
+        Some(self.public_key_der())
+    }
+    fn sign(&self, msg: &EnvelopeContent) -> Result<Signature, String> {
+        self.sign_arbitrary(&msg.to_request_id().signable())
+    }
+    fn sign_arbitrary(&self, msg: &[u8]) -> Result<Signature, String> {
+        use ic_crypto_sha2::Sha256;
         let msg = Sha256::hash(msg).to_vec();
         Ok(Signature {
             signature: Some(
                 Self::ecdsa_sig_to_bytes(EcdsaSig::sign(&msg, &self.key).expect("unable to sign"))
                     .to_vec(),
             ),
-            public_key: Some(self.public_key_der()),
+            public_key: self.public_key(),
         })
     }
 }

@@ -83,7 +83,7 @@ impl GossipImpl {
             let version = RegistryVersion::from(version);
             let node_records = self
                 .registry_client
-                .get_subnet_transport_infos(self.subnet_id, version)
+                .get_subnet_node_records(self.subnet_id, version)
                 .unwrap_or(None)
                 .unwrap_or_default();
             for node in node_records {
@@ -96,15 +96,9 @@ impl GossipImpl {
 
 fn get_peer_addr(node_record: &NodeRecord) -> Option<SocketAddr> {
     node_record
-        .p2p_flow_endpoints
-        .get(0)
-        .and_then(|flow_enpoint| flow_enpoint.endpoint.as_ref())
-        .and_then(|endpoint| {
-            Some((
-                IpAddr::from_str(&endpoint.ip_addr).ok()?,
-                endpoint.port.try_into().ok()?,
-            ))
-        })
+        .http
+        .as_ref()
+        .and_then(|endpoint| Some((IpAddr::from_str(&endpoint.ip_addr).ok()?, 4100)))
         .map(SocketAddr::from)
 }
 
@@ -113,7 +107,7 @@ mod tests {
     use super::*;
     use crate::download_management::tests::new_test_gossip_impl_with_registry;
     use ic_interfaces_registry::RegistryClient;
-    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint, Protocol};
+    use ic_protobuf::registry::node::v1::ConnectionEndpoint;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities::{
         consensus::MockConsensusCache,
@@ -125,50 +119,23 @@ mod tests {
 
     #[test]
     fn test_get_peer_addr() {
-        {
-            let node_record: NodeRecord = Default::default();
-            let peer_addr = get_peer_addr(&node_record);
-            assert!(peer_addr.is_none());
-        }
-        {
-            let mut node_record: NodeRecord = Default::default();
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
-                    port: 200,
-                    protocol: Protocol::P2p1Tls13 as i32,
-                }),
-            });
+        let node_record: NodeRecord = Default::default();
+        let peer_addr = get_peer_addr(&node_record);
+        assert!(peer_addr.is_none());
 
-            let peer_addr = get_peer_addr(&node_record).unwrap();
-            assert_eq!(
-                peer_addr.to_string(),
-                "[2001:db8:0:1:1:1:1:1]:200".to_string()
-            );
-        }
-        {
-            let mut node_record: NodeRecord = Default::default();
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
-                    port: 100,
-                    protocol: Protocol::P2p1Tls13 as i32,
-                }),
-            });
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:2".to_string(),
-                    port: 200,
-                    protocol: Protocol::P2p1Tls13 as i32,
-                }),
-            });
+        let node_record = NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
+                port: 200,
+            }),
+            ..Default::default()
+        };
 
-            let peer_addr = get_peer_addr(&node_record).unwrap();
-            assert_eq!(
-                peer_addr.to_string(),
-                "[2001:db8:0:1:1:1:1:1]:100".to_string()
-            );
-        }
+        let peer_addr = get_peer_addr(&node_record).unwrap();
+        assert_eq!(
+            peer_addr.to_string(),
+            "[2001:db8:0:1:1:1:1:1]:4100".to_string()
+        );
     }
 
     #[test]

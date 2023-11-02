@@ -15,7 +15,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
@@ -47,12 +47,10 @@ fn test_subnet_is_only_deleted_when_appropriate() {
             let xnet = Some(ConnectionEndpoint {
                 ip_addr: format!("128.0.{effective_id}.1"),
                 port: 1234,
-                protocol: Protocol::Http1 as i32,
             });
             let http = Some(ConnectionEndpoint {
                 ip_addr: format!("128.0.{effective_id}.1"),
                 port: 4321,
-                protocol: Protocol::Http1 as i32,
             });
             NodeRecord {
                 node_operator_id: node_operator_pid.get().to_vec(),
@@ -66,12 +64,10 @@ fn test_subnet_is_only_deleted_when_appropriate() {
             let xnet = Some(ConnectionEndpoint {
                 ip_addr: format!("128.0.{effective_id}.1"),
                 port: 1234,
-                protocol: Protocol::Http1 as i32,
             });
             let http = Some(ConnectionEndpoint {
                 ip_addr: format!("128.0.{effective_id}.1"),
                 port: 4321,
-                protocol: Protocol::Http1 as i32,
             });
             NodeRecord {
                 node_operator_id: node_operator_pid.get().to_vec(),

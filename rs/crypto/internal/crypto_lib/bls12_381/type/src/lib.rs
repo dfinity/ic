@@ -1,10 +1,32 @@
-//! Wrapper for BLS12-381 operations
+//! BLS12-381 wrapper types and common operations
+//!
+//! This crate provides a stable API for various operations relevant
+//! both to generic uses of BLS12-381 (point multiplication, pairings, ...)
+//! as well as Internet Computer specific functionality, especially functions
+//! necessary to implement the Non Interactive Distributed Key Generation
+//!
+//! It also offers optimized implementations of point multiplication and
+//! multiscalar multiplication which are substantially faster than the basic
+//! implementations from the bls12_381 crate, which this crate uses for
+//! its underlying arithmetic
+//!
+//! It also includes implementations of polynomial arithmetic and
+//! Lagrange interpolation.
 
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 #![warn(rust_2018_idioms)]
 #![warn(future_incompatible)]
 #![allow(clippy::needless_range_loop)]
+
+mod interpolation;
+mod poly;
+
+pub use interpolation::{InterpolationError, LagrangeCoefficients};
+pub use poly::Polynomial;
+
+/// The index of a node.
+pub type NodeIndex = u32;
 
 #[cfg(test)]
 mod tests;
@@ -46,6 +68,10 @@ pub enum PairingInvalidScalar {
 #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Scalar {
     value: ic_bls12_381::Scalar,
+}
+
+lazy_static::lazy_static! {
+    static ref SCALAR_ZERO: Scalar = Scalar::new(ic_bls12_381::Scalar::zero());
 }
 
 impl Ord for Scalar {
@@ -115,9 +141,15 @@ impl Scalar {
         Self::from_u64(v as u64)
     }
 
-    /// Create a scalar from a small integer value + 1
-    pub fn from_node_index(v: u32) -> Self {
-        Self::from_u64(v as u64 + 1)
+    /// Create a scalar used for threshold polynomial evaluation
+    ///
+    /// Normally this is used in threshold schemes, where a polynomial
+    /// `f` is evaluated as `f(x)` where `x` is an integer > 0 which
+    /// is unique to the node. In this scenario, `f(0)` reveals the
+    /// full secret and is never computed. Thus, we number the nodes
+    /// starting from index 1 instead of 0.
+    pub fn from_node_index(node_index: NodeIndex) -> Self {
+        Self::from_u64(node_index as u64 + 1)
     }
 
     /// Create a scalar from a small integer value
@@ -144,7 +176,7 @@ impl Scalar {
 
     /// Randomly generate a scalar in a way that is compatible with MIRACL
     ///
-    /// This should not be used for new code but only for compatability in
+    /// This should not be used for new code but only for compatibility in
     /// situations where MIRACL's BIG::randomnum was previously used
     pub fn miracl_random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
         /*
@@ -190,6 +222,11 @@ impl Scalar {
     /// Return the scalar 0
     pub fn zero() -> Self {
         Self::new(ic_bls12_381::Scalar::zero())
+    }
+
+    /// Return the scalar 0, as a static reference
+    pub fn zero_ref() -> &'static Self {
+        &SCALAR_ZERO
     }
 
     /// Return the scalar 1
@@ -837,7 +874,7 @@ macro_rules! define_affine_and_projective_types {
 
                         tbl_i[0] = accum;
                         for j in 1..Self::WINDOW_ELEMENTS {
-                            // Our table indexes are off by one due to the ommitted
+                            // Our table indexes are off by one due to the omitted
                             // identity element. So here we are checking if we are
                             // about to compute a point that is a doubling of a point
                             // we have previously computed. If so we can compute it
@@ -1023,7 +1060,7 @@ macro_rules! define_affine_and_projective_types {
             /// BLS12381G2_XMD:SHA-256_SSWU_RO_ suite.
             ///
             /// # Arguments
-            /// * `domain_sep` - some protocol specific domain seperator
+            /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
             pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
                 $projective::hash(domain_sep, input).into()
@@ -1036,7 +1073,7 @@ macro_rules! define_affine_and_projective_types {
             /// BLS12381G2_XMD:SHA-256_SSWU_RO_ suite.
             ///
             /// # Arguments
-            /// * `domain_sep` - some protocol specific domain seperator
+            /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
             pub fn hash_with_precomputation(domain_sep: &[u8], input: &[u8]) -> Self {
                 let mut pt = Self::hash(domain_sep, input);
@@ -1284,7 +1321,7 @@ macro_rules! define_affine_and_projective_types {
             /// BLS12381G2_XMD:SHA-256_SSWU_RO_ suite.
             ///
             /// # Arguments
-            /// * `domain_sep` - some protocol specific domain seperator
+            /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
             pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
                 let pt =

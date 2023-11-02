@@ -1,8 +1,10 @@
 use crate::canister_http::lib::get_universal_vm_address;
-use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
+use crate::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
+    await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
+    IcNodeContainer, NnsCanisterWasmStrategy, NnsInstallationBuilder, SubnetSnapshot,
     TopologySnapshot,
 };
 use crate::driver::universal_vm::UniversalVm;
@@ -15,29 +17,22 @@ use std::process::{Command, Stdio};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
+const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
+
 const REPLICATION_FACTOR: usize = 2;
 
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
-    // tECDSA is not enabled in the test yet
-    "$0 ~ /tECDSA/",
     // the replica does not yet check that the effective canister id is valid in all cases
-    "$0 ~ /wrong effective canister id.in mangement call/",
+    "$0 ~ /wrong effective canister id.in management call/",
     "$0 ~ /access denied with different effective canister id/",
-    // the replica does not implement proofs of path non-existence
-    "$0 ~ /non-existence proofs for non-existing request id/",
-    "$0 ~ /module_hash of empty canister/",
-    "$0 ~ /metadata.absent/",
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
     "$0 ~ /Call from query method traps (in query call)/",
-    // TODO(EXC-350): enable these two tests
-    "$0 ~ /invalid_canister_export.wat/",
-    "$0 ~ /invalid_empty_query_name.wat/",
 ];
 
-pub fn config_impl(env: TestEnv) {
+pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
     use crate::driver::test_env_api::{retry, secs};
     use crate::util::block_on;
     use hyper::client::connect::HttpConnector;
@@ -45,70 +40,101 @@ pub fn config_impl(env: TestEnv) {
     use hyper_tls::HttpsConnector;
     use std::env;
 
-    // Set up Universal VM with HTTP Bin testing service
-    env::set_var(
-        "SSL_CERT_FILE",
-        env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
-    );
-    env::remove_var("NIX_SSL_CERT_FILE");
-
-    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
-        .start(&env)
-        .expect("failed to set up universal VM");
-
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(16)),
+        memory_kibibytes: None,
+        boot_image_minimal_size_gibibytes: None,
+    };
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_default_vm_resources(vm_resources)
                 .with_features(SubnetFeatures {
-                    http_requests: true,
+                    http_requests,
                     ..SubnetFeatures::default()
                 })
                 .add_nodes(REPLICATION_FACTOR),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_default_vm_resources(vm_resources)
                 .with_features(SubnetFeatures {
-                    http_requests: true,
+                    http_requests,
                     ..SubnetFeatures::default()
                 })
                 .add_nodes(REPLICATION_FACTOR),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    if deploy_bn_and_nns_canisters {
+        let nns_node = env
+            .topology_snapshot()
+            .root_subnet()
+            .nodes()
+            .next()
+            .unwrap();
+        NnsInstallationBuilder::new()
+            .with_canister_wasm_strategy(NnsCanisterWasmStrategy::TakeBuiltFromSources)
+            .install(&nns_node, &env)
+            .expect("NNS canisters not installed");
+        info!(env.logger(), "NNS canisters are installed.");
+        BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+            .allocate_vm(&env)
+            .expect("Allocation of BoundaryNode failed.")
+            .for_ic(&env, "")
+            .use_ipv6_certs()
+            .start(&env)
+            .expect("failed to setup BoundaryNode VM");
+    }
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
 
-    let log = env.logger();
-    retry(log.clone(), secs(300), secs(10), || {
-        block_on(async {
-            let mut http_connector = HttpConnector::new();
-            http_connector.enforce_http(false);
-            let mut https_connector = HttpsConnector::new_with_connector(http_connector);
-            https_connector.https_only(true);
-            let client = Client::builder().build::<_, hyper::Body>(https_connector);
+    if http_requests {
+        env::set_var(
+            "SSL_CERT_FILE",
+            env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
+        );
+        env::remove_var("NIX_SSL_CERT_FILE");
 
-            let webserver_ipv6 = get_universal_vm_address(&env);
-            let httpbin = format!("https://[{webserver_ipv6}]:20443");
-            let req = hyper::Request::builder()
-                .method(hyper::Method::GET)
-                .uri(httpbin)
-                .body(hyper::Body::from(""))?;
+        // Set up Universal VM for httpbin testing service
+        UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+            .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
+            .start(&env)
+            .expect("failed to set up universal VM");
+        let log = env.logger();
+        retry(log.clone(), secs(300), secs(10), || {
+            block_on(async {
+                let mut http_connector = HttpConnector::new();
+                http_connector.enforce_http(false);
+                let mut https_connector = HttpsConnector::new_with_connector(http_connector);
+                https_connector.https_only(true);
+                let client = Client::builder().build::<_, hyper::Body>(https_connector);
 
-            let resp = client.request(req).await?;
+                let webserver_ipv6 = get_universal_vm_address(&env);
+                let httpbin = format!("https://[{webserver_ipv6}]:20443");
+                let req = hyper::Request::builder()
+                    .method(hyper::Method::GET)
+                    .uri(httpbin)
+                    .body(hyper::Body::from(""))?;
 
-            let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-            let body = String::from_utf8(body_bytes.to_vec()).unwrap();
+                let resp = client.request(req).await?;
 
-            info!(log, "response body from httpbin: {}", body);
+                let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+                let body = String::from_utf8(body_bytes.to_vec()).unwrap();
 
-            Ok(())
+                info!(log, "response body from httpbin: {}", body);
+
+                Ok(())
+            })
         })
-    })
-    .expect("Httpbin server should respond to incoming requests!");
+        .expect("Httpbin server should respond to incoming requests!");
+    }
+    if deploy_bn_and_nns_canisters {
+        await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+    }
 }
 
 fn find_subnet(
@@ -127,6 +153,8 @@ fn find_subnet(
 
 pub fn test_subnet(
     env: TestEnv,
+    use_bn: bool,
+    http_requests: bool,
     test_subnet_type: Option<SubnetType>,
     peer_subnet_type: Option<SubnetType>,
     excluded_tests: Vec<&str>,
@@ -140,10 +168,14 @@ pub fn test_subnet(
         peer_subnet_type,
         vec![test_subnet.subnet_id],
     );
-    let webserver_ipv6 = get_universal_vm_address(&env);
-    let httpbin = format!("[{webserver_ipv6}]:20443");
+    let httpbin = if http_requests {
+        let webserver_ipv6 = get_universal_vm_address(&env);
+        Some(format!("[{webserver_ipv6}]:20443"))
+    } else {
+        None
+    };
     let ic_ref_test_path = env
-        .get_dependency_path("rs/tests/ic-hs/ic-ref-test")
+        .get_dependency_path("rs/tests/ic-hs/bin/ic-ref-test")
         .into_os_string()
         .into_string()
         .unwrap();
@@ -153,6 +185,7 @@ pub fn test_subnet(
         env,
         test_subnet,
         peer_subnet,
+        use_bn,
         httpbin,
         ic_ref_test_path,
         log,
@@ -163,14 +196,18 @@ pub fn test_subnet(
 
 fn subnet_config(subnet: &SubnetSnapshot) -> String {
     format!(
-        "(\"{}\",{},{},[{}])",
+        "(\"{}\",{},[{}],[{}],[{}])",
         subnet.subnet_id,
         match subnet.subnet_type() {
             SubnetType::VerifiedApplication => "verified_application",
             SubnetType::Application => "application",
             SubnetType::System => "system",
         },
-        REPLICATION_FACTOR,
+        subnet
+            .nodes()
+            .map(|n| format!("\"{}\"", n.node_id))
+            .collect::<Vec<String>>()
+            .join(","),
         subnet
             .subnet_canister_ranges()
             .iter()
@@ -180,6 +217,11 @@ fn subnet_config(subnet: &SubnetSnapshot) -> String {
                 canister_id_into_u64(r.end)
             ))
             .collect::<Vec<String>>()
+            .join(","),
+        subnet
+            .nodes()
+            .map(|n| format!("\"{}\"", n.get_public_url()))
+            .collect::<Vec<String>>()
             .join(",")
     )
 }
@@ -188,33 +230,52 @@ pub fn with_endpoint(
     env: TestEnv,
     test_subnet: SubnetSnapshot,
     peer_subnet: SubnetSnapshot,
-    httpbin: String,
+    use_bn: bool,
+    httpbin: Option<String>,
     ic_ref_test_path: String,
     log: Logger,
     excluded_tests: Vec<&str>,
     included_tests: Vec<&str>,
 ) {
-    let node = test_subnet.nodes().next().unwrap();
+    let endpoint = if use_bn {
+        let boundary_node = env
+            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+        boundary_node.get_public_url().to_string()
+    } else {
+        test_subnet
+            .nodes()
+            .next()
+            .unwrap()
+            .get_public_url()
+            .to_string()
+    };
     let test_subnet_config = subnet_config(&test_subnet);
     let peer_subnet_config = subnet_config(&peer_subnet);
     info!(log, "test-subnet-config: {}", test_subnet_config);
     info!(log, "peer-subnet-config: {}", peer_subnet_config);
-    let status = Command::new(ic_ref_test_path)
-        .env(
-            "IC_TEST_DATA",
-            env.get_dependency_path("rs/tests/ic-hs/test-data"),
-        )
-        .arg("-j12")
-        .arg("--pattern")
-        .arg(tests_to_pattern(excluded_tests, included_tests))
-        .arg("--endpoint")
-        .arg(node.get_public_url().to_string())
-        .arg("--httpbin")
-        .arg(&httpbin)
-        .arg("--test-subnet-config")
-        .arg(test_subnet_config)
-        .arg("--peer-subnet-config")
-        .arg(peer_subnet_config)
+    let mut cmd = Command::new(ic_ref_test_path);
+    cmd.env(
+        "IC_TEST_DATA",
+        env.get_dependency_path("rs/tests/ic-hs/test-data"),
+    )
+    .arg("-j16")
+    .arg("--pattern")
+    .arg(tests_to_pattern(excluded_tests, included_tests))
+    .arg("--endpoint")
+    .arg(endpoint)
+    .arg("--test-subnet-config")
+    .arg(test_subnet_config)
+    .arg("--peer-subnet-config")
+    .arg(peer_subnet_config)
+    .arg("--allow-self-signed-certs")
+    .arg("True");
+    if let Some(httpbin) = httpbin {
+        cmd.arg("--httpbin").arg(&httpbin);
+    }
+    let status = cmd
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
@@ -224,8 +285,11 @@ pub fn with_endpoint(
 }
 
 fn tests_to_pattern(excluded_tests: Vec<&str>, included_tests: Vec<&str>) -> String {
-    let inner = format!("!({})", excluded_tests.join(" || "));
-    let mut patterns = vec![inner.as_str()];
-    patterns.append(&mut included_tests.clone());
-    patterns.join(" && ")
+    let excluded = format!("!({})", excluded_tests.join(" || "));
+    if included_tests.is_empty() {
+        excluded
+    } else {
+        let included = format!("({})", included_tests.join(" || "));
+        format!("{} && {}", excluded, included)
+    }
 }

@@ -12,11 +12,6 @@
         tc qdisc del dev {{ ic_iface_ipv6 }} root
       fi
     fi
-    if [[ -n "{{ ic_iface_ipv4 }}" ]]; then
-      if tc qdisc list dev {{ ic_iface_ipv4 }} | grep -v 'qdisc fq'; then
-        tc qdisc del dev {{ ic_iface_ipv4 }} root
-      fi
-    fi
   args:
     executable: /bin/bash
   changed_when: true

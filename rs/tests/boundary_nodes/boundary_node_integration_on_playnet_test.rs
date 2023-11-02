@@ -2,19 +2,28 @@
 
 use anyhow::Result;
 
-use ic_tests::boundary_nodes_integration::boundary_nodes::{
+use ic_tests::boundary_nodes::boundary_nodes_integration::{
     canister_allowlist_test, canister_test, denylist_test, direct_to_replica_options_test,
     direct_to_replica_rosetta_test, direct_to_replica_test, http_canister_test, icx_proxy_test,
-    mk_setup, nginx_valid_config_test, reboot_test, redirect_http_to_https_test,
-    redirect_to_dashboard_test, redirect_to_non_raw_test, seo_test, sw_test,
-    BoundaryNodeHttpsConfig,
+    nginx_valid_config_test, reboot_test, redirect_http_to_https_test, redirect_to_dashboard_test,
+    redirect_to_non_raw_test, seo_test, sw_test,
 };
+use ic_tests::boundary_nodes::setup::{setup_ic_with_bn, BoundaryNodeType};
+use ic_tests::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
 use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_tests::systest;
 
 fn main() -> Result<()> {
+    let setup = |env| {
+        setup_ic_with_bn(
+            BOUNDARY_NODE_NAME,
+            BoundaryNodeType::BoundaryNode,
+            BoundaryNodeHttpsConfig::UseRealCertsAndDns,
+            env,
+        )
+    };
     SystemTestGroup::new()
-        .with_setup(mk_setup(BoundaryNodeHttpsConfig::UseRealCertsAndDns))
+        .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
                 .add_test(systest!(canister_test))

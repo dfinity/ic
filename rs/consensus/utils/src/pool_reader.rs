@@ -61,11 +61,7 @@ impl<'a> PoolReader<'a> {
     /// Find ancestor blocks of `block`, and return an iterator that starts
     /// from `block` and ends when a parent is not found (e.g. genesis).
     pub fn chain_iterator(&self, block: Block) -> Box<dyn Iterator<Item = Block> + 'a> {
-        Box::new(ChainIterator::new(
-            self.pool,
-            block,
-            Some(self.get_highest_catch_up_package().content.block),
-        ))
+        self.cache.chain_iterator(self.pool, block)
     }
 
     /// Get the range of ancestor blocks of `block` specified (inclusively) by
@@ -506,10 +502,13 @@ impl<'a> PoolReader<'a> {
         self.chain_iterator(self.get_finalized_tip())
             .take_while(|block| !block.payload.is_summary())
             .flat_map(|block| {
-                BlockPayload::from(block.payload)
-                    .into_data()
+                block
+                    .payload
+                    .as_ref()
+                    .as_data()
                     .dealings
                     .messages
+                    .clone()
                     .into_iter()
             })
             .map(|message| (message.signature.signer, message.content.dealing))
@@ -712,19 +711,7 @@ pub mod test {
             let notarization = pool.validated().notarization().get_highest().unwrap();
             let catch_up_package = pool.make_catch_up_package(notarization.height());
             pool.insert_validated(catch_up_package);
-            // remove the latest notarization
-            pool.remove_validated(notarization);
-            // remove the latest finalization
-            let finalization = pool.validated().finalization().get_highest().unwrap();
-            pool.remove_validated(finalization);
-            // max notarization now only exists at height 2
-            assert_eq!(
-                pool.validated()
-                    .notarization()
-                    .height_range()
-                    .map(|x| x.max),
-                Some(Height::from(4))
-            );
+            pool.purge_validated_below(notarization);
             let pool_reader = PoolReader::new(&pool);
             // notarized/finalized height are still 3, same as catchup height
             assert_eq!(pool_reader.get_notarized_height(), Height::from(5));
@@ -867,7 +854,7 @@ pub mod test {
                 );
             }
 
-            // For the hight from the 4th round there is no version.
+            // For the height from the 4th round there is no version.
             assert!(pool_reader
                 .registry_version(Height::from(4 * total_length + 1))
                 .is_none());

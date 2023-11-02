@@ -94,9 +94,13 @@ impl NnsRootCanisterClient for SpyNnsRootCanisterClient {
             ),
         );
 
-        let reply = self.replies.lock().unwrap().pop_front().unwrap_or_else(|| {
+        // This is split into two statements to make sure that the lock is released
+        // before we attempt to unwrap (which may panic). If the lock is held
+        // during a panic, it becomes "poisoned" and can't be locked again.
+        let reply = self.replies.lock().unwrap().pop_front();
+        let reply = reply.unwrap_or_else(|| {
             panic!(
-                "More calls were made to SpyNnsRootCanisterClient then expected. Last call {:?}",
+                "More calls were made to SpyNnsRootCanisterClient then expected. Last call change_canister_controllers({:?})",
                 change_canister_controllers_request
             )
         });
@@ -118,9 +122,13 @@ impl NnsRootCanisterClient for SpyNnsRootCanisterClient {
             SpyNnsRootCanisterClientCall::CanisterStatus(canister_id_record),
         );
 
-        let reply = self.replies.lock().unwrap().pop_front().unwrap_or_else(|| {
+        // This is split into two statements to make sure that the lock is released
+        // before we attempt to unwrap (which may panic). If the lock is held
+        // during a panic, it becomes "poisoned" and can't be locked again.
+        let reply = self.replies.lock().unwrap().pop_front();
+        let reply = reply.unwrap_or_else(|| {
             panic!(
-                "More calls were made to SpyNnsRootCanisterClient then expected. Last call {:?}",
+                "More calls were made to SpyNnsRootCanisterClient then expected. Last call canister_status({:?})",
                 canister_id_record
             )
         });
@@ -145,13 +153,22 @@ impl SpyNnsRootCanisterClient {
     }
 
     pub fn assert_all_replies_consumed(&self) {
-        assert!(self.replies.lock().unwrap().is_empty())
+        assert_eq!(
+            self.replies.lock().unwrap().clone(),
+            VecDeque::new(),
+            "not all replies were consumed"
+        )
     }
 }
 
 impl Drop for SpyNnsRootCanisterClient {
     fn drop(&mut self) {
-        self.assert_all_replies_consumed()
+        // We only want to assert if we're not currently panicking.
+        // (If we are panicking, then this assert might panic too, which would
+        // abort the program.)
+        if !std::thread::panicking() {
+            self.assert_all_replies_consumed()
+        }
     }
 }
 

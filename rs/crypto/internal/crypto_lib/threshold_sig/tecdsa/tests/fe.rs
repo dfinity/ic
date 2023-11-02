@@ -3,7 +3,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::RngCore;
 
 fn random_field_element(curve_type: EccCurveType) -> EccFieldElement {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let mut buf = vec![0u8; curve_type.field_bytes()];
 
@@ -91,7 +91,7 @@ fn test_ct_assign_is_conditional() -> Result<(), ThresholdEcdsaError> {
 
 #[test]
 fn test_from_bytes_is_inverse_of_as_bytes() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         for _trial in 0..1000 {
@@ -162,7 +162,7 @@ fn test_sqrt_is_consistent_with_math() -> Result<(), ThresholdEcdsaError> {
              * root modulo p. All currently supported primes have this form,
              * so verify that this is true.
              *
-             * This test would have to be ammended if support is later added
+             * This test would have to be amended if support is later added
              * for a prime field == 1 (mod 4)
              */
             if !bool::from(valid) {

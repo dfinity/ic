@@ -26,7 +26,7 @@ fn test_index_next_behavior() {
 
 #[test]
 fn test_that_key_derivation_on_secp256r1_currently_fails() -> Result<(), ThresholdEcdsaError> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let path = DerivationPath::new_bip32(&[1, 2, 3]);
     let master_key = EccPoint::hash_to_point(
         EccCurveType::P256,

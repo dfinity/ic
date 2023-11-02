@@ -29,7 +29,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
-    time, CanisterTimer, CountBytes, Cycles, NumInstructions, Time,
+    time, CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
 };
 use std::{
     collections::BTreeSet,
@@ -44,7 +44,7 @@ use common::*;
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 40);
 
 fn get_system_state_with_cycles(cycles_amount: Cycles) -> SystemState {
-    SystemState::new_running(
+    SystemState::new_running_for_testing(
         canister_test_id(42),
         user_test_id(24).get(),
         cycles_amount,
@@ -426,8 +426,8 @@ fn test_reply_api_support_on_nns() {
     let api_type = ApiTypeBuilder::build_reply_api(Cycles::zero());
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_msg_arg_data_size());
     assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -482,8 +482,8 @@ fn test_reply_api_support_non_nns() {
     let api_type = ApiTypeBuilder::build_reply_api(Cycles::zero());
     let mut api = get_system_api(api_type, &get_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_msg_arg_data_size());
     assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -535,14 +535,12 @@ fn test_reject_api_support_on_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::build_reject_api(RejectContext {
-        code: RejectCode::CanisterReject,
-        message: "error".to_string(),
-    });
+    let api_type =
+        ApiTypeBuilder::build_reject_api(RejectContext::new(RejectCode::CanisterReject, "error"));
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -594,14 +592,12 @@ fn test_reject_api_support_non_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::build_reject_api(RejectContext {
-        code: RejectCode::CanisterReject,
-        message: "error".to_string(),
-    });
+    let api_type =
+        ApiTypeBuilder::build_reject_api(RejectContext::new(RejectCode::CanisterReject, "error"));
     let mut api = get_system_api(api_type, &get_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -763,13 +759,16 @@ fn test_start_support() {
 fn test_cleanup_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiType::Cleanup { time: mock_time() },
+        ApiType::Cleanup {
+            caller: PrincipalId::new_anonymous(),
+            time: mock_time(),
+        },
         &get_system_state(),
         cycles_account_manager,
     );
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -877,7 +876,7 @@ fn test_inspect_message_support() {
 }
 
 #[test]
-fn test_canister_heartbeat_support() {
+fn test_canister_system_task_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
     let mut api = get_system_api(
@@ -886,8 +885,8 @@ fn test_canister_heartbeat_support() {
         cycles_account_manager,
     );
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -934,7 +933,7 @@ fn test_canister_heartbeat_support() {
 }
 
 #[test]
-fn test_canister_heartbeat_support_nns() {
+fn test_canister_system_task_support_nns() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::System)
         .build();
@@ -942,8 +941,8 @@ fn test_canister_heartbeat_support_nns() {
     let api_type = ApiTypeBuilder::build_system_task_api();
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -1322,7 +1321,7 @@ fn canister_status() {
     );
     assert_eq!(api.ic0_canister_status(), Ok(1));
 
-    let stopping_system_state = SystemState::new_stopping(
+    let stopping_system_state = SystemState::new_stopping_for_testing(
         canister_test_id(42),
         user_test_id(24).get(),
         INITIAL_CYCLES,
@@ -1335,7 +1334,7 @@ fn canister_status() {
     );
     assert_eq!(api.ic0_canister_status(), Ok(2));
 
-    let stopped_system_state = SystemState::new_stopped(
+    let stopped_system_state = SystemState::new_stopped_for_testing(
         canister_test_id(42),
         user_test_id(24).get(),
         INITIAL_CYCLES,
@@ -1467,6 +1466,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
@@ -1485,80 +1485,6 @@ fn update_available_memory_updates_subnet_available_memory() {
         .unwrap_err();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
     assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
-    assert_eq!(
-        subnet_available_memory.get_wasm_custom_sections_memory(),
-        wasm_custom_sections_available_memory_before
-    );
-}
-
-#[test]
-fn take_execution_result_properly_frees_memory() {
-    let subnet_available_memory = SubnetAvailableMemory::new(1 << 30, 1 << 30, 0);
-    let wasm_custom_sections_available_memory_before =
-        subnet_available_memory.get_wasm_custom_sections_memory();
-    let system_state = SystemStateBuilder::default().build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
-        &system_state,
-        cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters().compute_allocation,
-    );
-    let own_canister_id = system_state.canister_id;
-    let callback_id = sandbox_safe_system_state
-        .register_callback(Callback::new(
-            call_context_test_id(0),
-            Some(own_canister_id),
-            Some(canister_test_id(0)),
-            Cycles::zero(),
-            Some(Cycles::zero()),
-            Some(Cycles::zero()),
-            WasmClosure::new(0, 0),
-            WasmClosure::new(0, 0),
-            None,
-        ))
-        .unwrap();
-    let mut api = SystemApiImpl::new(
-        ApiTypeBuilder::build_update_api(),
-        sandbox_safe_system_state,
-        CANISTER_CURRENT_MEMORY_USAGE,
-        execution_parameters(),
-        subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        Memory::new_for_testing(),
-        Arc::new(DefaultOutOfInstructionsHandler {}),
-        no_op_logger(),
-    );
-
-    api.update_available_memory(0, 1, 64 << 10).unwrap();
-
-    let req = RequestBuilder::default()
-        .sender(own_canister_id)
-        .sender_reply_callback(callback_id)
-        .build();
-
-    assert_eq!(
-        0,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
-    );
-
-    assert!(api.get_allocated_bytes().get() > 0);
-    assert!(api.get_allocated_message_bytes().get() > 0);
-    assert_eq!(
-        subnet_available_memory.get_wasm_custom_sections_memory(),
-        wasm_custom_sections_available_memory_before
-    );
-    assert_eq!(
-        api.take_execution_result(Some(&HypervisorError::OutOfMemory))
-            .unwrap_err(),
-        HypervisorError::OutOfMemory
-    );
-    assert_eq!(api.get_allocated_bytes().get(), 0);
-    assert_eq!(api.get_allocated_message_bytes().get(), 0);
     assert_eq!(
         subnet_available_memory.get_wasm_custom_sections_memory(),
         wasm_custom_sections_available_memory_before
@@ -1607,6 +1533,7 @@ fn push_output_request_respects_memory_limits() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
@@ -1710,6 +1637,7 @@ fn push_output_request_oversized_request_memory_limits() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),

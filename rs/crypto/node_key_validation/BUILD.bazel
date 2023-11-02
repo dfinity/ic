@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:hex",
     "@crate_index//:serde",
-    "@crate_index//:x509-parser",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -22,6 +21,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/utils/basic_sig",
+    "//rs/interfaces",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:curve25519-dalek",

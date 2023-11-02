@@ -102,7 +102,7 @@ impl CatchUpPackageProvider {
         let mut nodes: Vec<(NodeId, NodeRecord)> = self
             .registry
             .registry_client
-            .get_subnet_transport_infos(subnet_id, registry_version)
+            .get_subnet_node_records(subnet_id, registry_version)
             .ok()
             .flatten()
             .unwrap_or_default();

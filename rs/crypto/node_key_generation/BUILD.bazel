@@ -33,6 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/types/base_types",
     "//rs/types/types_test_utils",
+    "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:hex",
     "@crate_index//:openssl",

@@ -4,7 +4,8 @@ use strum::IntoEnumIterator;
 
 #[test]
 fn should_correctly_convert_i32_to_algorithm_id() {
-    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
+    // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
+    assert_eq!(AlgorithmId::iter().count(), 17);
 
     assert_eq!(AlgorithmId::from(0), AlgorithmId::Placeholder);
     assert_eq!(AlgorithmId::from(1), AlgorithmId::MultiBls12_381);
@@ -26,11 +27,15 @@ fn should_correctly_convert_i32_to_algorithm_id() {
 
     // Verify that an unknown i32 maps onto Placeholder
     assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
+
+    // Verify that an i32 that doesn't fit into a u8 maps onto Placeholder
+    assert_eq!(AlgorithmId::from(420), AlgorithmId::Placeholder);
 }
 
 #[test]
 fn should_correctly_convert_algorithm_id_to_i32() {
-    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
+    // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
+    assert_eq!(AlgorithmId::iter().count(), 17);
 
     assert_eq!(AlgorithmId::Placeholder as i32, 0);
     assert_eq!(AlgorithmId::MultiBls12_381 as i32, 1);
@@ -53,7 +58,8 @@ fn should_correctly_convert_algorithm_id_to_i32() {
 
 #[test]
 fn should_correctly_convert_algorithm_id_to_u8() {
-    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
+    // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
+    assert_eq!(AlgorithmId::iter().count(), 17);
 
     let tests: Vec<(AlgorithmId, u8)> = vec![
         (AlgorithmId::Placeholder, 0),
@@ -76,7 +82,7 @@ fn should_correctly_convert_algorithm_id_to_u8() {
     ];
 
     for (algorithm_id, expected_discriminant) in tests {
-        assert_eq!(algorithm_id.as_u8(), expected_discriminant);
+        assert_eq!(u8::from(algorithm_id), expected_discriminant);
     }
 }
 
@@ -94,6 +100,14 @@ fn should_correctly_convert_usize_to_key_purpose() {
 
     // Verify that an unknown usize maps onto Placeholder
     assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
+}
+
+#[test]
+fn should_not_have_any_algorithm_id_that_does_not_fit_into_u8() {
+    for algorithm_id in AlgorithmId::iter() {
+        assert!(algorithm_id as isize >= (u8::MIN as isize));
+        assert!(algorithm_id as isize <= (u8::MAX as isize));
+    }
 }
 
 #[cfg(test)]
@@ -131,11 +145,6 @@ pub fn set_of(node_ids: &[NodeId]) -> BTreeSet<NodeId> {
         dealers.insert(*node_id);
     });
     dealers
-}
-
-fn ensure_all_algorithm_ids_are_compared(tested_algorithm_ids: &[isize]) {
-    let all_algorithm_ids: Vec<isize> = (0..=16).collect();
-    assert_eq!(tested_algorithm_ids, all_algorithm_ids);
 }
 
 mod current_node_public_keys {

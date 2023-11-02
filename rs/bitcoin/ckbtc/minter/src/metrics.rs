@@ -174,7 +174,7 @@ pub fn encode_metrics(
     metrics.encode_gauge(
         "ckbtc_minter_concurrent_update_balance_count",
         state::read_state(|s| s.update_balance_principals.len()) as f64,
-        "Total number of concurrent update_blanace requests.",
+        "Total number of concurrent update_balance requests.",
     )?;
 
     metrics.encode_gauge(

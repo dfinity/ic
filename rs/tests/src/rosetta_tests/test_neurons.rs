@@ -3,12 +3,12 @@ use ic_ledger_core::Tokens;
 use ic_nns_governance::pb::v1::Neuron;
 use ic_rosetta_test_utils::EdKeypair;
 use icp_ledger::AccountIdentifier;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use super::lib::create_custom_neuron;
 
 pub(crate) struct TestNeurons<'a> {
-    neurons: HashMap<u64, Neuron>,
+    neurons: BTreeMap<u64, Neuron>,
     seed: u64,
     ledger_balances: &'a mut HashMap<AccountIdentifier, Tokens>,
 }
@@ -19,7 +19,7 @@ impl TestNeurons<'_> {
         ledger_balances: &mut HashMap<AccountIdentifier, Tokens>,
     ) -> TestNeurons {
         TestNeurons {
-            neurons: HashMap::default(),
+            neurons: BTreeMap::default(),
             seed: seed * 100_000,
             ledger_balances,
         }
@@ -47,7 +47,7 @@ impl TestNeurons<'_> {
     }
 
     /// Return the map of neurons indexed by their id.
-    pub(crate) fn get_neurons(&self) -> HashMap<u64, Neuron> {
+    pub(crate) fn get_neurons(&self) -> BTreeMap<u64, Neuron> {
         self.neurons.clone()
     }
 }

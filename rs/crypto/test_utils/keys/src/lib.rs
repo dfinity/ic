@@ -9,6 +9,7 @@
 pub mod public_keys {
     use crate::hex_decode;
     use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey, X509PublicKeyCert};
+    use ic_types::time::Time;
 
     //Node signing public key with node ID
     //4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae
@@ -58,11 +59,22 @@ pub mod public_keys {
         }
     }
 
-    // Has same node_id as valid_node_signing_public_key
-    pub fn valid_tls_certificate() -> X509PublicKeyCert {
-        X509PublicKeyCert {
-            certificate_der: hex_decode(
-                "3082015630820108a00302010202140098d074\
+    /// Has same node_id as valid_node_signing_public_key.
+    ///
+    /// `not_before` is set to 2022-11-04, 18:12:14 (probably the actual
+    /// creation time).
+    ///
+    /// Returns
+    /// * a valid hard-coded TLS certificate
+    /// * a hard-coded point in time when this certificate is valid
+    ///   (certificate's `not_before` field)
+    pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) {
+        /// converted to seconds since `UNIX_EPOCH` by hand
+        const NOT_BEFORE: u64 = 1667585534;
+        (
+            X509PublicKeyCert {
+                certificate_der: hex_decode(
+                    "3082015630820108a00302010202140098d074\
                 7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
                 c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
                 6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
@@ -73,8 +85,11 @@ pub mod public_keys {
                 9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
                 649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
                 bb905f52faf28707735f1d90ab654380b",
-            ),
-        }
+                ),
+            },
+            Time::from_secs_since_unix_epoch(NOT_BEFORE)
+                .expect("failed to convert seconds to Time"),
+        )
     }
 
     // Has same node_id as valid_node_signing_public_key

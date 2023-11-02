@@ -196,13 +196,14 @@ if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFI
     read_malicious_behavior_variables "${MALICIOUS_BEHAVIOR_CONFIG_FILE}"
 fi
 
+INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
-IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 enp1s0 12)}"
+IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
 NNS_URL="${nns_url:-http://[::1]:8080}"
 NODE_INDEX="${node_index:-0}"
 # Default value is 24h
 BACKUP_RETENTION_TIME_SECS="${backup_retention_time_secs:-86400}"
-# Default vlaue is 1h
+# Default value is 1h
 BACKUP_PURGING_INTERVAL_SECS="${backup_purging_interval_secs:-3600}"
 # Default is an empty list
 REPLICA_LOG_DEBUG_OVERRIDES="${replica_log_debug_overrides:-[]}"

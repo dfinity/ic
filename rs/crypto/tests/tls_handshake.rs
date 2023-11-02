@@ -222,6 +222,30 @@ mod server {
     use openssl::ssl::SslVersion;
 
     #[test]
+    fn should_return_error_if_allowed_clients_empty() {
+        const NOT_ALLOWED_CLIENT: NodeId = CLIENT_ID_3;
+        let registry = TlsRegistry::new();
+        let server = Server::builder(SERVER_ID_1).build(registry.get());
+        assert!(server.allowed_clients().is_empty());
+        let client = Client::builder(NOT_ALLOWED_CLIENT, SERVER_ID_1).build(registry.get());
+        registry
+            .add_cert(SERVER_ID_1, server.cert())
+            .add_cert(NOT_ALLOWED_CLIENT, client.cert())
+            .add_cert(CLIENT_ID_1, generate_cert_using_temp_crypto(CLIENT_ID_1))
+            .add_cert(CLIENT_ID_2, generate_cert_using_temp_crypto(CLIENT_ID_2))
+            .update();
+
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
+
+        assert_handshake_server_error_containing(
+            &server_result,
+            "The peer certificate with node ID 2o3ay-vafaa-aaaaa-aaaap-2ai is \
+            not allowed. Allowed node IDs: Some({})",
+        );
+    }
+
+    #[test]
     fn should_return_error_if_client_not_allowed_and_allowed_clients_exist() {
         const NOT_ALLOWED_CLIENT: NodeId = CLIENT_ID_3;
         let registry = TlsRegistry::new();
@@ -275,10 +299,7 @@ mod server {
         let (_client_result, server_result) = new_tokio_runtime()
             .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
-        assert_malformed_self_cert_server_error_containing(
-            &server_result,
-            "asn1 encoding routines:ASN1_get_object:too long",
-        );
+        assert_malformed_self_cert_server_error_containing(&server_result, "Error parsing DER");
     }
 
     #[test]
@@ -732,6 +753,7 @@ mod server {
         );
     }
 
+    // TODO(CRP-2149): remove dependency on system time in the following test
     #[test]
     fn should_return_error_if_client_cert_not_yet_valid() {
         let registry = TlsRegistry::new();
@@ -756,7 +778,7 @@ mod server {
 
         assert_handshake_server_error_containing(
             &server_result,
-            "is later than two minutes from now",
+            "is in the future compared to current time",
         );
     }
 }
@@ -822,10 +844,7 @@ mod client {
 
         let result = new_tokio_runtime().block_on(client.run(server.port()));
 
-        assert_malformed_self_cert_client_error_containing(
-            &result,
-            "asn1 encoding routines:ASN1_get_object:too long",
-        );
+        assert_malformed_self_cert_client_error_containing(&result, "Error parsing DER");
     }
 
     #[test]
@@ -1266,7 +1285,7 @@ mod client {
 
         assert_handshake_client_error_containing(
             &client_result,
-            "is later than two minutes from now",
+            "is in the future compared to current time",
         );
     }
 
@@ -1391,12 +1410,11 @@ fn assert_handshake_server_error_containing(
     server_result: &Result<AuthenticatedPeer, TlsServerHandshakeError>,
     error_substring: &str,
 ) {
-    let error = server_result.clone().unwrap_err();
-    if let TlsServerHandshakeError::HandshakeError { internal_error } = error {
-        assert_string_contains(internal_error, error_substring);
-    } else {
-        panic!("expected HandshakeError error, got {}", error)
-    }
+    assert_matches!(
+        server_result,
+        Err(TlsServerHandshakeError::HandshakeError { internal_error })
+            if internal_error.contains(error_substring)
+    );
 }
 
 fn assert_malformed_self_cert_client_error_containing(

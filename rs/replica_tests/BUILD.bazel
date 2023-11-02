@@ -52,7 +52,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/rust_canisters/canister_test",
     "//rs/sys",
     "@crate_index//:assert_matches",

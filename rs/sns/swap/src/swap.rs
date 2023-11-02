@@ -10,17 +10,19 @@ use crate::{
         settle_community_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
         BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
-        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
+        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
+        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
         GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
         GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
         GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
-        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
-        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
-        ListSnsNeuronRecipesResponse, NeuronBasketConstructionParameters, NeuronId as SaleNeuronId,
-        NewSaleTicketRequest, NewSaleTicketResponse, OpenRequest, OpenResponse, Participant,
-        RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
-        SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap,
-        SweepResult, Ticket, TransferableAmount,
+        LinearScalingCoefficient, ListCommunityFundParticipantsRequest,
+        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
+        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
+        NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
+        NewSaleTicketResponse, OpenRequest, OpenResponse, Participant, RefreshBuyerTokensResponse,
+        RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
+        SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
+        TransferableAmount,
     },
     types::{ScheduledVestingEvent, TransferResult},
 };
@@ -49,13 +51,16 @@ use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::{
     borrow::Cow,
+    cmp::Ordering,
     collections::BTreeMap,
+    fmt,
     num::{NonZeroU128, NonZeroU64},
     ops::{
         Bound::{Included, Unbounded},
         Div,
     },
     str::FromStr,
+    time::Duration,
 };
 
 // TODO(NNS1-1589): Get these from the canonical location.
@@ -81,14 +86,15 @@ const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
 /// Range of allowed memos for neurons distributed via an SNS swap. This range is used to choose
-/// the memos of Swap neurons, and to enforce that other memos (e.g. for Airdrop neurons) do not
-/// conflict with the memos of Swap neurons.
-pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
+/// the memos of neurons in the neuron basket, and to enforce that other memos (e.g. for Airdrop
+/// neurons) do not conflict with the neuron basket memos.
+pub const NEURON_BASKET_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
 
 /// The principal with all bytes set to zero. The main property
-/// of this principal is that for any principal p != FIRST_PRINCIPAL_BYTES
-/// then p.as_slice() < FIRST_PRINCIPAL_BYTES.as_slice().
+/// of this principal is that for any principal p, the following condition holds:
+/// (p != FIRST_PRINCIPAL_BYTES) ==> FIRST_PRINCIPAL_BYTES.as_slice() < p.as_slice()
+/// Here, the `<` symbol means lexicographical comparison of sequences of bytes.
 pub const FIRST_PRINCIPAL_BYTES: [u8; PrincipalId::MAX_LENGTH_IN_BYTES] =
     [0; PrincipalId::MAX_LENGTH_IN_BYTES];
 
@@ -141,6 +147,105 @@ impl From<Result<SetDappControllersResponse, CanisterCallError>>
     }
 }
 
+pub enum LinearScalingCoefficientValidationError {
+    // All fields are mandatory.
+    UnspecifiedField(String),
+    EmptyInterval {
+        from_direct_participation_icp_e8s: u64,
+        to_direct_participation_icp_e8s: u64,
+    },
+    DenominatorIsZero,
+    // The slope should be between 0.0 and 1.0.
+    NumeratorGreaterThanDenominator {
+        slope_numerator: u64,
+        slope_denominator: u64,
+    },
+}
+
+impl ToString for LinearScalingCoefficientValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "LinearScalingCoefficientValidationError: ";
+        match self {
+            Self::UnspecifiedField(field_name) => {
+                format!("{prefix}Field `{}` must be specified.", field_name)
+            }
+            Self::EmptyInterval {
+                from_direct_participation_icp_e8s,
+                to_direct_participation_icp_e8s,
+            } => {
+                format!(
+                    "{prefix}from_direct_participation_icp_e8s ({}) must be strictly less that \
+                    to_direct_participation_icp_e8s ({})).",
+                    from_direct_participation_icp_e8s, to_direct_participation_icp_e8s,
+                )
+            }
+            Self::DenominatorIsZero => {
+                format!("{prefix}slope_denominator must not equal zero.")
+            }
+            Self::NumeratorGreaterThanDenominator {
+                slope_numerator,
+                slope_denominator,
+            } => {
+                format!(
+                    "{prefix}slope_numerator ({}) must be less than or equal \
+                    slope_denominator ({})",
+                    slope_numerator, slope_denominator,
+                )
+            }
+        }
+    }
+}
+
+impl LinearScalingCoefficient {
+    pub fn validate(&self) -> Result<(), LinearScalingCoefficientValidationError> {
+        let from_direct_participation_icp_e8s =
+            self.from_direct_participation_icp_e8s.ok_or_else(|| {
+                LinearScalingCoefficientValidationError::UnspecifiedField(
+                    "from_direct_participation_icp_e8s".to_string(),
+                )
+            })?;
+        let to_direct_participation_icp_e8s =
+            self.to_direct_participation_icp_e8s.ok_or_else(|| {
+                LinearScalingCoefficientValidationError::UnspecifiedField(
+                    "to_direct_participation_icp_e8s".to_string(),
+                )
+            })?;
+        let slope_numerator = self.slope_numerator.ok_or_else(|| {
+            LinearScalingCoefficientValidationError::UnspecifiedField("slope_numerator".to_string())
+        })?;
+        let slope_denominator = self.slope_denominator.ok_or_else(|| {
+            LinearScalingCoefficientValidationError::UnspecifiedField(
+                "slope_denominator".to_string(),
+            )
+        })?;
+        // Currently we only check that `intercept_icp_e8s` is specified, so the actual field value
+        // is unused.
+        let _intercept_icp_e8s = self.intercept_icp_e8s.ok_or_else(|| {
+            LinearScalingCoefficientValidationError::UnspecifiedField(
+                "intercept_icp_e8s".to_string(),
+            )
+        })?;
+        if to_direct_participation_icp_e8s <= from_direct_participation_icp_e8s {
+            return Err(LinearScalingCoefficientValidationError::EmptyInterval {
+                from_direct_participation_icp_e8s,
+                to_direct_participation_icp_e8s,
+            });
+        }
+        if slope_denominator == 0 {
+            return Err(LinearScalingCoefficientValidationError::DenominatorIsZero);
+        }
+        if slope_numerator > slope_denominator {
+            return Err(
+                LinearScalingCoefficientValidationError::NumeratorGreaterThanDenominator {
+                    slope_numerator,
+                    slope_denominator,
+                },
+            );
+        }
+        Ok(())
+    }
+}
+
 impl From<Result<Result<(), GovernanceError>, CanisterCallError>>
     for SettleCommunityFundParticipationResult
 {
@@ -172,6 +277,8 @@ impl From<DerivedState> for GetDerivedStateResponse {
             cf_participant_count: state.cf_participant_count,
             cf_neuron_count: state.cf_neuron_count,
             sns_tokens_per_icp: Some(state.sns_tokens_per_icp as f64),
+            direct_participation_icp_e8s: state.direct_participation_icp_e8s,
+            neurons_fund_participation_icp_e8s: state.neurons_fund_participation_icp_e8s,
         }
     }
 }
@@ -193,7 +300,13 @@ impl NeuronBasketConstructionParameters {
             .map(|i| i * self.dissolve_delay_interval_seconds)
             .collect::<Vec<u64>>();
 
-        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count);
+        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count)
+            // TODO: Bubble up. The only cases in which AAE returns Err are
+            // 1. the second argument is nonzero, but we already asserted that
+            // it isn't 2. AAE detects that it has a bug, but ofc, we do not
+            // know how that can happen (other than the fact that humans are
+            // fallible).
+            .expect("Internal bug.");
 
         assert_eq!(dissolve_delay_seconds_list.len(), chunks_e8s.len());
 
@@ -214,16 +327,218 @@ impl NeuronBasketConstructionParameters {
 ///
 /// More precisely, result.len() == len. result.sum() == total. Each element of
 /// result is approximately equal to the others. However, unless len divides
-/// total evenly, the elements of result will inevitabley be not equal.
-pub fn apportion_approximately_equally(total: u64, len: u64) -> Vec<u64> {
-    assert!(len > 0, "len must be greater than zero");
-    let quotient = total.saturating_div(len);
-    let remainder = total % len;
+/// total evenly, the elements of result will inevitably be not equal.
+///
+/// There are two ways that Err can be returned:
+///
+///   1. Caller mistake: len == 0
+///
+///   2. This has a bug. See implementation comments for why we know of know way
+///      this can happen, but can detect if it does.
+pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>, String> {
+    let quotient = total
+        .checked_div(len)
+        .ok_or_else(|| format!("Unable to divide total={} by len={}", total, len))?;
+    let remainder = total % len; // For unsigned integers, % cannot overflow.
 
+    // So far, we have only apportioned quotient * len. To reach the desired
+    // total, we must still somehow add remainder (per Euclid's Division
+    // Theorem). That is accomplished right after this.
     let mut result = vec![quotient; len as usize];
-    *result.first_mut().unwrap() += remainder;
 
-    result
+    // Divy out the remainder: Starting from the last element, increment
+    // elements by 1. The number of such increments performed here is remainder,
+    // bringing our total back to the desired amount.
+    assert!(
+        remainder < result.len() as u64, // By Euclid's Division Theorem,
+        "{} vs. {}",
+        remainder,
+        result.len(),
+    );
+    let mut iter_mut = result.iter_mut();
+    for _ in 0..remainder {
+        let element: &mut u64 = iter_mut
+            .next_back()
+            // We can prove that this will not panic:
+            // The number of iterations of this loop is total % len.
+            // This must be < len (by Euclid's Division Theorem).
+            // Thus, the number of iterations that this loop goes through is < len.
+            // Thus, the number of times next_back is called is < len.
+            // next_back only returns None after len calls.
+            // Therefore, next_back does not return None here.
+            // Therefore, this expect will never panic.
+            .ok_or_else(|| {
+                format!(
+                    "Ran out of elements to increment. total={}, len={}",
+                    total, len,
+                )
+            })?;
+
+        // This cannot overflow because the result must be <= total. Thus, this
+        // will not panic.
+        *element = element.checked_add(1).ok_or_else(|| {
+            format!(
+                "Incrementing element by 1 resulted in overflow. total={}, len={}",
+                total, len,
+            )
+        })?;
+    }
+
+    Ok(result)
+}
+
+/// This structure allows checking the total amount of swap participation
+/// at any state of the SNS lifecycle.
+#[derive(Debug)]
+pub enum IcpTargetProgress {
+    /// This value is reserved for the situations in which the ICP target has not
+    /// been reached, e.g., at the beginning and during the swap, or at the ond of
+    /// a swap that did not reach the target.
+    NotReached {
+        current_total_participation_e8s: u64,
+        max_total_participation_e8s: u64,
+    },
+    /// This value is reserved for the situation in which the ICP target has been
+    /// reached *exactly*.
+    Reached(u64),
+    /// This value is reserved for situations in which the ICP target has been
+    /// somehow exceeded. This should not happen under normal circumstances.
+    Exceeded {
+        current_total_participation_e8s: u64,
+        max_total_participation_e8s: u64,
+    },
+    /// The ICP target cannot be defined or reached in some abnormal situations, e.g.,
+    /// when the Swap Params is not available. This value covers such cases.
+    Undefined,
+}
+
+pub enum IcpTargetError {
+    /// Specifies excess in ICP e8s.
+    TargetExceededBy(u64),
+    TargetUndefined,
+}
+
+impl fmt::Display for IcpTargetError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Self::TargetExceededBy(excess_amount_e8s) = self {
+            write!(
+                f,
+                "Total amount of ICP e8s committed exceeds the target by {} ICP e8s",
+                excess_amount_e8s
+            )
+        } else {
+            write!(f, "ICP target undefined")
+        }
+    }
+}
+
+impl IcpTargetProgress {
+    pub fn is_undefined(&self) -> bool {
+        matches!(self, Self::Undefined)
+    }
+
+    pub fn is_reached_or_exceeded(&self) -> bool {
+        matches!(self, Self::Reached(_) | Self::Exceeded { .. })
+    }
+
+    /// Validates if the ICP target has somehow been exceeded, i.e., there is an excess amount
+    /// of ICP that has been accepted. In that case, the excess amount (in ICP e8s) is returned
+    /// as the `Err` result. Otherwise, the result is `Ok`.
+    pub fn validate(&self) -> Result<(), IcpTargetError> {
+        match self {
+            Self::Exceeded {
+                current_total_participation_e8s,
+                max_total_participation_e8s,
+            } => {
+                let excess = current_total_participation_e8s
+                    .checked_sub(*max_total_participation_e8s)
+                    .unwrap_or_else(|| {
+                        log!(
+                            ERROR,
+                            "Invariant violated in IcpTargetProgress::Exceeded: \
+                            current_total_participation_e8s = {current_total_participation_e8s} \
+                            <= max_total_participation_e8s = {max_total_participation_e8s}",
+                        );
+                        0
+                    });
+                Err(IcpTargetError::TargetExceededBy(excess))
+            }
+            Self::Undefined => Err(IcpTargetError::TargetUndefined),
+            _ => Ok(()),
+        }
+    }
+}
+
+/// This module includes helper functions for implementing Swap participation logic.
+mod swap_participation {
+    use crate::{
+        logs::ERROR,
+        swap::{Lifecycle, Swap},
+    };
+    use ic_canister_log::log;
+
+    impl Swap {
+        pub fn validate_possibility_of_direct_participation(&self) -> Result<(), String> {
+            let icp_target = self.icp_target_progress();
+            if let Err(icp_target_error) = icp_target.validate() {
+                log!(ERROR, "{}", icp_target_error);
+            }
+            if icp_target.is_reached_or_exceeded() {
+                Err("The ICP target for this token swap has already been reached.".to_string())
+            } else {
+                Ok(())
+            }
+        }
+
+        pub fn validate_lifecycle_is_open(&self) -> Result<(), String> {
+            let lifecycle: Lifecycle = self.lifecycle();
+            if lifecycle == Lifecycle::Open {
+                Ok(())
+            } else {
+                Err(
+                    format!(
+                        "Participation is possible only when the Swap is in the OPEN state. Current state is {:?}.",
+                        lifecycle,
+                    ),
+                )
+            }
+        }
+
+        /// Validate the confirmation text from the caller who wishes to participate in the swap.
+        /// This is conceptually just comparing the text against what has been specified in
+        /// the SnsInitPayload structure, but we provide precise errors in case something
+        /// does not match.
+        pub fn validate_confirmation_text(
+            &self,
+            confirmation_text: Option<String>,
+        ) -> Result<(), String> {
+            match (
+                self.init_or_panic().confirmation_text.as_ref(),
+                confirmation_text,
+            ) {
+                (Some(expected_text), Some(text)) => {
+                    if &text != expected_text {
+                        Err("The value of `confirmation_text` does not match the value provided in SNS init payload.".to_string())
+                    } else {
+                        Ok(())
+                    }
+                }
+                (Some(_), None) => Err("No value provided for `confirmation_text`.".to_string()),
+                (None, Some(_)) => {
+                    Err("Found a value for `confirmation_text`, expected none.".to_string())
+                }
+                (None, None) => Ok(()),
+            }
+        }
+    }
+
+    pub fn context_before_awaiting_icp_ledger_response(err: String) -> String {
+        format!("{err} (before awaiting ICP ledger response)")
+    }
+
+    pub fn context_after_awaiting_icp_ledger_response(err: String) -> String {
+        format!("{err} (after awaiting ICP ledger response)")
+    }
 }
 
 // High level documentation in the corresponding Protobuf message.
@@ -249,8 +564,11 @@ impl Swap {
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
+            auto_finalize_swap_response: None,
+            direct_participation_icp_e8s: None,
+            neurons_fund_participation_icp_e8s: None,
         };
-        if init.is_swap_init_for_single_proposal() {
+        if init.is_swap_init_for_one_proposal_flow() {
             // Automatically fill out the fields that the (legacy) open request
             // used to provide, supporting clients who read legacy Swap fields.
             {
@@ -298,27 +616,112 @@ impl Swap {
             .ok_or_else(|| "Swap not open, no tokens available.".to_string())
     }
 
-    /// The total amount of ICP contributed by direct investors and the
+    /// The total amount of ICP e8s contributed by direct investors and the
     /// community fund.
-    pub fn participant_total_icp_e8s(&self) -> u64 {
-        self.direct_investor_total_icp_e8s()
-            .saturating_add(self.cf_total_icp_e8s())
+    pub fn current_total_participation_e8s(&self) -> u64 {
+        let current_direct_participation_e8s = self.current_direct_participation_e8s();
+        let current_neurons_fund_participation_e8s = self.current_neurons_fund_participation_e8s();
+        current_direct_participation_e8s
+            .checked_add(current_neurons_fund_participation_e8s)
+            .unwrap_or_else(|| {
+                log!(
+                    ERROR,
+                    "current_direct_participation_e8s ({current_direct_participation_e8s}) \
+                    + current_neurons_fund_participation_e8s ({current_neurons_fund_participation_e8s}) \
+                    > u64::MAX",
+                );
+                u64::MAX
+            })
     }
 
-    /// The total amount of ICP contributed by the community fund.
-    pub fn cf_total_icp_e8s(&self) -> u64 {
+    /// The maximum overall amount (in ICP e8s) that can be collected in this swap.
+    pub fn max_total_participation_e8s(&self) -> u64 {
+        self.params
+            .as_ref()
+            .expect("Expected params to be set")
+            .max_icp_e8s
+    }
+
+    /// The total amount of ICP e8s contributed by the Neurons' Fund.
+    pub fn current_neurons_fund_participation_e8s(&self) -> u64 {
+        self.neurons_fund_participation_icp_e8s.unwrap_or(0)
+    }
+
+    /// The maximum Neurons' Fund participation amount (in ICP e8s).
+    pub fn max_neurons_fund_participation_e8s(&self) -> u64 {
         self.cf_participants
             .iter()
             .map(|x| x.participant_total_icp_e8s())
             .fold(0, |sum, v| sum.saturating_add(v))
     }
 
-    /// The total amount of ICP contributed by direct investors.
-    pub fn direct_investor_total_icp_e8s(&self) -> u64 {
-        self.buyers
-            .values()
-            .map(|x| x.amount_icp_e8s())
-            .fold(0, |sum, v| sum.saturating_add(v))
+    /// The total amount of ICP e8s contributed by direct participants.
+    pub fn current_direct_participation_e8s(&self) -> u64 {
+        self.direct_participation_icp_e8s.unwrap_or(0)
+    }
+
+    /// The maximum direct participation amount (in ICP e8s).
+    pub fn max_direct_participation_e8s(&self) -> u64 {
+        let max_total_participation_e8s = self.max_total_participation_e8s();
+        let max_neurons_fund_participation_e8s = self.max_neurons_fund_participation_e8s();
+        max_total_participation_e8s
+            .checked_sub(max_neurons_fund_participation_e8s)
+            .unwrap_or_else(|| {
+                log!(
+                    ERROR,
+                    "max_total_participation_e8s ({max_total_participation_e8s}) \
+                    < max_neurons_fund_participation_e8s ({max_neurons_fund_participation_e8s})"
+                );
+                0
+            })
+    }
+
+    /// The amount of ICP e8s currently available for direct participation.
+    pub fn available_direct_participation_e8s(&self) -> u64 {
+        let max_direct_participation_e8s = self.max_direct_participation_e8s();
+        let current_direct_participation_e8s = self.current_direct_participation_e8s();
+        max_direct_participation_e8s
+            .checked_sub(current_direct_participation_e8s)
+            .unwrap_or_else(|| {
+                log!(
+                    ERROR,
+                    "max_direct_participation_e8s ({max_direct_participation_e8s}) \
+                    < current_direct_participation_e8s ({current_direct_participation_e8s})"
+                );
+                0
+            })
+    }
+
+    /// This function updates the current contribution from direct and Neurons' Fund participants.
+    ///
+    /// Calling this function in `Swap.refresh_buyer_token_e8s` should be the only way that the
+    /// fields `direct_participation_icp_e8s` and `neurons_fund_participation_icp_e8s`
+    /// are updated.
+    fn update_participation_amounts(&mut self) {
+        self.direct_participation_icp_e8s = Some(
+            self.buyers
+                .values()
+                .map(|x| x.amount_icp_e8s())
+                .fold(0, |sum, v| sum.saturating_add(v)),
+        );
+        // TODO(NNS1-2521): Make NF participation dependent on direct participation.
+        self.neurons_fund_participation_icp_e8s = Some(self.max_neurons_fund_participation_e8s());
+    }
+
+    /// Update cached fields:
+    /// - direct_participation_icp_e8s
+    /// - neurons_fund_participation_icp_e8s
+    ///
+    /// This function helps unit testing the Swap canister. Normally, the cached fields should be
+    /// updated as soon as the old values are invalid. However, in unit testing, we cannot rely on
+    /// all the right functions being called. For example, refresh_buyer_token_e8s is
+    /// responsible for calling update_participation_amounts. While writing a unit test expressing
+    /// consistency between several fields of Swap, we might not want to also call
+    /// refresh_buyer_token_e8s. Thus, in such scenarios we need update_cached_fields to ensure
+    /// that the cached fields are updated.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn update_cached_fields(&mut self) {
+        self.update_participation_amounts()
     }
 
     /// The count of unique CommunityFund Neurons.
@@ -378,8 +781,21 @@ impl Swap {
         );
         self.already_tried_to_auto_finalize = Some(true);
 
-        let finalize_response = self.finalize(now_fn, environment).await;
-        Ok(finalize_response)
+        // Attempt finalization
+        let auto_finalize_swap_response = self.finalize(now_fn, environment).await;
+
+        // Record the result
+        if self.auto_finalize_swap_response.is_some() {
+            log!(
+                ERROR,
+                "Somehow, auto-finalization happened twice (second time at {}). Overriding self.auto_finalize_swap_response, old value was: {:?}",
+                now_fn(true),
+                auto_finalize_swap_response,
+            );
+        }
+        self.auto_finalize_swap_response = Some(auto_finalize_swap_response.clone());
+
+        Ok(auto_finalize_swap_response)
     }
 
     /// Opens the SNS decentralization swap (only for the legacy flow).
@@ -406,7 +822,11 @@ impl Swap {
     ) -> Result<OpenResponse, String> {
         // Precondition 1
         if self.lifecycle() != Lifecycle::Pending {
-            return Err("Invalid lifecycle state to OPEN the swap: must be PENDING".to_string());
+            return Err(format!(
+                "Invalid lifecycle state to open the swap: must be {:?}, was {:?}",
+                Lifecycle::Pending,
+                self.lifecycle()
+            ));
         }
         // Precondition 2
         req.validate(now_seconds, self.init_or_panic())?;
@@ -462,7 +882,7 @@ impl Swap {
         r as u64
     }
 
-    /// If: lifecycle == OPEN && sufficient_participation && (swap_due || icp_target_reached)
+    /// If: lifecycle == OPEN && sufficient_participation && (swap_due || icp_target.is_reached())
     ///
     /// Then: lifecycle == COMMITTED
     pub fn try_commit(&mut self, now_seconds: u64) -> bool {
@@ -492,8 +912,9 @@ impl Swap {
         assert!(sns_being_offered_e8s > 0);
         // Note that this value has to be > 0 as we have > 0
         // participants each with > 0 ICP contributed.
-        let total_participant_icp_e8s = NonZeroU64::try_from(self.participant_total_icp_e8s())
-            .expect("participant_total_icp_e8s must be greater than 0");
+        let total_participant_icp_e8s =
+            NonZeroU64::try_from(self.current_total_participation_e8s())
+                .expect("participant_total_icp_e8s must be greater than 0");
 
         // Keep track of SNS tokens sold just to check that the amount
         // is correct at the end.
@@ -516,7 +937,7 @@ impl Swap {
                     &parsed_principal,
                     amount_sns_e8s,
                     neuron_basket_construction_parameters,
-                    SALE_NEURON_MEMO_RANGE_START,
+                    NEURON_BASKET_MEMO_RANGE_START,
                 );
             neurons.extend(direct_participant_sns_neuron_recipes);
 
@@ -529,7 +950,7 @@ impl Swap {
         // investors in the swap use the NNS Governance principal_id, there can be
         // neuron id collisions, so there must be a global memo used for all baskets
         // for all CF investors.
-        let mut global_cf_memo: u64 = SALE_NEURON_MEMO_RANGE_START;
+        let mut global_cf_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
         for cf_participant in self.cf_participants.iter() {
             for cf_neuron in cf_participant.cf_neurons.iter() {
                 let amount_sns_e8s = Swap::scale(
@@ -645,30 +1066,24 @@ impl Swap {
         // Automatically transition the state
 
         // Auto-open the swap
-        if self.can_open(heartbeat_start_seconds) {
-            if self.try_open_after_delay(heartbeat_start_seconds) {
-                log!(INFO, "Swap opened at timestamp {}", heartbeat_start_seconds);
-            }
+        if self.try_open_after_delay(heartbeat_start_seconds) {
+            log!(INFO, "Swap opened at timestamp {}", heartbeat_start_seconds);
         }
         // Auto-commit the swap
-        else if self.can_commit(heartbeat_start_seconds) {
-            if self.try_commit(heartbeat_start_seconds) {
-                log!(
-                    INFO,
-                    "Swap committed at timestamp {}",
-                    heartbeat_start_seconds
-                );
-            }
+        if self.try_commit(heartbeat_start_seconds) {
+            log!(
+                INFO,
+                "Swap committed at timestamp {}",
+                heartbeat_start_seconds
+            );
         }
         // Auto-abort the swap
-        else if self.can_abort(heartbeat_start_seconds) {
-            if self.try_abort(heartbeat_start_seconds) {
-                log!(
-                    INFO,
-                    "Swap aborted at timestamp {}",
-                    heartbeat_start_seconds
-                );
-            }
+        else if self.try_abort(heartbeat_start_seconds) {
+            log!(
+                INFO,
+                "Swap aborted at timestamp {}",
+                heartbeat_start_seconds
+            );
         }
         // Auto-finalize the swap
         // We discard the error, if there is one, because to log it would mean
@@ -753,73 +1168,43 @@ impl Swap {
         this_canister: CanisterId,
         icp_ledger: &dyn ICRC1Ledger,
     ) -> Result<RefreshBuyerTokensResponse, String> {
-        if self.lifecycle() != Lifecycle::Open {
-            return Err(
-                "The token amount can only be refreshed when the canister is in the OPEN state"
-                    .to_string(),
-            );
-        }
-        if self.icp_target_reached() {
-            return Err("The ICP target for this token swap has already been reached.".to_string());
-        }
+        use swap_participation::*;
 
-        match (
-            self.init_or_panic().confirmation_text.as_ref(),
-            confirmation_text,
-        ) {
-            (Some(expected_text), Some(text)) => {
-                if &text != expected_text {
-                    return Err("The value of `confirmation_text` does not match the value provided in SNS init payload.".to_string());
-                }
-            }
-            (Some(_), None) => {
-                return Err("No value provided for `confirmation_text`.".to_string());
-            }
-            (None, Some(_)) => {
-                return Err("Found a value for `confirmation_text`, expected none.".to_string());
-            }
-            (None, None) => {}
-        }
+        // These two checks need to be repeated after awaiting the response from the ICP ledger.
+        self.validate_lifecycle_is_open()
+            .map_err(context_before_awaiting_icp_ledger_response)?;
+        self.validate_possibility_of_direct_participation()
+            .map_err(context_before_awaiting_icp_ledger_response)?;
+
+        // User input validation doesn't expire after await, so this check doesn't need repetition.
+        self.validate_confirmation_text(confirmation_text)?;
 
         // Look for the token balance of the specified principal's subaccount on 'this' canister.
-        let account = Account {
-            owner: this_canister.get().0,
-            subaccount: Some(principal_to_subaccount(&buyer)),
+        let e8s = {
+            let account = Account {
+                owner: this_canister.get().0,
+                subaccount: Some(principal_to_subaccount(&buyer)),
+            };
+            icp_ledger
+                .account_balance(account)
+                .await
+                .map_err(|x| x.to_string())?
+                .get_e8s()
         };
-        let e8s = icp_ledger
-            .account_balance(account)
-            .await
-            .map_err(|x| x.to_string())
-            .map(|x| x.get_e8s())?;
 
-        // Recheck lifecycle state after async call because the swap
-        // could have been closed (committed or aborted) while the
-        // call to get the account balance was outstanding.
-        if self.lifecycle() != Lifecycle::Open {
-            return Err(
-                "The token amount can only be refreshed when the canister is in the OPEN state"
-                    .to_string(),
-            );
-        }
+        // Recheck lifecycle state and ICP target after async call because the swap could have
+        // been closed (committed or aborted) while the call to get the account balance was
+        // outstanding.
+        self.validate_lifecycle_is_open()
+            .map_err(context_after_awaiting_icp_ledger_response)?;
+        self.validate_possibility_of_direct_participation()
+            .map_err(context_after_awaiting_icp_ledger_response)?;
 
-        // Recheck total amount of ICP bought after async call.
-        let participant_total_icp_e8s = self.participant_total_icp_e8s();
-        let params = &self.params.as_ref().expect("Expected params to be set"); // Safe as lifecycle is OPEN.
-        let max_icp_e8s = params.max_icp_e8s;
-        if participant_total_icp_e8s >= max_icp_e8s {
-            if participant_total_icp_e8s > max_icp_e8s {
-                log!(
-                    ERROR,
-                    "Total amount of ICP committed {} already exceeds the target {}!",
-                    participant_total_icp_e8s,
-                    max_icp_e8s
-                );
-            }
-            // Nothing we can do for this buyer.
-            return Err("The swap has already reached its target".to_string());
-        }
+        // Once swap is OPEN, the Swap.params field is set. In light of validation performed
+        // above, we should be able to `expect` this value without a panic.
+        let params = &self.params.as_ref().expect("Expected params to be set");
         // Subtraction safe because of the preceding if-statement.
-        let max_increment_e8s = max_icp_e8s - participant_total_icp_e8s;
+        let max_increment_e8s = self.available_direct_participation_e8s();
 
         // Check that the minimum amount has been transferred before
         // actually creating an entry for the buyer.
@@ -839,7 +1224,7 @@ impl Swap {
         if old_amount_icp_e8s >= e8s {
             // Already up-to-date. Strict inequality can happen if messages are re-ordered.
             return Ok(RefreshBuyerTokensResponse {
-                icp_accepted_participation_e8s: e8s,
+                icp_accepted_participation_e8s: old_amount_icp_e8s,
                 icp_ledger_account_balance_e8s: e8s,
             });
         }
@@ -864,7 +1249,7 @@ impl Swap {
         // participating.
         if new_balance_e8s < params.min_participant_icp_e8s {
             return Err(format!(
-                "New balance: {}; minimum required to participate: {}",
+                "Rejecting participation of effective amount {}; minimum required to participate: {}",
                 new_balance_e8s, params.min_participant_icp_e8s
             ));
         }
@@ -884,10 +1269,10 @@ impl Swap {
             // and the actual requested amount of tokens will be used.
             // Lower amounts than specified on the ticket are not excepted.
             if amount_ticket > requested_increment_e8s {
-                return Err(
-                    format!("The available balance to be topped up ({}) by the buyer is smaller than the amount requested ({}).",requested_increment_e8s,amount_ticket)
-                        ,
-                );
+                return Err(format!(
+                    "The available balance to be topped up ({requested_increment_e8s}) \
+                    by the buyer is smaller than the amount requested ({amount_ticket})."
+                ));
             }
             // The requested balance in the ticket matches the balance to be topped up in the swap
             // --> Delete fully executed ticket, if it exists and proceed with the top up
@@ -907,29 +1292,36 @@ impl Swap {
                 })?;
         }
 
-        let buyer_state = self
-            .buyers
+        self.buyers
             .entry(buyer.to_string())
             .or_insert_with(|| BuyerState {
                 icp: Some(TransferableAmount {
                     amount_e8s: 0,
                     ..TransferableAmount::default()
                 }),
-            });
-        buyer_state.set_amount_icp_e8s(new_balance_e8s);
+            })
+            .set_amount_icp_e8s(new_balance_e8s);
+        // We compute the current participation amounts once and store the result in Swap's state,
+        // for efficiency reasons.
+        self.update_participation_amounts();
+
         log!(
             INFO,
             "Refresh_buyer_tokens for buyer {}; old e8s {}; new e8s {}",
             buyer,
             old_amount_icp_e8s,
-            buyer_state.amount_icp_e8s()
+            new_balance_e8s,
         );
-        if requested_increment_e8s >= max_increment_e8s {
-            log!(INFO, "Swap has reached ICP target of {}", max_icp_e8s);
+        if new_balance_e8s.saturating_sub(old_amount_icp_e8s) >= max_increment_e8s {
+            log!(
+                INFO,
+                "Swap has reached ICP target of {}",
+                self.max_total_participation_e8s()
+            );
         }
 
         Ok(RefreshBuyerTokensResponse {
-            icp_accepted_participation_e8s: buyer_state.amount_icp_e8s(),
+            icp_accepted_participation_e8s: new_balance_e8s,
             icp_ledger_account_balance_e8s: e8s,
         })
     }
@@ -2032,6 +2424,8 @@ impl Swap {
         let result = if self.lifecycle() == Lifecycle::Committed {
             Result::Committed(Committed {
                 sns_governance_canister_id: Some(sns_governance.get()),
+                total_direct_contribution_icp_e8s: Some(self.current_direct_participation_e8s()),
+                total_neurons_fund_contribution_icp_e8s: self.neurons_fund_participation_icp_e8s,
             })
         } else {
             Result::Aborted(Aborted {})
@@ -2052,15 +2446,28 @@ impl Swap {
         caller: PrincipalId,
         time: u64,
     ) -> NewSaleTicketResponse {
-        if self.lifecycle() < Lifecycle::Open {
+        // Return an error if we are not in Lifecycle::Open.
+        if self.lifecycle().is_before_open() {
             return NewSaleTicketResponse::err_sale_not_open();
         }
-        if self.lifecycle() > Lifecycle::Open {
+        if self.lifecycle().is_after_open() {
             return NewSaleTicketResponse::err_sale_closed();
         }
+        if self.lifecycle() != Lifecycle::Open {
+            // It must be that we are in Lifecycle::Unspecified, but this also
+            // accounts for cases that might have been overlooked.
+            log!(
+                ERROR,
+                "We are not in Lifecycle::Open. Swap:\n{:#?}",
+                SwapDigest::new(self),
+            );
+            return NewSaleTicketResponse::err_sale_not_open();
+        }
+
         if caller.is_anonymous() {
             return NewSaleTicketResponse::err_invalid_principal();
         }
+
         // subaccounts must be 32 bytes
         if request
             .subaccount
@@ -2084,7 +2491,7 @@ impl Swap {
             .get(&caller.to_string())
             .map_or(0, |buyer_state| buyer_state.amount_icp_e8s());
         let amount_icp_e8s = match compute_participation_increment(
-            self.participant_total_icp_e8s(),
+            self.current_total_participation_e8s(),
             params.max_icp_e8s,
             params.min_participant_icp_e8s,
             params.max_participant_icp_e8s,
@@ -2248,9 +2655,9 @@ impl Swap {
             if !to_purge.is_empty() {
                 log!(
                     INFO,
-                    "Purging {} open tickets because they are older than {} seconds (number of open tickets: {})",
+                    "Purging {} open tickets because they are older than {:?} (number of open tickets: {})",
                     to_purge.len(),
-                    max_age_in_nanoseconds,
+                    Duration::from_nanos(max_age_in_nanoseconds),
                     tickets.borrow().len(),
                 );
             }
@@ -2330,20 +2737,33 @@ impl Swap {
             {
                 false
             } else {
-                self.participant_total_icp_e8s() >= params.min_icp_e8s
+                self.current_total_participation_e8s() >= params.min_icp_e8s
             }
         } else {
             false
         }
     }
 
-    /// The total number of ICP contributed by all buyers is at least
-    /// the target (max) ICP of the swap.
-    pub fn icp_target_reached(&self) -> bool {
-        if let Some(params) = &self.params {
-            return self.participant_total_icp_e8s() >= params.max_icp_e8s;
+    /// Returns the `IcpTargetProgress`, a structure summarizing the current progress in reaching
+    /// the target total ICP amount (both direct and NF contributions).
+    pub fn icp_target_progress(&self) -> IcpTargetProgress {
+        if self.params.is_some() {
+            let current_total_participation_e8s = self.current_total_participation_e8s();
+            let max_total_participation_e8s = self.max_total_participation_e8s();
+            match current_total_participation_e8s.cmp(&max_total_participation_e8s) {
+                Ordering::Less => IcpTargetProgress::NotReached {
+                    current_total_participation_e8s,
+                    max_total_participation_e8s,
+                },
+                Ordering::Greater => IcpTargetProgress::Exceeded {
+                    current_total_participation_e8s,
+                    max_total_participation_e8s,
+                },
+                Ordering::Equal => IcpTargetProgress::Reached(max_total_participation_e8s),
+            }
+        } else {
+            IcpTargetProgress::Undefined
         }
-        false
     }
 
     /// Returns true if the swap can be opened at the specified
@@ -2362,13 +2782,13 @@ impl Swap {
             return false;
         }
         // Possible optimization: both 'sufficient_participation' and
-        // 'icp_target_reached' compute 'participant_total_icp_e8s', and
+        // 'icp_target.is_reached()' compute 'participant_total_icp_e8s', and
         // this computation could be shared (or cached).
         if !self.sufficient_participation() {
             return false;
         }
         // If swap is due, or the target ICP has been reached, return true
-        self.swap_due(now_seconds) || self.icp_target_reached()
+        self.swap_due(now_seconds) || self.icp_target_progress().is_reached_or_exceeded()
     }
 
     /// Returns true if the swap can be aborted at the specified
@@ -2380,7 +2800,7 @@ impl Swap {
         }
 
         // if the swap is due or the ICP target is reached without sufficient participation, we can abort
-        (self.swap_due(now_seconds) || self.icp_target_reached())
+        (self.swap_due(now_seconds) || self.icp_target_progress().is_reached_or_exceeded())
             && !self.sufficient_participation()
     }
 
@@ -2449,10 +2869,10 @@ impl Swap {
     /// Computes the DerivedState.
     /// `sns_tokens_per_icp` will be 0 if `participant_total_icp_e8s` is 0.
     pub fn derived_state(&self) -> DerivedState {
-        let participant_total_icp_e8s = self.participant_total_icp_e8s();
-        let direct_participant_count = self.buyers.len() as u64;
-        let cf_participant_count = self.cf_participants.len() as u64;
-        let cf_neuron_count = self.cf_neuron_count();
+        let participant_total_icp_e8s = self.current_total_participation_e8s();
+        let direct_participant_count = Some(self.buyers.len() as u64);
+        let cf_participant_count = Some(self.cf_participants.len() as u64);
+        let cf_neuron_count = Some(self.cf_neuron_count());
         let tokens_available_for_swap = match self.sns_token_e8s() {
             Ok(tokens) => tokens,
             Err(err) => {
@@ -2464,12 +2884,17 @@ impl Swap {
             .checked_div(i2d(participant_total_icp_e8s))
             .and_then(|d| d.to_f32())
             .unwrap_or(0.0);
+        let direct_participation_icp_e8s = Some(self.current_direct_participation_e8s());
+        let neurons_fund_participation_icp_e8s =
+            Some(self.current_neurons_fund_participation_e8s());
         DerivedState {
             buyer_total_icp_e8s: participant_total_icp_e8s,
-            direct_participant_count: Some(direct_participant_count),
-            cf_participant_count: Some(cf_participant_count),
-            cf_neuron_count: Some(cf_neuron_count),
+            direct_participant_count,
+            cf_participant_count,
+            cf_neuron_count,
             sns_tokens_per_icp,
+            direct_participation_icp_e8s,
+            neurons_fund_participation_icp_e8s,
         }
     }
 
@@ -2484,7 +2909,7 @@ impl Swap {
     /// Returns the total amount of ICP deposited by participants in the swap.
     pub fn get_buyers_total(&self) -> GetBuyersTotalResponse {
         GetBuyersTotalResponse {
-            buyers_total: self.participant_total_icp_e8s(),
+            buyers_total: self.current_total_participation_e8s(),
         }
     }
 
@@ -2494,6 +2919,21 @@ impl Swap {
             lifecycle: Some(self.lifecycle),
             decentralization_sale_open_timestamp_seconds: self
                 .decentralization_sale_open_timestamp_seconds,
+        }
+    }
+
+    /// Returns the current lifecycle stage (e.g. Open, Committed, etc)
+    pub fn get_auto_finalization_status(
+        &self,
+        _request: &GetAutoFinalizationStatusRequest,
+    ) -> GetAutoFinalizationStatusResponse {
+        GetAutoFinalizationStatusResponse {
+            is_auto_finalize_enabled: self
+                .init
+                .as_ref()
+                .and_then(|init| init.should_auto_finalize),
+            has_auto_finalize_been_attempted: self.already_tried_to_auto_finalize,
+            auto_finalize_swap_response: self.auto_finalize_swap_response.clone(),
         }
     }
 
@@ -2581,6 +3021,11 @@ impl Swap {
             .min(LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP) // cap
             as usize;
 
+        // Disallow indexing outside of the bounds of self.cf_participants
+        if offset >= self.cf_participants.len() {
+            return ListCommunityFundParticipantsResponse::default();
+        }
+
         let end = (offset + limit).min(self.cf_participants.len());
         let cf_participants = self.cf_participants[offset..end].to_vec();
 
@@ -2623,15 +3068,19 @@ impl Swap {
         &self,
         request: ListSnsNeuronRecipesRequest,
     ) -> ListSnsNeuronRecipesResponse {
-        let limit = request
-            .limit
+        let ListSnsNeuronRecipesRequest { limit, offset } = request;
+        let offset = offset.unwrap_or_default() as usize;
+        let limit = limit
             .unwrap_or(DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT)
             .min(DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT) as usize;
 
-        let start_at = request.offset.unwrap_or_default() as usize;
-        let end = (start_at + limit).min(self.neuron_recipes.len());
+        // Disallow indexing outside of the bounds of self.neuron_recipes
+        if offset >= self.neuron_recipes.len() {
+            return ListSnsNeuronRecipesResponse::default();
+        }
 
-        let sns_neuron_recipes = self.neuron_recipes[start_at..end].to_vec();
+        let end = (offset + limit).min(self.neuron_recipes.len());
+        let sns_neuron_recipes = self.neuron_recipes[offset..end].to_vec();
 
         ListSnsNeuronRecipesResponse { sns_neuron_recipes }
     }
@@ -2641,15 +3090,15 @@ impl Swap {
 ///
 /// # Arguments
 ///
-/// * `tot_participation` - The current amount of tokens commited to
+/// * `tot_participation` - The current amount of tokens committed to
 ///                         the swap by all users.
 /// * `max_tot_participation` - The maximum amount of tokens that can
-///                             be commited to the swap.
+///                             be committed to the swap.
 /// * `min_user_participation` - The minimum amount of tokens that a
 ///                              user must commit to participate to the swap.
 /// * `max_user_participation` - The maximum amount of tokens that a
 ///                              user can commit to participate to the swap.
-/// * `user_participation` - The current amount of tokens commited to the
+/// * `user_participation` - The current amount of tokens committed to the
 ///                          swap by the user that requested the increment.
 /// * `requested_increment` - The amount of tokens by which the user wants
 ///                           to increase its participation in the swap.
@@ -3005,6 +3454,90 @@ fn insert_buyer_into_buyers_list_index(buyer_principal_id: PrincipalId) -> Resul
     memory::BUYERS_LIST_INDEX.with(|buyer_list| buyer_list.borrow_mut().push(&buyer_principal_id))
 }
 
+/// A version of Swap that implements a shorter version of Debug, suitable for
+/// logs. Potentially large collection fields are summarized and/or decimated.
+struct SwapDigest<'a> {
+    swap: &'a Swap,
+}
+
+impl<'a> SwapDigest<'a> {
+    fn new(swap: &'a Swap) -> Self {
+        Self { swap }
+    }
+}
+
+impl<'a> fmt::Debug for SwapDigest<'a> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        let Swap {
+            lifecycle,
+            init,
+            params,
+            open_sns_token_swap_proposal_id,
+            finalize_swap_in_progress,
+            decentralization_sale_open_timestamp_seconds,
+            next_ticket_id,
+            purge_old_tickets_last_completion_timestamp_nanoseconds,
+            purge_old_tickets_next_principal,
+            already_tried_to_auto_finalize,
+            auto_finalize_swap_response,
+
+            // These are (potentially large) collections. To avoid an
+            // overwhelmingly large log message, we need summarize and/or
+            // decimate these.
+            cf_participants,
+            buyers,
+            neuron_recipes,
+            direct_participation_icp_e8s,
+            neurons_fund_participation_icp_e8s,
+        } = self.swap;
+
+        formatter
+            .debug_struct("Swap(digest)")
+            .field("lifecycle", lifecycle)
+            .field("init", init)
+            .field("params", params)
+            .field(
+                "open_sns_token_swap_proposal_id",
+                open_sns_token_swap_proposal_id,
+            )
+            .field("finalize_swap_in_progress", finalize_swap_in_progress)
+            .field(
+                "decentralization_sale_open_timestamp_seconds",
+                decentralization_sale_open_timestamp_seconds,
+            )
+            .field("next_ticket_id", next_ticket_id)
+            .field(
+                "purge_old_tickets_last_completion_timestamp_nanoseconds",
+                purge_old_tickets_last_completion_timestamp_nanoseconds,
+            )
+            .field(
+                "purge_old_tickets_next_principal",
+                purge_old_tickets_next_principal,
+            )
+            .field(
+                "already_tried_to_auto_finalize",
+                already_tried_to_auto_finalize,
+            )
+            .field("auto_finalize_swap_response", auto_finalize_swap_response)
+            // Summarize and/or decimate (potentially large) collection fields.
+            //
+            // TODO: Include some samples? E.g. the first, and last element, and
+            // maybe some random elements in the middle.
+            .field(
+                "cf_participants",
+                &format!("<len={}>", cf_participants.len()),
+            )
+            .field("buyers", &format!("<len={}>", buyers.len()))
+            .field("neuron_recipes", &format!("<len={}>", neuron_recipes.len()))
+            .field("direct_participation_icp_e8s", direct_participation_icp_e8s)
+            .field(
+                "neurons_fund_participation_icp_e8s",
+                neurons_fund_participation_icp_e8s,
+            )
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -3050,6 +3583,7 @@ mod tests {
             nns_proposal_id: None,                       // TODO[NNS1-2339]
             neurons_fund_participants: None,             // TODO[NNS1-2339]
             should_auto_finalize: Some(true),
+            neurons_fund_participation_constraints: None,
         });
     }
 
@@ -3112,6 +3646,8 @@ mod tests {
             direct_participant_count: Some(1000),
             cf_participant_count: Some(100),
             cf_neuron_count: Some(200),
+            direct_participation_icp_e8s: Some(500_000_000),
+            neurons_fund_participation_icp_e8s: Some(300_000_000),
         };
 
         let response: GetDerivedStateResponse = derived_state.into();
@@ -3120,6 +3656,11 @@ mod tests {
         assert_eq!(response.direct_participant_count, Some(1000));
         assert_eq!(response.cf_participant_count, Some(100));
         assert_eq!(response.cf_neuron_count, Some(200));
+        assert_eq!(response.direct_participation_icp_e8s, Some(500_000_000));
+        assert_eq!(
+            response.neurons_fund_participation_icp_e8s,
+            Some(300_000_000)
+        );
     }
 
     #[test]
@@ -3335,6 +3876,16 @@ mod tests {
                 cf_participants: cf_participants[2..].to_vec(),
             },
         );
+
+        assert_eq!(
+            swap.list_community_fund_participants(&ListCommunityFundParticipantsRequest {
+                offset: Some((cf_participants.len() + 1) as u64), // Give an offset outside the bounds
+                limit: Some(10),                                  // Limit is irrelevant
+            }),
+            ListCommunityFundParticipantsResponse {
+                cf_participants: vec![],
+            }
+        )
     }
 
     #[test]
@@ -3376,23 +3927,23 @@ mod tests {
                 .generate_vesting_schedule(/* total_amount_e8s = */ 9),
             vec![
                 ScheduledVestingEvent {
-                    amount_e8s: 5,
+                    amount_e8s: 1,
                     dissolve_delay_seconds: 0,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 100,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 200,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 300,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 400,
                 },
             ],
@@ -3428,10 +3979,12 @@ mod tests {
                     .sum::<u64>(),
                 total_e8s,
             );
-            for i in 1..vesting_schedule.len() {
-                assert_eq!(
-                    vesting_schedule.get(i).unwrap().amount_e8s,
-                    total_e8s / count,
+            let lower_bound_e8s = total_e8s / count;
+            let upper_bound_e8s = lower_bound_e8s + 1;
+            for scheduled_vesting_event in &vesting_schedule {
+                assert!(
+                    lower_bound_e8s <= scheduled_vesting_event.amount_e8s
+                        && scheduled_vesting_event.amount_e8s <= upper_bound_e8s,
                     "{:#?}",
                     vesting_schedule,
                 );
@@ -3618,6 +4171,16 @@ mod tests {
                 sns_neuron_recipes: neuron_recipes[1..3].to_vec()
             }
         );
+
+        assert_eq!(
+            swap.list_sns_neuron_recipes(ListSnsNeuronRecipesRequest {
+                limit: Some(2),                                  // Limit is irrelevant
+                offset: Some((neuron_recipes.len() + 1) as u64), // Give an offset outside the bounds
+            }),
+            ListSnsNeuronRecipesResponse {
+                sns_neuron_recipes: vec![],
+            }
+        )
     }
 
     proptest! {
@@ -3648,6 +4211,7 @@ mod tests {
                     nns_proposal_id: None, // TODO[NNS1-2339]
                     neurons_fund_participants: None, // TODO[NNS1-2339]
                     should_auto_finalize: Some(true),
+                    neurons_fund_participation_constraints: None,
                 }),
                 params: Some(Params {
                     min_participants: 1,
@@ -3673,6 +4237,9 @@ mod tests {
                 purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
                 purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
                 already_tried_to_auto_finalize: Some(false),
+                auto_finalize_swap_response: None,
+                direct_participation_icp_e8s: None,
+                neurons_fund_participation_icp_e8s: None,
             };
             let mut ticket_ids = HashSet::new();
             for pid in pids {
@@ -3807,6 +4374,7 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
+        swap.update_cached_fields();
 
         // test try_commit
         {
@@ -3896,6 +4464,7 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
+        swap.update_cached_fields();
 
         // test try_commit
         {
@@ -3952,6 +4521,7 @@ mod tests {
                 nns_proposal_id: None,                       // TODO[NNS1-2339]
                 neurons_fund_participants: None,             // TODO[NNS1-2339]
                 should_auto_finalize: Some(true),
+                neurons_fund_participation_constraints: None,
             }),
             params: Some(Params {
                 min_participants: 0,
@@ -3977,6 +4547,9 @@ mod tests {
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
+            auto_finalize_swap_response: None,
+            direct_participation_icp_e8s: None,
+            neurons_fund_participation_icp_e8s: None,
         };
 
         let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {

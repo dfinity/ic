@@ -49,6 +49,7 @@ Arguments:
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
+       --cert-syncer-raw-domains-file   specify a path to a file containing a list of custom domains that should bypass the service worker
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
        --ip-hash-salt                   specify a salt for hashing ip values
        --logging-url                    specify an endpoint for our logging backend
@@ -119,6 +120,9 @@ for argument in "${@}"; do
         --cert-issuer-enc-key=*)
             CERTIFICATE_ISSUER_ENCRYPTION_KEY="${argument#*=}"
             ;;
+        --cert-syncer-raw-domains-file=*)
+            CERTIFICATE_SYNCER_RAW_DOMAINS_FILE="${argument#*=}"
+            ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
             ;;
@@ -150,6 +154,7 @@ OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:-}"
 CERTIFICATE_ISSUER_CREDENTIALS="${CERTIFICATE_ISSUER_CREDENTIALS:-}"
+CERTIFICATE_SYNCER_RAW_DOMAINS_FILE="${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE:-}"
 if [ -z ${NNS_PUBLIC_KEY+x} ]; then
     err "--nns_public_key not set"
     exit 1
@@ -485,13 +490,14 @@ function generate_certificate_issuer_config() {
             "certificate_orchestrator_uri") readonly CERTIFICATE_ORCHESTRATOR_URI="${value:-}" ;;
             "certificate_orchestrator_canister_id") readonly CERTIFICATE_ORCHESTRATOR_CANISTER_ID="${value:-}" ;;
             "certificate_issuer_delegation_domain") readonly CERTIFICATE_ISSUER_DELEGATION_DOMAIN="${value:-}" ;;
+            "certificate_issuer_acme_provider_url") readonly CERTIFICATE_ISSUER_ACME_PROVIDER_URL="${value:-}" ;;
             "certificate_issuer_acme_id") readonly CERTIFICATE_ISSUER_ACME_ID="${value:-}" ;;
             "certificate_issuer_acme_key") readonly CERTIFICATE_ISSUER_ACME_KEY="${value:-}" ;;
             "certificate_issuer_cloudflare_api_key") readonly CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY="${value:-}" ;;
         esac
     done <"${CERTIFICATE_ISSUER_CREDENTIALS}"
 
-    if [[ -z "${CERTIFICATE_ORCHESTRATOR_URI}" || -z "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_IDENTITY}" || -z "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z "${CERTIFICATE_ISSUER_ACME_ID}" || -z "${CERTIFICATE_ISSUER_ACME_KEY}" || -z "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]]; then
+    if [[ -z "${CERTIFICATE_ORCHESTRATOR_URI}" || -z "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_IDENTITY}" || -z "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z "${CERTIFICATE_ISSUER_ACME_PROVIDER_URL}" || -z "${CERTIFICATE_ISSUER_ACME_ID}" || -z "${CERTIFICATE_ISSUER_ACME_KEY}" || -z "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]]; then
         err "ERROR: Missing certificate-issuer configuration."
         exit_usage
     fi
@@ -513,12 +519,29 @@ function generate_certificate_issuer_config() {
 certificate_orchestrator_uri=${CERTIFICATE_ORCHESTRATOR_URI}
 certificate_orchestrator_canister_id=${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}
 certificate_issuer_delegation_domain=${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}
+certificate_issuer_acme_provider_url=${CERTIFICATE_ISSUER_ACME_PROVIDER_URL}
 certificate_issuer_acme_id=${CERTIFICATE_ISSUER_ACME_ID}
 certificate_issuer_acme_key=${CERTIFICATE_ISSUER_ACME_KEY}
 certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
 EOF
         fi
     done
+}
+
+function generate_certificate_syncer_config() {
+    if [ ! -z "${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE}" ]; then
+        for n in $NODES; do
+            declare -n NODE=$n
+            if [[ "${NODE["type"]}" != "boundary" ]]; then
+                continue
+            fi
+
+            local SUBNET_IDX="${NODE["subnet_idx"]}"
+            local NODE_IDX="${NODE["node_idx"]}"
+            local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+            cp "${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE}" "${CONFIG_DIR}/${NODE_PREFIX}/raw_domains.txt"
+        done
+    fi
 }
 
 function copy_pre_isolation_canisters() {
@@ -639,6 +662,7 @@ function main() {
     copy_deny_list
     copy_geolite2_dbs
     generate_certificate_issuer_config
+    generate_certificate_syncer_config
     copy_pre_isolation_canisters
     copy_ip_hash_salt
     copy_logging_credentials

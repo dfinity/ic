@@ -102,7 +102,7 @@ async fn create_canister(
             &Principal::management_canister(),
             "provisional_create_canister_with_cycles",
         )
-        .with_arg(&Encode!(&CreateCanisterArgs::default())?)
+        .with_arg(Encode!(&CreateCanisterArgs::default())?)
         .call_and_wait()
         .await?;
     let result = Decode!(&response, CreateCanisterResult)?;
@@ -118,7 +118,7 @@ async fn install_canister(
     let _ = agent
         .update(&Principal::management_canister(), "install_code")
         .with_effective_canister_id(canister_id)
-        .with_arg(&Encode!(&InstallCodeArgs {
+        .with_arg(Encode!(&InstallCodeArgs {
             canister_id: canister_id.into(),
             wasm_module,
             arg,

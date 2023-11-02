@@ -48,7 +48,7 @@ gflags.DEFINE_string(
 gflags.DEFINE_string("artifacts_path", "", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
-gflags.DEFINE_string("targets", "", "Set load target IP adresses from this comma-separated list directly.")
+gflags.DEFINE_string("targets", "", "Set load target IP addresses from this comma-separated list directly.")
 gflags.DEFINE_string("top_level_out_dir", "", "Set the top-level output directory. Default is the git commit id.")
 gflags.DEFINE_string(
     "second_level_out_dir",
@@ -303,11 +303,12 @@ class BaseExperiment:
         """Return path to ic-admin."""
         return os.path.join(self.artifacts_path, "ic-admin")
 
+    @retry(tries=5)
     def __get_topology(self, nns_url=None):
         """
         Get the current topology from the registry.
 
-        A different NNS can be choosen by setting nns_url. This is useful, for example
+        A different NNS can be chosen by setting nns_url. This is useful, for example
         when multiple testnets are used, one for workload generators, and one for
         target machines.
         """
@@ -338,7 +339,7 @@ class BaseExperiment:
         """
         Get info for the given node from the registry.
 
-        A different NNS can be choosen by setting nns_url. This is useful, for example
+        A different NNS can be chosen by setting nns_url. This is useful, for example
         when multiple testnets are used, one for workload generators, and one for
         target machines.
         """
@@ -419,7 +420,9 @@ class BaseExperiment:
         for subnet, info in topology["topology"]["subnets"].items():
             if subnet == MAINNET_NNS_SUBNET_ID:
                 node_id = random.choice(info["records"][0]["value"]["membership"])
-                return self.get_node_ip_address(node_id, nns_url=MAINNET_NNS_URL)
+                nns_ip = self.get_node_ip_address(node_id, nns_url=MAINNET_NNS_URL)
+                print(f"Using NNS ip address: {nns_ip}")
+                return nns_ip
         raise Exception(f"Failed to get the mainnet NNS url from {MAINNET_NNS_URL}")
 
     def _get_nns_ip(self):
@@ -522,11 +525,17 @@ class BaseExperiment:
         cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "0"]
         if this_canister_name != "counter":
             canister_in_artifacts = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm")
+            canister_in_artifacts_gz = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm.gz")
             canister_in_repo = os.path.join("canisters", f"{this_canister_name}.wasm")
             canister_in_repo_gzip = os.path.join("canisters", f"{this_canister_name}.wasm.gz")
-            print(f"Looking for canister at locations: {canister_in_artifacts} and {canister_in_repo}")
-            if os.path.exists(canister_in_artifacts):
+            print(
+                f"Looking for canister at locations: {canister_in_artifacts}, {canister_in_artifacts_gz} and {canister_in_repo}")
+            if os.path.exists(this_canister):
+                cmd += this_canister
+            elif os.path.exists(canister_in_artifacts):
                 cmd += ["--canister", canister_in_artifacts]
+            elif os.path.exists(canister_in_artifacts_gz):
+                cmd += ["--canister", canister_in_artifacts_gz]
             elif os.path.exists(canister_in_repo):
                 cmd += ["--canister", canister_in_repo]
             elif os.path.exists(canister_in_repo_gzip):
@@ -605,7 +614,7 @@ class BaseExperiment:
         """
         Build dictionary to be used to build the summary file.
 
-        This is overriden by workload experiment, so visibility needs to be _ not __.
+        This is overridden by workload experiment, so visibility needs to be _ not __.
         """
         return {}
 
@@ -645,6 +654,8 @@ class BaseExperiment:
 
     def get_iter_logs_from_targets(self, machines: List[str], since_time: str, outdir: str):
         """Fetch logs from target machines since the given time."""
+        if FLAGS.no_instrument:
+            return
         ssh.run_all_ssh_in_parallel(
             machines,
             [f"journalctl -u ic-replica --since={since_time}" for m in machines],

@@ -29,41 +29,42 @@ impl Default for BatchBuilder {
 }
 
 impl BatchBuilder {
-    /// Create a new XNetPayloadBuilder
+    /// Creates a new `BatchBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Set the batch_number field to batch_number
+    /// Sets the `batch_number` field.
     pub fn batch_number(mut self, batch_number: Height) -> Self {
         self.batch.batch_number = batch_number;
         self
     }
 
-    /// Set the messages field to messages.
+    /// Sets the `messages` field.
     pub fn messages(mut self, messages: BatchMessages) -> Self {
         self.batch.messages = messages;
         self
     }
 
-    /// Set the randomness field to randomness.
+    /// Sets the `randomness` field.
     pub fn randomness(mut self, randomness: Randomness) -> Self {
         self.batch.randomness = randomness;
         self
     }
 
-    /// Set the registry_version field to registry_version.
+    /// Sets the `registry_version` field.
     pub fn registry_version(mut self, registry_version: RegistryVersion) -> Self {
         self.batch.registry_version = registry_version;
         self
     }
 
+    /// Sets the `time` field.
     pub fn time(mut self, time: Time) -> Self {
         self.batch.time = time;
         self
     }
 
-    /// Return the built Batch.
+    /// Returns the built `Batch`.
     pub fn build(&self) -> Batch {
         self.batch.clone()
     }

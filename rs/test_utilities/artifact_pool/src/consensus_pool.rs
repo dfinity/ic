@@ -18,10 +18,12 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
-use ic_types::artifact_kind::ConsensusArtifact;
-use ic_types::batch::ValidationContext;
-use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
 use ic_types::signature::*;
+use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
+use ic_types::{
+    artifact_kind::ConsensusArtifact,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+};
 use ic_types::{consensus::*, crypto::*, *};
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -406,7 +408,7 @@ impl TestConsensusPool {
         rb_shares: u32,
         f_shares: u32,
         // this is a vector of 32-element arrays with random usize numbers
-        certfied_height: Option<Height>,
+        certified_height: Option<Height>,
     ) -> Height {
         let notarized_height = self
             .pool
@@ -436,9 +438,11 @@ impl TestConsensusPool {
         );
         let mut rand_num = [0; 32].iter().cycle();
         let node_id = node_test_id(0);
-        let dkg_id = IDkgId {
-            instance_id: Height::from(0),
-            subnet_id: subnet_test_id(0),
+        let dkg_id = NiDkgId {
+            start_block_height: Height::from(0),
+            dealer_subnet: subnet_test_id(0),
+            dkg_tag: NiDkgTag::HighThreshold,
+            target_subnet: NiDkgTargetSubnet::Local,
         };
         let crypto = CryptoReturningOk::default();
 
@@ -467,7 +471,7 @@ impl TestConsensusPool {
                 add_catch_up_package_if_needed = false;
             }
             block.rank = Rank(i as u64);
-            if let Some(height) = certfied_height {
+            if let Some(height) = certified_height {
                 block.context.certified_height = height;
             }
             let block_proposal = BlockProposal::fake(
@@ -510,7 +514,7 @@ impl TestConsensusPool {
             let content = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(&beacon));
             let share = RandomBeaconShare {
                 signature: crypto
-                    .sign_threshold(&content, DkgId::IDkgId(dkg_id))
+                    .sign_threshold(&content, dkg_id)
                     .map(|signature| ThresholdSignatureShare {
                         signature,
                         signer: node_id,
@@ -645,12 +649,12 @@ impl TestConsensusPool {
         );
     }
 
-    pub fn remove_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
+    pub fn purge_validated_below<T: ConsensusMessageHashable + HasHeight>(&mut self, value: T) {
         let msg = value.into_message();
         let time_source = self.time_source.clone();
         self.apply_changes(
             time_source.as_ref(),
-            vec![ChangeAction::RemoveFromValidated(msg)],
+            vec![ChangeAction::PurgeValidatedBelow(msg.height())],
         );
     }
 
@@ -710,6 +714,10 @@ impl ConsensusPool for TestConsensusPool {
 impl MutablePool<ConsensusArtifact, ChangeSet> for TestConsensusPool {
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
+    }
+
+    fn remove(&mut self, id: &ConsensusMessageId) {
+        self.pool.remove(id)
     }
 
     fn apply_changes(

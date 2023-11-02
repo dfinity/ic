@@ -37,7 +37,7 @@ class XrcHooks(WorkloadHooks):
             print(f"{label}: {num}")
 
         num_succ = len(succ_exchange_rates[0]["value"])
-        print(f"Number of succesful requests: {num_succ}. ")
+        print(f"Number of successful requests: {num_succ}. ")
 
         f_rate = sum_failures / (sum_failures + num_succ)
         print(f"Failure rate: {f_rate})")

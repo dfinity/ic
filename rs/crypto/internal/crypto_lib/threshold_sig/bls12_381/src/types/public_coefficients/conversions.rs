@@ -64,7 +64,7 @@ impl From<&Polynomial> for PublicCoefficients {
     fn from(polynomial: &Polynomial) -> Self {
         PublicCoefficients {
             coefficients: polynomial
-                .coefficients
+                .coefficients()
                 .iter()
                 .map(public_key_from_secret_key)
                 .collect(),

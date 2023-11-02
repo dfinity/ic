@@ -151,7 +151,7 @@ pub async fn test_async(env: TestEnv, config: Config) {
     // Step 1: Install Xnet canisters on each subnet.
     info!(logger, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(
-        env,
+        env.clone(),
         &endpoints_runtime,
         config.subnets,
         config.canisters_per_subnet,

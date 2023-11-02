@@ -7,7 +7,7 @@ use crate::driver::{
 
 /// A graph where nodes are stateful objects connected via directed actions.
 /// When a node A changes state, every action connecting this node to another
-/// node is taken if the state of A meets the condition assocated with that
+/// node is taken if the state of A meets the condition associated with that
 /// action.
 #[derive(Debug)]
 pub struct ActionGraph<T> {
@@ -118,7 +118,7 @@ impl<T: TaskIdT> ActionGraph<T> {
 
                 // NB: Re-declaring `a` here drops the reference on self.actions
                 // from above. Using a different symbol would conflict with
-                // owernship semantics as `&a` is borrows self.actions.
+                // ownership semantics as `&a` is borrows self.actions.
                 let a = self.actions.remove(a_idx);
                 let (new_state, cond) = self.nodes[target].apply_effect(a.effect);
                 self.nodes[target] = new_state;

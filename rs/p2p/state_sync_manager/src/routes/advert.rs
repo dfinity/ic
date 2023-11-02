@@ -13,7 +13,7 @@ use ic_protobuf::p2p::v1 as pb;
 use ic_types::{artifact::StateSyncArtifactId, NodeId};
 use prost::Message;
 
-pub const STATE_SYNC_ADVERT_PATH: &str = "/advert";
+pub const STATE_SYNC_ADVERT_PATH: &str = "/state-sync/advert";
 
 pub(crate) async fn state_sync_advert_handler(
     State(state): State<Arc<StateSyncAdvertHandler>>,

@@ -2,8 +2,9 @@
 Rules for system-tests.
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:defs.bzl", "untar", "zstd_compress")
 load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
@@ -58,7 +59,10 @@ def _run_system_test(ctx):
                 ),
             ),
         ),
-        RunEnvironmentInfo(environment = env),
+        RunEnvironmentInfo(
+            environment = env,
+            inherited_environment = ctx.attr.env_inherit,
+        ),
     ]
 
 run_system_test = rule(
@@ -70,6 +74,7 @@ run_system_test = rule(
         "env": attr.string_dict(allow_empty = True),
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.label_keyed_string_dict(allow_files = True),
+        "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
         "version_file_path": attr.label(allow_single_file = True, default = "//bazel:version_file_path"),
     },
 )
@@ -86,11 +91,12 @@ def system_test(
         tags = [],
         test_timeout = "long",
         flaky = True,
+        malicious = False,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
-        ic_os_fixed_version = True,
+        env_inherit = [],
         **kwargs):
     """Declares a system-test.
 
@@ -100,6 +106,7 @@ def system_test(
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       flaky: rerun in case of failure (up to 3 times).
+      malicious: use the malicious disk image.
       colocated_test_driver_vm_resources: a structure describing
       the required resources of the colocated test-driver VM. For example:
         {
@@ -113,7 +120,7 @@ def system_test(
       For example: [ "performance" ]
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
-      ic_os_fixed_version: the test can work with ic-os that contains synthetic stable ic version.
+      env_inherit: specifies additional environment variables to inherit from the external environment when the test is executed by bazel test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
 
@@ -137,9 +144,9 @@ def system_test(
 
     _env_deps = {}
 
-    _guestos = "//ic-os/guestos/envs/dev-fixed-version:" if ic_os_fixed_version else "//ic-os/guestos/envs/dev:"
+    _guestos = "//ic-os/guestos/envs/dev:"
 
-    # Always add version.txt for now as all test use it even that they don't declary they use dev image.
+    # Always add version.txt for now as all test use it even that they don't declare they use dev image.
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
 
@@ -155,12 +162,22 @@ def system_test(
         _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256"
 
+    if malicious:
+        _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
+
+        _env_deps[_guestos_malicous + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos_malicous + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256"
+        _env_deps[_guestos_malicous + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos_malicous + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256"
+
     run_system_test(
         name = name,
         src = bin_name,
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
-        tags = tags + ["requires-network", "system_test"],
+        env_inherit = env_inherit,
+        tags = tags + ["requires-network", "system_test"] +
+               (["manual"] if "experimental_system_test_colocation" in tags else []),
         timeout = test_timeout,
         # TODO: set flaky = False by default when PFOPS-3148 is resolved
         flaky = flaky,
@@ -180,6 +197,7 @@ def system_test(
             bin_name,
         ],
         env_deps = _env_deps,
+        env_inherit = env_inherit,
         env = {
             "COLOCATED_TEST": name,
             "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
@@ -193,16 +211,12 @@ def system_test(
     )
 
 def _uvm_config_image_impl(ctx):
-    out = ctx.actions.declare_file(ctx.label.name + ".zst")
-
-    input_tar = ctx.attr.input_tar[DefaultInfo].files.to_list()[0]
-
-    create_universal_vm_config_image = ctx.executable._create_universal_vm_config_image
+    out = ctx.actions.declare_file(ctx.label.name)
 
     ctx.actions.run(
-        executable = ctx.executable._create_universal_vm_config_image_from_tar,
-        arguments = [create_universal_vm_config_image.path, input_tar.path, out.path],
-        inputs = [input_tar, create_universal_vm_config_image],
+        executable = ctx.executable._create_universal_vm_config_image,
+        arguments = ["--input", ctx.file.src.path, "--output", out.path, "--label", "CONFIG"],
+        inputs = [ctx.file.src],
         outputs = [out],
     )
     return [
@@ -214,30 +228,59 @@ def _uvm_config_image_impl(ctx):
 uvm_config_image_impl = rule(
     implementation = _uvm_config_image_impl,
     attrs = {
-        "input_tar": attr.label(),
-        "_create_universal_vm_config_image_from_tar": attr.label(
-            executable = True,
-            cfg = "exec",
-            default = ":create_universal_vm_config_image_from_tar_sh",
-        ),
+        "src": attr.label(allow_single_file = True),
         "_create_universal_vm_config_image": attr.label(
             executable = True,
             cfg = "exec",
-            default = ":create_universal_vm_config_image_sh",
+            default = ":create_universal_vm_config_image_ci_sh",
         ),
     },
 )
 
-def uvm_config_image(name, **kws):
+def uvm_config_image(name, tags = None, visibility = None, **kwargs):
+    """This macro creates bazel targets for uvm config images.
+
+    Args:
+        name: This name will be used for the target.
+        tags: Controls execution of targets. "manual" excludes a target from wildcard targets like (..., :*, :all). See: https://bazel.build/reference/test-encyclopedia#tag-conventions
+        visibility: Target visibility controls who may depend on a target.
+        **kwargs: Keyworded arguments for pkg_tar.
+    """
     tar = name + "_tar"
 
+    # TODO: remove tar and untar by copy with remap and mode
     pkg_tar(
         name = tar,
-        **kws
+        tags = ["manual"],
+        visibility = ["//visibility:private"],
+        **kwargs
+    )
+
+    untar(
+        name = name + "_untar",
+        src = ":" + tar,
+        tags = ["manual"],
+        visibility = ["//visibility:private"],
     )
 
     uvm_config_image_impl(
-        name = name,
-        input_tar = ":" + tar,
+        name = name + "_uncompressed",
+        src = ":" + name + "_untar",
         tags = ["manual"],
+        visibility = ["//visibility:private"],
+    )
+
+    zstd_compress(
+        name = name + ".zst",
+        srcs = [":" + name + "_uncompressed"],
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = tags,
+        visibility = ["//visibility:private"],
+    )
+
+    native.alias(
+        name = name,
+        actual = name + ".zst",
+        tags = tags,
+        visibility = visibility,
     )

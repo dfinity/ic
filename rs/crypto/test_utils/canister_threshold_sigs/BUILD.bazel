@@ -20,7 +20,9 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities/in_memory_logger",
         "//rs/types/types",
+        "@crate_index//:assert_matches",
         "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand_chacha_0_3_1",
     ],
 )
 

@@ -72,7 +72,7 @@ pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<(
     }
 }
 
-/// Copies `src` into `dst` using do_copy semantics overwritting destination if
+/// Copies `src` into `dst` using do_copy semantics overwriting destination if
 /// it exists
 pub fn do_copy_overwrite(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<()> {
     if dst.exists() {

@@ -104,6 +104,7 @@ type Operation = variant {
     };
     Burn : record {
         from : AccountIdentifier;
+        spender : opt AccountIdentifier;
         amount : Tokens;
     };
     Transfer : record {
@@ -288,6 +289,10 @@ type AccountBalanceArgsDfx = record {
     account: TextAccountIdentifier;
 };
 
+type FeatureFlags = record {
+    icrc2 : bool;
+};
+
 type InitArgs = record {
     minting_account: TextAccountIdentifier;
     icrc1_minting_account: opt Account;
@@ -299,6 +304,9 @@ type InitArgs = record {
     transfer_fee: opt Tokens;
     token_symbol: opt text;
     token_name: opt text;
+    feature_flags : opt FeatureFlags;
+    maximum_number_of_accounts : opt nat64;
+    accounts_overflow_trim_quantity: opt nat64;
 };
 
 type Icrc1BlockIndex = nat;
@@ -347,11 +355,50 @@ type Value = variant {
 type UpgradeArgs = record {
   maximum_number_of_accounts : opt nat64;
   icrc1_minting_account : opt Account;
+  feature_flags : opt FeatureFlags;
 };
 
 type LedgerCanisterPayload = variant {
     Init: InitArgs;
     Upgrade: opt UpgradeArgs;
+};
+
+type ApproveArgs = record {
+    from_subaccount : opt SubAccount;
+    spender : Account;
+    amount : Icrc1Tokens;
+    expected_allowance : opt Icrc1Tokens;
+    expires_at : opt TimeStamp;
+    fee : opt Icrc1Tokens;
+    memo : opt blob;
+    created_at_time: opt TimeStamp;
+};
+
+type ApproveError = variant {
+    BadFee : record { expected_fee : Icrc1Tokens };
+    InsufficientFunds : record { balance : Icrc1Tokens };
+    AllowanceChanged : record { current_allowance : Icrc1Tokens };
+    Expired : record { ledger_time : nat64 };
+    TooOld;
+    CreatedInFuture : record { ledger_time : nat64 };
+    Duplicate : record { duplicate_of : Icrc1BlockIndex };
+    TemporarilyUnavailable;
+    GenericError : record { error_code : nat; message : text };
+};
+
+type ApproveResult = variant {
+    Ok : Icrc1BlockIndex;
+    Err : ApproveError;
+};
+
+type AllowanceArgs = record {
+    account : Account;
+    spender : Account;
+};
+
+type Allowance = record {
+    allowance : Icrc1Tokens;
+    expires_at : opt TimeStamp;
 };
 
 service: (LedgerCanisterPayload) -> {
@@ -362,6 +409,9 @@ service: (LedgerCanisterPayload) -> {
 
     // Returns the amount of Tokens on the specified account.
     account_balance : (AccountBalanceArgs) -> (Tokens) query;
+
+    // Returns the account identifier for the given Principal and subaccount.
+    account_identifier : (Account) -> (AccountIdentifier) query;
 
     // Returns the current transfer_fee.
     transfer_fee : (TransferFeeArg) -> (TransferFee) query;
@@ -398,5 +448,7 @@ service: (LedgerCanisterPayload) -> {
     icrc1_minting_account : () -> (opt Account) query;
     icrc1_balance_of : (Account) -> (Icrc1Tokens) query;
     icrc1_transfer : (TransferArg) -> (Icrc1TransferResult);
-    icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;  
+    icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;
+    icrc2_approve : (ApproveArgs) -> (ApproveResult);
+    icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
 }

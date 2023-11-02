@@ -1,3 +1,4 @@
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChangelogEntry {
     /// The version that this mutation produced.
@@ -16,6 +17,7 @@ pub struct ChangelogEntry {
 }
 /// Just a container for a set of RegistryDelta that can be used to
 /// serialize/deserialize the content of the registry.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStableStorage {
     /// Version of the stable store representation.
@@ -85,10 +87,19 @@ pub mod registry_stable_storage {
                 Version::Version1 => "VERSION_1",
             }
         }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "VERSION_UNSPECIFIED" => Some(Self::Unspecified),
+                "VERSION_1" => Some(Self::Version1),
+                _ => None,
+            }
+        }
     }
 }
 /// A container for the what gets written to stable storage,
 /// from the registry canister.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryCanisterStableStorage {
     #[prost(message, optional, tag = "2")]
@@ -100,8 +111,27 @@ pub struct RegistryCanisterStableStorage {
 }
 /// Maps Node Provider IDs to the amount (in 10,000ths of an SDR) they should be
 /// rewarded for providing nodes to the Internet Computer for the month.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeProvidersMonthlyXdrRewards {
     #[prost(map = "string, uint64", tag = "1")]
     pub rewards: ::std::collections::HashMap<::prost::alloc::string::String, u64>,
+}
+/// Maps the supplied PrincipalId (of a canister) to the subnet to which the canister is assigned to.
+/// There is no guarantee that the canister exists, even if a subnet ID is returned.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetSubnetForCanisterRequest {
+    #[prost(message, optional, tag = "1")]
+    pub principal: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+/// Response if the supplied PrincipalId is assigned to a subnet.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetSubnetForCanisterResponse {
+    #[prost(message, optional, tag = "1")]
+    pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }

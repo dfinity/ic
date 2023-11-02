@@ -125,6 +125,9 @@ pub enum OperationType {
     #[serde(rename = "BURN")]
     #[strum(serialize = "BURN")]
     Burn,
+    #[serde(rename = "APPROVE")]
+    #[strum(serialize = "APPROVE")]
+    Approve,
     #[serde(rename = "FEE")]
     #[strum(serialize = "FEE")]
     Fee,

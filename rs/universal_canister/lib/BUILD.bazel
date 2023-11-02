@@ -13,7 +13,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/types/types",
 ]
 
@@ -31,7 +31,7 @@ rust_doc_test(
     name = "lib_doc_test",
     crate = ":lib",
     deps = [
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/types/types",
     ],
 )

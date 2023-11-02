@@ -1,5 +1,8 @@
+#[cfg(feature = "test")]
+use crate::pb::v1::{
+    AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
+};
 use crate::{
-    account_from_proto, account_to_proto,
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
@@ -75,7 +78,10 @@ use ic_nervous_system_common::{
     cmc::CMC,
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, BASIS_POINTS_PER_UNITY, SECONDS_PER_DAY,
+    NervousSystemError, SECONDS_PER_DAY,
+};
+use ic_nervous_system_governance::maturity_modulation::{
+    apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
@@ -258,7 +264,8 @@ impl GovernanceProto {
                 for followee in followees.followees.iter() {
                     let nid = followee.to_string();
                     if let Some(followee_set) = followee_index.get_mut(&nid) {
-                        followee_set.remove(neuron.id.as_ref().expect("Neuron must have an id"));
+                        followee_set
+                            .remove(neuron.id.as_ref().expect("Neuron must have a NeuronId"));
                         if followee_set.is_empty() {
                             followee_index.remove(&nid);
                         }
@@ -276,7 +283,6 @@ impl GovernanceProto {
         neuron: &Neuron,
     ) {
         let neuron_id = neuron.id.as_ref().expect("Neuron must have a NeuronId");
-
         neuron
             .permissions
             .iter()
@@ -344,7 +350,7 @@ impl GovernanceProto {
     /// Builds an index that maps principalIDs to a set of neurons for which the
     /// principals have some permissions.
     ///
-    /// This index is build from the `neurons` in the `Governance` struct, which specify
+    /// This index is built from the `neurons` in the `Governance` struct, which specify
     /// the principals that can modify the neuron.
     pub fn build_principal_to_neuron_ids_index(
         &self,
@@ -1104,12 +1110,12 @@ impl Governance {
             let from_subaccount = neuron.subaccount()?;
 
             // If no account was provided, transfer to the caller's (default) account.
-            let to_account: Account = match disburse.to_account.as_ref() {
+            let to_account = match disburse.to_account.as_ref() {
                 None => Account {
                     owner: caller.0,
                     subaccount: None,
                 },
-                Some(ai_pb) => account_from_proto(ai_pb.clone()).map_err(|e| {
+                Some(ai_pb) => Account::try_from(ai_pb.clone()).map_err(|e| {
                     GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
                         format!("The recipient's subaccount is invalid due to: {}", e),
@@ -1588,16 +1594,13 @@ impl Governance {
         let neuron = self.get_neuron_result(id)?;
         neuron.check_authorized(caller, NeuronPermissionType::DisburseMaturity)?;
 
-        let maturity_modulation_basis_points =
-            self.proto.effective_maturity_modulation_basis_points()?;
-
         // If no account was provided, transfer to the caller's account.
         let to_account: Account = match disburse_maturity.to_account.as_ref() {
             None => Account {
                 owner: caller.0,
                 subaccount: None,
             },
-            Some(account) => account_from_proto(account.clone()).map_err(|e| {
+            Some(account) => Account::try_from(account.clone()).map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
                     format!(
@@ -1607,7 +1610,7 @@ impl Governance {
                 )
             })?,
         };
-        let to_account_proto: AccountProto = account_to_proto(to_account);
+        let to_account_proto: AccountProto = AccountProto::from(to_account);
 
         if disburse_maturity.percentage_to_disburse > 100
             || disburse_maturity.percentage_to_disburse == 0
@@ -1617,7 +1620,7 @@ impl Governance {
                 "The percentage of maturity to disburse must be a value between 1 and 100 (inclusive)."));
         }
 
-        // The amount to deduct = the amout in the neuron * request.percentage / 100.
+        // The amount to deduct = the amount in the neuron * request.percentage / 100.
         let maturity_to_deduct = neuron
             .maturity_e8s_equivalent
             .checked_mul(disburse_maturity.percentage_to_disburse as u64)
@@ -1626,48 +1629,46 @@ impl Governance {
             .expect("Error when processing maturity to disburse.")
             as u128;
 
-        // Modulate maturity_to_deduct. That is, multiply by 1 + X where
-        // X = maturity_modulation_basis_points / 10_000.
-        //
-        // From the fact that maturity_to_deduct is converted from u64 to u128,
-        // it should not be possible that any of the lines that look like they
-        // might panic at face value actually panic.
-        let maturity_to_disburse: u64 = u64::try_from(
-            maturity_to_deduct
-                .checked_mul(
-                    (BASIS_POINTS_PER_UNITY as i32 + maturity_modulation_basis_points)
-                        .try_into()
-                        .unwrap(),
-                )
-                .unwrap()
-                .checked_div(BASIS_POINTS_PER_UNITY as u128)
-                .unwrap(),
-        )
-        .expect("Couldn't convert maturity to u64");
-
         let maturity_to_deduct = maturity_to_deduct as u64;
 
         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
-        if maturity_to_disburse < transaction_fee_e8s {
+        let worst_case_maturity_modulation =
+            apply_maturity_modulation(maturity_to_deduct, MIN_MATURITY_MODULATION_PERMYRIAD)
+                // Applying maturity modulation is a safe operation.
+                // However, in the case that the method fails to apply the equation, return an
+                // error instead of throwing a panic.
+                .map_err(|err| {
+                    GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        format!(
+                            "Could not calculate worst case maturity modulation \
+                            and therefore cannot disburse maturity. Err: {}",
+                            err
+                        ),
+                    )
+                })?;
+
+        if worst_case_maturity_modulation < transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Tried to merge {} e8s, but can't merge an amount \
-                     less than the transaction fee of {} e8s.",
-                    maturity_to_disburse, transaction_fee_e8s
+                    "If worst case maturity modulation is applied (-5%) then this neuron would \
+                     disburse {} e8s, but can't disburse an amount less than the transaction fee \
+                     of {} e8s.",
+                    worst_case_maturity_modulation, transaction_fee_e8s
                 ),
             ));
         }
 
         let disbursement_in_progress = DisburseMaturityInProgress {
-            amount_e8s: maturity_to_disburse,
+            amount_e8s: maturity_to_deduct,
             timestamp_of_disbursement_seconds: self.env.now(),
             account_to_disburse_to: Some(to_account_proto),
         };
 
         // Re-borrow the neuron mutably to update now that the maturity has been
-        // disbursed.
-        let mut neuron = self.get_neuron_result_mut(id)?;
+        // deducted and is waiting until the end of the window to modulate and disburse.
+        let neuron = self.get_neuron_result_mut(id)?;
         neuron.maturity_e8s_equivalent = neuron
             .maturity_e8s_equivalent
             .saturating_sub(maturity_to_deduct);
@@ -1676,7 +1677,9 @@ impl Governance {
             .push(disbursement_in_progress);
 
         Ok(DisburseMaturityResponse {
-            amount_disbursed_e8s: maturity_to_disburse,
+            // TODO(NNS1-2576) - deprecate amount_disbursed_e8s
+            amount_disbursed_e8s: maturity_to_deduct,
+            amount_deducted_e8s: Some(maturity_to_deduct),
         })
     }
 
@@ -1690,7 +1693,7 @@ impl Governance {
     /// - The proposal's decision status is ProposalStatusAdopted
     pub fn set_proposal_execution_status(&mut self, pid: u64, result: Result<(), GovernanceError>) {
         match self.proto.proposals.get_mut(&pid) {
-            Some(mut proposal) => {
+            Some(proposal) => {
                 // The proposal has to be adopted before it is executed.
                 assert_eq!(proposal.status(), ProposalDecisionStatus::Adopted);
                 match result {
@@ -1925,17 +1928,18 @@ impl Governance {
             Some(p) => p,
         };
 
-        if proposal_data.status() != ProposalDecisionStatus::Open {
-            return;
+        // Recompute the tally here. It should correctly reflect all votes until
+        // the deadline, even after the proposal has been decided.
+        if proposal_data.status() == ProposalDecisionStatus::Open
+            || proposal_data.accepts_vote(now_seconds)
+        {
+            proposal_data.recompute_tally(now_seconds);
         }
 
-        // Recompute the tally here. It is imperative that only
-        // 'open' proposals have their tally recomputed. Votes may
-        // arrive after a decision has been made: such votes count
-        // for voting rewards, but shall not make it into the
-        // tally.
-        proposal_data.recompute_tally(now_seconds);
-        if !proposal_data.can_make_decision(now_seconds) {
+        // If the status is open
+        if proposal_data.status() != ProposalDecisionStatus::Open
+            || !proposal_data.can_make_decision(now_seconds)
+        {
             return;
         }
 
@@ -1980,7 +1984,7 @@ impl Governance {
     }
 
     /// Processes all proposals with decision status ProposalStatusOpen
-    fn process_proposals(&mut self) {
+    pub fn process_proposals(&mut self) {
         if self.env.now() < self.closest_proposal_deadline_timestamp_seconds {
             // Nothing to do.
             return;
@@ -1990,7 +1994,9 @@ impl Governance {
             .proto
             .proposals
             .iter()
-            .filter(|(_, info)| info.status() == ProposalDecisionStatus::Open)
+            .filter(|(_, info)| {
+                info.status() == ProposalDecisionStatus::Open || info.accepts_vote(self.env.now())
+            })
             .map(|(pid, _)| *pid)
             .collect::<Vec<u64>>();
 
@@ -3446,10 +3452,25 @@ impl Governance {
     /// - the neuron is not in the set of neurons with ongoing operations
     /// - the neuron's balance on the ledger account is at least
     ///   neuron_minimum_stake_e8s as defined in the nervous system parameters
+    /// - the neuron was not created via an NNS Neurons' Fund participation in the
+    ///   decentralization swap
     async fn refresh_neuron(&mut self, nid: &NeuronId) -> Result<(), GovernanceError> {
         let now = self.env.now();
         let subaccount = nid.subaccount()?;
         let account = self.neuron_account_id(subaccount);
+
+        // First ensure that the neuron was not created via an NNS Neurons' Fund participation in the
+        // decentralization swap
+        {
+            let neuron = self.get_neuron_result(nid)?;
+
+            if neuron.is_neurons_fund_controlled() {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot refresh an SNS Neuron controlled by the Neurons' Fund",
+                ));
+            }
+        }
 
         // Get the balance of the neuron from the ledger canister.
         let balance = self.ledger.account_balance(account).await?;
@@ -3464,7 +3485,7 @@ impl Governance {
                     ErrorType::InsufficientFunds,
                     format!(
                         "Account does not have enough funds to refresh a neuron. \
-                     Please make sure that account has at least {:?} e8s (was {:?} e8s)",
+                        Please make sure that account has at least {:?} e8s (was {:?} e8s)",
                         min_stake,
                         balance.get_e8s()
                     ),
@@ -4116,6 +4137,16 @@ impl Governance {
         if !self.can_finalize_disburse_maturity() {
             return;
         }
+
+        let maturity_modulation_basis_points =
+            match self.proto.effective_maturity_modulation_basis_points() {
+                Ok(maturity_modulation_basis_points) => maturity_modulation_basis_points,
+                Err(message) => {
+                    log!(ERROR, "{}", message.error_message);
+                    return;
+                }
+            };
+
         self.proto.is_finalizing_disburse_maturity = Some(true);
         let now_seconds = self.env.now();
         let disbursal_delay_elapsed_seconds = now_seconds - SEVEN_DAYS_IN_SECONDS;
@@ -4139,8 +4170,25 @@ impl Governance {
                         }
                         Some(id) => id,
                     };
-                    // TODO(NNS1-1708) add modulation
-                    let maturity_to_disburse_after_modulation_e8s = d.amount_e8s;
+
+                    let maturity_to_disburse_after_modulation_e8s: u64 =
+                        match apply_maturity_modulation(
+                            d.amount_e8s,
+                            maturity_modulation_basis_points,
+                        ) {
+                            Ok(maturity_to_disburse_after_modulation_e8s) => {
+                                maturity_to_disburse_after_modulation_e8s
+                            }
+                            Err(err) => {
+                                log!(
+                                    ERROR,
+                                    "Could not apply maturity modulation to {:?} for neuron {} due to {:?}, skipping",
+                                    d, neuron_id, err
+                                );
+                                continue;
+                            }
+                        };
+
                     let fdm = FinalizeDisburseMaturity {
                         amount_to_be_disbursed_e8s: maturity_to_disburse_after_modulation_e8s,
                         to_account: d.account_to_disburse_to.clone(),
@@ -4169,7 +4217,7 @@ impl Governance {
                             continue;
                         }
                     };
-                    let to_account = match account_from_proto(account_proto) {
+                    let to_account = match Account::try_from(account_proto) {
                         Ok(account) => account,
                         Err(e) => {
                             log!(
@@ -5011,10 +5059,9 @@ impl Governance {
         let max_number_of_neurons = self
             .nervous_system_parameters_or_panic()
             .max_number_of_neurons
-            .expect("NervousSystemParameters must have max_number_of_neurons")
-            as usize;
+            .expect("NervousSystemParameters must have max_number_of_neurons");
 
-        if self.proto.neurons.len() + 1 > max_number_of_neurons {
+        if (self.proto.neurons.len() as u64) + 1 > max_number_of_neurons {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot add neuron. Max number of neurons reached.",
@@ -5135,6 +5182,48 @@ impl Governance {
         GetMaturityModulationResponse {
             maturity_modulation: self.proto.maturity_modulation.clone(),
         }
+    }
+
+    #[cfg(feature = "test")]
+    pub fn add_maturity(
+        &mut self,
+        add_maturity_request: AddMaturityRequest,
+    ) -> AddMaturityResponse {
+        let AddMaturityRequest { id, amount_e8s } = add_maturity_request;
+        let id = id.expect("AddMaturityRequest::id is required");
+        let amount_e8s = amount_e8s.expect("AddMaturityRequest::amount_e8s is required");
+
+        // Here, we're getting a mutable reference without a lock, but it's
+        // okay because this is is only callable from test code
+        let neuron = self.get_neuron_mut(&id).expect("neuron did not exist");
+
+        neuron.maturity_e8s_equivalent = neuron.maturity_e8s_equivalent.saturating_add(amount_e8s);
+
+        AddMaturityResponse {
+            new_maturity_e8s: Some(neuron.maturity_e8s_equivalent),
+        }
+    }
+
+    #[cfg(feature = "test")]
+    pub async fn mint_tokens(
+        &mut self,
+        add_maturity_request: MintTokensRequest,
+    ) -> MintTokensResponse {
+        self.ledger
+            .transfer_funds(
+                add_maturity_request.amount_e8s(),
+                0,    // Minting transfer don't pay a fee
+                None, // This is a minting transfer, no 'from' account is needed
+                add_maturity_request
+                    .recipient
+                    .expect("recipient must be set")
+                    .try_into()
+                    .unwrap(), // The account of the neuron on the ledger
+                self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
+            )
+            .await
+            .unwrap();
+        MintTokensResponse {}
     }
 
     /// Returns the ledger account identifier of the minting account on the ledger canister
@@ -8683,7 +8772,7 @@ mod tests {
         );
         let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(
-            account_from_proto(target_account_pb),
+            Account::try_from(target_account_pb),
             Ok(Account {
                 owner: setup.controller.0,
                 subaccount: None
@@ -8736,7 +8825,7 @@ mod tests {
         );
         let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(
-            account_from_proto(target_account_pb),
+            Account::try_from(target_account_pb),
             Ok(Account {
                 owner: target_principal.0,
                 subaccount: None
@@ -8791,7 +8880,7 @@ mod tests {
         );
         let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(
-            account_from_proto(target_account_pb),
+            Account::try_from(target_account_pb),
             Ok(Account {
                 owner: setup.controller.0,
                 subaccount: None
@@ -8907,7 +8996,7 @@ mod tests {
         assert_matches!(
         result,
         Err(GovernanceError{error_type: code, error_message: msg})
-            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't disburse an amount less than"));
     }
 
     #[test]

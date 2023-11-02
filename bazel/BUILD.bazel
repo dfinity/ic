@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("//bazel:status.bzl", "ic_version_or_git_sha", "version_file_path")
+load("//bazel:status.bzl", "FAKE_IC_VERSION", "ic_version_or_git_sha", "version_file_path")
 
 bool_flag(
     name = "enable_malicious_code",
@@ -33,7 +33,7 @@ string_flag(
 
 string_flag(
     name = "ic_version_rc_only",
-    build_setting_default = "0000000000000000000000000000000000000000",
+    build_setting_default = FAKE_IC_VERSION,
 )
 
 # Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise <git sha>-<timestamp>.

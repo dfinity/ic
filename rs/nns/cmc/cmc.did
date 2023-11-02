@@ -1,5 +1,12 @@
 type Cycles = nat;
 type BlockIndex = nat64;
+type CanisterSettings = record {
+  controllers : opt vec principal;
+  compute_allocation : opt nat;
+  memory_allocation : opt nat;
+  freezing_threshold : opt nat;
+  reserved_cycles_limit: opt nat;
+};
 
 // The argument of the [notify_top_up] method.
 type NotifyTopUpArg = record {
@@ -21,6 +28,10 @@ type NotifyCreateCanisterArg = record {
   // An optional subnet type that, if set, determines what type of subnet
   // the new canister will be created on.
   subnet_type: opt text;
+
+  // Optional canister settings that, if set, are applied to the newly created canister.
+  // If not specified, the caller is the controller of the canister, and the other settings are set to default values.
+  settings : opt CanisterSettings;
 };
 
 type NotifyError = variant {
@@ -79,7 +90,7 @@ type IcpXdrConversionRateResponse = record {
   data : IcpXdrConversionRate;
 
   // CBOR-serialized hash tree as specified in
-  // https://smartcontracts.org/docs/interface-spec/index.html#certification-encoding.
+  // https://internetcomputer.org/docs/interface-spec/index.html#certification-encoding
   // The hash tree is used for certification and hash the following structure:
   // ```
   // *
@@ -91,12 +102,16 @@ type IcpXdrConversionRateResponse = record {
   hash_tree : blob;
 
   // System certificate as specified in
-  // https://smartcontracts.org/docs/interface-spec/index.html#certification-encoding
+  // https://internetcomputer.org/docs/interface-spec/index.html#certification-encoding
   certificate : blob;
 };
 
 type SubnetTypesToSubnetsResponse = record {
   data: vec record { text; vec principal };
+};
+
+type PrincipalsAuthorizedToCreateCanistersToSubnetsResponse = record {
+  data: vec record { principal; vec principal };
 };
 
 type AccountIdentifier = record {
@@ -119,7 +134,7 @@ type CyclesCanisterInitPayload = record {
 };
 
 service : (opt CyclesCanisterInitPayload) -> {
-  // Propmts the cycles minting canister to process a payment by converting ICP
+  // Prompts the cycles minting canister to process a payment by converting ICP
   // into cycles and sending the cycles the specified canister.
   notify_top_up : (NotifyTopUpArg) -> (NotifyTopUpResult);
 
@@ -131,4 +146,8 @@ service : (opt CyclesCanisterInitPayload) -> {
 
   // Returns the current mapping of subnet types to subnets.
   get_subnet_types_to_subnets : () -> (SubnetTypesToSubnetsResponse) query;
+
+  // Returns the mapping from principals to subnets in which they are authorized
+  // to create canisters.
+  get_principals_authorized_to_create_canisters_to_subnets : () -> (PrincipalsAuthorizedToCreateCanistersToSubnetsResponse) query;
 }

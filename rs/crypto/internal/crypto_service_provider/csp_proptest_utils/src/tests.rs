@@ -237,3 +237,28 @@ should_have_a_strategy_for_each_variant!(
     },
     TransientInternalError { .. },
 );
+
+use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
+should_have_a_strategy_for_each_variant!(
+    CspTlsKeygenError,
+    CspTlsKeygenError::TransientInternalError {
+        internal_error: "dummy error to match upon".to_string()
+    },
+    InvalidArguments { .. },
+    InternalError { .. },
+    DuplicateKeyId { .. },
+    TransientInternalError { .. },
+);
+
+use ic_crypto_internal_csp::vault::api::CspTlsSignError;
+should_have_a_strategy_for_each_variant!(
+    CspTlsSignError,
+    CspTlsSignError::TransientInternalError {
+        internal_error: "dummy error to match upon".to_string()
+    },
+    SecretKeyNotFound { .. },
+    WrongSecretKeyType { .. },
+    MalformedSecretKey { .. },
+    SigningFailed { .. },
+    TransientInternalError { .. },
+);

@@ -15,10 +15,7 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
-ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
-ic-crypto-sha = {path = "../crypto/sha/"}
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
@@ -40,20 +37,17 @@ ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
-ic-replica = { path = "../replica" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
-prost = "0.11.0"
-rand = "0.8"
+prost = { workspace = true }
 serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.40"
 slog = "2.5.2"
 slog-async = { version = "2.5", features = ["nested-values"] }
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]

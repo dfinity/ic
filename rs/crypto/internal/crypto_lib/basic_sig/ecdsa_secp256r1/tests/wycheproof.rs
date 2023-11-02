@@ -1,5 +1,5 @@
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use std::convert::TryFrom;
 use wycheproof::ecdsa::*;
 

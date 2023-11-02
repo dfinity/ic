@@ -10,7 +10,6 @@ pub struct ExecutionLogEntry {
 }
 /// Nested message and enum types in `ExecutionLogEntry`.
 pub mod execution_log_entry {
-    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum MessageType {
@@ -30,6 +29,16 @@ pub mod execution_log_entry {
                 MessageType::Ingress => "MESSAGE_TYPE_INGRESS",
                 MessageType::CanisterRequest => "MESSAGE_TYPE_CANISTER_REQUEST",
                 MessageType::CanisterResponse => "MESSAGE_TYPE_CANISTER_RESPONSE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "MESSAGE_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+                "MESSAGE_TYPE_INGRESS" => Some(Self::Ingress),
+                "MESSAGE_TYPE_CANISTER_REQUEST" => Some(Self::CanisterRequest),
+                "MESSAGE_TYPE_CANISTER_RESPONSE" => Some(Self::CanisterResponse),
+                _ => None,
             }
         }
     }

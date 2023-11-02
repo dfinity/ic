@@ -226,7 +226,7 @@ impl Upgrade {
         Ok(Some(subnet_id))
     }
 
-    // Special case for when we are doing boostrap subnet recovery for
+    // Special case for when we are doing bootstrap subnet recovery for
     // nns and replacing the local registry store. Because we replace the
     // contents of the local registry store in the process of doing this, we
     // will not perpetually hit this case, and thus it is not important to
@@ -250,7 +250,7 @@ impl Upgrade {
                     registry_store_uri.uri,
                     registry_store_uri.hash,
                 );
-                let downloader = FileDownloader::new(Some(self.logger.clone()));
+                let downloader = FileDownloader::new(Some(self.logger.clone())).follow_redirects();
                 let local_store_location = tempfile::tempdir()
                     .expect("temporary location for local store download could not be created")
                     .into_path();

@@ -19,9 +19,8 @@ use ic_interfaces::ecdsa::{
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::{ArtifactKind, EcdsaMessageId};
+use ic_types::artifact::{ArtifactKind, EcdsaArtifactId, EcdsaMessageId};
 use ic_types::artifact_kind::EcdsaArtifact;
-use ic_types::consensus::BlockPayload;
 use ic_types::consensus::{
     ecdsa::{
         ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf,
@@ -339,8 +338,8 @@ impl EcdsaPoolImpl {
         let block = catch_up_package.content.block.get_value().clone();
         let mut initial_dealings = None;
         if block.payload.is_summary() {
-            let block_payload = BlockPayload::from(block.payload);
-            if let Some(ecdsa_summary) = block_payload.into_summary().ecdsa {
+            let block_payload = block.payload.as_ref();
+            if let Some(ecdsa_summary) = &block_payload.as_summary().ecdsa {
                 initial_dealings = ecdsa_summary.initial_dkg_dealings();
             }
         }
@@ -384,6 +383,12 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
     fn insert(&mut self, artifact: UnvalidatedArtifact<EcdsaMessage>) {
         let mut ops = EcdsaPoolSectionOps::new();
         ops.insert(artifact.into_inner());
+        self.unvalidated.mutate(ops);
+    }
+
+    fn remove(&mut self, id: &EcdsaArtifactId) {
+        let mut ops = EcdsaPoolSectionOps::new();
+        ops.remove(id.clone());
         self.unvalidated.mutate(ops);
     }
 
@@ -757,7 +762,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_pool_insert() {
+    fn test_ecdsa_pool_insert_remove() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut ecdsa_pool =
@@ -787,7 +792,10 @@ mod tests {
                     msg_id
                 };
 
-                check_state(&ecdsa_pool, &[msg_id_1, msg_id_2], &[]);
+                check_state(&ecdsa_pool, &[msg_id_1.clone(), msg_id_2.clone()], &[]);
+
+                ecdsa_pool.remove(&msg_id_1);
+                check_state(&ecdsa_pool, &[msg_id_2], &[]);
             })
         })
     }

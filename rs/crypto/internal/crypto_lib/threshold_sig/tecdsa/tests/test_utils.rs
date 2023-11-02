@@ -35,15 +35,15 @@ impl ProtocolSetup {
             }
         };
 
-        let mut rng = seed.into_rng();
+        let rng = &mut seed.into_rng();
         let ad = rng.gen::<[u8; 32]>().to_vec();
 
         let mut sk = Vec::with_capacity(receivers);
         let mut pk = Vec::with_capacity(receivers);
 
         for _i in 0..receivers {
-            let k = MEGaPrivateKey::generate(curve, &mut rng);
-            pk.push(k.public_key()?);
+            let k = MEGaPrivateKey::generate(curve, rng);
+            pk.push(k.public_key());
             sk.push(k);
         }
 
@@ -56,7 +56,7 @@ impl ProtocolSetup {
             ad,
             pk,
             sk,
-            seed: Seed::from_rng(&mut rng),
+            seed: Seed::from_rng(rng),
             protocol_round: std::cell::Cell::new(0),
         })
     }
@@ -320,7 +320,7 @@ impl ProtocolRound {
 
                 let coefficients = LagrangeCoefficients::at_zero(curve_type, &indexes)?;
                 let dlog = coefficients.interpolate_scalar(&g_openings)?;
-                let pt = EccPoint::mul_by_g(&dlog)?;
+                let pt = EccPoint::mul_by_g(&dlog);
                 assert_eq!(pt, constant_term);
             }
 
@@ -360,7 +360,7 @@ impl ProtocolRound {
 
         let reconstruction_threshold = setup.threshold.get() as usize;
         let seed = Seed::from_bytes(&transcript.combined_commitment.serialize().unwrap());
-        let mut rng = seed.derive("rng").into_rng();
+        let rng = &mut seed.derive("rng").into_rng();
 
         // Ensure every receiver can open
         for receiver in 0..setup.receivers {
@@ -445,7 +445,7 @@ impl ProtocolRound {
 
                     // drop all but the required # of openings
                     while openings_for_this_dealing.len() > reconstruction_threshold {
-                        let index = *openings_for_this_dealing.keys().choose(&mut rng).unwrap();
+                        let index = *openings_for_this_dealing.keys().choose(rng).unwrap();
                         openings_for_this_dealing.remove(&index);
                     }
 
@@ -521,7 +521,7 @@ impl ProtocolRound {
         assert!(number_of_dealers <= shares.len());
         assert!(number_of_dealings_corrupted <= number_of_dealers);
 
-        let mut rng = &mut seed.into_rng();
+        let rng = &mut seed.into_rng();
 
         let mut dealings = BTreeMap::new();
 
@@ -535,7 +535,7 @@ impl ProtocolRound {
                 setup.threshold,
                 &setup.pk,
                 share,
-                Seed::from_rng(&mut rng),
+                Seed::from_rng(rng),
             )
             .expect("failed to create dealing");
 
@@ -577,7 +577,7 @@ impl ProtocolRound {
                 (0..setup.receivers as NodeIndex).choose_multiple(rng, number_of_corruptions);
 
             let bad_dealing =
-                test_utils::corrupt_dealing(dealing, &corrupted_recip, Seed::from_rng(&mut rng))
+                test_utils::corrupt_dealing(dealing, &corrupted_recip, Seed::from_rng(rng))
                     .unwrap();
 
             // Privately invalid iff we were corrupted
@@ -765,7 +765,7 @@ impl SignatureProtocolExecution {
         random_beacon: Randomness,
         derivation_path: DerivationPath,
     ) -> Self {
-        let hashed_message = ic_crypto_sha::Sha256::hash(&signed_message).to_vec();
+        let hashed_message = ic_crypto_sha2::Sha256::hash(&signed_message).to_vec();
 
         Self {
             setup,

@@ -26,7 +26,7 @@ def load_global_infra_yaml(fin: Path):
     return res
 
 
-def load_gloabl_infra_json(fin: Path):
+def load_global_infra_json(fin: Path):
     return GlobalInfra.fromIcRegeditSnapshotFile(fin)
 
 
@@ -68,7 +68,7 @@ def run_test():
     print("Global Infra Yaml I/O idempotentcy test passed.")
 
     # Test B: Global Infra snapshots from ic-regedit
-    ginfra_4 = load_gloabl_infra_json(IC_REGEDIT_SNAPSHOT)
+    ginfra_4 = load_global_infra_json(IC_REGEDIT_SNAPSHOT)
     dump_global_infra_yaml(ginfra_4, IC_REGEDIT_SNAPSHOT_REPRO)
 
     assert_eq(set(ginfra_4.node_id_to_host_map.keys()), set(ginfra_4.host_addr_to_node_id_map.values()))

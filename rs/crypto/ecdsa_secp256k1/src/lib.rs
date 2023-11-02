@@ -53,7 +53,7 @@ format instead of PKCS #8.
 
 If the RFC 5915 block is destined to be included in a PKCS #8 encoding,
 then we omit the curve parameter, as the curve is instead specified in
-the PKCS #8 privateKeyAlgorithm field. This is controled by the `include_curve`
+the PKCS #8 privateKeyAlgorithm field. This is controlled by the `include_curve`
 parameter.
 
 The public key can be optionally specified in the ECPrivateKey structure;
@@ -316,7 +316,7 @@ impl PrivateKey {
         Some(sig.to_bytes().into())
     }
 
-    /// Return the public key cooresponding to this private key
+    /// Return the public key corresponding to this private key
     pub fn public_key(&self) -> PublicKey {
         let key = self.key.verifying_key();
         PublicKey { key: *key }
@@ -480,5 +480,90 @@ impl PublicKey {
         } else {
             self.key.verify_prehash(digest, &signature).is_ok()
         }
+    }
+
+    /// Determines the [`RecoveryId`] for a given public key, digest and signature.
+    ///
+    /// The recovery cannot fail if the parameters are correct, meaning that
+    /// `signature` corresponds to a signature on the given `digest`
+    /// with the secret key associated with this `PublicKey`.
+    ///
+    /// # Errors
+    /// See [`RecoveryError`] for details.
+    pub fn try_recovery_from_digest(
+        &self,
+        digest: &[u8],
+        signature: &[u8],
+    ) -> Result<RecoveryId, RecoveryError> {
+        let signature = k256::ecdsa::Signature::from_slice(signature)
+            .map_err(|e| RecoveryError::SignatureParseError(e.to_string()))?;
+        k256::ecdsa::RecoveryId::trial_recovery_from_prehash(&self.key, digest, &signature)
+            .map(|recid| RecoveryId { recid })
+            .map_err(|e| RecoveryError::WrongParameters(e.to_string()))
+    }
+}
+
+/// An error indicating that recovering the recovery of the signature y parity bit failed.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum RecoveryError {
+    /// The signature is syntactically invalid and cannot be parsed.
+    SignatureParseError(String),
+    /// Recovery failed which can only happen if parameters are wrong:
+    /// signature was not done on given digest or was done by another key pair.
+    WrongParameters(String),
+}
+
+/// Given an ECDSA signature `(r,s)` and a signed digest, there can be several public
+/// keys that could verify this signature. This is problematic for certain applications (Bitcoin, Ethereum)
+/// where the public key is not transmitted but computed from the signature.
+/// The [`RecoveryId`] determines uniquely which one of those public keys (and corresponding secret key)
+/// was used and is usually transmitted together with the signature.
+///
+/// Note that in secp256k1 there can be at most 4 public keys for a given signature `(r,s)` and message digest `d`.
+/// The public key is determined by the following equation `r⁻¹(𝑠𝑅 − d𝐺)`,
+/// where `R` is a point on the curve and can have 4 possible values
+/// (see [Public Key Recovery Operation](https://www.secg.org/sec1-v2.pdf)):
+/// 1. `(r, y)`
+/// 2. `(r, -y)`
+/// 3. `(r + n, y' )`
+/// 4. `(r + n, -y')`
+/// where `y`, `y'` are computed from the affine x-coordinate together with the curve equation and `n` is the order of the curve.
+/// Note that because the affine coordinates are over `𝔽ₚ`, where `p > n` but `p` and `n` are somewhat close from each other,
+/// the last 2 possibilities often do not exist, see [`RecoveryId::is_x_reduced`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveryId {
+    recid: k256::ecdsa::RecoveryId,
+}
+
+impl RecoveryId {
+    /// True iff the affine y-coordinate of `𝑘×𝑮` odd.
+    pub const fn is_y_odd(&self) -> bool {
+        self.recid.is_y_odd()
+    }
+
+    /// True iff the affine x-coordinate of `𝑘×𝑮` overflows the curve order.
+    ///
+    /// This is `false` with overwhelming probability and some applications like Ethereum completely ignore this bit.
+    /// To see why, recall that in ECDSA the signature starts with choosing a random number `𝑘` in `[1, n-1]` and computing `𝑘×𝑮`
+    /// which is an element of the elliptic curve and whose affine x-coordinate is in `𝔽ₚ`.
+    /// This value is then reduced modulo `n` to get `r` (the first part of the signature),
+    /// which can only happen if the affine x-coordinate of `𝑘×𝑮` is in the interval `[n, p-1]`,
+    /// which contains `p-n` elements.
+    ///
+    /// However, the number of affine x-coordinates in 𝔽ₚ is `(n-1)/2`
+    /// (since every x-coordinate corresponds to 2 symmetric points on the curve which also contains the point at infinity),
+    /// and so the probability that a random affine x-coordinate is in `[n, p-1]`
+    /// is `(p-n)/((n-1)/2) = 2(p-n)/(n-1)`, which with secp256k1 parameters is less than `2⁻¹²⁵`:
+    /// * `p = 0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F > 2²⁵⁵`
+    /// * `n = 0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141 > 2²⁵⁵`
+    /// * `p-n = 432420386565659656852420866390673177326 < 2¹²⁹`
+    /// * `2(p-n)/(n-1) < 2 * 2¹²⁹ * 2⁻²⁵⁵ = 2⁻¹²⁵`
+    pub const fn is_x_reduced(&self) -> bool {
+        self.recid.is_x_reduced()
+    }
+
+    /// Convert this [`RecoveryId`] into a `u8`.
+    pub const fn to_byte(&self) -> u8 {
+        self.recid.to_byte()
     }
 }

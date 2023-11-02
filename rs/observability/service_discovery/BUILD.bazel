@@ -4,9 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/async_utils",
-    "//rs/config",
-    "//rs/http_endpoints/metrics",
-    "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
@@ -26,17 +23,12 @@ DEPENDENCIES = [
     "@crate_index//:crossbeam",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:futures",
-    "@crate_index//:futures-util",
-    "@crate_index//:humantime",
-    "@crate_index//:humantime-serde",
     "@crate_index//:hyper",
     "@crate_index//:prometheus",
     "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
@@ -44,11 +36,9 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:slog_derive",
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/test_utilities",
     "@crate_index//:itertools",
 ]
 

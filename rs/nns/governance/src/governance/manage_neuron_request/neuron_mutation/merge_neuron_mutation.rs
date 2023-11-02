@@ -5,7 +5,7 @@ use crate::{
             saturating_add_or_subtract_u64_i128, GovernanceMutationProxy, GovernanceNeuronMutation,
             NeuronDeltas,
         },
-        neuron_subaccount, subaccount_from_slice,
+        neuron_subaccount,
     },
     pb::v1::{governance_error::ErrorType, GovernanceError},
 };
@@ -34,8 +34,8 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
         &self,
         gov: &GovernanceMutationProxy,
     ) -> Result<BTreeMap<NeuronId, NeuronDeltas>, GovernanceError> {
-        let source_neuron = gov.get_neuron(&self.source_neuron_id)?;
-        let target_neuron = gov.get_neuron(&self.target_neuron_id)?;
+        let source_neuron = gov.with_neuron(&self.source_neuron_id, |n| n.clone())?;
+        let target_neuron = gov.with_neuron(&self.target_neuron_id, |n| n.clone())?;
 
         let transaction_fees_e8s = gov.transaction_fee();
 
@@ -163,73 +163,65 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
 
         if source_stake_less_transaction_fee_e8s > 0 {
             let transaction_fee_e8s = gov.transaction_fee();
-            let target_neuron = gov.get_neuron(&self.target_neuron_id)?;
-            let to_subaccount =
-                subaccount_from_slice(&target_neuron.account)?.ok_or_else(|| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidCommand,
-                        "Subaccount of target neuron is not valid",
-                    )
-                })?;
-            let source_neuron_mut = gov.get_neuron_mut(&self.source_neuron_id)?;
+            let to_subaccount = gov.with_neuron(&self.target_neuron_id, |target_neuron| {
+                target_neuron.subaccount()
+            })??;
 
-            let from_subaccount =
-                subaccount_from_slice(&source_neuron_mut.account)?.ok_or_else(|| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidCommand,
-                        "Subaccount of source neuron is not valid",
-                    )
-                })?;
+            let from_subaccount = gov.with_neuron(&self.source_neuron_id, |source_neuron| {
+                source_neuron.subaccount()
+            })??;
 
             let original_delta_cached_neuron_stake_e8s = source_delta.cached_neuron_stake_e8s;
             let original_delta_aging_since_timestamp_seconds =
                 source_delta.aging_since_timestamp_seconds;
 
-            let source_delta_mut = deltas.get_mut(&self.source_neuron_id).unwrap();
+            gov.with_neuron_mut(&self.source_neuron_id, |source_neuron_mut| {
+                let source_delta_mut = deltas.get_mut(&self.source_neuron_id).unwrap();
 
-            // We must zero out the source neuron's cached stake before
-            // submitting the call to transfer_funds. If we do not do this,
-            // there would be a window of opportunity -- from the moment the
-            // stake is transferred but before the cached stake is updated --
-            // when a proposal could be submitted and rejected on behalf of
-            // the source neuron (since cached stake is high enough), but that
-            // would be impossible to charge because the account had been
-            // emptied. To guard against this, we preemptively set the stake
-            // to zero, and set it back in case of transfer failure.
-            //
-            // Another important reason to set the cached stake to zero (net
-            // fees) is so that the source neuron cannot use the stake that is
-            // getting merged to vote or propose. Also, the source neuron
-            // should not be able to increase stake while locked because we do
-            // not allow the source to have pending proposals.
-            source_neuron_mut.cached_neuron_stake_e8s = saturating_add_or_subtract_u64_i128(
-                source_neuron_mut.cached_neuron_stake_e8s,
-                source_delta_mut.cached_neuron_stake_e8s,
-            );
-            // Record that the delta was partially applied
-            source_delta_mut.cached_neuron_stake_e8s = 0;
-
-            // Reset source aging. In other words, if it was aging before, it
-            // is still aging now, although the timer is reset to the time of
-            // the merge -- but only if there is stake being transferred.
-            // Since all fees have been burned (if they were greater in value
-            // than the transaction fee) and since this neuron is not
-            // currently participating in any proposal, it means the cached
-            // stake is 0 and increasing the stake will not take advantage of
-            // this age. However, it is consistent with the use of
-            // aging_since_timestamp_seconds that we simply reset the age
-            // here, since we do not change the dissolve state in any other
-            // way.
-            // let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
-            if source_neuron_mut.aging_since_timestamp_seconds != u64::MAX {
-                source_neuron_mut.aging_since_timestamp_seconds =
-                    saturating_add_or_subtract_u64_i128(
-                        source_neuron_mut.aging_since_timestamp_seconds,
-                        source_delta_mut.aging_since_timestamp_seconds,
-                    );
+                // We must zero out the source neuron's cached stake before
+                // submitting the call to transfer_funds. If we do not do this,
+                // there would be a window of opportunity -- from the moment the
+                // stake is transferred but before the cached stake is updated --
+                // when a proposal could be submitted and rejected on behalf of
+                // the source neuron (since cached stake is high enough), but that
+                // would be impossible to charge because the account had been
+                // emptied. To guard against this, we preemptively set the stake
+                // to zero, and set it back in case of transfer failure.
+                //
+                // Another important reason to set the cached stake to zero (net
+                // fees) is so that the source neuron cannot use the stake that is
+                // getting merged to vote or propose. Also, the source neuron
+                // should not be able to increase stake while locked because we do
+                // not allow the source to have pending proposals.
+                source_neuron_mut.cached_neuron_stake_e8s = saturating_add_or_subtract_u64_i128(
+                    source_neuron_mut.cached_neuron_stake_e8s,
+                    source_delta_mut.cached_neuron_stake_e8s,
+                );
                 // Record that the delta was partially applied
-                source_delta_mut.aging_since_timestamp_seconds = 0;
-            }
+                source_delta_mut.cached_neuron_stake_e8s = 0;
+
+                // Reset source aging. In other words, if it was aging before, it
+                // is still aging now, although the timer is reset to the time of
+                // the merge -- but only if there is stake being transferred.
+                // Since all fees have been burned (if they were greater in value
+                // than the transaction fee) and since this neuron is not
+                // currently participating in any proposal, it means the cached
+                // stake is 0 and increasing the stake will not take advantage of
+                // this age. However, it is consistent with the use of
+                // aging_since_timestamp_seconds that we simply reset the age
+                // here, since we do not change the dissolve state in any other
+                // way.
+                // let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
+                if source_neuron_mut.aging_since_timestamp_seconds != u64::MAX {
+                    source_neuron_mut.aging_since_timestamp_seconds =
+                        saturating_add_or_subtract_u64_i128(
+                            source_neuron_mut.aging_since_timestamp_seconds,
+                            source_delta_mut.aging_since_timestamp_seconds,
+                        );
+                    // Record that the delta was partially applied
+                    source_delta_mut.aging_since_timestamp_seconds = 0;
+                }
+            })?;
 
             let _block_height: u64 = gov
                 .ledger
@@ -242,20 +234,22 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
                 )
                 .await
                 .map_err(|err| {
-                    let source_neuron_mut = gov
-                        .get_neuron_mut(&self.source_neuron_id)
-                        .expect("Expected the source neuron to exist");
-                    // Rollback changes (apply negative deltas)
-                    source_neuron_mut.cached_neuron_stake_e8s = saturating_add_or_subtract_u64_i128(
-                        source_neuron_mut.cached_neuron_stake_e8s,
-                        original_delta_cached_neuron_stake_e8s.saturating_neg(),
-                    );
-                    source_neuron_mut.aging_since_timestamp_seconds =
-                        saturating_add_or_subtract_u64_i128(
-                            source_neuron_mut.aging_since_timestamp_seconds,
-                            original_delta_aging_since_timestamp_seconds.saturating_neg(),
-                        );
+                    gov.with_neuron_mut(&self.source_neuron_id, |source_neuron_mut| {
+                        // Rollback changes (apply negative deltas)
+                        source_neuron_mut.cached_neuron_stake_e8s =
+                            saturating_add_or_subtract_u64_i128(
+                                source_neuron_mut.cached_neuron_stake_e8s,
+                                original_delta_cached_neuron_stake_e8s.saturating_neg(),
+                            );
+                        source_neuron_mut.aging_since_timestamp_seconds =
+                            saturating_add_or_subtract_u64_i128(
+                                source_neuron_mut.aging_since_timestamp_seconds,
+                                original_delta_aging_since_timestamp_seconds.saturating_neg(),
+                            );
+                    })
+                    .expect("Expected the source neuron to exist");
 
+                    let source_delta_mut = deltas.get_mut(&self.source_neuron_id).unwrap();
                     // Restore the delta state of changes to be applied
                     source_delta_mut.cached_neuron_stake_e8s =
                         original_delta_cached_neuron_stake_e8s;

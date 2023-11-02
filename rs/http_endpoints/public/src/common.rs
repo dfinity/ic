@@ -8,9 +8,9 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::CanisterId;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, RegistryVersion, SubnetId,
+    crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, PrincipalId,
+    RegistryVersion, SubnetId,
 };
 use ic_validator::RequestValidationError;
 use serde::Serialize;
@@ -204,7 +204,7 @@ pub(crate) async fn get_latest_certified_state(
         Err(TooLongPathError {}) => panic!("bug: failed to convert path to LabeledTree"),
     };
     state_reader_executor
-        .read_certified_state(&labeled_tree)
+        .read_certified_state(labeled_tree)
         .await
         .ok()?
         .map(|r| r.0)
@@ -213,14 +213,14 @@ pub(crate) async fn get_latest_certified_state(
 /// Remove the effective canister id from the request parts.
 /// The effective canister id is added to the request during routing by looking at the url.
 /// Returns an BAD_REQUEST response if the effective canister id is not found in the request parts.
-pub(crate) fn remove_effective_canister_id(
+pub(crate) fn remove_effective_principal_id(
     parts: &mut Parts,
-) -> Result<CanisterId, Response<Body>> {
-    match parts.extensions.remove::<CanisterId>() {
-        Some(canister_id) => Ok(canister_id),
+) -> Result<PrincipalId, Response<Body>> {
+    match parts.extensions.remove::<PrincipalId>() {
+        Some(principal_id) => Ok(principal_id),
         _ => Err(make_plaintext_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to get effective canister id from request. This is a bug.".to_string(),
+            "Failed to get effective principal id from request. This is a bug.".to_string(),
         )),
     }
 }

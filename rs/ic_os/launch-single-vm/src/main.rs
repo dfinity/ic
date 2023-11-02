@@ -109,14 +109,9 @@ fn main() {
     let nodes = BTreeMap::from([(
         0,
         NodeConfiguration {
-            xnet_api: SocketAddr::new(ipv6_addr, 2497).into(),
-            public_api: SocketAddr::new(ipv6_addr, 8080).into(),
-            p2p_addr: format!(
-                "org.internetcomputer.p2p1://{}",
-                SocketAddr::new(ipv6_addr, 4100)
-            )
-            .parse()
-            .unwrap(),
+            xnet_api: SocketAddr::new(ipv6_addr, 2497),
+            public_api: SocketAddr::new(ipv6_addr, 8080),
+            p2p_addr: SocketAddr::new(ipv6_addr, 4100),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: vec![],
@@ -181,7 +176,7 @@ fn main() {
     // Upload config image
     let image_id = farm.upload_file(&config_path, filename).unwrap();
 
-    // Attatch image
+    // Attach image
     farm.attach_disk_images(&group_name, vm_name, "usb-storage", vec![image_id])
         .unwrap();
 
@@ -216,6 +211,7 @@ fn subnet_to_subnet_config(
         subnet.max_number_of_canisters,
         subnet.ssh_readonly_access,
         subnet.ssh_backup_access,
+        subnet.running_state,
     )
 }
 

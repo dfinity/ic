@@ -1,25 +1,24 @@
-use std::{
-    net::{IpAddr, SocketAddr},
-    str::FromStr,
-    sync::Arc,
-    time::Instant,
-};
-
-use anyhow::{Context, Error};
-use arc_swap::{access::Access, ArcSwapOption};
 use async_trait::async_trait;
-use axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig};
-use ic_registry_client::client::RegistryClient;
-use tokio::sync::Mutex;
+use std::time::Instant;
 use tracing::info;
+
+#[cfg(feature = "tls")]
+use {
+    anyhow::Context,
+    arc_swap::ArcSwapOption,
+    axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig},
+    std::sync::Arc,
+};
 
 use crate::{
     firewall::Rule,
     metrics::{MetricParams, WithMetrics},
-    tls::{self, Provision},
-    Run,
 };
 
+#[cfg(feature = "tls")]
+use crate::tls::{self, Provision};
+
+#[allow(dead_code)] // TODO: remove when Firewall() is used.
 #[derive(Clone, PartialEq)]
 pub enum ServiceConfiguration {
     Tls(String),
@@ -28,6 +27,7 @@ pub enum ServiceConfiguration {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigureError {
+    #[cfg(feature = "tls")]
     #[error(transparent)]
     ProvisionError(#[from] tls::ProvisionError),
 
@@ -50,7 +50,14 @@ impl<T: Configure> Configure for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let MetricParams { action } = &self.1;
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -94,11 +101,13 @@ impl Configure for Configurator {
     }
 }
 
+#[cfg(feature = "tls")]
 pub struct TlsConfigurator {
     acceptor: Arc<ArcSwapOption<RustlsAcceptor>>,
     provisioner: Box<dyn Provision>,
 }
 
+#[cfg(feature = "tls")]
 impl TlsConfigurator {
     pub fn new(
         acceptor: Arc<ArcSwapOption<RustlsAcceptor>>,
@@ -111,6 +120,7 @@ impl TlsConfigurator {
     }
 }
 
+#[cfg(feature = "tls")]
 #[async_trait]
 impl Configure for TlsConfigurator {
     async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
@@ -130,6 +140,18 @@ impl Configure for TlsConfigurator {
             self.acceptor.store(acceptor);
         }
 
+        Ok(())
+    }
+}
+
+// No-op configurator when the feature is off
+#[cfg(not(feature = "tls"))]
+pub struct TlsConfigurator {}
+
+#[cfg(not(feature = "tls"))]
+#[async_trait]
+impl Configure for TlsConfigurator {
+    async fn configure(&mut self, _cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
         Ok(())
     }
 }

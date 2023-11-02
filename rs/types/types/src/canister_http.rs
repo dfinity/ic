@@ -3,7 +3,7 @@
 //! The lifecycle of a request looks as follows:
 //!
 //! 1a. When a canister makes a http request, the [`CanisterHttpRequestContext`] is stored in the state.
-//! The canister http pool manager (which is a thread that continously checks for requests)
+//! The canister http pool manager (which is a thread that continuously checks for requests)
 //! will take the request and pass it to the network layer to make the actual request.
 //!
 //! 1b. The response may be passed to a transform function, which can make arbitrary changes to the response.
@@ -15,7 +15,7 @@
 //!
 //! 2. Now we need to get consensus of the content. Since the actual [`CanisterHttpResponseContent`] could be large and we
 //! require n-to-n communication, we will turn the content into a much smaller [`CanisterHttpResponseMetadata`] object,
-//! that contains all the the important information (such as the response hash) required to archieve consensus.
+//! that contains all the the important information (such as the response hash) required to achieve consensus.
 //!
 //! 3a. We sign the metadata to get the [`CanisterHttpResponseShare`] and store it in the pool.
 //!
@@ -33,7 +33,7 @@
 //! The blockmaker compiles a [`CanisterHttpResponseDivergence`] proof and includes it in it's payload.
 //! Once the proof has made it into a finalized block, the request is answered with an error message.
 //!
-//! Early detection of non-determinsitic server responses is not guaranteed to work if malicious nodes are present,
+//! Early detection of non-deterministic server responses is not guaranteed to work if malicious nodes are present,
 //! which sign multiple different responses for the same request.
 //! In that case, the non-determisitic server responses will time out using the timeout mechanism (see 4c).
 //!
@@ -49,6 +49,8 @@ use crate::{
 };
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -301,7 +303,10 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
         }
 
         let request_body = args.body;
-        validate_http_headers_and_body(&args.headers, request_body.as_ref().unwrap_or(&vec![]))?;
+        validate_http_headers_and_body(
+            args.headers.get(),
+            request_body.as_ref().unwrap_or(&vec![]),
+        )?;
 
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
@@ -309,6 +314,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             max_response_bytes,
             headers: args
                 .headers
+                .get()
                 .clone()
                 .into_iter()
                 .map(|h| CanisterHttpHeader {
@@ -450,6 +456,7 @@ pub struct CanisterHttpRequest {
 
 /// The content of a response after the transformation
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
     pub timeout: Time,
@@ -465,6 +472,7 @@ impl CountBytes for CanisterHttpResponse {
 
 /// Content of a [`CanisterHttpResponse`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CanisterHttpResponseContent {
     /// In the case of a success, this will be the data returned by the server.
     Success(Vec<u8>),
@@ -485,6 +493,7 @@ impl CountBytes for CanisterHttpResponseContent {
 /// If a [`CanisterHttpRequest`] is rejected, the [`CanisterHttpReject`] provides additional
 /// information about the rejection.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpReject {
     /// The [`RejectCode`] of the request
     pub reject_code: RejectCode,
@@ -494,7 +503,7 @@ pub struct CanisterHttpReject {
 
 impl From<&CanisterHttpReject> for RejectContext {
     fn from(value: &CanisterHttpReject) -> RejectContext {
-        RejectContext::new(value.reject_code, value.message.clone())
+        RejectContext::new(value.reject_code, &value.message)
     }
 }
 
@@ -547,6 +556,7 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
 
 /// A proof that the replicas have reached consensus on some [`CanisterHttpResponseContent`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
@@ -563,6 +573,7 @@ impl CountBytes for CanisterHttpResponseWithConsensus {
 /// This can be used as a proof that consensus can not be reached for this call
 /// as sufficiently many nodes have seen divergent content.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseDivergence {
     pub shares: Vec<CanisterHttpResponseShare>,
 }
@@ -575,6 +586,7 @@ impl CountBytes for CanisterHttpResponseDivergence {
 
 /// Metadata about some [`CanisterHttpResponseContent`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
     pub timeout: Time,
@@ -660,6 +672,7 @@ mod tests {
                 payment: Cycles::new(10),
                 method_name: "tansform".to_string(),
                 method_payload: Vec::new(),
+                metadata: None,
             },
             time: UNIX_EPOCH,
         };
@@ -700,6 +713,7 @@ mod tests {
                 payment: Cycles::new(10),
                 method_name: "tansform".to_string(),
                 method_payload: Vec::new(),
+                metadata: None,
             },
             time: UNIX_EPOCH,
         };

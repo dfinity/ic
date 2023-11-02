@@ -102,6 +102,7 @@ impl NodeRegistration {
         .unwrap()
         {
             warn!(self.log, "Node keys are not setup: {:?}", e);
+            UtilityCommand::notify_host(format!("Node keys are not setup: {:?}", e).as_str(), 1);
             self.retry_register_node().await;
         }
         // postcondition: node keys are registered
@@ -129,11 +130,27 @@ impl NodeRegistration {
                         )
                         .await
                     {
-                        warn!(self.log, "Registration request failed: {:?}", e);
+                        warn!(self.log, "Registration request failed: {}", e);
+                        UtilityCommand::notify_host(
+                            format!(
+                                "node-id {}: Registration request failed: {}",
+                                self.node_id, e
+                            )
+                            .as_str(),
+                            1,
+                        );
                     };
                 }
                 Err(e) => {
-                    warn!(self.log, "Failed to create the message signer: {:?}", e);
+                    warn!(self.log, "Failed to create the message signer: {}", e);
+                    UtilityCommand::notify_host(
+                        format!(
+                            "node-id {}: Failed to create the message signer: {}",
+                            self.node_id, e
+                        )
+                        .as_str(),
+                        1,
+                    );
                 }
             };
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -141,11 +158,11 @@ impl NodeRegistration {
 
         UtilityCommand::notify_host(
             format!(
-                "Join request successful! The node has successfully joined the Internet Computer, and the node onboarding is now complete.\nNode id: {}\nVerify that the node has successfully onboarded by checking its status on the Internet Computer dashboard.",
+                "node-id {}:\nJoin request successful! The node has successfully joined the Internet Computer, and the node onboarding is now complete.\nVerify that the node has successfully onboarded by checking its status on the Internet Computer dashboard.",
                 self.node_id
             )
             .as_str(),
-            20,
+            10,
         );
     }
 
@@ -176,16 +193,8 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            p2p_flow_endpoints: transport_config_to_endpoints(
-                &self.log,
-                &self.node_config.transport,
-            )
-            .expect("Invalid endpoints in transport config."),
-            prometheus_metrics_endpoint: metrics_config_to_endpoint(
-                &self.log,
-                &self.node_config.metrics,
-            )
-            .expect("Invalid endpoints in metrics config."),
+            p2p_flow_endpoints: vec![],
+            prometheus_metrics_endpoint: "".to_string(),
         }
     }
 
@@ -216,6 +225,10 @@ impl NodeRegistration {
         {
             self.metrics.observe_key_rotation_error();
             warn!(self.log, "Failed to check keys with registry: {e:?}");
+            UtilityCommand::notify_host(
+                format!("Failed to check keys with registry: {:?}", e).as_str(),
+                1,
+            );
         }
 
         if !self.is_time_to_rotate(registry_version, subnet_id, delta) {
@@ -246,6 +259,7 @@ impl NodeRegistration {
             Err(e) => {
                 self.metrics.observe_key_rotation_error();
                 warn!(self.log, "Key rotation error: {e:?}");
+                UtilityCommand::notify_host(format!("Key rotation error: {:?}", e).as_str(), 1);
             }
         }
     }
@@ -388,13 +402,14 @@ impl NodeRegistration {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
 
+        let arguments =
+            Encode!(&update_node_payload).expect("Could not encode payload for update_node-call.");
         agent
             .execute_update(
                 &REGISTRY_CANISTER_ID,
                 &REGISTRY_CANISTER_ID,
                 "update_node_directly",
-                Encode!(&update_node_payload)
-                    .expect("Could not encode payload for update_node-call."),
+                arguments,
                 generate_nonce(),
             )
             .await
@@ -438,11 +453,11 @@ impl NodeRegistration {
 
         let t_infos = match self
             .registry_client
-            .get_subnet_transport_infos(root_subnet_id, version)
+            .get_subnet_node_records(root_subnet_id, version)
         {
             Ok(Some(infos)) => infos,
             err => {
-                warn!(self.log, "Failed to get transport infos: {:?}", err);
+                warn!(self.log, "failed to get node records: {:?}", err);
                 return None;
             }
         };

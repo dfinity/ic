@@ -10,11 +10,17 @@ pub const DEFAULT_MAX_BLOCKS_PER_RESPONSE: u64 = 2000;
 #[derive(CandidType, Debug, Deserialize)]
 pub enum IndexArg {
     Init(InitArg),
+    Upgrade(UpgradeArg),
 }
 
 #[derive(CandidType, Debug, Deserialize)]
 pub struct InitArg {
     pub ledger_id: Principal,
+}
+
+#[derive(CandidType, Debug, Deserialize)]
+pub struct UpgradeArg {
+    pub ledger_id: Option<Principal>,
 }
 
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
@@ -78,4 +84,17 @@ pub struct Status {
 #[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct FeeCollectorRanges {
     pub ranges: Vec<(Account, Vec<(BlockIndex, BlockIndex)>)>,
+}
+
+#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+pub struct LogEntry {
+    pub timestamp: u64,
+    pub file: String,
+    pub line: u32,
+    pub message: String,
+}
+
+#[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]
+pub struct Log {
+    pub entries: Vec<LogEntry>,
 }

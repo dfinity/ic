@@ -3,7 +3,7 @@
 
 use crate::address::BitcoinAddress;
 use crate::signature::EncodedSignature;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use serde_bytes::{ByteBuf, Bytes};
 use std::fmt;
 
@@ -220,7 +220,7 @@ pub struct TxOut {
 }
 
 /// Encodes the scriptPubkey required to unlock an output for the specified address.
-pub fn encode_address_scipt_pubkey(btc_address: &BitcoinAddress, buf: &mut impl Buffer) {
+pub fn encode_address_script_pubkey(btc_address: &BitcoinAddress, buf: &mut impl Buffer) {
     match btc_address {
         BitcoinAddress::P2wpkhV0(pkhash) => encode_p2wpkh_script_pubkey(pkhash, buf),
         BitcoinAddress::P2wshV0(pkhash) => encode_p2wsh_script(pkhash, buf),
@@ -512,7 +512,7 @@ impl Encode for SignedInput {
 impl Encode for TxOut {
     fn encode(&self, buf: &mut impl Buffer) {
         self.value.encode(buf);
-        encode_address_scipt_pubkey(&self.address, buf);
+        encode_address_script_pubkey(&self.address, buf);
     }
 }
 

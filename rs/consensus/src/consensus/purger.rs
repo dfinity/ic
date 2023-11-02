@@ -83,7 +83,7 @@ impl Purger {
 
         // During normal operation we need to purge when the finalized tip increases.
         // However, when a number of nodes just restarted and are recomputing the state until
-        // the certified height, we also want to purge when the lastest state height increases,
+        // the certified height, we also want to purge when the latest state height increases,
         // otherwise we might not purge all the recomputed states until the nodes have caught up.
         if certified_height_increased || latest_state_height_increased {
             self.purge_replicated_state_by_finalized_certified_height(pool);

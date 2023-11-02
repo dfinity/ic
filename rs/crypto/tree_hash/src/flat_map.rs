@@ -81,19 +81,19 @@ impl<K: Ord, V> FlatMap<K, V> {
 
     /// Constructs a map from a list of (key, value) pairs.
     ///
-    /// Entries doesn't have to be sorted. Any duplicates will be removed, it's
+    /// Entries don't have to be sorted. Any duplicates will be removed, it's
     /// not specified which duplicate is removed.
     ///
     /// Complexity: O(log(N)×N)
     pub fn from_key_values(mut kv: Vec<(K, V)>) -> Self {
-        kv.sort_by(|l, r| l.0.cmp(&r.0));
-        let mut m = Self::with_capacity(kv.len());
-        for (k, v) in kv {
-            if Some(&k) > m.last_key() {
-                let _ = m.try_append(k, v);
-            }
+        if kv.windows(2).any(|w| w[0].0 >= w[1].0) {
+            kv.sort_unstable_by(|l, r| l.0.cmp(&r.0));
+            kv.dedup_by(|l, r| l.0 == r.0);
         }
-        m
+
+        let (keys, values) = kv.into_iter().unzip();
+
+        Self { keys, values }
     }
 
     /// Searches a value by key.

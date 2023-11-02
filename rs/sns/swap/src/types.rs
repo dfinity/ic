@@ -406,7 +406,7 @@ impl Init {
     /// - `self.is_swap_init_for_single_proposal()`
     pub fn mk_open_sns_request(&self) -> OpenRequest {
         assert!(
-            self.is_swap_init_for_single_proposal(),
+            self.is_swap_init_for_one_proposal_flow(),
             "cannot make an `OpenRequest` instance from a legacy `SnsInitPayload`"
         );
         let params = Params {
@@ -446,7 +446,7 @@ impl Init {
     /// Indicates whether this swap `Init` payload matches the new structure,
     /// i.e., all of its swap-opening fields (see `swap_opening_field_states`)
     /// are **set**.
-    pub fn is_swap_init_for_single_proposal(&self) -> bool {
+    pub fn is_swap_init_for_one_proposal_flow(&self) -> bool {
         self.swap_opening_field_states(None)
             .values()
             .all(|x| x.is_some())
@@ -494,7 +494,7 @@ impl Init {
         // TODO[NNS1-2362] Re-validate also the fields that were filled out by
         // TODO[NNS1-2362] trusted code.
 
-        if !self.is_swap_init_for_legacy() && !self.is_swap_init_for_single_proposal() {
+        if !self.is_swap_init_for_legacy() && !self.is_swap_init_for_one_proposal_flow() {
             return Err(
                 "fields listed in `swap_opening_field_states` must either all be set (for 1-proposal) or all be unset (legacy).".to_string()
             );
@@ -615,9 +615,9 @@ impl Params {
             .as_ref()
             .expect("Expected neuron_basket_construction_parameters to be set");
 
-        if neuron_basket.count == 0 {
+        if neuron_basket.count < 2 {
             return Err(format!(
-                "neuron_basket_construction_parameters.count ({}) must be > 0",
+                "neuron_basket_construction_parameters.count ({}) must be >= 2",
                 neuron_basket.count,
             ));
         }
@@ -901,7 +901,7 @@ impl CfNeuron {
 }
 
 impl Lifecycle {
-    pub fn is_terminal(&self) -> bool {
+    pub fn is_terminal(self) -> bool {
         match self {
             Self::Committed | Self::Aborted => true,
 
@@ -910,6 +910,40 @@ impl Lifecycle {
                 log!(ERROR, "A wild Lifecycle::Unspecified appeared.",);
                 false
             }
+        }
+    }
+
+    pub fn is_before_open(self) -> bool {
+        match self {
+            Self::Pending | Self::Adopted => true,
+
+            // Everything else is false. We list everything explicitly so that
+            // if more states are added, the compiler will force us to
+            // re-examine this, and make appropriate changes.
+
+            // Because this is ==.
+            Self::Open => false,
+            // Because these are after.
+            Self::Committed | Self::Aborted => false,
+            // Because this is neither before nor after.
+            Self::Unspecified => false,
+        }
+    }
+
+    pub fn is_after_open(self) -> bool {
+        match self {
+            Self::Committed | Self::Aborted => true,
+
+            // Everything else is false. We list everything explicitly so that
+            // if more states are added, the compiler will force us to
+            // re-examine this, and make appropriate changes.
+
+            // Because these are before.
+            Self::Pending | Self::Adopted => false,
+            // Because this is ==.
+            Self::Open => false,
+            // Because this is neither before nor after.
+            Self::Unspecified => false,
         }
     }
 }
@@ -1131,6 +1165,7 @@ impl TryInto<NeuronId> for SaleNeuronId {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         pb::v1::{
             CfNeuron, CfParticipant, Init, ListDirectParticipantsResponse,
@@ -1243,6 +1278,42 @@ mod tests {
         };
 
         assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
+    }
+
+    #[test]
+    fn open_request_reject_one_neuron_in_basket() {
+        let request_fail = OpenRequest {
+            params: Some(Params {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 1, // 1 should be too little
+                    dissolve_delay_interval_seconds: 7890000,
+                }),
+                ..PARAMS.clone()
+            }),
+            ..OPEN_REQUEST.clone()
+        };
+
+        let request_success = OpenRequest {
+            params: Some(Params {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 2, // 2 should be enough
+                    dissolve_delay_interval_seconds: 7890000,
+                }),
+                ..PARAMS.clone()
+            }),
+            ..OPEN_REQUEST.clone()
+        };
+
+        let error = request_fail
+            .validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT)
+            .unwrap_err();
+        assert_eq!(
+            error,
+            "neuron_basket_construction_parameters.count (1) must be >= 2".to_string()
+        );
+        request_success
+            .validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT)
+            .unwrap();
     }
 
     #[test]
@@ -1498,7 +1569,7 @@ mod tests {
                 ..Default::default()
             };
             assert!(
-                !incorrect_init.is_swap_init_for_single_proposal()
+                !incorrect_init.is_swap_init_for_one_proposal_flow()
                     && !incorrect_init.is_swap_init_for_legacy()
             );
         }
@@ -1523,7 +1594,7 @@ mod tests {
         };
         // There exists some `SnsInitPayload` that is suitable for the new
         // single-proposal flow.
-        assert!(init.is_swap_init_for_single_proposal());
+        assert!(init.is_swap_init_for_one_proposal_flow());
 
         let neurons_fund_participant_a = CfParticipant {
             hotkey_principal: "HotKeyA".to_string(),
@@ -1609,5 +1680,28 @@ mod tests {
             .swap_opening_field_states(Some(&open_request))
             .values()
             .any(|x| x.map(|y| y.is_contradiction()).unwrap_or(false)));
+    }
+
+    #[test]
+    fn test_life_cycle_order_methods() {
+        use Lifecycle::{Aborted, Adopted, Committed, Open, Pending, Unspecified};
+
+        let before_open = [Pending, Adopted];
+        let after_open = [Committed, Aborted];
+
+        for lifecycle in before_open {
+            assert!(lifecycle.is_before_open(), "{:?}", lifecycle);
+            assert!(!lifecycle.is_after_open(), "{:?}", lifecycle);
+        }
+
+        for lifecycle in after_open {
+            assert!(lifecycle.is_after_open(), "{:?}", lifecycle);
+            assert!(!lifecycle.is_before_open(), "{:?}", lifecycle);
+        }
+
+        assert!(!Open.is_before_open());
+        assert!(!Open.is_after_open());
+        assert!(!Unspecified.is_before_open());
+        assert!(!Unspecified.is_after_open());
     }
 }

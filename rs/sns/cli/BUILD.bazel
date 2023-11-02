@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/humanize",
@@ -12,25 +12,16 @@ BASE_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/test_utils",
-    "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/on_wire",
     "//rs/sns/root",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:json-patch",
-    "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
     "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -59,7 +50,9 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 
 MACRO_DEPENDENCIES = []
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "@crate_index//:lazy_static",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 
@@ -70,7 +63,7 @@ rust_library(
     srcs = glob(
         ["src/**/*.rs"],
         exclude = [
-            "src/**/*_tests.rs",
+            "**/*tests.rs",
             "main.rs",
         ],
     ),
@@ -85,7 +78,10 @@ rust_library(
     name = "cli--test_feature",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/**/*_tests.rs"],
+        exclude = [
+            "**/*tests.rs",
+            "main.rs",
+        ],
     ),
     aliases = ALIASES,
     crate_features = ["test"],
@@ -97,10 +93,7 @@ rust_library(
 
 rust_binary(
     name = "sns",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["src/**/*_tests.rs"],
-    ),
+    srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.0",
@@ -109,10 +102,7 @@ rust_binary(
 
 rust_binary(
     name = "sns--test_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["src/**/*_tests.rs"],
-    ),
+    srcs = ["src/main.rs"],
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "sns",
@@ -123,7 +113,10 @@ rust_binary(
 
 rust_test(
     name = "sns_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
     aliases = ALIASES,
     args = [
         # This is needed because one of the tests changes directory (namely,
@@ -135,8 +128,9 @@ rust_test(
     ],
     crate_root = "src/lib.rs",
     data = [
-        "example_sns_init_v2.yaml",
         "test.png",
+        "test_sns_init_v1.yaml",
+        "test_sns_init_v2.yaml",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/cli",

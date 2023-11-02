@@ -29,6 +29,14 @@ pub enum CertificationVersion {
     V10 = 10,
     /// Producing `error_code` field in `request_status` subtree.
     V11 = 11,
+    /// Added `/subnet/<own_subnet_id>/node` subtree, with node public keys.
+    V12 = 12,
+    /// Dropped `/canister/<canister_id>/controller`.
+    V13 = 13,
+    /// Define optional `Request::metadata` field.
+    V14 = 14,
+    /// Added subnet metrics in `subnet` subtree.
+    V15 = 15,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -61,13 +69,13 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V11;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V15;
 
 /// Maximum supported certification version.
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V11;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V15;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {

@@ -2,12 +2,11 @@
 
 use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
-use ic_onchain_observability_server::spawn_onchain_observability_grpc_server_and_register_metrics;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_types::consensus::CatchUpPackage;
@@ -82,27 +81,47 @@ fn main() -> io::Result<()> {
     #[cfg(feature = "profiler")]
     let guard = pprof::ProfilerGuard::new(100).unwrap();
 
-    // We create 3 separate Tokio runtimes. The main one is for the most important
-    // IC operations (e.g. transport). Then the `http` is for serving user requests.
-    // This is also crucial because IC upgrades go through this code path.
-    // The 3rd one is for XNet.
-    // In a bug-free system with quotas in place we would use just a single runtime.
-    // We do have 3 currently as risk management measure. We don't want to risk
+    // We create 4 separate Tokio runtimes. The main one is for the most important
+    // IC operations (crypto).
+
+    // In a bug-free system with we would use just a single runtime.
+    // We do have 4 currently as risk management measure. We don't want to risk
     // a potential bug (e.g. blocking some thread) in one component to yield the
     // Tokio scheduler irresponsive and block progress on other components.
-    let rt_main = tokio::runtime::Runtime::new().unwrap();
+
+    // Until NET-1559 is not resolved there must be separate runtimes for the different compoenents as risk mitigation.
+
+    // Async components usually spend most of their time awaiting for I/O operations.
+    // Ideally async components are not CPU intensive so they should not need many OS threads.
+    let rt_worker_threads = std::cmp::max(num_cpus::get() / 4, 2);
+
+    // The runtime is use for inter process communication - crypto, networking adapters, etc.
+    let rt_main = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(rt_worker_threads)
+        .thread_name("Main_Thread".to_string())
+        .enable_all()
+        .build()
+        .unwrap();
+
+    // The runtime is used for P2P.
+    let rt_p2p = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(rt_worker_threads)
+        .thread_name("P2P_Thread".to_string())
+        .enable_all()
+        .build()
+        .unwrap();
+
     // Runtime used for serving user requests.
-    let http_rt_worker_threads = std::cmp::max(num_cpus::get() / 2, 1);
     let rt_http = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(http_rt_worker_threads)
+        .worker_threads(rt_worker_threads)
         .thread_name("HTTP_Thread".to_string())
         .enable_all()
         .build()
         .unwrap();
 
-    let xnet_rt_worker_threads = std::cmp::max(num_cpus::get() / 4, 1);
+    // Runtime used for XNet.
     let rt_xnet = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(xnet_rt_worker_threads)
+        .worker_threads(rt_worker_threads)
         .thread_name("XNet_Thread".to_string())
         .enable_all()
         .build()
@@ -163,7 +182,7 @@ fn main() -> io::Result<()> {
         .as_ref()
         .map(|c| CatchUpPackage::try_from(c).expect("deserializing CUP failed"));
 
-    // Set the replica verison and report as metric
+    // Set the replica version and report as metric
     setup::set_replica_version(&replica_args, &logger);
     {
         let g = metrics_registry.int_gauge_vec(
@@ -231,9 +250,10 @@ fn main() -> io::Result<()> {
         ic_replica::setup_ic_stack::construct_ic_stack(
             &logger,
             &metrics_registry,
-            rt_main.handle().clone(),
-            rt_http.handle().clone(),
-            rt_xnet.handle().clone(),
+            rt_main.handle(),
+            rt_p2p.handle(),
+            rt_http.handle(),
+            rt_xnet.handle(),
             config.clone(),
             node_id,
             subnet_id,
@@ -243,21 +263,6 @@ fn main() -> io::Result<()> {
         )?;
 
     info!(logger, "Constructed IC stack");
-
-    // TODO(NET-1366) - remove this flag once confident that starting gRPC is stable
-    if config
-        .adapters_config
-        .onchain_observability_enable_grpc_server
-    {
-        // Spawns a new grpc server in a new task. This will continue to run until the Runtime shuts down.
-        spawn_onchain_observability_grpc_server_and_register_metrics(
-            metrics_registry,
-            rt_main.handle().clone(),
-            config
-                .adapters_config
-                .onchain_observability_uds_metrics_path,
-        );
-    }
 
     std::thread::sleep(Duration::from_millis(5000));
 

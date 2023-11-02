@@ -7,40 +7,46 @@ edition = "2021"
 [dependencies]
 bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 clap = { version = "3.1.6", features = ["derive"] }
-futures = "0.3.17"
+futures = { workspace = true }
 hashlink = "0.8.0"
 hex = "0.4.2"
 http = "0.2"
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-btc-service = { path = "../service" }
-ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "bed90536df60ff215675a048d5ebaf19411c95cb" }
+ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 parking_lot = "0.12.1"
-prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.11.0"
+prometheus = { version = "0.12.0", features = ["process"] }
+prost = { workspace = true }
 rand = "0.8.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 slog = "2.7.0"
 slog-async = "2.7.0"
 thiserror = "1.0.26"
-tokio = { version = "1.15.0", features = ["full", "macros"] }
+tokio = { version = "1.32.0", features = ["full", "macros"] }
 tokio-socks = "0.5.1"
-tonic = "0.8.2"
-tower = { version = "0.4.11", features = ["util"], optional = true }
+tonic = { workspace = true }
+tower = { workspace = true, optional = true }
 
 [dev-dependencies]
 bitcoind = "0.32.0"
 bitcoincore-rpc = "0.15.0"
+criterion = "0.5"
+ic-btc-adapter-test-utils = { path = "./test_utils" }
 ic-btc-adapter-client = { path = "../client" }
 ic-btc-interface = { workspace = true }
 ic-btc-types-internal = { path = "../types/internal" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 tempfile = "^3.1.0"
+
+[[bench]]
+name = "e2e"
+harness = false
 
 [[bin]]
 name = "adapter-stress-test"

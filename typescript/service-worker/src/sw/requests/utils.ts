@@ -6,16 +6,19 @@ import {
   HttpDetailsResponse,
 } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
+import initResponseVerification, {
+  InitOutput,
+  getMaxVerificationVersion,
+} from '@dfinity/response-verification';
+import responseVerificationWasmModule from '@dfinity/response-verification/dist/web/web_bg.wasm';
 import { idlFactory } from '../../http-interface/canister_http_interface';
 import {
   HttpRequest,
   _SERVICE,
 } from '../../http-interface/canister_http_interface_types';
-import initResponseVerification, {
-  InitOutput,
-  getMaxVerificationVersion,
-} from '@dfinity/response-verification';
 import { HTTPHeaders } from './typings';
+
+declare const self: ServiceWorkerGlobalScope;
 
 export const shouldFetchRootKey = Boolean(process.env.FORCE_FETCH_ROOT_KEY);
 export const isMainNet = !shouldFetchRootKey;
@@ -37,6 +40,18 @@ export async function createAgentAndActor(
   });
 
   return [agent, actor];
+}
+
+export async function uninstallServiceWorker(): Promise<void> {
+  await self.registration.unregister();
+}
+
+export async function reloadServiceWorkerClients(): Promise<void> {
+  self.clients.matchAll({ type: 'window' }).then(function (clients) {
+    clients.forEach((client) => {
+      client.navigate(client.url);
+    });
+  });
 }
 
 export function getBoundaryNodeRequestId(
@@ -137,7 +152,9 @@ let loadingResponseVerificationWasm: Promise<InitOutput> | null = null;
 
 export const loadResponseVerification = async (): Promise<void> => {
   if (!responseVerificationWasm && !loadingResponseVerificationWasm) {
-    loadingResponseVerificationWasm = initResponseVerification();
+    loadingResponseVerificationWasm = initResponseVerification(
+      responseVerificationWasmModule
+    );
     responseVerificationWasm = await loadingResponseVerificationWasm;
     loadingResponseVerificationWasm = null;
     return;

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-PATH=$PATH:/usr/sbin
+PATH="$PATH:/usr/sbin"
 
 if [ -f "${VERSION_FILE_PATH:-}" ]; then
     STATUSFILE="$(cat "${VERSION_FILE_PATH}")"
@@ -17,7 +17,7 @@ if [ -f "${STATUSFILE:-}" ]; then
     done <"$STATUSFILE"
 fi
 
-exec "${E2E_TEST_BIN}" \
+exec env DFX_PATH="$(readlink $dfx_path)" "${E2E_TEST_BIN}" \
     --ic_os_version "$(cat "${IC_OS_VERSION_FILE}")" \
     --image_url "$(cat "${IC_OS_IMAGE_URL}")" \
     --image_sha256sum "$(cat "${IC_OS_IMAGE_SHA256SUM}")" \

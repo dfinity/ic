@@ -132,7 +132,7 @@ class BazelRustDependencyManager(DependencyManager):
         else:
             fix = {}
 
-        # For certain external crates, we maintian our own forks
+        # For certain external crates, we maintain our own forks
         # Hence, id URL might not be 100% accurate
         # TODO : retrieve URL from crate.spec
         return Dependency(
@@ -191,7 +191,7 @@ class BazelRustDependencyManager(DependencyManager):
         try:
             active_branch = repo.active_branch
         except Exception:
-            logging.info(f"Running on CI, usuing HEAD hexsha instead of branch name to revert {traceback.format_exc()}")
+            logging.info(f"Running on CI, using HEAD hexsha instead of branch name to revert {traceback.format_exc()}")
             active_branch = repo.head.commit
 
         logging.info("Checking out merge base")
@@ -439,25 +439,25 @@ class BazelRustDependencyManager(DependencyManager):
         return False
 
     def __get_first_level_dependencies_for_vulnerable_dependency(self, dep: Dependency) -> typing.List[Dependency]:
-        dependecy_builder: typing.List[Dependency] = []
+        dependency_builder: typing.List[Dependency] = []
         bazel_dependency = self.__dependency_to_transitive_bazel_string(dep)
         bazel_query = f'"rdeps(@crate_index//:all, {bazel_dependency}) except {bazel_dependency}"'
         result = self.executor.get_bazel_query_output(bazel_query, self.root)
 
         if not result:
-            return dependecy_builder
+            return dependency_builder
 
         result = result.split("\n")
 
         if "@crate_index//" in result and len(result) == 1:
             # direct_dependency
-            return dependecy_builder
+            return dependency_builder
         result.remove("@crate_index//")
         for transitive_bazel_string in sorted(result):
             transitive_dependency = self.__transitive_bazel_string_to_dependency(transitive_bazel_string)
             if transitive_dependency and self.__is_transitive_dependency_first_level_dependency(transitive_dependency):
-                dependecy_builder.append(transitive_dependency)
-        return dependecy_builder
+                dependency_builder.append(transitive_dependency)
+        return dependency_builder
 
     def __get_projects_for_vulnerable_dependency(
         self, vulnerable_dependency: Dependency, first_level_dependencies: typing.List[Dependency]

@@ -1,5 +1,4 @@
 use crate::unit_helpers;
-use anyhow::anyhow;
 use clap::Parser;
 use ic_nervous_system_proto::pb::v1::Countries;
 use ic_sns_governance::{
@@ -96,7 +95,7 @@ pub struct SnsGovernanceConfig {
     /// initial_reward_rate_basis_points and final_reward_rate_basis_points.
     /// In the config file we use percentages instead of basis points to try to
     /// be a bit more user friendly.
-    /// For example, on the ic dashbord
+    /// For example, on the ic dashboard
     /// <https://dashboard.internetcomputer.org/circulation> we show the reward
     /// rate in terms of percentages instead of basis points.
     pub initial_reward_rate_percentage: Option<f64>,
@@ -270,11 +269,11 @@ impl Default for SnsCliInitConfig {
 }
 
 impl SnsCliInitConfig {
-    fn initial_reward_rate_basis_points(&self) -> anyhow::Result<u64> {
+    fn initial_reward_rate_basis_points(&self) -> Result<u64, String> {
         let initial_reward_rate_percentage = self
             .sns_governance
             .initial_reward_rate_percentage
-            .ok_or_else(|| anyhow!("initial_reward_rate_percentage must be specified"))?;
+            .ok_or("initial_reward_rate_percentage must be specified")?;
 
         let initial_reward_rate_basis_points =
             unit_helpers::percentage_to_basis_points(initial_reward_rate_percentage);
@@ -282,7 +281,7 @@ impl SnsCliInitConfig {
         if initial_reward_rate_basis_points
             > VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING
         {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: initial_reward_rate_percentage must be less than or equal to {}, but it is {initial_reward_rate_percentage}",
                 unit_helpers::basis_points_to_percentage(VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING)
             ));
@@ -291,18 +290,18 @@ impl SnsCliInitConfig {
         Ok(initial_reward_rate_basis_points)
     }
 
-    fn final_reward_rate_basis_points(&self) -> anyhow::Result<u64> {
+    fn final_reward_rate_basis_points(&self) -> Result<u64, String> {
         let final_reward_rate_percentage = self
             .sns_governance
             .final_reward_rate_percentage
-            .ok_or_else(|| anyhow!("final_reward_rate_percentage must be specified"))?;
+            .ok_or("final_reward_rate_percentage must be specified")?;
         let initial_reward_rate_percentage = self
             .sns_governance
             .initial_reward_rate_percentage
-            .ok_or_else(|| anyhow!("initial_reward_rate_percentage must be specified"))?;
+            .ok_or("initial_reward_rate_percentage must be specified")?;
 
         if final_reward_rate_percentage > initial_reward_rate_percentage {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: final_reward_rate_percentage must be less than or equal to initial_reward_rate_percentage, but they are {final_reward_rate_percentage} and {initial_reward_rate_percentage}.",
             ));
         }
@@ -313,17 +312,17 @@ impl SnsCliInitConfig {
         Ok(final_reward_rate_basis_points)
     }
 
-    fn max_dissolve_delay_bonus_percentage(&self) -> anyhow::Result<u64> {
+    fn max_dissolve_delay_bonus_percentage(&self) -> Result<u64, String> {
         let max_dissolve_delay_bonus_multiplier = self
             .sns_governance
             .max_dissolve_delay_bonus_multiplier
-            .ok_or_else(|| anyhow!("max_dissolve_delay_bonus_multiplier must be specified"))?;
+            .ok_or("max_dissolve_delay_bonus_multiplier must be specified")?;
 
         let max_dissolve_delay_bonus_percentage =
             unit_helpers::multiplier_to_percentage_increase(
                 max_dissolve_delay_bonus_multiplier,
             ).ok_or_else(|| {
-                anyhow!(
+                format!(
                     "max_dissolve_delay_bonus_multiplier must be greater than or equal to 1.0, but it is {max_dissolve_delay_bonus_multiplier}"
                 )
             })?;
@@ -331,7 +330,7 @@ impl SnsCliInitConfig {
         if max_dissolve_delay_bonus_percentage
             > NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
         {
-            return Err(anyhow!(
+            return Err(format!(
                 "max_dissolve_delay_bonus_multiplier must be less than or equal to {}, but it is {max_dissolve_delay_bonus_multiplier}", 
                 unit_helpers::percentage_increase_to_multiplier(NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING)
             ));
@@ -340,23 +339,23 @@ impl SnsCliInitConfig {
         Ok(max_dissolve_delay_bonus_percentage)
     }
 
-    fn max_age_bonus_percentage(&self) -> anyhow::Result<u64> {
+    fn max_age_bonus_percentage(&self) -> Result<u64, String> {
         let max_age_bonus_multiplier = self
             .sns_governance
             .max_age_bonus_multiplier
-            .ok_or_else(|| anyhow!("max_age_bonus_multiplier must be specified"))?;
+            .ok_or("max_age_bonus_multiplier must be specified")?;
 
         let max_age_bonus_percentage =
         unit_helpers::multiplier_to_percentage_increase(
             max_age_bonus_multiplier,
         ).ok_or_else(|| {
-            anyhow!(
+            format!(
                 "max_age_bonus_multiplier must be greater than or equal to 1.0, but it is {max_age_bonus_multiplier}"
             )
         })?;
 
         if max_age_bonus_percentage > NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING {
-            return Err(anyhow!(
+            return Err(format!(
                 "max_age_bonus_multiplier must be less than or equal to {}, but it is {}",
                 max_age_bonus_multiplier,
                 unit_helpers::percentage_increase_to_multiplier(
@@ -370,7 +369,7 @@ impl SnsCliInitConfig {
 
     /// A SnsCliInitConfig is valid if it can convert to an SnsInitPayload and have the generated
     /// struct pass its validation.
-    fn validate(&self) -> anyhow::Result<()> {
+    fn validate(&self) -> Result<(), String> {
         let sns_init_payload = SnsInitPayload::try_from(self.clone())?;
         sns_init_payload.validate_legacy_init()?;
         Ok(())
@@ -378,7 +377,7 @@ impl SnsCliInitConfig {
 }
 
 /// Generates a logo data URL from a file.
-fn load_logo(logo_path: &PathBuf) -> Result<String, anyhow::Error> {
+fn load_logo(logo_path: &PathBuf) -> Result<String, String> {
     // Extensions and their corresponding mime types:
     let supported_formats = [("png", "image/png")];
     // In error messages we provide the list of supported file extensions:
@@ -404,13 +403,13 @@ fn load_logo(logo_path: &PathBuf) -> Result<String, anyhow::Error> {
                 }
             })
             .ok_or_else(|| {
-                anyhow!(
+                format!(
                     "Unsupported logo type ({:?}) not in: {}",
                     extension,
                     supported_extensions()
                 )
             }),
-        None => Err(anyhow!(
+        None => Err(format!(
             "Logo file has no extension.  Supported extensions: {}",
             supported_extensions()
         )),
@@ -425,17 +424,16 @@ fn load_logo(logo_path: &PathBuf) -> Result<String, anyhow::Error> {
         let file = match File::open(logo_path) {
             Ok(file) => file,
             Err(err) => {
-                return Err(anyhow!(
+                return Err(format!(
                     "Couldn't open the logo file ({:?}): {}",
-                    logo_path,
-                    err
+                    logo_path, err
                 ))
             }
         };
 
         let mut reader = BufReader::new(file);
 
-        std::io::copy(&mut reader, &mut writer)?;
+        std::io::copy(&mut reader, &mut writer).map_err(|s| s.to_string())?;
     }
     let data_url: String = std::str::from_utf8(&buffer)
         .expect("This should be impossible")
@@ -444,7 +442,7 @@ fn load_logo(logo_path: &PathBuf) -> Result<String, anyhow::Error> {
 }
 
 impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
-    type Error = anyhow::Error;
+    type Error = String;
 
     fn try_from(sns_cli_init_config: SnsCliInitConfig) -> Result<Self, Self::Error> {
         let optional_logo = match sns_cli_init_config.sns_governance.logo {
@@ -515,6 +513,8 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
                 },
             ),
             neurons_fund_participants: None,
+            token_logo: None,
+            neurons_fund_participation_constraints: None,
         })
     }
 }
@@ -1239,6 +1239,8 @@ wait_for_quiet_deadline_increase_seconds: 1000
             neuron_basket_construction_parameters: _,
             nns_proposal_id: _,
             neurons_fund_participants: _,
+            token_logo: _,
+            neurons_fund_participation_constraints: _,
         } = sns_init_payload;
 
         assert_eq!(

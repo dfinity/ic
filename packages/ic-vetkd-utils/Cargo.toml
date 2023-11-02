@@ -22,6 +22,9 @@ wasm-bindgen = { version = "0.2.84", optional = true }
 # Enable `custom` feature of getrandom dependency. See lib.rs for more details.
 getrandom = { version = "0.2", features = ["custom"], optional = true }
 
+[dev-dependencies]
+hex = "0.4"
+
 [features]
 default = ["js"]
 js = ["dep:wasm-bindgen", "dep:getrandom"]

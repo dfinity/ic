@@ -202,8 +202,8 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
         }
 
         let mut guard = self.state.lock().unwrap();
-        let mut state = &mut *guard;
-        state.buf.put_u32(data.len() as u32);
+        let state = &mut *guard;
+        state.buf.put_u64(data.len() as u64);
         state.buf.extend_from_slice(data);
         state.fds.extend_from_slice(fds);
         if !state.sending_in_background {
@@ -570,11 +570,11 @@ fn send_message(
                     as MsgControlLenType;
             assert!(
                 hdr.msg_controllen <= cmsgbuf.len() as MsgControlLenType,
-                "Controll message buffer overflow: {} > {}",
+                "Control message buffer overflow: {} > {}",
                 hdr.msg_controllen,
                 cmsgbuf.len(),
             );
-            let mut cmsg = libc::CMSG_FIRSTHDR(&hdr);
+            let cmsg = libc::CMSG_FIRSTHDR(&hdr);
             (*cmsg).cmsg_level = libc::SOL_SOCKET;
             (*cmsg).cmsg_type = libc::SCM_RIGHTS;
             (*cmsg).cmsg_len = libc::CMSG_LEN((std::mem::size_of::<RawFd>() * fds_to_send) as u32)
@@ -607,7 +607,7 @@ fn send_message(
 /// It is a wrapper around `libc::recvmsg()` and returns the result of that
 /// syscall (which is the number of bytes read or -1 on error).
 ///
-/// If reading is successfull, then the function pushes the read bytes and file
+/// If reading is successful, then the function pushes the read bytes and file
 /// descriptors onto the given `buf` and `fds`.
 fn receive_message(
     socket_fd: i32,

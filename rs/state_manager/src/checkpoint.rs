@@ -11,6 +11,7 @@ use ic_replicated_state::{
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
+use ic_types::batch::ReceivedEpochStats;
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
@@ -74,10 +75,16 @@ pub(crate) fn make_checkpoint(
         recv.recv().unwrap()?
     };
 
-    // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
-    let (send, recv) = unbounded();
-    tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
-    recv.recv().unwrap();
+    {
+        // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
+        let _timer = metrics
+            .make_checkpoint_step_duration
+            .with_label_values(&["wait_for_reflinking"])
+            .start_timer();
+        let (send, recv) = unbounded();
+        tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
+        recv.recv().unwrap();
+    }
 
     let state = {
         let _timer = metrics
@@ -115,7 +122,7 @@ pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
     )
 }
 
-/// loads the node state heighted with `height` using the specified
+/// Loads the node state heighted with `height` using the specified
 /// directory layout.
 pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
     checkpoint_layout: &CheckpointLayout<P>,
@@ -169,6 +176,14 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         .map_err(|err| into_checkpoint_error("CanisterQueues".into(), err))?
     };
 
+    let stats = checkpoint_layout.stats().deserialize()?;
+    let query_stats = if let Some(query_stats) = stats.query_stats {
+        ReceivedEpochStats::try_from(query_stats)
+            .map_err(|err| into_checkpoint_error("QueryStats".into(), err))?
+    } else {
+        ReceivedEpochStats::default()
+    };
+
     let canister_states = {
         let _timer = metrics
             .load_checkpoint_step_duration
@@ -213,7 +228,8 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         canister_states
     };
 
-    let state = ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues);
+    let state =
+        ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues, query_stats);
 
     Ok(state)
 }
@@ -328,10 +344,24 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.scheduled_as_first,
         canister_state_bits.skipped_round_due_to_no_messages,
         canister_state_bits.executed,
-        canister_state_bits.interruped_during_execution,
+        canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles_since_replica_started,
         canister_state_bits.consumed_cycles_since_replica_started_by_use_cases,
     );
+
+    let starting_time = Instant::now();
+    // on initial rollout the checkpoint file won't exist.
+    let wasm_chunk_store_data = if canister_layout.wasm_chunk_store().exists() {
+        PageMap::open(
+            &canister_layout.wasm_chunk_store(),
+            height,
+            Arc::clone(&fd_factory),
+        )?
+    } else {
+        PageMap::new(Arc::clone(&fd_factory))
+    };
+    durations.insert("wasm_chunk_store", starting_time.elapsed());
+
     let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
         *canister_id,
@@ -343,10 +373,14 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_metrics,
         canister_state_bits.cycles_balance,
         canister_state_bits.cycles_debit,
+        canister_state_bits.reserved_balance,
+        canister_state_bits.reserved_balance_limit,
         canister_state_bits.task_queue.into_iter().collect(),
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
         canister_state_bits.canister_history,
+        wasm_chunk_store_data,
+        canister_state_bits.wasm_chunk_store_metadata,
     );
 
     let canister_state = CanisterState {
@@ -365,6 +399,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             time_of_last_allocation_charge: Time::from_nanos_since_unix_epoch(
                 canister_state_bits.time_of_last_allocation_charge_nanos,
             ),
+            total_query_stats: canister_state_bits.total_query_stats,
         },
     };
 

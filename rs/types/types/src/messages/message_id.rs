@@ -1,6 +1,8 @@
 use super::RawHttpRequestVal;
 use crate::{crypto::SignedBytesWithoutDomainSeparator, CountBytes};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
 use std::{
@@ -15,6 +17,7 @@ pub const EXPECTED_MESSAGE_ID_LENGTH: usize = 32;
 
 /// The ID used to uniquely identify a user's ingress message.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MessageId([u8; EXPECTED_MESSAGE_ID_LENGTH]);
 
 // Because we can't use #[serde(with = "serde_bytes")] with derive(Deserialize)

@@ -1,5 +1,7 @@
 use crate::CountBytes;
 use ic_btc_types_internal::BitcoinAdapterResponse;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -19,6 +21,7 @@ pub const MAX_BITCOIN_PAYLOAD_IN_BYTES: u64 =
 
 /// Payload that contains SelfValidating messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SelfValidatingPayload(pub(super) Vec<BitcoinAdapterResponse>);
 
 impl SelfValidatingPayload {

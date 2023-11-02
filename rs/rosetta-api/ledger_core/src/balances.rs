@@ -1,9 +1,6 @@
 use num_traits::Bounded;
 use serde::{Deserialize, Serialize};
-use std::collections::{
-    hash_map::Entry::{Occupied, Vacant},
-    HashMap,
-};
+use std::collections::{btree_map::Entry, BTreeMap};
 
 use crate::tokens::{CheckedAdd, CheckedSub, TokensType, Zero};
 
@@ -29,9 +26,9 @@ pub trait InspectableBalancesStore: BalancesStore {
     fn len(&self) -> usize;
 }
 
-impl<AccountId, Tokens> BalancesStore for HashMap<AccountId, Tokens>
+impl<AccountId, Tokens> BalancesStore for BTreeMap<AccountId, Tokens>
 where
-    AccountId: std::hash::Hash + Eq + Clone,
+    AccountId: Eq + Clone + std::cmp::Ord,
     Tokens: TokensType,
 {
     type AccountId = AccountId;
@@ -46,7 +43,7 @@ where
         F: FnMut(Option<&Self::Tokens>) -> Result<Self::Tokens, E>,
     {
         match self.entry(k) {
-            Occupied(mut entry) => {
+            Entry::Occupied(mut entry) => {
                 let new_v = f(Some(entry.get()))?;
                 if !new_v.is_zero() {
                     *entry.get_mut() = new_v;
@@ -55,7 +52,7 @@ where
                 }
                 Ok(new_v)
             }
-            Vacant(entry) => {
+            Entry::Vacant(entry) => {
                 let new_v = f(None)?;
                 if !new_v.is_zero() {
                     entry.insert(new_v);
@@ -66,9 +63,9 @@ where
     }
 }
 
-impl<AccountId, Tokens> InspectableBalancesStore for HashMap<AccountId, Tokens>
+impl<AccountId, Tokens> InspectableBalancesStore for BTreeMap<AccountId, Tokens>
 where
-    AccountId: std::hash::Hash + Eq + Clone,
+    AccountId: Eq + Clone + std::cmp::Ord,
     Tokens: TokensType,
 {
     fn len(&self) -> usize {
@@ -229,7 +226,7 @@ where
         self.store
             .get_balance(account)
             .cloned()
-            .unwrap_or_else(|| S::Tokens::zero())
+            .unwrap_or_else(S::Tokens::zero)
     }
 
     /// Returns the total quantity of Tokens that are "in existence" -- that

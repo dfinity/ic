@@ -5,7 +5,7 @@ use ic_ic00_types::{
 };
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
-        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext,
+        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
     },
     ReplicatedState,
 };
@@ -36,14 +36,13 @@ pub fn get_successors(
             match get_successors_request {
                 BitcoinGetSuccessorsArgs::Initial(payload) => {
                     // Insert request into subnet call contexts.
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
                             request: request.clone(),
                             payload,
                             time: state.time(),
-                        });
+                        }),
+                    );
 
                     Ok(None)
                 }
@@ -94,16 +93,15 @@ pub fn send_transaction_internal(
     match BitcoinSendTransactionInternalArgs::decode(request.method_payload()) {
         Ok(send_transaction_internal_request) => {
             // Insert request into subnet call contexts.
-            state
-                .metadata
-                .subnet_call_context_manager
-                .push_bitcoin_send_transaction_internal_request(
+            state.metadata.subnet_call_context_manager.push_context(
+                SubnetCallContext::BitcoinSendTransactionInternal(
                     BitcoinSendTransactionInternalContext {
                         request: request.clone(),
                         payload: send_transaction_internal_request,
                         time: state.time(),
                     },
-                );
+                ),
+            );
 
             Ok(None)
         }

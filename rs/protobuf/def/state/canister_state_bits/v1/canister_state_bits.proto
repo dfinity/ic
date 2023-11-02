@@ -1,12 +1,12 @@
 syntax = "proto3";
 package state.canister_state_bits.v1;
-import "types/v1/ic00_types.proto";
-import "types/v1/types.proto";
-import "state/queues/v1/queues.proto";
-import "state/ingress/v1/ingress.proto";
-import "state/v1/metadata.proto";
 
 import "google/protobuf/wrappers.proto";
+import "state/ingress/v1/ingress.proto";
+import "state/queues/v1/queues.proto";
+import "state/v1/metadata.proto";
+import "types/v1/ic00_types.proto";
+import "types/v1/types.proto";
 
 message CallContext {
   message Ingress {
@@ -31,6 +31,7 @@ message CallContext {
   state.queues.v1.Funds available_funds = 6;
   bool deleted = 8;
   optional uint64 time_nanos = 9;
+  uint64 instructions_executed = 10;
 }
 
 message CallContextEntry {
@@ -104,26 +105,26 @@ message WasmMethod {
 }
 
 enum CustomSectionType {
-    CUSTOM_SECTION_TYPE_UNSPECIFIED = 0;
-    CUSTOM_SECTION_TYPE_PUBLIC = 1;
-    CUSTOM_SECTION_TYPE_PRIVATE = 2;
+  CUSTOM_SECTION_TYPE_UNSPECIFIED = 0;
+  CUSTOM_SECTION_TYPE_PUBLIC = 1;
+  CUSTOM_SECTION_TYPE_PRIVATE = 2;
 }
 
 message WasmCustomSection {
-    CustomSectionType visibility = 1;
-    bytes content = 2;
-    optional bytes hash = 3;
+  CustomSectionType visibility = 1;
+  bytes content = 2;
+  optional bytes hash = 3;
 }
 
 message WasmMetadata {
-    map<string, WasmCustomSection> custom_sections = 1;
+  map<string, WasmCustomSection> custom_sections = 1;
 }
 
 enum NextScheduledMethod {
-    NEXT_SCHEDULED_METHOD_UNSPECIFIED = 0;
-    NEXT_SCHEDULED_METHOD_GLOBAL_TIMER = 1;
-    NEXT_SCHEDULED_METHOD_HEARTBEAT = 2;
-    NEXT_SCHEDULED_METHOD_MESSAGE = 3;
+  NEXT_SCHEDULED_METHOD_UNSPECIFIED = 0;
+  NEXT_SCHEDULED_METHOD_GLOBAL_TIMER = 1;
+  NEXT_SCHEDULED_METHOD_HEARTBEAT = 2;
+  NEXT_SCHEDULED_METHOD_MESSAGE = 3;
 }
 
 message ExecutionStateBits {
@@ -140,6 +141,7 @@ message StopCanisterContext {
   message Ingress {
     types.v1.UserId sender = 1;
     bytes message_id = 2;
+    optional uint64 call_id = 5;
   }
 
   message Canister {
@@ -147,6 +149,7 @@ message StopCanisterContext {
     uint64 reply_callback = 2;
     state.queues.v1.Funds funds = 3;
     state.queues.v1.Cycles cycles = 4;
+    optional uint64 call_id = 5;
   }
 
   oneof context {
@@ -155,7 +158,9 @@ message StopCanisterContext {
   }
 }
 
-message CanisterStatusRunning { CallContextManager call_context_manager = 1; }
+message CanisterStatusRunning {
+  CallContextManager call_context_manager = 1;
+}
 
 message CanisterStatusStopping {
   CallContextManager call_context_manager = 1;
@@ -191,6 +196,8 @@ message ExecutionTask {
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.
     state.queues.v1.Cycles prepaid_execution_cycles = 3;
+    reserved "request_id";
+    optional uint64 call_id = 4;
   }
 
   oneof task {
@@ -200,18 +207,18 @@ message ExecutionTask {
 }
 
 enum CyclesUseCase {
-    CYCLES_USE_CASE_UNSPECIFIED = 0;
-    CYCLES_USE_CASE_MEMORY = 1;
-    CYCLES_USE_CASE_COMPUTE_ALLOCATION = 2;
-    CYCLES_USE_CASE_INGRESS_INDUCTION = 3;
-    CYCLES_USE_CASE_INSTRUCTIONS = 4;
-    CYCLES_USE_CASE_REQUEST_AND_RESPONSE_TRANSMISSION = 5;
-    CYCLES_USE_CASE_UNINSTALL = 6;
-    CYCLES_USE_CASE_CANISTER_CREATION = 7;
-    CYCLES_USE_CASE_ECDSA_OUTCALLS = 8;
-    CYCLES_USE_CASE_HTTP_OUTCALLS = 9;
-    CYCLES_USE_CASE_DELETED_CANISTERS = 10;
-    CYCLES_USE_CASE_NON_CONSUMED = 11;
+  CYCLES_USE_CASE_UNSPECIFIED = 0;
+  CYCLES_USE_CASE_MEMORY = 1;
+  CYCLES_USE_CASE_COMPUTE_ALLOCATION = 2;
+  CYCLES_USE_CASE_INGRESS_INDUCTION = 3;
+  CYCLES_USE_CASE_INSTRUCTIONS = 4;
+  CYCLES_USE_CASE_REQUEST_AND_RESPONSE_TRANSMISSION = 5;
+  CYCLES_USE_CASE_UNINSTALL = 6;
+  CYCLES_USE_CASE_CANISTER_CREATION = 7;
+  CYCLES_USE_CASE_ECDSA_OUTCALLS = 8;
+  CYCLES_USE_CASE_HTTP_OUTCALLS = 9;
+  CYCLES_USE_CASE_DELETED_CANISTERS = 10;
+  CYCLES_USE_CASE_NON_CONSUMED = 11;
 }
 
 message ConsumedCyclesByUseCase {
@@ -220,47 +227,69 @@ message ConsumedCyclesByUseCase {
 }
 
 message CanisterChangeFromUser {
-    types.v1.PrincipalId user_id = 1;
+  types.v1.PrincipalId user_id = 1;
 }
 
 message CanisterChangeFromCanister {
-    types.v1.PrincipalId canister_id = 1;
-    optional uint64 canister_version = 2;
+  types.v1.PrincipalId canister_id = 1;
+  optional uint64 canister_version = 2;
 }
 
 message CanisterCreation {
-    repeated types.v1.PrincipalId controllers = 1;
+  repeated types.v1.PrincipalId controllers = 1;
 }
 
 message CanisterCodeUninstall {}
 
 message CanisterCodeDeployment {
-    types.v1.CanisterInstallMode mode = 1;
-    bytes module_hash = 2;
+  types.v1.CanisterInstallMode mode = 1;
+  bytes module_hash = 2;
 }
 
 message CanisterControllersChange {
-    repeated types.v1.PrincipalId controllers = 1;
+  repeated types.v1.PrincipalId controllers = 1;
 }
 
 message CanisterChange {
-    uint64 timestamp_nanos = 1;
-    uint64 canister_version = 2;
-    oneof change_origin {
-        CanisterChangeFromUser canister_change_from_user = 3;
-        CanisterChangeFromCanister canister_change_from_canister = 4;
-    }
-    oneof change_details {
-        CanisterCreation canister_creation = 5;
-        CanisterCodeUninstall canister_code_uninstall = 6;
-        CanisterCodeDeployment canister_code_deployment = 7;
-        CanisterControllersChange canister_controllers_change = 8;
-    }
+  uint64 timestamp_nanos = 1;
+  uint64 canister_version = 2;
+  oneof change_origin {
+    CanisterChangeFromUser canister_change_from_user = 3;
+    CanisterChangeFromCanister canister_change_from_canister = 4;
+  }
+  oneof change_details {
+    CanisterCreation canister_creation = 5;
+    CanisterCodeUninstall canister_code_uninstall = 6;
+    CanisterCodeDeployment canister_code_deployment = 7;
+    CanisterControllersChange canister_controllers_change = 8;
+  }
 }
 
 message CanisterHistory {
-    repeated CanisterChange changes = 1;
-    uint64 total_num_changes = 2;
+  repeated CanisterChange changes = 1;
+  uint64 total_num_changes = 2;
+}
+
+message Unsigned128 {
+  bytes raw = 1;
+}
+
+message TotalQueryStats {
+  Unsigned128 num_calls = 1;
+  Unsigned128 num_instructions = 2;
+  Unsigned128 ingress_payload_size = 3;
+  Unsigned128 egress_payload_size = 4;
+}
+
+message WasmChunkData {
+  bytes hash = 1;
+  uint64 index = 2;
+  uint64 length = 3;
+}
+
+message WasmChunkStoreMetadata {
+  repeated WasmChunkData chunks = 1;
+  uint64 size = 2;
 }
 
 message CanisterStateBits {
@@ -282,7 +311,7 @@ message CanisterStateBits {
     CanisterStatusRunning running = 11;
     CanisterStatusStopping stopping = 12;
     CanisterStatusStopped stopped = 13;
-  };
+  }
   reserved 14;
   reserved "scheduled_to_run";
   uint64 scheduled_as_first = 15;
@@ -294,7 +323,7 @@ message CanisterStateBits {
   reserved 19;
   reserved "executed_and_exhausted_its_messages";
   bytes certified_data = 20;
-  uint64 interruped_during_execution = 21;
+  uint64 interrupted_during_execution = 21;
   types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
   uint64 freeze_threshold = 23;
   reserved 24;
@@ -323,4 +352,12 @@ message CanisterStateBits {
   reserved 35;
   repeated ConsumedCyclesByUseCase consumed_cycles_since_replica_started_by_use_cases = 36;
   CanisterHistory canister_history = 37;
+  // Resource reservation cycles.
+  state.queues.v1.Cycles reserved_balance = 38;
+  // The user-specified upper limit on `reserved_balance`.
+  state.queues.v1.Cycles reserved_balance_limit = 39;
+  // Maps tracking chunks in the Wasm chunk store.
+  WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
+  // Statistics on query execution for entire lifetime of canister.
+  TotalQueryStats total_query_stats = 41;
 }

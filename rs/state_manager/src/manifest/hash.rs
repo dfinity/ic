@@ -1,4 +1,4 @@
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_types::state_sync::StateSyncVersion;
 
 /// Trait specifying how a type should be hashed when it's included into a

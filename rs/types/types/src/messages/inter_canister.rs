@@ -1,15 +1,17 @@
-use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes};
+use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes, Time};
 use ic_error_types::{RejectCode, TryFromError, UserError};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgs, Method, Payload as _,
-    ProvisionalTopUpCanisterArgs, SetControllerArgs, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgsV2, Method, Payload as _,
+    ProvisionalTopUpCanisterArgs, UpdateSettingsArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
-use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrTruncate};
+use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize, str::StrTruncate};
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -34,6 +36,25 @@ pub enum CallContextIdTag {}
 /// Identifies an incoming call.
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RequestMetadata {
+    /// Indicates how many steps down the call tree a request is, starting at 0.
+    pub call_tree_depth: Option<u64>,
+    /// The block time (on the respective subnet) at the start of the call at the
+    /// root of the call tree that this request is part of. This is used for metrics
+    /// only.
+    pub call_tree_start_time: Option<Time>,
+    /// A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
+    /// its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
+    /// does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of
+    /// downstream calls at any point in the tree. Since a call tree can be dissolved from above if
+    /// a corresponding deadline expires, this effectively implies that `call_subtree_deadline` can only
+    /// decrease as we go down the tree.
+    ///
+    /// Reserved for future use (guaranteed replies won't be affected).
+    pub call_subtree_deadline: Option<Time>,
+}
+
 /// Canister-to-canister request message.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Request {
@@ -44,6 +65,7 @@ pub struct Request {
     pub method_name: String,
     #[serde(with = "serde_bytes")]
     pub method_payload: Vec<u8>,
+    pub metadata: Option<RequestMetadata>,
 }
 
 impl Request {
@@ -90,11 +112,7 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::SetController) => match SetControllerArgs::decode(&self.method_payload) {
-                Ok(record) => Some(record.get_canister_id()),
-                Err(_) => None,
-            },
-            Ok(Method::InstallCode) => match InstallCodeArgs::decode(&self.method_payload) {
+            Ok(Method::InstallCode) => match InstallCodeArgsV2::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
@@ -104,6 +122,10 @@ impl Request {
                     Err(_) => None,
                 }
             }
+            Ok(Method::UploadChunk)
+            | Ok(Method::StoredChunks)
+            | Ok(Method::DeleteChunks)
+            | Ok(Method::ClearChunkStore) => None,
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
@@ -146,39 +168,66 @@ impl std::fmt::Debug for Request {
         }
         write!(
             f,
-            "method_payload: [{}] }}",
+            "method_payload: [{}], ",
             truncate_and_format(&self.method_payload, 1024)
         )?;
+        write!(f, "metadata: {:?} }}", self.metadata)?;
         Ok(())
     }
 }
 
 /// The context attached when an inter-canister message is rejected.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RejectContext {
-    pub code: RejectCode,
-    pub message: String,
+    code: RejectCode,
+    message: String,
 }
 
+/// Minimum length limit that may be imposed on reject messages.
+const MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES: usize = 10;
+/// Maximum allowed length for reject messages.
+pub const MAX_REJECT_MESSAGE_LEN_BYTES: usize = 8 * 1024;
+
 impl RejectContext {
-    pub fn new(code: RejectCode, message: String) -> Self {
-        Self { code, message }
+    pub fn new(code: RejectCode, message: impl ToString) -> Self {
+        Self::new_with_message_length_limit(code, message, MAX_REJECT_MESSAGE_LEN_BYTES)
     }
 
     pub fn new_with_message_length_limit(
         code: RejectCode,
-        message: String,
+        message: impl ToString,
         max_msg_len: usize,
     ) -> Self {
-        Self::new(code, message.safe_truncate(max_msg_len).to_string())
+        Self {
+            code,
+            message: message.to_string().ellipsize(
+                // Ensure `max_msg_len` is within reasonable bounds.
+                max_msg_len.clamp(
+                    MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES,
+                    MAX_REJECT_MESSAGE_LEN_BYTES,
+                ),
+                75,
+            ),
+        }
+    }
+
+    /// A constructor to be used only when decoding from the canonical
+    /// representation, so we do not accidentally change the canonical
+    /// representation of an already certified `RejectContext`.
+    pub fn from_canonical(code: RejectCode, message: impl ToString) -> Self {
+        Self {
+            code,
+            message: message.to_string(),
+        }
     }
 
     pub fn code(&self) -> RejectCode {
         self.code
     }
 
-    pub fn message(&self) -> String {
-        self.message.clone()
+    pub fn message(&self) -> &String {
+        &self.message
     }
 
     /// Returns the size of this `RejectContext` in bytes.
@@ -199,6 +248,7 @@ impl From<UserError> for RejectContext {
 
 /// A union of all possible message payloads.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum Payload {
     /// Opaque payload data of the current message.
     Data(Vec<u8>),
@@ -232,11 +282,7 @@ impl std::fmt::Debug for Payload {
                 if context.message.len() <= 8 * KB {
                     write!(f, "message: {:?} ", context.message)?;
                 } else {
-                    let mut message = String::with_capacity(8 * KB);
-                    message.push_str(context.message.safe_truncate(5 * KB));
-                    message.push_str("...");
-                    message.push_str(context.message.safe_truncate_right(2 * KB));
-                    write!(f, "message: {:?} ", message)?;
+                    write!(f, "message: {:?} ", context.message.ellipsize(8 * KB, 75))?;
                 }
                 write!(f, "}})")
             }
@@ -268,6 +314,7 @@ impl From<Result<Option<WasmResult>, UserError>> for Payload {
 
 /// Canister-to-canister response message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
     pub respondent: CanisterId,
@@ -375,6 +422,20 @@ impl From<Response> for RequestOrResponse {
     }
 }
 
+impl From<&RequestMetadata> for pb_queues::RequestMetadata {
+    fn from(metadata: &RequestMetadata) -> Self {
+        Self {
+            call_tree_depth: metadata.call_tree_depth,
+            call_tree_start_time_nanos: metadata
+                .call_tree_start_time
+                .map(|call_tree_start_time| call_tree_start_time.as_nanos_since_unix_epoch()),
+            call_subtree_deadline_nanos: metadata
+                .call_subtree_deadline
+                .map(|deadline| deadline.as_nanos_since_unix_epoch()),
+        }
+    }
+}
+
 impl From<&Request> for pb_queues::Request {
     fn from(req: &Request) -> Self {
         Self {
@@ -385,6 +446,23 @@ impl From<&Request> for pb_queues::Request {
             method_name: req.method_name.clone(),
             method_payload: req.method_payload.clone(),
             cycles_payment: Some((req.payment).into()),
+            metadata: req.metadata.as_ref().map(From::from),
+        }
+    }
+}
+
+impl From<pb_queues::RequestMetadata> for RequestMetadata {
+    fn from(metadata: pb_queues::RequestMetadata) -> Self {
+        Self {
+            call_tree_depth: metadata.call_tree_depth,
+            call_tree_start_time: metadata
+                .call_tree_start_time_nanos
+                .map(|call_tree_start_time| {
+                    Time::from_nanos_since_unix_epoch(call_tree_start_time)
+                }),
+            call_subtree_deadline: metadata
+                .call_subtree_deadline_nanos
+                .map(Time::from_nanos_since_unix_epoch),
         }
     }
 }
@@ -408,6 +486,7 @@ impl TryFrom<pb_queues::Request> for Request {
             payment,
             method_name: req.method_name,
             method_payload: req.method_payload,
+            metadata: req.metadata.map(From::from),
         })
     }
 }
@@ -416,7 +495,7 @@ impl From<&RejectContext> for pb_queues::RejectContext {
     fn from(rc: &RejectContext) -> Self {
         Self {
             reject_code: rc.code as u64,
-            reject_message: rc.message(),
+            reject_message: rc.message.clone(),
         }
     }
 }

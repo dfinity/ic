@@ -5,9 +5,8 @@ edition = "2021"
 
 [dependencies]
 base64 = "0.13.0"
-candid = { workspace = true }
 clap = { version = "3.1.6", features = ["derive"] }
-futures = "0.3.25"
+futures = { workspace = true }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-base-types = { path = "../types/base_types/" }
@@ -34,8 +33,13 @@ ic-replay = { path = "../replay" }
 ic-state-manager = { path = "../state_manager" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-types = { path = "../types/types" }
-prost = "0.11.0"
-reqwest = { version = "0.11.1", features = [ "blocking", "json", "multipart", "native-tls" ] }
+prost = { workspace = true }
+reqwest = { version = "0.11.1", features = [
+    "blocking",
+    "json",
+    "multipart",
+    "native-tls",
+] }
 serde = { version = "1.0.115", features = ["derive"] }
 serde_cbor = "0.11.1"
 serde_json = "1.0.54"
@@ -44,7 +48,7 @@ slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 strum = "0.24.1"
 strum_macros = "0.24.1"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]

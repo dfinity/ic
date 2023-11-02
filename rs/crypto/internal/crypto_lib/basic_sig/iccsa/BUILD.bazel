@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/certification",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/types/types",
     "@crate_index//:base64",

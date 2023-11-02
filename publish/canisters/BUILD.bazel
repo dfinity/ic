@@ -10,17 +10,20 @@ CANISTERS = {
     "governance-canister.wasm": "//rs/nns/governance:governance-canister",
     "governance-canister_test.wasm": "//rs/nns/governance:governance-canister-test",
     "governance-mem-test-canister.wasm": "//rs/nns/integration_tests:governance-mem-test-canister",
-    "http_counter.wasm": "//rs/tests/test_canisters/http_counter",
+    "http_counter.wasm": "//rs/tests/test_canisters/http_counter:http_counter",
     "ic-ckbtc-minter.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-icrc1-index.wasm": "//rs/rosetta-api/icrc1/index:index_canister",
     "ic-icrc1-index-ng.wasm": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
+    "ic-icrc1-index-ng-u256.wasm": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256",
     "ic-icrc1-ledger.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "ic-nervous-system-common-test-canister.wasm": "//rs/nervous_system/common/test_canister",
+    "ic-icrc1-ledger-u256.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256",
+    "ic-nervous-system-common-test-canister.wasm": "//rs/nervous_system/common/test_canister:test_canister",
+    "ic-icp-index-canister.wasm": "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
     "identity-canister.wasm": "//rs/nns/identity:identity-canister",
     "inter_canister_error_handling.wasm": "//rs/rust_canisters/tests:inter_canister_error_handling",
-    "kv_store.wasm": "//rs/tests/test_canisters/kv_store",
+    "kv_store.wasm": "//rs/tests/test_canisters/kv_store:kv_store",
     "json.wasm": "//rs/rust_canisters/tests:json",
     "ledger-canister.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
     "ledger-canister_notify-method.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
@@ -31,7 +34,7 @@ CANISTERS = {
     "nns-ui-canister.wasm": "//rs/nns/nns-ui:nns-ui-canister",
     "panics.wasm": "//rs/rust_canisters/tests:panics",
     "pmap_canister.wasm": "//rs/rust_canisters/pmap:pmap_canister",
-    "proxy_canister.wasm": "//rs/rust_canisters/proxy_canister",
+    "proxy_canister.wasm": "//rs/rust_canisters/proxy_canister:proxy_canister",
     "registry-canister.wasm": "//rs/registry/canister:registry-canister",
     "response-payload-test-canister.wasm": "//rs/rust_canisters/response_payload_test:response-payload-test-canister",
     "root-canister.wasm": "//rs/nns/handlers/root/impl:root-canister",
@@ -54,24 +57,25 @@ CANISTERS = {
     "xrc-mock-canister.wasm": "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
 }
 
-CANISTERS_MAX_SIZE_IN_BYTES = {
-    "default": "2097152",
-    "cycles-minting-canister.wasm": "2500000",
-    "genesis-token-canister.wasm": "2500000",
-    "governance-canister.wasm": "2500000",
-    "governance-canister_test.wasm": "2500000",
-    "governance-mem-test-canister.wasm": "2500000",
-    "ic-ckbtc-minter.wasm": "1900000",
-    "ic-icrc1-ledger.wasm": "1900000",
-    "ledger-canister.wasm": "1900000",
-    "ledger-canisternotify-method.wasm": "1900000",
-    "registry-canister.wasm": "3500000",
-    "root-canister.wasm": "1500000",
-    "sns-canister.wasm": "1500000",
-    "sns-governance-canister.wasm": "1900000",
-    "sns-governance-canistertest.wasm": "1900000",
-    "sns-root-canister.wasm": "1500000",
-    "sns-swap-canister.wasm": "1500000",
+DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
+
+CANISTERS_MAX_SIZE_E5_BYTES = {
+    "cycles-minting-canister.wasm": "25",
+    "genesis-token-canister.wasm": "25",
+    "governance-canister.wasm": "26",
+    "governance-canister_test.wasm": "28",
+    "governance-mem-test-canister.wasm": "25",
+    "ic-ckbtc-minter.wasm": "19",
+    "ic-icrc1-ledger.wasm": "19",
+    "ledger-canister.wasm": "19",
+    "ledger-canisternotify-method.wasm": "19",
+    "registry-canister.wasm": "35",
+    "root-canister.wasm": "15",
+    "sns-canister.wasm": "15",
+    "sns-governance-canister.wasm": "19",
+    "sns-governance-canister_test.wasm": "19",
+    "sns-root-canister.wasm": "15",
+    "sns-swap-canister.wasm": "15",
 }
 
 [
@@ -89,10 +93,10 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
         data = [target],
         env = {
             "FILE": "$(rootpath " + target + ")",
-            "MAX_SIZE": CANISTERS_MAX_SIZE_IN_BYTES.get(
+            "MAX_SIZE": CANISTERS_MAX_SIZE_E5_BYTES.get(
                 name,
-                CANISTERS_MAX_SIZE_IN_BYTES["default"],
-            ),
+                DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
+            ) + "00000",
         },
     )
     for (name, target) in CANISTERS.items()
@@ -101,6 +105,7 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
 COMPRESSED_CANISTERS = {
     "ic-btc-canister.wasm.gz": "@btc_canister//file",
     "ic-icrc1-archive.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
+    "ic-icrc1-archive-u256.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
     "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
 }
 
@@ -121,9 +126,33 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+[
+    copy_file(
+        name = name + "-did",
+        src = target + ".didfile",
+        out = name + ".did",
+        allow_symlink = False,
+    )
+    for (name, target) in CANISTERS.items()
+    if (
+        name.endswith(".wasm") and not target.startswith("//rs/tests") and not target.endswith(".wasm")
+    )
+]
+
+filegroup(
+    name = "canisters.did",
+    srcs = [
+        n + "-did"
+        for n, t in CANISTERS.items()
+        if (
+            n.endswith(".wasm") and not t.startswith("//rs/tests") and not t.endswith(".wasm")
+        )
+    ],
+)
+
 upload_artifacts(
     name = "upload",
-    inputs = [":canisters"],
+    inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
     visibility = ["//visibility:public"],
 )

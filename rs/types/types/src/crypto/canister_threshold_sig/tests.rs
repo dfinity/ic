@@ -6,14 +6,16 @@ use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
-use rand::Rng;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
 fn should_create_quadruples_correctly() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
 
     let result = PreSignatureQuadruple::new(
         kappa_unmasked.clone(),
@@ -32,11 +34,12 @@ fn should_create_quadruples_correctly() {
 
 #[test]
 fn should_not_create_quadruples_with_inconsistent_algorithms() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_algorithm_id = AlgorithmId::Tls;
 
     let (mut kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
     kappa_unmasked.algorithm_id = wrong_algorithm_id;
     assert_ne!(kappa_unmasked.algorithm_id, lambda_masked.algorithm_id);
 
@@ -54,11 +57,12 @@ fn should_not_create_quadruples_with_inconsistent_algorithms() {
 
 #[test]
 fn should_not_create_quadruples_with_inconsistent_receivers() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_receivers = set_of_nodes(&[1, 2, 3, 4]);
 
     let (mut kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
     kappa_unmasked.receivers = IDkgReceivers::new(wrong_receivers).unwrap();
     assert_ne!(kappa_unmasked.receivers, lambda_masked.receivers);
 
@@ -76,13 +80,14 @@ fn should_not_create_quadruples_with_inconsistent_receivers() {
 
 #[test]
 fn should_not_create_quadruples_for_kappa_with_wrong_type() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_kappa_unmasked_type = IDkgTranscriptType::Unmasked(
-        IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(random_transcript_id()),
+        IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(random_transcript_id(rng)),
     );
 
     let (mut kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
     assert_ne!(kappa_unmasked.transcript_type, wrong_kappa_unmasked_type);
     kappa_unmasked.transcript_type = wrong_kappa_unmasked_type;
 
@@ -99,13 +104,14 @@ fn should_not_create_quadruples_for_kappa_with_wrong_type() {
 
 #[test]
 fn should_not_create_quadruples_for_lambda_with_wrong_type() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_lambda_masked_type = IDkgTranscriptType::Unmasked(
-        IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(random_transcript_id()),
+        IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(random_transcript_id(rng)),
     );
 
     let (kappa_unmasked, mut lambda_masked, kappa_times_lambda, key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
     assert_ne!(lambda_masked.transcript_type, wrong_lambda_masked_type);
     lambda_masked.transcript_type = wrong_lambda_masked_type;
 
@@ -122,15 +128,16 @@ fn should_not_create_quadruples_for_lambda_with_wrong_type() {
 
 #[test]
 fn should_not_create_quadruples_for_kappa_times_lambda_with_wrong_origin() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_kappa_times_lambda_type =
         IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
-            random_transcript_id(),
-            random_transcript_id(),
+            random_transcript_id(rng),
+            random_transcript_id(rng),
         ));
 
     let (kappa_unmasked, lambda_masked, mut kappa_times_lambda, key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
     assert_ne!(
         kappa_times_lambda.transcript_type,
         wrong_kappa_times_lambda_type
@@ -150,12 +157,13 @@ fn should_not_create_quadruples_for_kappa_times_lambda_with_wrong_origin() {
 
 #[test]
 fn should_not_create_quadruples_for_kappa_times_lambda_of_wrong_type() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_kappa_times_lambda_type =
         IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random);
 
     let (kappa_unmasked, lambda_masked, mut kappa_times_lambda, key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
     assert_ne!(
         kappa_times_lambda.transcript_type,
         wrong_kappa_times_lambda_type
@@ -175,15 +183,16 @@ fn should_not_create_quadruples_for_kappa_times_lambda_of_wrong_type() {
 
 #[test]
 fn should_not_create_quadruples_for_key_times_lambda_with_wrong_origin() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_key_times_lambda_type =
         IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
-            random_transcript_id(),
-            random_transcript_id(),
+            random_transcript_id(rng),
+            random_transcript_id(rng),
         ));
 
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, mut key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
     assert_ne!(
         key_times_lambda.transcript_type,
         wrong_key_times_lambda_type
@@ -203,12 +212,13 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_origin() {
 
 #[test]
 fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_key_times_lambda_type =
         IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random);
 
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, mut key_times_lambda) =
-        transcripts_for_quadruple(common_receivers);
+        transcripts_for_quadruple(common_receivers, rng);
     assert_ne!(
         key_times_lambda.transcript_type,
         wrong_key_times_lambda_type
@@ -228,9 +238,10 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
 
 #[test]
 fn should_create_ecdsa_inputs_correctly() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers);
+        transcripts_for_ecdsa_inputs(common_receivers, rng);
 
     let quadruple = PreSignatureQuadruple::new(
         kappa_unmasked,
@@ -269,9 +280,10 @@ fn should_create_ecdsa_inputs_correctly() {
 
 #[test]
 fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers);
+        transcripts_for_ecdsa_inputs(common_receivers, rng);
 
     let wrong_algorithm = AlgorithmId::Tls;
     assert_ne!(key_transcript.algorithm_id, wrong_algorithm);
@@ -302,6 +314,7 @@ fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
 
 #[test]
 fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (
         mut kappa_unmasked,
@@ -309,7 +322,7 @@ fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
         mut kappa_times_lambda,
         mut key_times_lambda,
         mut key_transcript,
-    ) = transcripts_for_ecdsa_inputs(common_receivers);
+    ) = transcripts_for_ecdsa_inputs(common_receivers, rng);
 
     let wrong_algorithm = AlgorithmId::Tls;
     assert_ne!(key_transcript.algorithm_id, wrong_algorithm);
@@ -344,9 +357,10 @@ fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
 
 #[test]
 fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers);
+        transcripts_for_ecdsa_inputs(common_receivers, rng);
 
     let quadruple = PreSignatureQuadruple::new(
         kappa_unmasked,
@@ -372,10 +386,11 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
 
 #[test]
 fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let wrong_receivers = IDkgReceivers::new(set_of_nodes(&[1, 2, 3, 4])).unwrap();
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers);
+        transcripts_for_ecdsa_inputs(common_receivers, rng);
 
     assert_ne!(key_transcript.receivers, wrong_receivers);
 
@@ -405,11 +420,12 @@ fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
 
 #[test]
 fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
+    let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers);
+        transcripts_for_ecdsa_inputs(common_receivers, rng);
 
-    let wrong_key_transcript_id = random_transcript_id();
+    let wrong_key_transcript_id = random_transcript_id(rng);
     assert_ne!(key_transcript.transcript_id, wrong_key_transcript_id);
 
     key_transcript.transcript_id = wrong_key_transcript_id;
@@ -435,8 +451,7 @@ fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
 }
 
 // A randomized way to get non-repeating IDs.
-pub fn random_transcript_id() -> IDkgTranscriptId {
-    let rng = &mut rand::thread_rng();
+pub fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
     let id = rng.gen();
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
     let height = Height::from(rng.gen::<u64>());
@@ -444,12 +459,13 @@ pub fn random_transcript_id() -> IDkgTranscriptId {
     IDkgTranscriptId::new(subnet, id, height)
 }
 
-pub fn transcript(
+pub fn transcript<R: Rng + CryptoRng>(
     receivers: BTreeSet<NodeId>,
     transcript_type: IDkgTranscriptType,
+    rng: &mut R,
 ) -> IDkgTranscript {
     IDkgTranscript {
-        transcript_id: random_transcript_id(),
+        transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
         verified_dealings: BTreeMap::new(),
@@ -459,8 +475,9 @@ pub fn transcript(
     }
 }
 
-pub fn transcripts_for_quadruple(
+pub fn transcripts_for_quadruple<R: Rng + CryptoRng>(
     receivers: BTreeSet<NodeId>,
+    rng: &mut R,
 ) -> (
     IDkgTranscript,
     IDkgTranscript,
@@ -468,26 +485,26 @@ pub fn transcripts_for_quadruple(
     IDkgTranscript,
 ) {
     let kappa_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        random_transcript_id(),
+        random_transcript_id(rng),
     ));
-    let kappa_unmasked_transcript = transcript(receivers.clone(), kappa_type);
+    let kappa_unmasked_transcript = transcript(receivers.clone(), kappa_type, rng);
 
     let lambda_type = IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random);
-    let lambda_masked_transcript = transcript(receivers.clone(), lambda_type);
+    let lambda_masked_transcript = transcript(receivers.clone(), lambda_type, rng);
 
     let kappa_times_lambda_type =
         IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
             kappa_unmasked_transcript.transcript_id,
             lambda_masked_transcript.transcript_id,
         ));
-    let kappa_times_lambda_transcript = transcript(receivers.clone(), kappa_times_lambda_type);
+    let kappa_times_lambda_transcript = transcript(receivers.clone(), kappa_times_lambda_type, rng);
 
     let key_times_lambda_type =
         IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
-            random_transcript_id(),
+            random_transcript_id(rng),
             lambda_masked_transcript.transcript_id,
         ));
-    let key_times_lambda_transcript = transcript(receivers, key_times_lambda_type);
+    let key_times_lambda_transcript = transcript(receivers, key_times_lambda_type, rng);
 
     (
         kappa_unmasked_transcript,
@@ -497,8 +514,9 @@ pub fn transcripts_for_quadruple(
     )
 }
 
-pub fn transcripts_for_ecdsa_inputs(
+pub fn transcripts_for_ecdsa_inputs<R: Rng + CryptoRng>(
     receivers: BTreeSet<NodeId>,
+    rng: &mut R,
 ) -> (
     IDkgTranscript,
     IDkgTranscript,
@@ -507,31 +525,31 @@ pub fn transcripts_for_ecdsa_inputs(
     IDkgTranscript,
 ) {
     let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        random_transcript_id(),
+        random_transcript_id(rng),
     ));
-    let key_transcript = transcript(receivers.clone(), key_type);
+    let key_transcript = transcript(receivers.clone(), key_type, rng);
 
     let kappa_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        random_transcript_id(),
+        random_transcript_id(rng),
     ));
-    let kappa_unmasked_transcript = transcript(receivers.clone(), kappa_type);
+    let kappa_unmasked_transcript = transcript(receivers.clone(), kappa_type, rng);
 
     let lambda_type = IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random);
-    let lambda_masked_transcript = transcript(receivers.clone(), lambda_type);
+    let lambda_masked_transcript = transcript(receivers.clone(), lambda_type, rng);
 
     let kappa_times_lambda_type =
         IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
             kappa_unmasked_transcript.transcript_id,
             lambda_masked_transcript.transcript_id,
         ));
-    let kappa_times_lambda_transcript = transcript(receivers.clone(), kappa_times_lambda_type);
+    let kappa_times_lambda_transcript = transcript(receivers.clone(), kappa_times_lambda_type, rng);
 
     let key_times_lambda_type =
         IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
             key_transcript.transcript_id,
             lambda_masked_transcript.transcript_id,
         ));
-    let key_times_lambda_transcript = transcript(receivers, key_times_lambda_type);
+    let key_times_lambda_transcript = transcript(receivers, key_times_lambda_type, rng);
 
     (
         kappa_unmasked_transcript,

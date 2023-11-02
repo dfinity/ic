@@ -204,7 +204,7 @@ impl Allow {
 /// Blocks contain an array of Transactions that occurred at a particular
 /// BlockIdentifier.  A hard requirement for blocks returned by Rosetta
 /// implementations is that they MUST be _inalterable_: once a client has
-/// requested and received a block identified by a specific BlockIndentifier,
+/// requested and received a block identified by a specific BlockIdentifier,
 /// all future calls for that same BlockIdentifier must return the same block
 /// contents.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -862,13 +862,13 @@ pub struct ConstructionPayloadsRequestMetadata {
     pub memo: Option<u64>,
 
     /// The earliest acceptable expiry date for a ledger transfer.
-    /// Must be withing 24 hours from created_at_time.
+    /// Must be within 24 hours from created_at_time.
     /// Represents number of nanoseconds since UNIX epoch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ingress_start: Option<u64>,
 
     /// The latest acceptable expiry date for a ledger transfer.
-    /// Must be withing 24 hours from created_at_time.
+    /// Must be within 24 hours from created_at_time.
     /// Represents number of nanoseconds since UNIX epoch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ingress_end: Option<u64>,

@@ -4,6 +4,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::canister_agent::{CanisterAgent, HasCanisterAgentCapability};
+use crate::canister_api::NnsRequestProvider;
 use crate::canister_api::{
     CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
     NnsDappRequestProvider, Request, Response, SnsRequestProvider,
@@ -21,20 +22,29 @@ use crate::driver::test_env_api::{
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome};
 use crate::sns_client::openchat_create_service_nervous_system_proposal;
+use crate::types::CanisterStatusResult;
+use crate::types::CreateCanisterResult;
+use crate::util::UniversalCanister;
+use candid::Decode;
 use candid::{Nat, Principal};
-use ic_agent::{Identity, Signature};
+use ic_agent::Agent;
+use ic_agent::{agent::EnvelopeContent, Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
+use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
 
 use ic_sns_governance::pb::v1::governance::Mode;
-use ic_sns_swap::pb::v1::{new_sale_ticket_response, DerivedState, GetStateResponse, Lifecycle};
+use ic_sns_swap::pb::v1::{new_sale_ticket_response, Lifecycle};
 use ic_sns_swap::swap::principal_to_subaccount;
+use ic_types::Cycles;
 use ic_types::Height;
+use ic_universal_canister::management;
+use ic_universal_canister::wasm;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
@@ -42,7 +52,6 @@ use icrc_ledger_types::icrc1::transfer::TransferArg;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use tokio::runtime::Builder;
-use tokio::time::sleep;
 
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
@@ -54,10 +63,11 @@ use crate::driver::ic::{
 use crate::driver::test_env::TestEnvAttribute;
 
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
-use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 
-use super::sns_aggregator::AggregatorClient;
+use crate::nns_tests::neurons_fund::NnsNfNeuron;
+use crate::nns_tests::sns_aggregator::AggregatorClient;
 
 const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
 
@@ -152,7 +162,7 @@ pub fn workload_static_testnet_fe_users(env: TestEnv) {
     let raw_rps = effective_rps * num_requests;
 
     // --- Generate workload ---
-    let workload = Engine::new(log.clone(), future_generator, raw_rps, duration)
+    let workload = Engine::new(log.clone(), future_generator, raw_rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = {
@@ -201,7 +211,7 @@ pub fn workload_static_testnet_get_account(env: TestEnv) {
     };
 
     // --- Generate workload ---
-    let workload = Engine::new(log.clone(), future_generator, rps, duration)
+    let workload = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = {
@@ -245,7 +255,7 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
     };
 
     // --- Generate workload ---
-    let workload = Engine::new(log.clone(), future_generator, rps, duration)
+    let workload = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = {
@@ -285,28 +295,93 @@ pub fn setup_with_oc_parameters_legacy(
 pub fn setup(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
-    neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
+    nf_neurons: Vec<NnsNfNeuron>,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
     setup_ic(&env, fast_test_setup);
 
-    install_nns(&env, canister_wasm_strategy, sale_participants, neurons);
+    install_nns(
+        &env,
+        canister_wasm_strategy,
+        sale_participants,
+        nf_neurons.clone(),
+    );
+    let nns_request_provider = NnsRequestProvider::default();
+    let nns_node = env.get_first_healthy_system_node_snapshot();
+
+    // get the first application node from the second subnet, which should be the dapp subnet
+    let dapp_node = env.get_first_healthy_node_snapshot_from_nth_subnet_where(
+        |s| s.subnet_type() == SubnetType::Application,
+        1,
+    );
+    let dapp_agent = dapp_node.build_default_agent();
+
+    // Create a canister and give it to NNS root
+    let dapp_canister = block_on(DappCanister::new(&env, dapp_node, &dapp_agent));
+    let create_service_nervous_system_proposal = CreateServiceNervousSystem {
+        dapp_canisters: vec![Canister {
+            id: Some(PrincipalId::from(dapp_canister.canister_id)),
+        }],
+        ..create_service_nervous_system_proposal
+    };
+
+    let starting_nf_neuron_maturity = {
+        let mut neurons = Vec::new();
+        for neuron in nf_neurons.iter() {
+            let updated_neuron =
+                block_on(neuron.get_current_info(&nns_node, &nns_request_provider)).unwrap();
+            neurons.push(updated_neuron);
+        }
+        neurons
+            .iter()
+            .map(|n| n.maturity_e8s_equivalent)
+            .sum::<u64>()
+    };
 
     // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
     install_sns(
         &env,
         canister_wasm_strategy,
-        create_service_nervous_system_proposal,
+        create_service_nervous_system_proposal.clone(),
     );
+
+    // Assert that the NF NNS neuron's maturity has decreased by the same amount
+    // as the neurons' fund's investment in the SNS.
+    let neurons_fund_investment_icp = create_service_nervous_system_proposal
+        .swap_parameters
+        .unwrap()
+        .neurons_fund_investment_icp
+        .unwrap()
+        .e8s
+        .unwrap();
+    let final_nf_neuron_maturity = {
+        let mut neurons = Vec::new();
+        for neuron in nf_neurons.iter() {
+            let updated_neuron =
+                block_on(neuron.get_current_info(&nns_node, &nns_request_provider)).unwrap();
+            neurons.push(updated_neuron);
+        }
+        neurons
+            .iter()
+            .map(|n| n.maturity_e8s_equivalent)
+            .sum::<u64>()
+    };
+    assert_eq!(
+        starting_nf_neuron_maturity - final_nf_neuron_maturity,
+        neurons_fund_investment_icp,
+        "NF maturity did not decrease after SNS creation"
+    );
+
+    block_on(dapp_canister.check_exclusively_owned_by_sns_root(&env));
 }
 
-///  Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
+/// Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
 pub fn setup_legacy(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
-    neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
+    neurons: Vec<NnsNfNeuron>, // NNS Neurons to add in addition to the "test" neurons
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
@@ -335,11 +410,19 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
     }
 
     let mut ic = InternetComputer::new()
+        // NNS
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(SUBNET_SIZE),
         )
+        // SNS
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(SUBNET_SIZE),
+        )
+        // Dapps
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -358,7 +441,7 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
         .expect("failed to setup IC under test");
 
     if !fast_test_setup {
-        env.sync_prometheus_config_with_topology();
+        env.sync_with_prometheus();
     }
 }
 
@@ -544,7 +627,7 @@ pub fn install_nns(
     env: &TestEnv,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     sale_participants: Vec<SaleParticipant>,
-    neurons: Vec<ic_nns_governance::pb::v1::Neuron>,
+    neurons: Vec<NnsNfNeuron>,
 ) {
     let log = env.logger();
     let start_time = Instant::now();
@@ -565,7 +648,12 @@ pub fn install_nns(
     };
     let nns_customizations = NnsCustomizations {
         ledger_balances: Some(ledger_balances),
-        neurons: Some(neurons),
+        neurons: Some(
+            neurons
+                .into_iter()
+                .map(|nns_nf_neuron| nns_nf_neuron.neuron)
+                .collect(),
+        ),
         install_at_ids: false,
     };
 
@@ -647,17 +735,12 @@ pub fn install_sns_legacy(
 pub fn initiate_token_swap(
     env: TestEnv,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
-    community_fund_investment_e8s: u64,
 ) {
     let log = env.logger();
     let start_time = Instant::now();
 
     let sns_client = SnsClient::read_attribute(&env);
-    sns_client.initiate_token_swap_immediately(
-        &env,
-        create_service_nervous_system_proposal,
-        community_fund_investment_e8s,
-    );
+    sns_client.initiate_token_swap_immediately(&env, create_service_nervous_system_proposal);
     block_on(sns_client.assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap));
     info!(
         log,
@@ -673,12 +756,7 @@ pub fn initiate_token_swap(
 /// This function should be the one used "by default" for most tests, to ensure
 /// that the tests are using realistic parameters.
 pub fn initiate_token_swap_with_oc_parameters(env: TestEnv) {
-    let community_fund_investment_e8s = 333_333 * E8;
-    initiate_token_swap(
-        env,
-        openchat_create_service_nervous_system_proposal(),
-        community_fund_investment_e8s,
-    );
+    initiate_token_swap(env, openchat_create_service_nervous_system_proposal());
 }
 
 pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
@@ -740,7 +818,7 @@ pub fn generate_sns_workload_with_many_users<T, R>(
         }
     };
 
-    let workload = Engine::new(log.clone(), future_generator, rps, duration)
+    let workload = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
     let metrics = {
         let aggr = LoadTestMetrics::new(log);
@@ -834,14 +912,18 @@ impl Identity for SaleParticipant {
         let principal = Principal::try_from(self.principal_id).unwrap();
         Ok(principal)
     }
-
-    fn sign(&self, msg: &[u8]) -> Result<Signature, String> {
-        let signature = self.key_pair().sign(msg.as_ref());
+    fn public_key(&self) -> Option<Vec<u8>> {
         let pk = self.key_pair().get_pb_key();
-        let pk_der = ed25519_public_key_to_der(pk);
+        Some(ed25519_public_key_to_der(pk))
+    }
+    fn sign(&self, msg: &EnvelopeContent) -> Result<Signature, String> {
+        self.sign_arbitrary(&msg.to_request_id().signable())
+    }
+    fn sign_arbitrary(&self, msg: &[u8]) -> Result<Signature, String> {
+        let signature = self.key_pair().sign(msg.as_ref());
         Ok(Signature {
             signature: Some(signature.as_ref().to_vec()),
-            public_key: Some(pk_der),
+            public_key: self.public_key(),
         })
     }
 }
@@ -1112,13 +1194,13 @@ pub fn generate_ticket_participants_workload(
 
     let future_generator = {
         let nns_node = env.get_first_healthy_nns_node_snapshot();
-        let app_node = env.get_first_healthy_application_node_snapshot();
+        let sns_node = env.get_first_healthy_application_node_snapshot();
         let sns_client = SnsClient::read_attribute(&env);
         let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
         let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
 
         move |idx| {
-            let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
+            let (nns_node, app_node) = (nns_node.clone(), sns_node.clone());
             async move {
                 let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
                 let overall_start_time = Instant::now();
@@ -1150,7 +1232,7 @@ pub fn generate_ticket_participants_workload(
             }
         }
     };
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(SNS_ENDPOINT_RETRY_TIMEOUT);
 
     let metrics = {
@@ -1186,7 +1268,7 @@ async fn create_one_sale_participant(
     seed: u64,
     contribution: u64,
     nns_node: IcNodeSnapshot,
-    app_node: IcNodeSnapshot,
+    sns_node: IcNodeSnapshot,
     ledger_canister_id: Principal,
     sns_request_provider: SnsRequestProvider,
     outcome: &mut Vec<(String, RequestOutcome<(), String>)>,
@@ -1206,7 +1288,7 @@ async fn create_one_sale_participant(
             seed,
         );
         let ledger_agent = nns_node.build_canister_agent_with_identity(p.clone()).await;
-        let canister_agent = app_node.build_canister_agent_with_identity(p.clone()).await;
+        let canister_agent = sns_node.build_canister_agent_with_identity(p.clone()).await;
         (p, ledger_agent, canister_agent)
     };
     let sns_subaccount = Subaccount(principal_to_subaccount(&participant.principal_id));
@@ -1338,134 +1420,116 @@ async fn create_one_sale_participant(
     Ok(())
 }
 
-/// Waits for the swap to finalize (for up to 2 minutes), and verifies that the swap was finalized as expected.
-pub async fn finalize_swap_and_check_success(
-    env: TestEnv,
-    expected_derived_swap_state: DerivedState,
-    create_service_nervous_system_proposal: CreateServiceNervousSystem,
-) {
-    let log = env.logger();
-    info!(log, "Finalizing the swap");
+struct DappCanister<'a> {
+    canister_id: Principal,
+    original_controller: UniversalCanister<'a>,
+}
 
-    let sns_client = SnsClient::read_attribute(&env);
-    let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let canister_agent = app_node.build_canister_agent().await;
+impl<'a> DappCanister<'a> {
+    // Creates a canister and gives control to NNS root
+    async fn new(
+        env: &TestEnv,
+        dapp_node: IcNodeSnapshot,
+        dapp_agent: &'a Agent,
+    ) -> DappCanister<'a> {
+        let logger = env.logger();
 
-    info!(log, "Waiting for the swap to be finalized");
-
-    for _ in 0..120 {
-        let request = sns_request_provider.get_sns_governance_mode();
-        let get_mode_response = canister_agent
-            .call_and_parse(&request)
-            .await
-            .result()
-            .unwrap();
-        if get_mode_response.mode.and_then(Mode::from_i32).unwrap() == Mode::Normal {
-            info!(
-                log,
-                "Governance mode is `Normal`, indicating that the swap is finalized."
-            );
-            break;
-        }
-        sleep(Duration::from_secs(1)).await;
-    }
-
-    // TODO(NNS1-2359): Verify the FinalizeSwapResponse from automatic finalization is correct.
-
-    sns_client
-        .assert_state(&env, Lifecycle::Committed, Mode::Normal)
+        let original_controller_canister = UniversalCanister::new_with_retries(
+            dapp_agent,
+            dapp_node.effective_canister_id(),
+            &logger,
+        )
         .await;
 
-    info!(log, "Checking that the swap finalized successfully");
+        let controllers = vec![
+            Principal::from(ROOT_CANISTER_ID),
+            original_controller_canister.canister_id(),
+        ];
 
-    info!(log, "Swap finalization check 1: Call swap's `get_state` and assert it contains the correct information");
-    let get_state_request = sns_request_provider.get_state(CallMode::Query);
-    let get_state_response = canister_agent
-        .call_and_parse(&get_state_request)
-        .await
-        .result()
-        .unwrap();
-
-    let GetStateResponse { swap: Some(swap_state), derived: Some(derived_swap_state) } = get_state_response else {
-        panic!("Unexpected get_state_response: {get_state_response:?}");
-    };
-
-    assert_eq!(
-        Lifecycle::from_i32(swap_state.lifecycle).unwrap(),
-        Lifecycle::Committed
-    );
-    assert_eq!(derived_swap_state, expected_derived_swap_state);
-
-    info!(
-        log,
-        "Swap finalization check 2: Get all neurons from SNS governance"
-    );
-    let neurons = {
-        let mut start_page_at = None;
-        let mut neurons = Vec::new();
-        // Call list_neurons up to 1000 times to get all neurons.
-        // (if this is not enough, we panic, so the limit can be increased.)
-        'repeatedly_call_list_neurons: {
-            let max_pages = 1000;
-            for _ in 0..max_pages {
-                let list_neurons_request = sns_request_provider.list_neurons(
-                    0,
-                    start_page_at.clone(),
-                    None,
-                    CallMode::Query,
-                );
-                let neurons_page = canister_agent
-                    .call_and_parse(&list_neurons_request)
-                    .await
-                    .result()
+        // The original_controller_canister canister creates the dapp canister,
+        // and also assigns the NNS root canister as a controller
+        let dapp_canister = original_controller_canister
+            .update(
+                wasm().call(
+                    management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
+                        .with_controllers(controllers.clone()),
+                ),
+            )
+            .await
+            .map(|res| {
+                Decode!(res.as_slice(), CreateCanisterResult)
                     .unwrap()
-                    .neurons;
-                match neurons_page.last() {
-                    Some(last_neuron) => {
-                        start_page_at = last_neuron.id.clone();
-                    }
-                    None => {
-                        assert!(neurons_page.is_empty());
-                        break 'repeatedly_call_list_neurons;
-                    }
-                }
-                neurons.extend(neurons_page);
-            }
-            panic!("Too many neurons created in SNS governance, unable to read all of them! (Tried calling list_neurons {max_pages} times.)");
+                    .canister_id
+            })
+            .unwrap();
+
+        // Check that the dummy_controller_canister can ask for the status.
+        original_controller_canister
+            .update(wasm().call(management::canister_status(dapp_canister)))
+            .await
+            .map(|res| {
+                let canister_status_result = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
+
+                // Check result matches the expected value.
+                let observed_controllers = canister_status_result.settings.controllers();
+                let expected_controllers = controllers
+                    .iter()
+                    .map(crate::util::to_principal_id)
+                    .collect::<Vec<PrincipalId>>();
+                assert_eq!(
+                    observed_controllers, expected_controllers,
+                    "Controllers did not match expectation"
+                );
+            })
+            .unwrap();
+
+        DappCanister {
+            canister_id: dapp_canister,
+            original_controller: original_controller_canister,
         }
-        neurons
-    };
+    }
 
-    info!(
-        log,
-        "Swap finalization check 3: Verify that the correct number of neurons were created"
-    );
-    let developer_distribution = create_service_nervous_system_proposal
-        .initial_token_distribution
-        .as_ref()
-        .unwrap()
-        .developer_distribution
-        .as_ref()
-        .unwrap();
+    async fn check_exclusively_owned_by_sns_root(&self, env: &TestEnv) {
+        let log = env.logger();
 
-    let initial_neuron_count = developer_distribution.developer_neurons.len();
+        // Check that the original_controller can't ask for the status.
+        self.original_controller
+            .update(wasm().call(management::canister_status(self.canister_id)))
+            .await
+            .map(|res| Decode!(res.as_slice(), CanisterStatusResult).unwrap())
+            .unwrap_err();
 
-    let neuron_basket_construction_parameters = create_service_nervous_system_proposal
-        .swap_parameters
-        .unwrap()
-        .neuron_basket_construction_parameters
-        .unwrap();
-    let created_neuron_count = (derived_swap_state.direct_participant_count.unwrap()
-        + derived_swap_state.cf_neuron_count.unwrap())
-        * neuron_basket_construction_parameters.count.unwrap();
+        let sns_node = env.get_first_healthy_application_node_snapshot();
+        let sns_client = SnsClient::read_attribute(env);
+        let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+        let sns_agent = sns_node.build_canister_agent().await;
 
-    let expected_neuron_count = initial_neuron_count as u64 + created_neuron_count;
-    assert_eq!(neurons.len() as u64, expected_neuron_count);
+        let sns_canisters_summary = {
+            let request = sns_request_provider.get_sns_canisters_summary();
+            sns_agent.call_and_parse(&request).await.result().unwrap()
+        };
 
-    // TODO(NNS1-2250): We should check that the swap finalized as expected. Some ideas for what might be relevant:
-    // 1. Check that every participant got the neurons we expected them to
-    // 2. Ask Lara Schmid, Max Summe, and Björn Assmann for additional suggestions
+        let dapp_canister_summaries = sns_canisters_summary.dapp_canister_summaries();
+        let dapp_canister_summary = dapp_canister_summaries
+            .iter()
+            .find(|summary| summary.canister_id.unwrap() == self.canister_id.into())
+            .expect("Canister should be in canister summary!");
+
+        assert_eq!(
+            dapp_canister_summary
+                .status
+                .as_ref()
+                .unwrap()
+                .settings
+                .controllers,
+            vec![sns_client.sns_canisters.root.unwrap()]
+        );
+
+        info!(
+            log,
+            "The dapp canister is now under the exclusive control of the SNS."
+        );
+    }
 }
 
 const SNS_ENDPOINT_RETRY_TIMEOUT: Duration = Duration::from_secs(5 * 60); // 5 minutes
@@ -1532,7 +1596,7 @@ where
             async move { agent.call(&request).await.map(|_| ()).into_test_outcome() }
         }
     };
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = {

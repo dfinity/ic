@@ -1,10 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = [
-    "//rs/p2p/memory_transport:__subpackages__",
-    "//rs/p2p/quic_transport:__subpackages__",
-    "//rs/p2p/state_sync_manager:__subpackages__",
+    "//rs/p2p:__subpackages__",
     "//rs/replica:__subpackages__",
 ])
 
@@ -13,13 +11,13 @@ DEPENDENCIES = [
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/tls",
     "//rs/ic_os/sev_interfaces",
-    "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/p2p/peer_manager",
+    "//rs/phantom_newtype",
     "//rs/registry/helpers",
-    "//rs/types/types",
+    "//rs/types/base_types",
     "@crate_index//:axum",
     "@crate_index//:bincode",
     "@crate_index//:bytes",
@@ -30,7 +28,9 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:quinn",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:slog",
+    "@crate_index//:socket2",
     "@crate_index//:tokio",
     "@crate_index//:tokio-metrics",
     "@crate_index//:tokio-rustls",
@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
+    "@crate_index//:criterion",
     "@crate_index//:turmoil",
 ]
 
@@ -72,5 +73,12 @@ rust_test_suite_with_extra_srcs(
     aliases = ALIASES,
     extra_srcs = ["tests/common.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":quic_transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "quic_transport_bench",
+    testonly = True,
+    srcs = ["benches/bench.rs"],
     deps = [":quic_transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

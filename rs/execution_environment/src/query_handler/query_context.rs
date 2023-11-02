@@ -9,7 +9,7 @@ use crate::{
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -37,7 +37,7 @@ use super::query_call_graph::evaluate_query_call_graph;
 
 /// The response of a query. If the query originated from a user, then it
 /// contains either `UserResponse` or `UserError`. If the query originated from
-/// a canister, then it containts `CanisterResponse`.
+/// a canister, then it contains `CanisterResponse`.
 pub(super) enum QueryResponse {
     UserResponse(WasmResult),
     UserError(UserError),
@@ -94,7 +94,8 @@ pub(super) struct QueryContext<'a> {
     query_context_time_start: Instant,
     query_context_time_limit: Duration,
     query_critical_error: &'a IntCounter,
-    subnet_memory_capacity: NumBytes,
+    // Number of instructions used in total
+    pub total_instructions_used: NumInstructions,
 }
 
 impl<'a> QueryContext<'a> {
@@ -106,7 +107,6 @@ impl<'a> QueryContext<'a> {
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
         subnet_available_memory: SubnetAvailableMemory,
-        subnet_memory_capacity: NumBytes,
         max_canister_memory_size: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
@@ -143,7 +143,7 @@ impl<'a> QueryContext<'a> {
             query_context_time_start: Instant::now(),
             query_context_time_limit: max_query_call_walltime,
             query_critical_error,
-            subnet_memory_capacity,
+            total_instructions_used: NumInstructions::from(0),
         }
     }
 
@@ -177,6 +177,7 @@ impl<'a> QueryContext<'a> {
             old_canister.memory_usage(),
             old_canister.scheduler_state.compute_allocation,
             subnet_size,
+            old_canister.system_state.reserved_balance(),
         ) > old_canister.system_state.balance()
         {
             return Err(UserError::new(
@@ -394,6 +395,7 @@ impl<'a> QueryContext<'a> {
             &mut self.round_limits,
         );
         let instructions_executed = instruction_limit - instructions_left;
+        self.total_instructions_used += instructions_executed;
         measurement_scope.add(
             instructions_executed,
             NumSlices::from(1),
@@ -471,6 +473,7 @@ impl<'a> QueryContext<'a> {
         let api_type = match response.response_payload {
             Payload::Data(payload) => ApiType::reply_callback(
                 time,
+                call_origin.get_principal(),
                 payload.to_vec(),
                 incoming_cycles,
                 call_context_id,
@@ -479,6 +482,7 @@ impl<'a> QueryContext<'a> {
             ),
             Payload::Reject(context) => ApiType::reject_callback(
                 time,
+                call_origin.get_principal(),
                 context,
                 incoming_cycles,
                 call_context_id,
@@ -575,7 +579,10 @@ impl<'a> QueryContext<'a> {
         };
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
-                ApiType::Cleanup { time },
+                ApiType::Cleanup {
+                    caller: call_origin.get_principal(),
+                    time,
+                },
                 time,
                 canister.system_state.clone(),
                 canister_current_memory_usage,
@@ -852,7 +859,7 @@ impl<'a> QueryContext<'a> {
         self.query_context_time_start.elapsed() >= self.query_context_time_limit
     }
 
-    /// Returns a synthetic reject reponse for the case when a query call
+    /// Returns a synthetic reject response for the case when a query call
     /// context did not produce any response.
     pub fn empty_response(
         &self,
@@ -895,9 +902,8 @@ impl<'a> QueryContext<'a> {
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode: ExecutionMode::NonReplicated,
-            subnet_memory_capacity: self.subnet_memory_capacity,
             // Effectively disable subnet memory resource reservation for queries.
-            subnet_memory_threshold: self.subnet_memory_capacity,
+            subnet_memory_saturation: ResourceSaturation::default(),
         }
     }
 

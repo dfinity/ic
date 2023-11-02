@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 
-pub mod connection_endpoint;
-
 /// Errors returned when requesting a value from the registry.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RegistryError {

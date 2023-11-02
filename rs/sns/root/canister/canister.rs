@@ -77,7 +77,7 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
     let ledger_canister_id = STATE
         .with(|state| state.borrow().ledger_canister_id())
         .try_into()
-        .expect("Expected the ledger_canister_id to be convertable to a CanisterId");
+        .expect("Expected the ledger_canister_id to be convertible to a CanisterId");
 
     RealLedgerCanisterClient::new(ledger_canister_id)
 }

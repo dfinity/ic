@@ -1,9 +1,8 @@
 use std::ops::Range;
 
-use wasmparser::GlobalType;
 use wasmparser::{
-    BinaryReaderError, Export, Import, MemoryType, Operator, Parser, Payload, TableType, Type,
-    ValType,
+    BinaryReaderError, Export, GlobalType, Import, MemoryType, Operator, Parser, Payload, RefType,
+    SubType, TableType, ValType,
 };
 
 mod convert;
@@ -27,13 +26,16 @@ pub struct Body<'a> {
 
 pub enum ElementItems<'a> {
     Functions(Vec<u32>),
-    ConstExprs(Vec<Vec<Operator<'a>>>),
+    ConstExprs {
+        ty: RefType,
+        exprs: Vec<Vec<Operator<'a>>>,
+    },
 }
 
 pub enum ElementKind<'a> {
     Passive,
     Active {
-        table_index: u32,
+        table_index: Option<u32>,
         offset_expr: Vec<Operator<'a>>,
     },
     Declared,
@@ -181,11 +183,12 @@ impl std::fmt::Display for Error {
 }
 
 pub struct Module<'a> {
-    pub types: Vec<Type>,
+    pub types: Vec<SubType>,
     pub imports: Vec<Import<'a>>,
     /// Mapping from function index to type index.
     pub functions: Vec<u32>,
-    pub tables: Vec<TableType>,
+    /// Each table has a type and optional initialization expression.
+    pub tables: Vec<(TableType, Option<Vec<Operator<'a>>>)>,
     pub memories: Vec<MemoryType>,
     pub globals: Vec<Global<'a>>,
     pub data: Vec<DataSegment<'a>>,
@@ -193,7 +196,7 @@ pub struct Module<'a> {
     pub exports: Vec<Export<'a>>,
     // Index of the start function.
     pub start: Option<u32>,
-    pub elements: Vec<(ElementKind<'a>, ValType, ElementItems<'a>)>,
+    pub elements: Vec<(ElementKind<'a>, ElementItems<'a>)>,
     pub code_sections: Vec<Body<'a>>,
     pub custom_sections: Vec<(&'a str, &'a [u8])>,
 }
@@ -231,12 +234,23 @@ impl<'a> Module<'a> {
                         .into_iter()
                         .map(|sec| {
                             sec.map_err(Error::from)
-                                .and_then(|data| parser_to_internal::data_segment(data))
+                                .and_then(parser_to_internal::data_segment)
                         })
                         .collect::<Result<_, _>>()?;
                 }
                 Payload::TableSection(table_section_reader) => {
-                    tables = table_section_reader.into_iter().collect::<Result<_, _>>()?;
+                    tables = table_section_reader
+                        .into_iter()
+                        .map(|t| {
+                            t.and_then(|t| match t.init {
+                                wasmparser::TableInit::RefNull => Ok((t.ty, None)),
+                                wasmparser::TableInit::Expr(e) => {
+                                    convert::parser_to_internal::const_expr(e)
+                                        .map(|init| (t.ty, Some(init)))
+                                }
+                            })
+                        })
+                        .collect::<Result<_, _>>()?;
                 }
                 Payload::MemorySection(memory_section_reader) => {
                     memories = memory_section_reader
@@ -268,21 +282,8 @@ impl<'a> Module<'a> {
                 Payload::ElementSection(element_section_reader) => {
                     for element in element_section_reader.into_iter() {
                         let element = element?;
-                        if element.ty != ValType::FuncRef {
-                            if let wasmparser::ElementKind::Passive = element.kind {
-                                return Err(Error::PassiveElementSectionTypeNotFuncRef {
-                                    ty: element.ty,
-                                });
-                            } else {
-                                break;
-                            }
-                        }
                         let items = parser_to_internal::element_items(element.items.clone())?;
-                        elements.push((
-                            parser_to_internal::element_kind(element.kind)?,
-                            element.ty,
-                            items,
-                        ));
+                        elements.push((parser_to_internal::element_kind(element.kind)?, items));
                     }
                 }
                 Payload::DataCountSection { count, range: _ } => {
@@ -402,18 +403,8 @@ impl<'a> Module<'a> {
 
         if !self.types.is_empty() {
             let mut types = wasm_encoder::TypeSection::new();
-            for Type::Func(ty) in self.types {
-                let params = ty
-                    .params()
-                    .iter()
-                    .map(internal_to_encoder::val_type)
-                    .collect::<Vec<_>>();
-                let results = ty
-                    .results()
-                    .iter()
-                    .map(internal_to_encoder::val_type)
-                    .collect::<Vec<_>>();
-                types.function(params, results);
+            for subtype in self.types {
+                types.subtype(&internal_to_encoder::subtype(&subtype));
             }
             module.section(&types);
         }
@@ -440,8 +431,13 @@ impl<'a> Module<'a> {
 
         if !self.tables.is_empty() {
             let mut tables = wasm_encoder::TableSection::new();
-            for table in self.tables {
-                tables.table(internal_to_encoder::table_type(table));
+            for (table_ty, init) in self.tables {
+                let table_ty = internal_to_encoder::table_type(table_ty);
+                match init {
+                    None => tables.table(table_ty),
+                    Some(const_expr) => tables
+                        .table_with_init(table_ty, &internal_to_encoder::const_expr(&const_expr)?),
+                };
             }
             module.section(&tables);
         }
@@ -484,40 +480,27 @@ impl<'a> Module<'a> {
         if !self.elements.is_empty() {
             let mut elements = wasm_encoder::ElementSection::new();
             let mut all_temp_const_exprs = vec![];
-            for (kind, ty, items) in self.elements {
+            for (kind, items) in self.elements {
                 all_temp_const_exprs.push(vec![]);
                 let index = all_temp_const_exprs.len() - 1;
                 let element_items =
                     internal_to_encoder::element_items(&items, &mut all_temp_const_exprs[index])?;
                 match kind {
                     ElementKind::Passive => {
-                        elements.passive(internal_to_encoder::val_type(&ty), element_items);
+                        elements.passive(element_items);
                     }
                     ElementKind::Active {
                         table_index,
                         offset_expr,
                     } => {
-                        // Setting the table_index to `None` is semantically
-                        // equivalent to `Some(0)` with the type being FuncRef.
-                        // But `None` will use the `0x00` element section tag
-                        // and `Some(0) will use the `0x02` element tag. We
-                        // didn't track which tag was actually used in the
-                        // original file, but it's safer to assume `0x00` was
-                        // used if possible.
-                        let table_index = if table_index == 0 && ty == ValType::FuncRef {
-                            None
-                        } else {
-                            Some(table_index)
-                        };
                         elements.active(
                             table_index,
                             &internal_to_encoder::const_expr(&offset_expr)?,
-                            internal_to_encoder::val_type(&ty),
                             element_items,
                         );
                     }
                     ElementKind::Declared => {
-                        elements.declared(internal_to_encoder::val_type(&ty), element_items);
+                        elements.declared(element_items);
                     }
                 }
             }
@@ -566,7 +549,10 @@ impl<'a> Module<'a> {
         }
 
         for (name, data) in self.custom_sections {
-            module.section(&wasm_encoder::CustomSection { name, data });
+            module.section(&wasm_encoder::CustomSection {
+                name: std::borrow::Cow::Borrowed(name),
+                data: std::borrow::Cow::Borrowed(data),
+            });
         }
 
         Ok(module.finish())

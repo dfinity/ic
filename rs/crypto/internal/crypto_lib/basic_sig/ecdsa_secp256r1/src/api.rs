@@ -89,7 +89,7 @@ pub fn der_encoding_from_xy_coordinates(x: &[u8], y: &[u8]) -> CryptoResult<Vec<
 fn public_key_to_der(pk: &types::PublicKeyBytes) -> CryptoResult<Vec<u8>> {
     let pkey = ic_crypto_ecdsa_secp256r1::PublicKey::deserialize_sec1(&pk.0).map_err(|e| {
         CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::EcdsaSecp256k1,
+            algorithm: AlgorithmId::EcdsaP256,
             key_bytes: Some(pk.0.to_vec()),
             internal_error: format!("{:?}", e),
         }
@@ -174,7 +174,7 @@ pub fn verify(
     match pubkey.verify_signature_prehashed(msg, &sig.0) {
         true => Ok(()),
         false => Err(CryptoError::SignatureVerification {
-            algorithm: AlgorithmId::EcdsaSecp256k1,
+            algorithm: AlgorithmId::EcdsaP256,
             public_key_bytes: pk.0.to_vec(),
             sig_bytes: sig.0.to_vec(),
             internal_error: "verification failed".to_string(),

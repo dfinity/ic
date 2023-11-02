@@ -1,6 +1,6 @@
 mod crypto_hash_tests {
     use super::super::*;
-    use ic_crypto_sha::{DomainSeparationContext, Sha256};
+    use ic_crypto_sha2::{DomainSeparationContext, Sha256};
     use std::hash::Hash;
     use CryptoHashDomain;
     use CryptoHashableTestDummy;

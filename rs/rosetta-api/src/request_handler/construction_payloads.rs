@@ -243,27 +243,32 @@ fn handle_transfer(
         Operation::Approve { .. } => Err(ApiError::invalid_request(
             "Approve operations are not supported through Rosetta.",
         )),
-        Operation::TransferFrom { .. } => Err(ApiError::invalid_request(
-            "TransferFrom operations are not supported through Rosetta.",
-        )),
         Operation::Transfer {
             from,
             to,
             amount,
             fee,
-        } => handle_transfer_operation(
-            from,
-            to,
-            amount,
-            fee,
-            memo,
-            created_at_time,
-            ledger,
-            payloads,
-            updates,
-            pks_map,
-            ingress_expiries,
-        ),
+            spender,
+        } => {
+            if spender.is_some() {
+                return Err(ApiError::invalid_request(
+                    "TransferFrom operations are not supported through Rosetta.",
+                ));
+            }
+            handle_transfer_operation(
+                from,
+                to,
+                amount,
+                fee,
+                memo,
+                created_at_time,
+                ledger,
+                payloads,
+                updates,
+                pks_map,
+                ingress_expiries,
+            )
+        }
     }
 }
 

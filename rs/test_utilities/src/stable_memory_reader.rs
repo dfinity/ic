@@ -33,5 +33,5 @@ lazy_static! {
     pub static ref STABLE_MEMORY_READER_WASM: Vec<u8> =
         wat::parse_str(STABLE_MEMORY_READER_WAT).unwrap();
     pub static ref STABLE_MEMORY_READER_SHA256: [u8; 32] =
-        ic_crypto_sha::Sha256::hash(&STABLE_MEMORY_READER_WASM);
+        ic_crypto_sha2::Sha256::hash(&STABLE_MEMORY_READER_WASM);
 }

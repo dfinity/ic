@@ -41,6 +41,7 @@ fn example_block() -> Block {
     let transaction = Transaction::new(
         AccountIdentifier::new(CanisterId::from_u64(1).get(), None),
         AccountIdentifier::new(CanisterId::from_u64(2).get(), None),
+        None,
         Tokens::new(10000, 50).unwrap(),
         DEFAULT_TRANSFER_FEE,
         Memo(456),
@@ -190,7 +191,7 @@ fn test_rosetta1_92() {
         // Perform some more transfers, this should create another archive canister but
         // because of ROSETTA1-92 it doesn't.
         // Perform the transfers in single transfer batches so that we give archiving
-        // some oportunity to catch up.
+        // some opportunity to catch up.
         for _i in 0..blocks_per_archive_node {
             perform_transfers(nns_canisters.clone(), user.clone(), 1).await;
         }

@@ -3,10 +3,10 @@
 
 use ic_interfaces::{
     artifact_manager::ArtifactProcessor,
-    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    artifact_pool::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifactEvent},
     time_source::TimeSource,
 };
-use ic_types::{artifact::*, artifact_kind::*, messages::SignedIngress};
+use ic_types::{artifact::*, artifact_kind::*};
 use std::sync::{Arc, RwLock};
 
 pub struct Processor<P, C> {
@@ -32,25 +32,24 @@ impl<A: ArtifactKind, C, P: MutablePool<A, C> + Send + Sync + 'static> ArtifactP
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        artifacts: Vec<UnvalidatedArtifact<A::Message>>,
-    ) -> (Vec<Advert<A>>, bool) {
+        artifact_events: Vec<UnvalidatedArtifactEvent<A>>,
+    ) -> ChangeResult<A> {
         {
             let mut pool = self.pool.write().unwrap();
-            for artifact in artifacts {
-                pool.insert(artifact)
+            for artifact_event in artifact_events {
+                match artifact_event {
+                    UnvalidatedArtifactEvent::Insert(artifact) => pool.insert(artifact),
+                    UnvalidatedArtifactEvent::Remove(id) => pool.remove(&id),
+                }
             }
         }
-        let change_set = {
-            let pool = self.pool.read().unwrap();
-            self.change_set_producer.on_state_change(&*pool)
-        };
-        let result = self
-            .pool
+        let change_set = self
+            .change_set_producer
+            .on_state_change(&self.pool.read().unwrap());
+        self.pool
             .write()
             .unwrap()
-            .apply_changes(time_source, change_set);
-
-        (result.adverts, result.changed)
+            .apply_changes(time_source, change_set)
     }
 }
 
@@ -82,18 +81,20 @@ impl<C, P: MutablePool<IngressArtifact, C> + Send + Sync + 'static>
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        artifacts: Vec<UnvalidatedArtifact<SignedIngress>>,
-    ) -> (Vec<Advert<IngressArtifact>>, bool) {
+        artifact_events: Vec<UnvalidatedArtifactEvent<IngressArtifact>>,
+    ) -> ChangeResult<IngressArtifact> {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
-            for artifact in artifacts {
-                ingress_pool.insert(artifact)
+            for artifact_event in artifact_events {
+                match artifact_event {
+                    UnvalidatedArtifactEvent::Insert(artifact) => ingress_pool.insert(artifact),
+                    UnvalidatedArtifactEvent::Remove(id) => ingress_pool.remove(&id),
+                }
             }
         }
-        let change_set = {
-            let pool = self.ingress_pool.read().unwrap();
-            self.client.on_state_change(&*pool)
-        };
+        let change_set = self
+            .client
+            .on_state_change(&self.ingress_pool.read().unwrap());
         let result = self
             .ingress_pool
             .write()
@@ -101,6 +102,10 @@ impl<C, P: MutablePool<IngressArtifact, C> + Send + Sync + 'static>
             .apply_changes(time_source, change_set);
         // We ignore the ingress pool's "changed" result and return StateUnchanged,
         // in order to not trigger an immediate re-processing.
-        (result.adverts, false)
+        ChangeResult {
+            adverts: result.adverts,
+            purged: result.purged,
+            changed: false,
+        }
     }
 }

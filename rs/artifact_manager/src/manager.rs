@@ -7,8 +7,8 @@
 //! pools without knowing artifact-related details.
 use crate::ArtifactClientHandle;
 use ic_interfaces::{
-    artifact_manager::{AdvertMismatchError, ArtifactManager, OnArtifactError},
-    artifact_pool::UnvalidatedArtifact,
+    artifact_manager::{ArtifactManager, OnArtifactError},
+    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
 };
 use ic_types::{
     artifact,
@@ -88,12 +88,11 @@ impl ArtifactManager for ArtifactManagerImpl {
     fn on_artifact(
         &self,
         msg: artifact::Artifact,
-        advert: p2p::GossipAdvert,
         peer_id: &NodeId,
     ) -> Result<(), OnArtifactError> {
         let tag: ArtifactTag = (&msg).into();
         if let Some(client) = self.clients.get(&tag) {
-            return client.on_artifact(msg, advert, *peer_id);
+            return client.on_artifact(msg, *peer_id);
         }
         Err(OnArtifactError::NotProcessed)
     }
@@ -195,12 +194,7 @@ impl ArtifactManager for ArtifactManagerImpl {
 pub trait ArtifactManagerBackend: Send + Sync {
     /// The method is called when an artifact is received.
     #[allow(clippy::result_large_err)]
-    fn on_artifact(
-        &self,
-        msg: artifact::Artifact,
-        advert: p2p::GossipAdvert,
-        peer_id: NodeId,
-    ) -> Result<(), OnArtifactError>;
+    fn on_artifact(&self, msg: artifact::Artifact, peer_id: NodeId) -> Result<(), OnArtifactError>;
 
     /// The method indicates whether an artifact exists.
     fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> bool;
@@ -230,23 +224,6 @@ pub trait ArtifactManagerBackend: Send + Sync {
     ) -> Option<Box<dyn Chunkable + Send + Sync>>;
 }
 
-/// Checks if the given advert matches what is computed from the message.
-/// Returns the advert derived from artifact on mismatch.
-fn check_advert<Artifact: ArtifactKind>(
-    msg: &Artifact::Message,
-    advert: &Advert<Artifact>,
-) -> Result<(), Advert<Artifact>>
-where
-    Advert<Artifact>: Eq,
-{
-    let computed = Artifact::message_to_advert(msg);
-    if advert == &computed {
-        Ok(())
-    } else {
-        Err(computed)
-    }
-}
-
 /// Trait implementation for `ArtifactManagerBackend`.
 impl<Artifact: ArtifactKind> ArtifactManagerBackend for ArtifactClientHandle<Artifact>
 where
@@ -254,41 +231,34 @@ where
         + Send
         + 'static
         + TryFrom<artifact::Artifact, Error = artifact::Artifact>,
-    Advert<Artifact>:
-        Into<p2p::GossipAdvert> + TryFrom<p2p::GossipAdvert, Error = p2p::GossipAdvert> + Eq,
+    Advert<Artifact>: Into<p2p::GossipAdvert>,
     for<'a> &'a Artifact::Id: TryFrom<&'a artifact::ArtifactId, Error = &'a artifact::ArtifactId>,
     artifact::ArtifactFilter: AsMut<Artifact::Filter> + AsRef<Artifact::Filter>,
     for<'a> &'a Artifact::Attribute:
         TryFrom<&'a artifact::ArtifactAttribute, Error = &'a artifact::ArtifactAttribute>,
     Artifact::Attribute: 'static,
-    Artifact::Id: 'static,
+    Artifact::Id: 'static + Send,
 {
     /// The method is called when the given artifact is received.
     fn on_artifact(
         &self,
         artifact: artifact::Artifact,
-        advert: p2p::GossipAdvert,
         peer_id: NodeId,
     ) -> Result<(), OnArtifactError> {
-        match (artifact.try_into(), advert.try_into()) {
-            (Ok(message), Ok(advert)) => {
-                check_advert(&message, &advert).map_err(|expected| AdvertMismatchError {
-                    received: advert.into(),
-                    expected: expected.into(),
-                })?;
+        match artifact.try_into() {
+            Ok(message) => {
                 // this sends to an unbounded channel, which is what we want here
                 self.sender
-                    .send(UnvalidatedArtifact {
+                    .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                         message,
                         peer_id,
                         timestamp: self.time_source.get_relative_time(),
-                    })
+                    }))
                     .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
 
                 Ok(())
             }
-            (Err(_), _) => Err(OnArtifactError::NotProcessed),
-            (_, Err(advert)) => Err(OnArtifactError::MessageConversionfailed(advert)),
+            Err(_) => Err(OnArtifactError::NotProcessed),
         }
     }
 

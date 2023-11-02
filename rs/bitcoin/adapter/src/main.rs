@@ -44,7 +44,6 @@ pub async fn main() {
     }
 
     let adapter_state = AdapterState::new(config.idle_seconds);
-
     start_grpc_server_and_router(&config, &metrics_registry, logger.clone(), adapter_state);
 
     shutdown_signal(logger.inner_logger.root.clone()).await;

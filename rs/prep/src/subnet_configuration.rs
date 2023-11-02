@@ -6,16 +6,21 @@ use std::{
     time::Duration,
 };
 
+use crate::{
+    initialized_subnet::InitializedSubnet,
+    internet_computer::INITIAL_REGISTRY_VERSION,
+    node::{InitializeNodeError, InitializedNode, NodeConfiguration, NodeIndex},
+};
 use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
-use thiserror::Error;
-
 use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    subnet::v1::{CatchUpPackageContents, EcdsaConfig, SubnetFeatures, SubnetRecord},
+    subnet::v1::{
+        CatchUpPackageContents, EcdsaConfig, InitialNiDkgTranscriptRecord, SubnetFeatures,
+        SubnetRecord,
+    },
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -28,12 +33,18 @@ use ic_types::{
     },
     p2p, Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
 };
+use thiserror::Error;
 
-use crate::internet_computer::INITIAL_REGISTRY_VERSION;
-use crate::node::{InitializedNode, NodeConfiguration, NodeConfigurationTryFromError, NodeIndex};
-use crate::{initialized_subnet::InitializedSubnet, node::InitializeNodeError};
 pub type SubnetIndex = u64;
 pub mod constants;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum SubnetRunningState {
+    #[default]
+    Active,
+    Halted,
+}
+
 /// This represents the initial configuration of an NNS subnetwork of an IC
 /// instance.
 #[derive(Clone, Debug, Default)]
@@ -102,16 +113,13 @@ pub struct SubnetConfig {
     /// The list of public keys whose owners have "backup" SSH access to nodes
     /// on the NNS subnet.
     pub ssh_backup_access: Vec<String>,
+
+    /// The status of the subnet, i.e., whether it is running or halted.
+    pub running_state: SubnetRunningState,
 }
 
 #[derive(Error, Debug)]
 pub enum InitializeSubnetError {
-    #[error("converting node to proto failed: {source}")]
-    TryFrom {
-        #[from]
-        source: NodeConfigurationTryFromError,
-    },
-
     #[error("threshold signature public key: {source}")]
     ThresholdSigPublicKey {
         #[from]
@@ -219,6 +227,7 @@ impl SubnetConfig {
         max_number_of_canisters: Option<u64>,
         ssh_readonly_access: Vec<String>,
         ssh_backup_access: Vec<String>,
+        running_state: SubnetRunningState,
     ) -> Self {
         let scheduler_config = SchedulerConfig::default_for_subnet_type(subnet_type);
 
@@ -252,6 +261,7 @@ impl SubnetConfig {
             max_number_of_canisters: max_number_of_canisters.unwrap_or(0),
             ssh_readonly_access,
             ssh_backup_access,
+            running_state,
         }
     }
 
@@ -272,12 +282,12 @@ impl SubnetConfig {
 
         let nodes_in_subnet: BTreeSet<NodeId> = initialized_nodes
             .values()
-            .map(|initalized_node| initalized_node.node_id)
+            .map(|initialized_node| initialized_node.node_id)
             .collect();
 
         let membership_nodes: Vec<Vec<u8>> = initialized_nodes
             .values()
-            .map(|initalized_node| initalized_node.node_id.get().into_vec())
+            .map(|initialized_node| initialized_node.node_id.get().into_vec())
             .collect();
 
         let subnet_record = SubnetRecord {
@@ -296,7 +306,7 @@ impl SubnetConfig {
             // subnet via NNS.
             start_as_nns: false,
             subnet_type: self.subnet_type.into(),
-            is_halted: false,
+            is_halted: self.running_state == SubnetRunningState::Halted,
             halt_at_cup_height: false,
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
@@ -327,6 +337,7 @@ impl SubnetConfig {
                 INITIAL_REGISTRY_VERSION,
             ),
             &dkg_dealing_encryption_pubkeys,
+            &mut rand::rngs::OsRng,
         );
         let ni_dkg_transcript_high_threshold = initial_dkg_transcript(
             InitialNiDkgConfig::new(
@@ -337,6 +348,7 @@ impl SubnetConfig {
                 INITIAL_REGISTRY_VERSION,
             ),
             &dkg_dealing_encryption_pubkeys,
+            &mut rand::rngs::OsRng,
         );
         let subnet_threshold_signing_public_key = PublicKey::from(ThresholdSigPublicKey::from(
             &ni_dkg_transcript_high_threshold,

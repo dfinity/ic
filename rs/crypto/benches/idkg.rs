@@ -3,7 +3,8 @@ use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
 use ic_crypto_test_utils_canister_threshold_sigs::node::{Node, Nodes};
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    build_params_from_previous, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    build_params_from_previous, random_transcript_id, CanisterThresholdSigTestEnvironment,
+    IDkgParticipants,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::IDkgProtocol;
@@ -46,28 +47,26 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
         },
     ];
 
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
         group
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
-        IDkgMode::iter().for_each(|mode| bench_create_dealing(group, &test_case, &mode, &mut rng));
+        IDkgMode::iter().for_each(|mode| bench_create_dealing(group, &test_case, &mode, rng));
         IDkgMode::iter()
-            .for_each(|mode| bench_verify_dealing_public(group, &test_case, &mode, &mut rng));
+            .for_each(|mode| bench_verify_dealing_public(group, &test_case, &mode, rng));
         IDkgMode::iter()
-            .for_each(|mode| bench_verify_dealing_private(group, &test_case, &mode, &mut rng));
+            .for_each(|mode| bench_verify_dealing_private(group, &test_case, &mode, rng));
 
-        bench_verify_initial_dealings(group, &test_case, &mut rng);
+        bench_verify_initial_dealings(group, &test_case, rng);
 
-        IDkgMode::iter()
-            .for_each(|mode| bench_create_transcript(group, &test_case, &mode, &mut rng));
-        IDkgMode::iter()
-            .for_each(|mode| bench_verify_transcript(group, &test_case, &mode, &mut rng));
-        IDkgMode::iter().for_each(|mode| bench_load_transcript(group, &test_case, &mode, &mut rng));
+        IDkgMode::iter().for_each(|mode| bench_create_transcript(group, &test_case, &mode, rng));
+        IDkgMode::iter().for_each(|mode| bench_verify_transcript(group, &test_case, &mode, rng));
+        IDkgMode::iter().for_each(|mode| bench_load_transcript(group, &test_case, &mode, rng));
 
-        bench_retain_active_transcripts(group, &test_case, 1, &mut rng);
+        bench_retain_active_transcripts(group, &test_case, 1, rng);
     }
 }
 
@@ -146,22 +145,32 @@ fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
     test_case: &TestCase,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let receiver = env.nodes.random_node(rng);
+    let dealers_env = test_case.new_test_environment(rng);
+    let receivers_env = CanisterThresholdSigTestEnvironment::new_with_existing_registry(
+        &dealers_env,
+        test_case.num_of_nodes,
+        rng,
+    );
+    dealers_env.registry.reload();
+    // `src` refers to the subnet where the key is initially generated. Here, both dealers and
+    // receivers are needed.
+    let (src_dealers, src_receivers) = dealers_env
+        .choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    // `dst` refers to the subnet where the key is reshared to.
+    let (_dst_dealers, dst_receivers) = receivers_env
+        .choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
 
     group.bench_function("verify_initial_dealings", |bench| {
         bench.iter_batched(
             || {
-                let initial_params = env.params_for_random_sharing(
-                    &dealers,
-                    &receivers,
+                let initial_params = dealers_env.params_for_random_sharing(
+                    &src_dealers,
+                    &src_receivers,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
                     rng,
                 );
                 let initial_transcript =
-                    run_idkg_without_complaint(&initial_params, &env.nodes, rng);
+                    run_idkg_without_complaint(&initial_params, &dealers_env.nodes, rng);
 
                 let unmasked_params = build_params_from_previous(
                     initial_params,
@@ -169,24 +178,34 @@ fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
                     rng,
                 );
                 let unmasked_transcript =
-                    run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
+                    run_idkg_without_complaint(&unmasked_params, &dealers_env.nodes, rng);
 
-                let reshare_of_unmasked_params = build_params_from_previous(
-                    unmasked_params,
+                let reshare_of_unmasked_params = IDkgTranscriptParams::new(
+                    random_transcript_id(rng),
+                    src_dealers.get().clone(),
+                    dst_receivers.get().clone(),
+                    unmasked_transcript.registry_version,
+                    unmasked_transcript.algorithm_id,
                     IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
-                    rng,
+                )
+                .expect("invalid reshare of unmasked parameters");
+                load_previous_transcripts_for_all_dealers(
+                    &reshare_of_unmasked_params,
+                    &dealers_env.nodes,
                 );
-                load_previous_transcripts_for_all_dealers(&reshare_of_unmasked_params, &env.nodes);
-                let dealings = env.nodes.create_dealings(&reshare_of_unmasked_params);
+                let dealings = dealers_env
+                    .nodes
+                    .create_dealings(&reshare_of_unmasked_params);
 
                 let initial_dealings = InitialIDkgDealings::new(
                     reshare_of_unmasked_params.clone(),
                     dealings.into_values().collect(),
                 )
                 .expect("failed to create initial dealings");
-                (reshare_of_unmasked_params, initial_dealings)
+                let receiver = receivers_env.nodes.random_node(rng);
+                (reshare_of_unmasked_params, initial_dealings, receiver)
             },
-            |(params, initial_dealings)| {
+            |(params, initial_dealings, receiver)| {
                 verify_initial_dealings(receiver, &params, &initial_dealings)
             },
             SmallInput,

@@ -1,0 +1,48 @@
+[package]
+name = "testnets"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.31"
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+tests = { path = "../.." }
+ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }
+slog = { version = "2.5.2", features = ["release_max_level_trace"] }
+
+[[bin]]
+name = "large"
+path = "large.rs"
+
+[[bin]]
+name = "medium"
+path = "medium.rs"
+
+[[bin]]
+name = "recovered_mainnet_nns"
+path = "recovered_mainnet_nns.rs"
+
+[[bin]]
+name = "single_app_large_node"
+path = "single_app_large_node.rs"
+
+[[bin]]
+name = "single_large_node"
+path = "single_large_node.rs"
+
+[[bin]]
+name = "small_api_boundary"
+path = "small_api_boundary.rs"
+
+[[bin]]
+name = "small_nns"
+path = "small_nns.rs"
+
+[[bin]]
+name = "small"
+path = "small.rs"
+
+[[bin]]
+name = "sns_testing"
+path = "sns_testing.rs"

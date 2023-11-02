@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//rs/replica:__subpackages__"])
@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/certification",
     "//rs/config",
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
@@ -21,6 +22,7 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/phantom_newtype",
     "//rs/types/error_types",
     "//rs/types/types",
     "//rs/validator",
@@ -74,6 +76,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:serde_bytes",
     "@crate_index//:tower-test",
 ]
 

@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn empty() {
-        let source: Vec<_> = (0..=1002).into_iter().map(|v| v as u8).collect();
+        let source: Vec<_> = (0..=1002).map(|v| v as u8).collect();
         for skip in [0, 10, 1000] {
             for bytes in [0, 1, 9, 10, 11, 999, 1000, 1001] {
                 let mut buf = ChunkWriter::new(skip, 0);
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn non_empty() {
-        let source: Vec<_> = (0..=2002).into_iter().map(|v| v as u8).collect();
+        let source: Vec<_> = (0..=2002).map(|v| v as u8).collect();
         for skip in [0, 10, 1000] {
             for size in [1, 10, 1000] {
                 for bytes in [

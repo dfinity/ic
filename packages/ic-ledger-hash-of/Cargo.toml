@@ -12,6 +12,5 @@ repository = "https://github.com/dfinity/ic"
 
 [dependencies]
 candid = { workspace = true }
-ciborium = "0.2.1"
 hex = "0.4.2"
 serde = "1.0"

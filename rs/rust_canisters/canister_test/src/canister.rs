@@ -6,7 +6,7 @@ use ic_config::Config;
 use ic_ic00_types::CanisterStatusType::Stopped;
 pub use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::*;
@@ -14,11 +14,14 @@ pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 
 use ic_ic00_types::{CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs};
-use std::convert::TryFrom;
-use std::env;
-use std::fmt;
-use std::time::Duration;
-use std::{convert::AsRef, fs::File, io::Read, path::Path};
+use std::{
+    convert::{AsRef, TryFrom},
+    env, fmt,
+    fs::File,
+    io::Read,
+    path::Path,
+    time::Duration,
+};
 
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
@@ -211,7 +214,7 @@ impl Wasm {
                 }
                 Err(e) => {
                     eprintln!(
-                        "Installation of wasm into cansiter with ID: {} failed with: {}",
+                        "Installation of wasm into canister with ID: {} failed with: {}",
                         canister_id, e
                     );
                     match backoff.next_backoff() {
@@ -758,6 +761,7 @@ impl<'a> Canister<'a> {
     }
 
     /// Tries to stop this canister, waits for it to reach the Stopped state.
+    /// This is expected to work only when the canister's controller is an anonymous user
     pub async fn stop(&self) -> Result<(), String> {
         let stop_res: Result<(), String> = self
             .runtime
@@ -798,6 +802,13 @@ impl<'a> Canister<'a> {
     /// replace this in tests.
     pub async fn stop_then_restart(&self) -> Result<(), String> {
         self.stop().await?;
+        self.start().await
+    }
+    /// Tries to start the canister.
+    ///
+    /// This is expected to work only when the canister's controller is the
+    /// anonymous user.
+    pub async fn start(&self) -> Result<(), String> {
         let start_res: Result<(), String> = self
             .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())

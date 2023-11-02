@@ -79,7 +79,7 @@ The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organizat
 *System requirements*
 
 - x86-64 based system (minimum: 16 GB MEM/SWAP, 100 GB available disk space)
-- Ubuntu 20.04 or newer
+- Ubuntu 22.04 or newer
 - https://podman.io/getting-started/installation[Podman]
 
 For detailed information on building IC-OS images, please refer to the link:ic-os/README.adoc[IC-OS README]
@@ -98,9 +98,13 @@ All built artifacts will be located in the top-level artifacts/ directory.
 
 Each https://dashboard.internetcomputer.org/releases[release proposal] includes instructions on how to verify the build reproducibility of IC-OS update images.
 
-To verify the build reproducibility of a specific git revision, run:
+To verify the build reproducibility of a specific proposal, you can just copy the one liner below to a fresh Ubuntu VM 22.04 or higher:
 
-  $ ./gitlab-ci/tools/repro-check.sh -c <git revision>
+    $ sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/master/gitlab-ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -p <proposal>
+
+If you have the repository already cloned you can just run:
+
+    $ ./gitlab-ci/tools/repro-check.sh -c <git revision>
 
 == Contributing
 
@@ -125,4 +129,4 @@ few components licensed under the http://dfinity.org/licenses/IC-1.0[Internet Co
 Source License] and http://dfinity.org/licenses/IC-shared-1.0[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
 
 
-While we adapt our development processes and security reviews for a world of developing with our code in the open, we are not accepting any pull requests at this time. For now, please join our developer community at https://forum.dfinity.org. If you discover any bugs and vulnerabilities, please follow the procedure at https://dfinity.org/vulnerability-disclosure-program/. 
+While we adapt our development processes and security reviews for a world of developing with our code in the open, we are not accepting any pull requests at this time. For now, please join our developer community at https://forum.dfinity.org. If you discover any bugs and vulnerabilities, please follow the procedure at https://dfinity.org/vulnerability-disclosure-program/.

@@ -1,8 +1,8 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:prost.bzl", "generated_files_check")
-load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:candid.bzl", "did_git_test")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:candid.bzl", "did_git_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -31,8 +31,7 @@ rust_library(
     deps = [
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/sha",
-        "//rs/rosetta-api/icrc1",
+        "//rs/crypto/sha2",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/dfn_core",

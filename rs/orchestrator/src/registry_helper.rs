@@ -207,7 +207,7 @@ impl RegistryHelper {
         let registry_version = self.get_latest_version();
         let node_record = self
             .registry_client
-            .get_transport_info(self.node_id, registry_version)
+            .get_node_record(self.node_id, registry_version)
             .ok()
             .flatten();
         let node_operator_id =

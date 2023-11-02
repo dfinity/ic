@@ -2,6 +2,7 @@
 use super::*;
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
+use ic_types::time::UNIX_EPOCH;
 use std::str::FromStr;
 
 mod all_node_public_keys_validation {
@@ -12,15 +13,16 @@ mod all_node_public_keys_validation {
     use ic_crypto_test_utils_keys::public_keys::{
         valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
         valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
-        valid_tls_certificate,
+        valid_tls_certificate_and_validation_time,
     };
 
     #[test]
     fn should_succeed_for_valid_hard_coded_keys() {
-        let hard_coded_keys = valid_current_node_public_keys();
+        let (hard_coded_keys, validation_time) = valid_current_node_public_keys();
         let node_id = node_id_from_node_signing_public_key(&hard_coded_keys);
 
-        let valid_keys = ValidNodePublicKeys::try_from(hard_coded_keys.clone(), node_id);
+        let valid_keys =
+            ValidNodePublicKeys::try_from(hard_coded_keys.clone(), node_id, validation_time);
 
         assert_matches!(valid_keys, Ok(actual)
             if actual.node_id() == node_id &&
@@ -35,10 +37,10 @@ mod all_node_public_keys_validation {
     fn should_fail_if_node_signing_key_is_missing() {
         let public_keys = CurrentNodePublicKeys {
             node_signing_public_key: None,
-            ..valid_current_node_public_keys()
+            ..valid_current_node_public_keys().0
         };
 
-        let result = ValidNodePublicKeys::try_from(public_keys, derived_node_id());
+        let result = ValidNodePublicKeys::try_from(public_keys, derived_node_id(), UNIX_EPOCH);
 
         assert_matches!(result, Err(KeyValidationError { error })
             if error == "invalid node signing key: key is missing"
@@ -49,11 +51,11 @@ mod all_node_public_keys_validation {
     fn should_fail_if_committee_signing_key_is_missing() {
         let public_keys = CurrentNodePublicKeys {
             committee_signing_public_key: None,
-            ..valid_current_node_public_keys()
+            ..valid_current_node_public_keys().0
         };
         let node_id = node_id_from_node_signing_public_key(&public_keys);
 
-        let result = ValidNodePublicKeys::try_from(public_keys, node_id);
+        let result = ValidNodePublicKeys::try_from(public_keys, node_id, UNIX_EPOCH);
 
         assert_matches!(result, Err(KeyValidationError { error })
             if error == "invalid committee signing key: key is missing"
@@ -64,11 +66,11 @@ mod all_node_public_keys_validation {
     fn should_fail_if_tls_key_validation_fails_because_cert_is_missing() {
         let public_keys = CurrentNodePublicKeys {
             tls_certificate: None,
-            ..valid_current_node_public_keys()
+            ..valid_current_node_public_keys().0
         };
         let node_id = node_id_from_node_signing_public_key(&public_keys);
 
-        let result = ValidNodePublicKeys::try_from(public_keys, node_id);
+        let result = ValidNodePublicKeys::try_from(public_keys, node_id, UNIX_EPOCH);
 
         assert_matches!(result, Err(KeyValidationError { error })
             if error == "invalid TLS certificate: certificate is missing"
@@ -77,13 +79,14 @@ mod all_node_public_keys_validation {
 
     #[test]
     fn should_fail_if_dkg_dealing_encryption_key_is_missing() {
+        let (current_node_public_keys, validation_time) = valid_current_node_public_keys();
         let public_keys = CurrentNodePublicKeys {
             dkg_dealing_encryption_public_key: None,
-            ..valid_current_node_public_keys()
+            ..current_node_public_keys
         };
         let node_id = node_id_from_node_signing_public_key(&public_keys);
 
-        let result = ValidNodePublicKeys::try_from(public_keys, node_id);
+        let result = ValidNodePublicKeys::try_from(public_keys, node_id, validation_time);
 
         assert_eq!(
             result.unwrap_err(),
@@ -95,27 +98,32 @@ mod all_node_public_keys_validation {
 
     #[test]
     fn should_fail_if_idkg_dealing_encryption_key_is_missing() {
+        let (current_node_public_keys, validation_time) = valid_current_node_public_keys();
         let public_keys = CurrentNodePublicKeys {
             idkg_dealing_encryption_public_key: None,
-            ..valid_current_node_public_keys()
+            ..current_node_public_keys
         };
         let node_id = node_id_from_node_signing_public_key(&public_keys);
 
-        let result = ValidNodePublicKeys::try_from(public_keys, node_id);
+        let result = ValidNodePublicKeys::try_from(public_keys, node_id, validation_time);
 
         assert_matches!(result, Err(KeyValidationError { error })
             if error == "invalid I-DKG dealing encryption key: key is missing"
         );
     }
 
-    fn valid_current_node_public_keys() -> CurrentNodePublicKeys {
-        CurrentNodePublicKeys {
-            node_signing_public_key: Some(valid_node_signing_public_key()),
-            committee_signing_public_key: Some(valid_committee_signing_public_key()),
-            tls_certificate: Some(valid_tls_certificate()),
-            dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
-            idkg_dealing_encryption_public_key: Some(valid_idkg_dealing_encryption_public_key()),
-        }
+    fn valid_current_node_public_keys() -> (CurrentNodePublicKeys, Time) {
+        let (tls_cert, validation_time) = valid_tls_certificate_and_validation_time();
+        (
+            CurrentNodePublicKeys {
+                node_signing_public_key: Some(valid_node_signing_public_key()),
+                committee_signing_public_key: Some(valid_committee_signing_public_key()),
+                tls_certificate: Some(tls_cert),
+                dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
+                idkg_dealing_encryption_public_key: Some(valid_idkg_dealing_encryption_public_key()),
+            },
+            validation_time,
+        )
     }
 }
 
@@ -136,7 +144,7 @@ mod node_signing_public_key_validation {
     fn should_fail_on_default_public_key() {
         let result = ValidNodeSigningPublicKey::try_from(PublicKey::default());
 
-        assert_matches!(result, Err(KeyValidationError {error}) 
+        assert_matches!(result, Err(KeyValidationError {error})
             if error.contains("invalid node signing key"));
     }
 

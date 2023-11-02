@@ -1,5 +1,5 @@
 {
-  "image": "dfinity/ic-build:b5db99fec94ed412c9a2a239b42cae539bd607fdc47961b771b5587ff936e766",
+  "image": "dfinity/ic-build:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -45,17 +45,8 @@
       "source": "${localEnv:HOME}/.local/share/fish",
       "target": "/home/ubuntu/.local/share/fish",
       "type": "bind"
-    },
-    {
-      "source": "${localEnv:SSH_AUTH_SOCK}",
-      "target": "${localEnv:SSH_AUTH_SOCK}",
-      "type": "bind"
     }
   ],
-  "containerEnv": {
-    "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}",
-    "TERM": "xterm-256color"
-  },
   "customizations": {
     "vscode": {
       "extensions": [

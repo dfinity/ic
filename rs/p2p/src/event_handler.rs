@@ -6,17 +6,17 @@
 //! layer.
 //!
 //!```text
-//!                +-----------------------------+
-//!                |     HttpHandler(Ingress)    |
-//!                +-----------------------------+
-//!                |    IngressEventHandler{}    |
-//!                +------------v----------------+
-//!                |       P2P/Gossip            |
-//!                +----^----------------^-------+
-//!                | AsyncTranportEventHandler{} |
-//!                +-----------------------------+
-//!                |        Transport            |
-//!                +-----------------------------+
+//!                +------------------------------+
+//!                |      HttpHandler(Ingress)    |
+//!                +------------------------------+
+//!                |     IngressEventHandler{}    |
+//!                +------------v-----------------+
+//!                |        P2P/Gossip            |
+//!                +-----^----------------^-------+
+//!                | AsyncTransportEventHandler{} |
+//!                +------------------------------+
+//!                |         Transport            |
+//!                +------------------------------+
 //! ```
 //!
 //! Internally, P2P treats event streams as flows. Each flow is
@@ -75,7 +75,7 @@ use crate::{
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
 use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
+use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_types::{artifact::ArtifactFilter, p2p::GossipAdvert, NodeId};
 use parking_lot::Mutex;
 use std::{
@@ -87,7 +87,6 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::Duration,
 };
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
@@ -385,38 +384,16 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
     }
 }
 
-pub(crate) fn start_ticker_task(rt_handle: tokio::runtime::Handle, gossip: GossipArc) {
-    const P2P_TICK_INTERVAL: Duration = Duration::from_millis(100);
-    rt_handle.clone().spawn(async move {
-        loop {
-            tokio::time::sleep(P2P_TICK_INTERVAL).await;
-            let gossip_clone = gossip.clone();
-            rt_handle
-                .spawn_blocking(move || {
-                    gossip_clone.on_gossip_timer();
-                })
-                .await
-                .unwrap();
-        }
-    });
-}
-
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::advert_broadcaster::start_advert_broadcast_task;
     use crate::download_prioritization::test::make_gossip_advert;
-    use crate::AdvertBroadcasterImpl;
-    use ic_interfaces::artifact_manager::AdvertBroadcaster;
+    use crossbeam_channel::{bounded, Sender};
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_interfaces_transport::TransportPayload;
-    use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
-    use tokio::{
-        sync::mpsc::{channel, Receiver},
-        time::{sleep, Duration},
-    };
+    use tokio::time::{sleep, Duration};
 
     struct TestThrottle();
     impl IngressPoolThrottler for TestThrottle {
@@ -529,32 +506,19 @@ pub mod tests {
         advert_max_depth: usize,
         node_id: NodeId,
         gossip: GossipArc,
-    ) -> (
-        AsyncTransportEventHandlerImpl,
-        AdvertBroadcasterImpl,
-        Receiver<GossipAdvert>,
-    ) {
+    ) -> AsyncTransportEventHandlerImpl {
         let mut channel_config = ChannelConfig::default();
         channel_config
             .map
             .insert(FlowType::Advert, advert_max_depth);
 
-        let handler = AsyncTransportEventHandlerImpl::new(
+        AsyncTransportEventHandlerImpl::new(
             node_id,
             p2p_test_setup_logger().root.clone().into(),
             &MetricsRegistry::new(),
             channel_config,
             gossip,
-        );
-
-        let (tx, rx) = channel(MAX_ADVERT_BUFFER);
-        let advert_subscriber = AdvertBroadcasterImpl::new(
-            p2p_test_setup_logger().root.clone().into(),
-            &MetricsRegistry::new(),
-            tx,
-        );
-
-        (handler, advert_subscriber, rx)
+        )
     }
 
     /// The function sends the given number of messages to the peer with the
@@ -577,10 +541,10 @@ pub mod tests {
     }
 
     /// The function broadcasts the given number of adverts.
-    async fn broadcast_advert(count: usize, handler: &AdvertBroadcasterImpl) {
+    async fn broadcast_advert(count: usize, handler: &Sender<GossipAdvert>) {
         for i in 0..count {
             let message = make_gossip_advert(i as u64);
-            handler.process_delta(message);
+            handler.send(message).unwrap();
         }
     }
 
@@ -594,7 +558,7 @@ pub mod tests {
     async fn event_handler_start_stop() {
         let node_test_id = node_test_id(0);
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_test_id));
-        let _handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id, gossip_arc).0;
+        let _handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id, gossip_arc);
     }
 
     /// Test the dispatching of adverts to the event handler.
@@ -602,7 +566,7 @@ pub mod tests {
     async fn event_handler_advert_dispatch() {
         let node_test_id = node_test_id(0);
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_test_id));
-        let mut handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id, gossip_arc).0;
+        let mut handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id, gossip_arc);
         send_advert(100, &mut handler, node_test_id).await;
     }
 
@@ -611,7 +575,7 @@ pub mod tests {
     async fn event_handler_slow_consumer() {
         let node_id = node_test_id(0);
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_millis(3), node_id));
-        let mut handler = new_test_event_handler(1, node_id, gossip_arc).0;
+        let mut handler = new_test_event_handler(1, node_id, gossip_arc);
         // send adverts
         send_advert(10, &mut handler, node_id).await;
     }
@@ -621,7 +585,7 @@ pub mod tests {
     async fn event_handler_add_remove_peers() {
         let node_id = node_test_id(0);
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_id));
-        let mut handler = new_test_event_handler(1, node_id, gossip_arc).0;
+        let mut handler = new_test_event_handler(1, node_id, gossip_arc);
         send_advert(100, &mut handler, node_id).await;
     }
 
@@ -631,14 +595,9 @@ pub mod tests {
         let node_id = node_test_id(0);
         let node_test_id = node_test_id(0);
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_id));
-        let (mut handler, subscriber, rx) =
-            new_test_event_handler(MAX_ADVERT_BUFFER, node_id, gossip_arc.clone());
-        start_advert_broadcast_task(
-            tokio::runtime::Handle::current(),
-            no_op_logger(),
-            rx,
-            gossip_arc.clone(),
-        );
+        let mut handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_id, gossip_arc.clone());
+        let (subscriber, rx) = bounded(MAX_ADVERT_BUFFER);
+        let _g = crate::start_p2p_event_loop(rx, gossip_arc.clone());
 
         send_advert(MAX_ADVERT_BUFFER, &mut handler, node_test_id).await;
         loop {

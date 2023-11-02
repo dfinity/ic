@@ -5,7 +5,7 @@ use std::{
 };
 
 use arc_swap::ArcSwapOption;
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
+use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use mockall::{predicate::*, *};
@@ -52,7 +52,9 @@ pub fn generate_custom_routing_table(
                 subnet_id,
                 addr: IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, j as u8)),
                 port: 8080,
-                tls_certificate: valid_tls_certificate().certificate_der,
+                tls_certificate: valid_tls_certificate_and_validation_time()
+                    .0
+                    .certificate_der,
                 replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
             };
 
@@ -101,9 +103,11 @@ fn check_result(height: u64, lat: u64) -> CheckResult {
 // Ensure that nodes that have failed healthcheck or lag behind are excluded
 #[tokio::test(flavor = "multi_thread")]
 async fn test_check_some_unhealthy() -> Result<(), Error> {
-    let routes: ArcSwapOption<Routes> = ArcSwapOption::const_empty();
-    let persist = Persister::new(&routes);
-    let routing_table = ArcSwapOption::from_pointee(generate_custom_routing_table(2, 2, 0));
+    let routes = Arc::new(ArcSwapOption::empty());
+    let persist = Persister::new(Arc::clone(&routes));
+    let routing_table = Arc::new(ArcSwapOption::from_pointee(generate_custom_routing_table(
+        2, 2, 0,
+    )));
 
     let mut check = MockCheck::new();
 
@@ -131,7 +135,7 @@ async fn test_check_some_unhealthy() -> Result<(), Error> {
         .times(1)
         .returning(|_| Ok(check_result(500, 0)));
 
-    let mut check_runner = Runner::new(&routing_table, 1, 10, persist, check);
+    let mut check_runner = Runner::new(Arc::clone(&routing_table), 1, 10, persist, check);
     check_runner.run().await.expect("run should succeed");
 
     let rt = routes.load_full().unwrap();
@@ -148,8 +152,8 @@ async fn test_check_some_unhealthy() -> Result<(), Error> {
 // Ensure that when nodes are removed from routing table -> they're removed from the resulting lookup table
 #[tokio::test(flavor = "multi_thread")]
 async fn test_check_nodes_gone() -> Result<(), Error> {
-    let routes: ArcSwapOption<Routes> = ArcSwapOption::const_empty();
-    let persist = Persister::new(&routes);
+    let routes = Arc::new(ArcSwapOption::empty());
+    let persist = Persister::new(Arc::clone(&routes));
     let mut check = MockCheck::new();
 
     check
@@ -159,8 +163,10 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
         .returning(|_| Ok(check_result(1000, 0)));
 
     // Generate a table with 4 nodes first
-    let routing_table = ArcSwapOption::from_pointee(generate_custom_routing_table(2, 2, 0));
-    let mut check_runner = Runner::new(&routing_table, 1, 10, persist, check);
+    let routing_table = Arc::new(ArcSwapOption::from_pointee(generate_custom_routing_table(
+        2, 2, 0,
+    )));
+    let mut check_runner = Runner::new(Arc::clone(&routing_table), 1, 10, persist, check);
     check_runner.run().await.expect("run should succeed");
 
     let rt = routes.load_full().unwrap();
@@ -201,8 +207,8 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
 // Ensure that min_ok_count is respected
 #[tokio::test(flavor = "multi_thread")]
 async fn test_check_min_ok() -> Result<(), Error> {
-    let routes: ArcSwapOption<Routes> = ArcSwapOption::const_empty();
-    let persist = Persister::new(&routes);
+    let routes = Arc::new(ArcSwapOption::empty());
+    let persist = Persister::new(Arc::clone(&routes));
     let mut check = MockCheck::new();
     let mut seq1 = Sequence::new();
 
@@ -228,8 +234,10 @@ async fn test_check_min_ok() -> Result<(), Error> {
         .in_sequence(&mut seq1);
 
     // Generate a table
-    let routing_table = ArcSwapOption::from_pointee(generate_custom_routing_table(2, 2, 0));
-    let mut check_runner = Runner::new(&routing_table, 5, 10, persist, check);
+    let routing_table = Arc::new(ArcSwapOption::from_pointee(generate_custom_routing_table(
+        2, 2, 0,
+    )));
+    let mut check_runner = Runner::new(Arc::clone(&routing_table), 5, 10, persist, check);
 
     for i in 0..7 {
         check_runner.run().await.expect("run should succeed");
@@ -255,8 +263,8 @@ async fn test_check_min_ok() -> Result<(), Error> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_check_node_upgrade() -> Result<(), Error> {
-    let routes: ArcSwapOption<Routes> = ArcSwapOption::const_empty();
-    let persist = Persister::new(&routes);
+    let routes = Arc::new(ArcSwapOption::empty());
+    let persist = Persister::new(Arc::clone(&routes));
     let mut check = MockCheck::new();
     let mut seq1 = Sequence::new();
 
@@ -282,8 +290,10 @@ async fn test_check_node_upgrade() -> Result<(), Error> {
         .in_sequence(&mut seq1);
 
     // Generate a table
-    let routing_table = ArcSwapOption::from_pointee(generate_custom_routing_table(2, 2, 0));
-    let mut check_runner = Runner::new(&routing_table, 5, 10, persist, check);
+    let routing_table = Arc::new(ArcSwapOption::from_pointee(generate_custom_routing_table(
+        2, 2, 0,
+    )));
+    let mut check_runner = Runner::new(Arc::clone(&routing_table), 5, 10, persist, check);
 
     for i in 0..3 {
         check_runner.run().await.expect("run should succeed");

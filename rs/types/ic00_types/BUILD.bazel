@@ -20,7 +20,6 @@ rust_library(
         "//rs/types/base_types",
         "//rs/types/error_types",
         "@crate_index//:candid",
-        "@crate_index//:float-cmp",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

@@ -1,13 +1,21 @@
 //! Tests that rely on interleaving two method calls on the governance canister
 //! (in particular, when one method is suspended when it calls out to the ledger
 //! canister).
+use crate::interleaving::{
+    drain_receiver_channel,
+    test_data::{
+        CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL, GET_SNS_CANISTERS_SUMMARY_RESPONSE,
+        GET_STATE_RESPONSE, LIST_DEPLOYED_SNSES_RESPONSE, OPEN_SNS_TOKEN_SWAP_PROPOSAL,
+    },
+    EnvironmentControlMessage, InterleavingTestEnvironment,
+};
 use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
 use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_nervous_system_common::{ledger::IcpLedger, E8};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
-    governance::{Environment, Governance},
+    governance::{Environment, Governance, ONE_YEAR_SECONDS},
     pb::v1::{
         manage_neuron::Disburse, proposal::Action, settle_community_fund_participation,
         settle_community_fund_participation::Committed, NetworkEconomics, OpenSnsTokenSwap,
@@ -24,9 +32,7 @@ use std::{
 };
 
 mod common;
-
 mod fixtures;
-
 mod interleaving;
 
 // Test for NNS1-829
@@ -201,6 +207,8 @@ fn test_cant_interleave_calls_to_settle_community_fund() {
         result: Some(settle_community_fund_participation::Result::Committed(
             Committed {
                 sns_governance_canister_id: Some(sns_governance_canister_id),
+                total_direct_contribution_icp_e8s: None,
+                total_neurons_fund_contribution_icp_e8s: None,
             },
         )),
     };
@@ -280,6 +288,122 @@ fn test_cant_interleave_calls_to_settle_community_fund() {
             );
         }
     });
+
+    // Join the thread_handle to make sure the thread didn't exit unexpectedly
+    thread_handle
+        .join()
+        .expect("Expected the spawned thread to succeed");
+}
+
+/// Test that interleaving calls to submit OpenSnsTokenSwap or CreateServiceNervousSystem proposals
+/// is not possible. Concurrent proposal submissions should be rejected.
+#[test]
+fn test_open_sns_token_swap_proposals_block_other_sns_proposals() {
+    // Step 0: Setup the world
+
+    // We set up a single neuron that will try to make the simultaneous proposals
+    let neuron_id_u64 = 1;
+    let neuron_id = NeuronId { id: neuron_id_u64 };
+    let owner = principal(1);
+
+    // We use channels to control how the cals are interleaved
+    let (tx, mut rx) = mpsc::unbounded::<EnvironmentControlMessage>();
+
+    let mut nns = NNSBuilder::new()
+        // Add Neuron's who can make the proposals
+        .add_neuron(
+            NeuronBuilder::new(neuron_id_u64, 10 * E8, owner).set_dissolve_delay(ONE_YEAR_SECONDS),
+        )
+        // Create a second neuron so the proposal is not immediately executed
+        .add_neuron(
+            NeuronBuilder::new(2, 100 * E8, principal(2)).set_dissolve_delay(ONE_YEAR_SECONDS),
+        )
+        .add_environment_transform(Box::new(move |l| {
+            Box::new(InterleavingTestEnvironment::new(l, tx))
+        }))
+        .set_economics(NetworkEconomics::default())
+        .create();
+
+    // Add the mocked canister calls that will be made when creating the first proposal
+    nns.push_mocked_canister_reply(LIST_DEPLOYED_SNSES_RESPONSE.clone());
+    nns.push_mocked_canister_reply(GET_STATE_RESPONSE.clone());
+    nns.push_mocked_canister_reply(GET_STATE_RESPONSE.clone());
+    nns.push_mocked_canister_reply(GET_SNS_CANISTERS_SUMMARY_RESPONSE.clone());
+
+    // The governance canister relies on a static variable that's reused by multiple
+    // canister calls. To avoid using static variables in the test, and yet
+    // allow two mutable references to the same value, we'll take both a mutable
+    // reference and a raw pointer to it that we'll (unsafely) dereference later.
+    // To make sure that the pointer keeps pointing to the same reference, we'll pin
+    // the mutable reference.
+    let mut boxed = Box::pin(nns);
+    let raw_ptr = unsafe {
+        let mut_ref = boxed.as_mut();
+        Pin::get_unchecked_mut(mut_ref) as *mut NNS
+    };
+
+    // Spawn creating a OSTS proposal in a new thread; meanwhile, on the main thread we'll await
+    // for the signal that the call to the swap canister has been initiated
+    let neuron_id_clone = neuron_id;
+    let thread_handle = thread::spawn(move || {
+        let proposal = OPEN_SNS_TOKEN_SWAP_PROPOSAL.clone();
+        let make_proposal_future =
+            boxed
+                .governance
+                .make_proposal(&neuron_id_clone, &owner, &proposal);
+        let make_proposal_result = tokio_test::block_on(make_proposal_future);
+        assert!(
+            make_proposal_result.is_ok(),
+            "Got an unexpected error while submitting a proposal: {:?}",
+            make_proposal_result
+        );
+    });
+
+    // Block until the first proposal submission in the other thread has reached a async call
+    let (_msg, continue_proposal_submission) =
+        tokio_test::block_on(async { rx.next().await.unwrap() });
+
+    // While the other proposal is awaiting response from another canister, try to submit
+    // another OpenSnsTokenSwap proposal.
+    atomic::fence(AOrdering::SeqCst);
+    let proposal = OPEN_SNS_TOKEN_SWAP_PROPOSAL.clone();
+    let make_proposal_result = unsafe { &mut *raw_ptr }
+        .governance
+        .make_proposal(&neuron_id, &owner, &proposal)
+        .now_or_never()
+        .unwrap();
+
+    // This used to fail before NNS1-2464
+    assert!(
+        make_proposal_result.is_err(),
+        "Shouldn't be able to submit simultaneous SNS proposals but got {:?}",
+        make_proposal_result
+    );
+
+    // While the other proposal is awaiting response from another canister, try to submit
+    // another CreateServiceNervousSystem proposal.
+    atomic::fence(AOrdering::SeqCst);
+    let proposal = CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL.clone();
+    let make_proposal_result = unsafe { &mut *raw_ptr }
+        .governance
+        .make_proposal(&neuron_id, &owner, &proposal)
+        .now_or_never()
+        .unwrap();
+
+    // This used to fail before NNS1-2464
+    assert!(
+        make_proposal_result.is_err(),
+        "Shouldn't be able to submit simultaneous SNS proposals but got {:?}",
+        make_proposal_result
+    );
+
+    // Drain the channel to finish the test.
+    assert!(
+        continue_proposal_submission.send(Ok(())).is_ok(),
+        "Error in trying to continue to submit the first proposal",
+    );
+
+    tokio_test::block_on(drain_receiver_channel(&mut rx));
 
     // Join the thread_handle to make sure the thread didn't exit unexpectedly
     thread_handle

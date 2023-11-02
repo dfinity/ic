@@ -1,7 +1,6 @@
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::tokens::CheckedSub;
-use ic_ledger_core::Tokens;
+use ic_ledger_core::{tokens::CheckedSub, Tokens};
 use ic_nervous_system_common::ledger::compute_distribution_subaccount;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_test_utils::{

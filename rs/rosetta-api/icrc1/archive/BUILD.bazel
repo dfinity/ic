@@ -4,37 +4,57 @@ load("//bazel:defs.bzl", "gzip_compress")
 
 package(default_visibility = ["//visibility:public"])
 
-rust_canister(
-    name = "archive_canister",
-    srcs = ["src/main.rs"],
-    compile_data = [":archive.did"],
-    crate_name = "ic_icrc1_archive",
-    proc_macro_deps = [
-        "@crate_index//:ic-cdk-macros",
-    ],
-    rustc_env = {
-        "ARCHIVE_DID_PATH": "$(execpath :archive.did)",
-    },
-    service_file = ":archive.did",
-    version = "0.8.0",
-    deps = [
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/rosetta-api/icrc1",
-        "//rs/rosetta-api/ledger_core",
-        "//rs/rust_canisters/http_types",
-        "//rs/types/base_types",
-        "@crate_index//:candid",
-        "@crate_index//:ciborium",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:ic-metrics-encoder",
-        "@crate_index//:ic-stable-structures",
-        "@crate_index//:serde",
-    ],
-)
+[
+    rust_canister(
+        name = "archive_canister" + name_suffix,
+        srcs = ["src/main.rs"],
+        compile_data = [":archive.did"],
+        crate_features = features,
+        crate_name = "ic_icrc1_archive" + name_suffix,
+        proc_macro_deps = [
+            "@crate_index//:ic-cdk-macros",
+        ],
+        rustc_env = {
+            "ARCHIVE_DID_PATH": "$(execpath :archive.did)",
+        },
+        service_file = ":archive.did",
+        version = "0.8.0",
+        deps = [
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/rosetta-api/icrc1",
+            "//rs/rosetta-api/ledger_core",
+            "//rs/rust_canisters/http_types",
+            "//rs/types/base_types",
+            "@crate_index//:candid",
+            "@crate_index//:ciborium",
+            "@crate_index//:ic-cdk",
+            "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:ic-stable-structures",
+            "@crate_index//:serde",
+        ] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/rosetta-api/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/rosetta-api/icrc1/tokens_u256"],
+        ),
+    ]
+]
 
 gzip_compress(
     name = "archive_canister.wasm.gz",
     srcs = [":archive_canister"],
+)
+
+gzip_compress(
+    name = "archive_canister_u256.wasm.gz",
+    srcs = [":archive_canister_u256"],
 )
 
 rust_test(

@@ -3,7 +3,8 @@ use crate::KEEP_MAIN_MEMORY_ON_UPGRADE;
 use super::CanisterId;
 
 use hex::decode;
-use ic_ic00_types::{self as ic00, CanisterInstallMode, Payload};
+use ic00::{CanisterInstallModeV2, UpgradeOptions};
+use ic_ic00_types::{self as ic00, Payload};
 use ic_types::{
     messages::{SignedIngress, UserQuery},
     time::expiry_time_from_now,
@@ -11,7 +12,6 @@ use ic_types::{
 };
 
 use std::{
-    convert::TryFrom,
     fmt,
     fs::File,
     io::{self, Read},
@@ -243,19 +243,31 @@ fn parse_install(
     let canister_id = parse_canister_id(canister_id)?;
     let payload = parse_octet_string(payload)?;
 
+    let install_mode = match mode {
+        "install" => CanisterInstallModeV2::Install,
+        "reinstall" => CanisterInstallModeV2::Reinstall,
+        "upgrade" => CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+            skip_pre_upgrade: None,
+            keep_main_memory: Some(KEEP_MAIN_MEMORY_ON_UPGRADE),
+        })),
+        _ => {
+            return Err(String::from("Unsupported install mode: {mode}"));
+        }
+    };
+
     let signed_ingress = SignedIngressBuilder::new()
         // `source` should become a self-authenticating id according
         // to https://sdk.dfinity.org/docs/interface-spec/index.html#id-classes
         .canister_id(ic00::IC_00)
         .method_name(ic00::Method::InstallCode)
         .method_payload(
-            ic00::InstallCodeArgs::new(
-                CanisterInstallMode::try_from(mode.to_string()).unwrap(),
+            ic00::InstallCodeArgsV2::new(
+                install_mode,
                 canister_id,
                 wasm_data,
                 payload,
                 None,
-                Some(8 * 1024 * 1024 * 1024), // drun users dont care about memory limits
+                None,
                 None,
                 Some(KEEP_MAIN_MEMORY_ON_UPGRADE),
             )

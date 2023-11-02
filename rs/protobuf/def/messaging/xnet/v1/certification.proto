@@ -3,12 +3,19 @@
 
 syntax = "proto3";
 package messaging.xnet.v1;
+
 import "types/v1/types.proto";
 
 // Combined threshold signature.
 message ThresholdSignature {
   bytes signature = 1;
   types.v1.NiDkgId signer = 2;
+}
+
+// Threshold signature share.
+message ThresholdSignatureShare {
+  bytes signature = 1;
+  types.v1.NodeId signer = 2;
 }
 
 // State tree root hash.
@@ -24,4 +31,11 @@ message Certification {
   uint64 height = 1;
   CertificationContent content = 2;
   ThresholdSignature signature = 3;
+}
+
+// Certification signed by a single replica
+message CertificationShare {
+  uint64 height = 1;
+  CertificationContent content = 2;
+  ThresholdSignatureShare signature = 3;
 }

@@ -1,0 +1,19 @@
+[package]
+name = "ic-icrc1-tokens-u256"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2021"
+
+[dependencies]
+candid = { workspace = true }
+ciborium = { workspace = true }
+ic-ledger-core = { path = "../../ledger_core" }
+ic-stable-structures = { workspace = true }
+ethnum = { workspace = true }
+num-traits = "0.2"
+num-bigint = "0.4"
+serde = "1"
+
+[dev-dependencies]
+proptest = "1.0"
+hex = "0.4"

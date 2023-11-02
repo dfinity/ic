@@ -9,8 +9,11 @@ use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
-use ic_interfaces::{execution_environment::ExecutionComplexity, messages::CanisterMessageOrTask};
-use ic_types::ingress::{IngressState, IngressStatus};
+use ic_interfaces::execution_environment::ExecutionComplexity;
+use ic_types::{
+    ingress::{IngressState, IngressStatus},
+    messages::CanisterMessageOrTask,
+};
 
 pub fn execute_update_bench(c: &mut Criterion) {
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
@@ -44,12 +47,12 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_msg_caller_copy()/1B",
             Module::Test.from_ic0("msg_caller_copy", Params3(0, 0, 1), Result::No),
-            13_000_004,
+            14_000_004,
         ),
         common::Benchmark(
             "ic0_msg_caller_copy()/10B",
             Module::Test.from_ic0("msg_caller_copy", Params3(0, 0, 10), Result::No), // 10B max
-            13_000_004,
+            23_000_004,
         ),
         common::Benchmark(
             "ic0_msg_arg_data_size()",
@@ -106,12 +109,12 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_canister_self_copy()/1B",
             Module::Test.from_ic0("canister_self_copy", Params3(0, 0, 1), Result::No),
-            13_000_004,
+            14_000_004,
         ),
         common::Benchmark(
             "ic0_canister_self_copy()/10B",
             Module::Test.from_ic0("canister_self_copy", Params3(0, 0, 10), Result::No), // 10B max
-            13_000_004,
+            23_000_004,
         ),
         common::Benchmark(
             "ic0_debug_print()/1B",
@@ -126,37 +129,37 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_call_new()",
             Module::CallNewLoop.from_sections(("", "")), // call_new in a loop is rendered by default
-            18_000_004,
+            46_000_004,
         ),
         common::Benchmark(
             "call_new+ic0_call_data_append()/1B",
             Module::CallNewLoop.from_ic0("call_data_append", Params2(0, 1), Result::No), // 2MiB max
-            42_000_004,
+            70_000_004,
         ),
         common::Benchmark(
             "call_new+ic0_call_data_append()/8K",
             Module::CallNewLoop.from_ic0("call_data_append", Params2(0, 8192), Result::No), // 2MiB max
-            8_233_000_004,
+            8_261_000_004,
         ),
         common::Benchmark(
             "call_new+ic0_call_on_cleanup()",
             Module::CallNewLoop.from_ic0("call_on_cleanup", Params2(33, 0), Result::No),
-            21_000_004,
+            49_000_004,
         ),
         common::Benchmark(
             "call_new+ic0_call_cycles_add()",
             Module::CallNewLoop.from_ic0("call_cycles_add", Param1(100_i64), Result::No),
-            20_000_004,
+            48_000_004,
         ),
         common::Benchmark(
             "call_new+ic0_call_cycles_add128()",
             Module::CallNewLoop.from_ic0("call_cycles_add128", Params2(0_i64, 100_i64), Result::No),
-            21_000_004,
+            49_000_004,
         ),
         common::Benchmark(
             "call_new+ic0_call_perform()",
             Module::CallNewLoop.from_ic0("call_perform", NoParams, Result::I32),
-            20_000_004,
+            48_000_004,
         ),
         common::Benchmark(
             "ic0_stable_size()",
@@ -165,7 +168,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         ),
         common::Benchmark(
             "ic0_stable_grow()",
-            Module::Test.from_ic0("stable_grow", Param1(1), Result::I32),
+            Module::Test.from_ic0("stable_grow", Param1(0), Result::I32),
             12_000_004,
         ),
         common::Benchmark(
@@ -181,12 +184,12 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_stable_write()/1B",
             Module::StableTest.from_ic0("stable_write", Params3(0, 0, 1), Result::No),
-            34_000_007,
+            34_001_007,
         ),
         common::Benchmark(
             "ic0_stable_write()/8K",
             Module::StableTest.from_ic0("stable_write", Params3(0, 0, 8192), Result::No),
-            8_225_000_007,
+            8_225_002_007,
         ),
         common::Benchmark(
             "ic0_stable64_size()",
@@ -195,7 +198,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         ),
         common::Benchmark(
             "ic0_stable64_grow()",
-            Module::Test.from_ic0("stable64_grow", Param1(1_i64), Result::I64),
+            Module::Test.from_ic0("stable64_grow", Param1(0_i64), Result::I64),
             12_000_004,
         ),
         common::Benchmark(
@@ -215,7 +218,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_stable64_write()/1B",
             Module::StableTest.from_ic0("stable64_write", Params3(0_i64, 0_i64, 1_i64), Result::No),
-            34_000_007,
+            34_001_007,
         ),
         common::Benchmark(
             "ic0_stable64_write()/8K",
@@ -224,7 +227,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Params3(0_i64, 0_i64, 8192_i64),
                 Result::No,
             ),
-            8_225_000_007,
+            8_225_002_007,
         ),
         common::Benchmark(
             "ic0_time()",

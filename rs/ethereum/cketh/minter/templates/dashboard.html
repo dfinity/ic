@@ -1,0 +1,322 @@
+{% macro etherscan_address_link(address) %}
+{% match ethereum_network %}
+  {% when Sepolia %}
+  <a href="https://sepolia.etherscan.io/address/{{address}}"><code>{{address}}</code></a>
+  {% when Mainnet %}
+  <a href="https://etherscan.io/address/{{address}}"><code>{{address}}</code></a>
+{% endmatch %}
+{% endmacro %}
+
+{% macro etherscan_block_link(block_number) %}
+{% match ethereum_network %}
+  {% when Sepolia %}
+  <a href="https://sepolia.etherscan.io/block/{{block_number.to_string_inner()}}"><code>{{block_number.to_string_inner()}}</code></a>
+  {% when Mainnet %}
+  <a href="https://etherscan.io/block/{{block_number.to_string_inner()}}"><code>{{block_number.to_string_inner()}}</code></a>
+{% endmatch %}
+{% endmacro %}
+
+{% macro etherscan_tx_link(txhash) %}
+{% match ethereum_network %}
+  {% when Sepolia %}
+  <a href="https://sepolia.etherscan.io/tx/{{txhash}}"><code>{{txhash}}</code></a>
+  {% when Mainnet %}
+  <a href="https://etherscan.io/tx/{{txhash}}"><code>{{txhash}}</code></a>
+{% endmatch %}
+{% endmacro %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>ckETH Minter Dashboard</title>
+    <style>
+        table {
+            border: solid;
+            text-align: left;
+            width: 100%;
+            border-width: thin;
+        }
+
+        h3 {
+            font-variant: small-caps;
+            margin-top: 30px;
+            margin-bottom: 5px;
+        }
+
+        table table {
+            font-size: small;
+        }
+
+        .background {
+            margin: 0;
+            padding: 0;
+        }
+
+        .content {
+            max-width: 100vw;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        tbody tr:nth-child(odd) {
+            background-color: #eeeeee;
+        }
+
+        .numeric {
+            text-align: right;
+        }
+
+        #output-bytes32-principal-error {
+            color: red;
+            font-style: italic;
+        }
+
+        #output-bytes32-principal-ok {
+            margin-top: 10px;
+            font-family: monospace;
+        }
+
+        #input-principal {
+            width: 63ch;
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background">
+        <div class="content">
+            <h3>Metadata</h3>
+            <table>
+                <tbody>
+                    <tr>
+                        <th>Ethereum Chain</th>
+                        <td><a href="https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-{{ethereum_network.chain_id()}}.json">{{ ethereum_network }}</a></td>
+                    </tr>
+                    <tr>
+                        <th>Minter address</th>
+                        <td>{% call etherscan_address_link(minter_address) %}</td>
+                    </tr>
+                    <tr>
+                        <th>Helper contract address</th>
+                        <td>{% call etherscan_address_link(contract_address) %}</td>
+                    </tr>
+                    <tr>
+                        <th>Ledger canister ID</th>
+                        <td><code>{{ ledger_id }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>tECDSA key name</th>
+                        <td><code>{{ ecdsa_key_name }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>Next nonce</th>
+                        <td>{{ next_transaction_nonce }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Principal → Bytes32 conversion</h3>
+            <form id="form-principal-conversion">
+                Principal: <input id="input-principal" type="text">
+                <span id="output-bytes32-principal-error"></span>
+                <div id="output-bytes32-principal-ok"></div>
+            </form>
+
+            <h3>Block sync</h3>
+            <table>
+                <tbody>
+                    {% if last_observed_block.is_some() %}
+                    <tr>
+                        <th>Last observed block number</th>
+                        <td>{% call etherscan_block_link(last_observed_block.unwrap()) %}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th>Last synced block number</th>
+                        <td>{% call etherscan_block_link(last_synced_block) %}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+
+            {% if !events_to_mint.is_empty() %}
+            <h3>Events to mint</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Txn Hash</th>
+                    <th>Log Index</th>
+                    <th>From</th>
+                    <th>Value (wei)</th>
+                    <th>Beneficiary</th>
+                    <th>Block</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for event in events_to_mint %}
+                <tr>
+                    <td>{% call etherscan_tx_link(event.transaction_hash.to_string()) %}</td>
+                    <td class="numeric">{{ event.log_index }}</td>
+                    <td>{% call etherscan_address_link(event.from_address.to_string()) %}</td>
+                    <td class="numeric">{{ event.value }}</td>
+                    <td><code>{{ event.principal }}</code></td>
+                    <td class="numeric">{% call etherscan_block_link(event.block_number) %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if !minted_events.is_empty() %}
+            <h3>Minted events</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Txn Hash</th>
+                        <th>Log Index</th>
+                        <th>From</th>
+                        <th>Value (wei)</th>
+                        <th>Beneficiary</th>
+                        <th>Mint Block Index</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in minted_events %}
+                    <tr>
+                        <td>{% call etherscan_tx_link(event.deposit_event.transaction_hash.to_string()) %}</td>
+                        <td class="numeric">{{ event.deposit_event.log_index }}</td>
+                        <td>{% call etherscan_address_link(event.deposit_event.from_address.to_string()) %}</td>
+                        <td class="numeric">{{ event.deposit_event.value }}</td>
+                        <td><code>{{ event.deposit_event.principal }}</code></td>
+                        <td class="numeric">{{ event.mint_block_index }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if !rejected_deposits.is_empty() %}
+            <h3>Rejected deposits</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Transaction</th>
+                        <th>Log Index</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for (source, error) in rejected_deposits %}
+                    <tr>
+                        <td>{% call etherscan_tx_link(source.transaction_hash.to_string()) %}</td>
+                        <td class="numeric">{{ source.log_index }}</td>
+                        <td>{{ error }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            <h3>Withdrawal Requests ckETH → ETH</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Ledger Burn Index</th>
+                    <th>Destination</th>
+                    <th>Amount (Wei)</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for withdrawal in withdrawal_requests %}
+                <tr>
+                    <td class="numeric">{{ withdrawal.ledger_burn_index }}</td>
+                    <td>{% call etherscan_address_link(withdrawal.destination) %}</td>
+                    <td class="numeric">{{ withdrawal.withdrawal_amount }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <h3>Pending Transaction ckETH → ETH</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Ledger Burn Index</th>
+                    <th>To</th>
+                    <th>Value (Wei)</th>
+                    <th>Status</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% if let Some(tx) = pending_transaction %}
+                <tr>
+                    <td class="numeric">{{ tx.ledger_burn_index }}</td>
+                    <td>{% call etherscan_address_link(tx.destination) %}</td>
+                    <td class="numeric">{{ tx.transaction_amount }}</td>
+                    <td>{{ tx.status }}</td>
+                </tr>
+                {% endif %}
+                </tbody>
+            </table>
+
+            <h3>Confirmed Transactions ckETH → ETH</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Ledger Burn Index</th>
+                    <th>To</th>
+                    <th>Value (Wei)</th>
+                    <th>Block</th>
+                    <th>Txn Hash</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for tx in confirmed_transactions %}
+                <tr>
+                    <td class="numeric">{{ tx.ledger_burn_index }}</td>
+                    <td>{% call etherscan_address_link(tx.destination) %}</td>
+                    <td class="numeric">{{ tx.transaction_amount }}</td>
+                    <td class="numeric">{% call etherscan_block_link(tx.block_number) %}</td>
+                    <td>{% call etherscan_tx_link(tx.transaction_hash) %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        {% include "principal_to_bytes.js" %}
+
+        window.addEventListener("load", function () {
+            document.getElementById("form-principal-conversion").addEventListener("keypress", function (event) {
+                if (event.keyCode == 13) {
+                    event.preventDefault();
+                    return false;
+                }
+            });
+
+            function recomputePrincipal(event) {
+                let input = event.target.value.trim();
+                let ok_output = document.getElementById("output-bytes32-principal-ok");
+                let err_output = document.getElementById("output-bytes32-principal-error");
+                try {
+                    let hex = principalToBytes32(input);
+                    ok_output.innerHTML = hex;
+                    err_output.innerHTML = "";
+                } catch (e) {
+                    ok_output.innerHTML = "";
+                    err_output.innerHTML = e.message;
+                }
+            }
+            let inputPrincipal = document.getElementById("input-principal");
+
+            inputPrincipal.addEventListener("change", recomputePrincipal);
+            inputPrincipal.addEventListener("keypress", recomputePrincipal);
+            inputPrincipal.addEventListener("input", recomputePrincipal);
+        });
+    </script>
+    <body>
+</html>

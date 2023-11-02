@@ -17,7 +17,8 @@ use ic_crypto_temp_crypto::EcdsaSubnetConfig;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_keys::public_keys::{
     valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
-    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key, valid_tls_certificate,
+    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+    valid_tls_certificate_and_validation_time,
 };
 use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
 use ic_interfaces::crypto::KeyManager;
@@ -2026,7 +2027,7 @@ fn valid_current_node_public_keys_with_timestamps() -> CurrentNodePublicKeys {
     CurrentNodePublicKeys {
         node_signing_public_key: Some(valid_node_signing_public_key()),
         committee_signing_public_key: Some(valid_committee_signing_public_key()),
-        tls_certificate: Some(valid_tls_certificate()),
+        tls_certificate: Some(valid_tls_certificate_and_validation_time().0),
         dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
         idkg_dealing_encryption_public_key: Some(PublicKeyProto {
             timestamp: Some(0),
@@ -2039,7 +2040,7 @@ fn valid_current_node_public_keys() -> CurrentNodePublicKeys {
     CurrentNodePublicKeys {
         node_signing_public_key: Some(valid_node_signing_public_key()),
         committee_signing_public_key: Some(valid_committee_signing_public_key()),
-        tls_certificate: Some(valid_tls_certificate()),
+        tls_certificate: Some(valid_tls_certificate_and_validation_time().0),
         dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
         idkg_dealing_encryption_public_key: Some(valid_idkg_dealing_encryption_public_key()),
     }

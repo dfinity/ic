@@ -185,7 +185,7 @@ impl Step for MergeCertificationPoolsStep {
         if let Some(cert) = max_full_cert.as_ref() {
             info!(
                 self.logger,
-                "Maximum full certification height accross all nodes: {}, hash: {:?}",
+                "Maximum full certification height across all nodes: {}, hash: {:?}",
                 cert.height,
                 cert.signed.content.hash
             );
@@ -540,7 +540,8 @@ impl Step for UploadAndRestartStep {
 
         let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(
-                "Found multiple checkpoints in upload directory"));
+                "Found multiple checkpoints in upload directory",
+            ));
         };
 
         if self.check_ic_replay_height {
@@ -1041,7 +1042,7 @@ mod tests {
 
     use super::*;
 
-    fn make_certifcation(height: u64, hash: Vec<u8>) -> CertificationMessage {
+    fn make_certification(height: u64, hash: Vec<u8>) -> CertificationMessage {
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
             signed: Signed {
@@ -1106,20 +1107,20 @@ mod tests {
 
         // Add two different certifications for height 1 to both pools,
         // only one of them should be kept after the merge.
-        let cert1 = make_certifcation(1, vec![1, 2, 3]);
-        let cert1_2 = make_certifcation(1, vec![4, 5, 6]);
+        let cert1 = make_certification(1, vec![1, 2, 3]);
+        let cert1_2 = make_certification(1, vec![4, 5, 6]);
         pool1.persistent_pool.insert(cert1);
         pool2.persistent_pool.insert(cert1_2);
 
         // Add the same certification for height 2 to both pools,
         // it should only exists in the merged pool once.
-        let cert2 = make_certifcation(2, vec![1, 2, 3]);
+        let cert2 = make_certification(2, vec![1, 2, 3]);
         pool1.persistent_pool.insert(cert2.clone());
         pool2.persistent_pool.insert(cert2);
 
         // Add two more certifications for heights 3 and 4, one to each pool.
-        let cert3 = make_certifcation(3, vec![1, 2, 3]);
-        let cert4 = make_certifcation(4, vec![1, 2, 3]);
+        let cert3 = make_certification(3, vec![1, 2, 3]);
+        let cert4 = make_certification(4, vec![1, 2, 3]);
         pool1.persistent_pool.insert(cert4);
         pool2.persistent_pool.insert(cert3);
 
@@ -1167,14 +1168,14 @@ mod tests {
             work_dir: work_dir.clone(),
         };
 
-        // Add a full certification at height 4
-        let cert4 = make_certifcation(4, vec![1, 2, 3]);
+        // Add a full certification at height 4.
+        let cert4 = make_certification(4, vec![1, 2, 3]);
 
-        // Shares below or equal to the heighest full share should be ignored.
+        // Shares below or equal to the highest full share should be ignored.
         let share3 = make_share(3, vec![3], 1);
         let share4 = make_share(4, vec![4], 2);
 
-        // These shares should be included in the new pool
+        // These shares should be included in the new pool.
         let share5 = make_share(5, vec![5], 1);
         let share6 = make_share(6, vec![6], 1);
         let share6_2 = make_share(6, vec![6, 2], 2);

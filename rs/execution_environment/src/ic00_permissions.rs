@@ -1,7 +1,7 @@
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::Method as Ic00Method;
-use ic_interfaces::messages::CanisterCall;
 use ic_replicated_state::ReplicatedState;
+use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};
 
 /// Keeps track of when an IC00 method is allowed to be executed.
@@ -66,11 +66,6 @@ impl Ic00MethodPermissions {
             Ic00Method::RawRand => Self {
                 method,
                 allow_remote_subnet_sender: false,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::SetController => Self {
-                method,
-                allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::SetupInitialDKG => Self {
@@ -139,6 +134,14 @@ impl Ic00MethodPermissions {
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::ProvisionalTopUpCanister => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::UploadChunk
+            | Ic00Method::StoredChunks
+            | Ic00Method::DeleteChunks
+            | Ic00Method::ClearChunkStore => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

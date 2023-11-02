@@ -22,10 +22,18 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ".ic_registry_transport.pb.v1",
         "::ic-registry-transport::pb::v1",
     );
-    config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
+    config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
 
     config.type_attribute(
         "ic_registry_canister.pb.v1.NodeProvidersMonthlyXdrRewards",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_registry_canister.pb.v1.GetSubnetForCanisterRequest",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_registry_canister.pb.v1.GetSubnetForCanisterResponse",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
 

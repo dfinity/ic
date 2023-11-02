@@ -31,7 +31,9 @@ use crate::crypto::{
 };
 use crate::{node_id_into_protobuf, node_id_try_from_option};
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -41,6 +43,7 @@ use phantom_newtype::Id;
 /// that have already been reported and those that have not. This is
 /// to prevent signatures from being reported more than once.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedSignature {
     ReportedToExecution,
     Unreported(crate::messages::Response),
@@ -50,6 +53,7 @@ pub enum CompletedSignature {
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EcdsaPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
@@ -261,6 +265,7 @@ impl EcdsaPayload {
 /// The unmasked transcript is paired with its attributes, which will be used
 /// in creating reshare params.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTranscriptWithAttributes(IDkgTranscriptAttributes, UnmaskedTranscript);
 
 impl From<&UnmaskedTranscriptWithAttributes> for pb::UnmaskedTranscriptWithAttributes {
@@ -328,6 +333,7 @@ impl AsMut<TranscriptRef> for UnmaskedTranscriptWithAttributes {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EcdsaKeyTranscript {
     /// The ECDSA key transcript used for the current interval.
     pub current: Option<UnmaskedTranscriptWithAttributes>,
@@ -439,6 +445,7 @@ impl Display for EcdsaKeyTranscript {
 /// by going through the second path above. Then the switch-over will happen at
 /// the next 'EcdsaSummaryPayload'.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum KeyTranscriptCreation {
     Begin,
     // Configuration to create initial random transcript.
@@ -548,6 +555,7 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 
 /// Internal format of the resharing request from execution.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EcdsaReshareRequest {
     pub key_id: EcdsaKeyId,
     pub receiving_node_ids: Vec<NodeId>,
@@ -587,6 +595,7 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedReshareRequest {
     ReportedToExecution,
     Unreported(crate::messages::Response),
@@ -595,6 +604,7 @@ pub enum CompletedReshareRequest {
 /// To make sure all ids used in ECDSA payload are uniquely generated,
 /// we use a generator to keep track of this state.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EcdsaUIDGenerator {
     next_unused_transcript_id: IDkgTranscriptId,
     next_unused_quadruple_id: QuadrupleId,
@@ -634,6 +644,38 @@ pub enum EcdsaMessage {
     EcdsaSigShare(EcdsaSigShare),
     EcdsaComplaint(EcdsaComplaint),
     EcdsaOpening(EcdsaOpening),
+}
+
+impl From<&EcdsaMessage> for pb::EcdsaMessage {
+    fn from(value: &EcdsaMessage) -> Self {
+        use pb::ecdsa_message::Msg;
+        let msg = match value {
+            EcdsaMessage::EcdsaSignedDealing(x) => Msg::SignedDealing(x.into()),
+            EcdsaMessage::EcdsaDealingSupport(x) => Msg::DealingSupport(x.into()),
+            EcdsaMessage::EcdsaSigShare(x) => Msg::SigShare(x.into()),
+            EcdsaMessage::EcdsaComplaint(x) => Msg::Complaint(x.into()),
+            EcdsaMessage::EcdsaOpening(x) => Msg::Opening(x.into()),
+        };
+        Self { msg: Some(msg) }
+    }
+}
+
+impl TryFrom<&pb::EcdsaMessage> for EcdsaMessage {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &pb::EcdsaMessage) -> Result<Self, Self::Error> {
+        use pb::ecdsa_message::Msg;
+        let Some(msg) = &proto.msg else {
+            return Err(ProxyDecodeError::MissingField("EcdsaMessage::msg"));
+        };
+        Ok(match &msg {
+            Msg::SignedDealing(x) => EcdsaMessage::EcdsaSignedDealing(x.try_into()?),
+            Msg::DealingSupport(x) => EcdsaMessage::EcdsaDealingSupport(x.try_into()?),
+            Msg::SigShare(x) => EcdsaMessage::EcdsaSigShare(x.try_into()?),
+            Msg::Complaint(x) => EcdsaMessage::EcdsaComplaint(x.try_into()?),
+            Msg::Opening(x) => EcdsaMessage::EcdsaOpening(x.try_into()?),
+        })
+    }
 }
 
 /// EcdsaArtifactId is the unique identifier for the artifacts. It is made of a prefix + crypto
@@ -896,6 +938,32 @@ pub struct EcdsaSigShare {
     pub share: ThresholdEcdsaSigShare,
 }
 
+impl From<&EcdsaSigShare> for pb::EcdsaSigShare {
+    fn from(value: &EcdsaSigShare) -> Self {
+        Self {
+            signer_id: Some(node_id_into_protobuf(value.signer_id)),
+            request_id: Some(pb::RequestId::from(value.request_id)),
+            sig_share_raw: value.share.sig_share_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaSigShare> for EcdsaSigShare {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaSigShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            request_id: try_from_option_field(
+                value.request_id.as_ref(),
+                "EcdsaSigShare::request_id",
+            )?,
+            share: ThresholdEcdsaSigShare {
+                sig_share_raw: value.sig_share_raw.clone(),
+            },
+        })
+    }
+}
+
 impl Display for EcdsaSigShare {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
@@ -917,6 +985,45 @@ pub type EcdsaComplaint = Signed<EcdsaComplaintContent, BasicSignature<EcdsaComp
 impl EcdsaComplaint {
     pub fn get(&self) -> &EcdsaComplaintContent {
         &self.content
+    }
+}
+
+impl From<&EcdsaComplaint> for pb::EcdsaComplaint {
+    fn from(value: &EcdsaComplaint) -> Self {
+        Self {
+            content: Some((&value.content).into()),
+            signature: Some(value.signature.clone().into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaComplaint> for EcdsaComplaint {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaComplaint) -> Result<Self, Self::Error> {
+        Ok(Self {
+            content: try_from_option_field(value.content.as_ref(), "EcdsaComplaint::content")?,
+            signature: try_from_option_field(value.signature.clone(), "EcdsaComplaint::signature")?,
+        })
+    }
+}
+
+impl From<&EcdsaComplaintContent> for pb::EcdsaComplaintContent {
+    fn from(value: &EcdsaComplaintContent) -> Self {
+        Self {
+            idkg_complaint: Some((&value.idkg_complaint).into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaComplaintContent> for EcdsaComplaintContent {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaComplaintContent) -> Result<Self, Self::Error> {
+        Ok(Self {
+            idkg_complaint: try_from_option_field(
+                value.idkg_complaint.as_ref(),
+                "EcdsaComplaintContent::idkg_complaint",
+            )?,
+        })
     }
 }
 
@@ -955,6 +1062,45 @@ pub type EcdsaOpening = Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningC
 impl EcdsaOpening {
     pub fn get(&self) -> &EcdsaOpeningContent {
         &self.content
+    }
+}
+
+impl From<&EcdsaOpening> for pb::EcdsaOpening {
+    fn from(value: &EcdsaOpening) -> Self {
+        Self {
+            content: Some((&value.content).into()),
+            signature: Some(value.signature.clone().into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaOpening> for EcdsaOpening {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaOpening) -> Result<Self, Self::Error> {
+        Ok(Self {
+            content: try_from_option_field(value.content.as_ref(), "EcdsaOpening::content")?,
+            signature: try_from_option_field(value.signature.clone(), "EcdsaOpening::signature")?,
+        })
+    }
+}
+
+impl From<&EcdsaOpeningContent> for pb::EcdsaOpeningContent {
+    fn from(value: &EcdsaOpeningContent) -> Self {
+        Self {
+            idkg_opening: Some((&value.idkg_opening).into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaOpeningContent> for EcdsaOpeningContent {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaOpeningContent) -> Result<Self, Self::Error> {
+        Ok(Self {
+            idkg_opening: try_from_option_field(
+                value.idkg_opening.as_ref(),
+                "EcdsaOpeningContent::idkg_opening",
+            )?,
+        })
     }
 }
 
@@ -1255,14 +1401,10 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             quadruples_in_creation.insert(quadruple_id, quadruple);
         }
 
-        let next_unused_transcript_id: IDkgTranscriptId = (&payload.next_unused_transcript_id)
-            .try_into()
-            .map_err(|err| {
-                ProxyDecodeError::Other(format!(
-                    "EcdsaPayload:: Failed to convert next_unused_transcript_id: {:?}",
-                    err
-                ))
-            })?;
+        let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(
+            payload.next_unused_transcript_id.as_ref(),
+            "EcdsaPayload::next_unused_transcript_id",
+        )?;
 
         let next_unused_quadruple_id: QuadrupleId = QuadrupleId(payload.next_unused_quadruple_id);
 
@@ -1365,6 +1507,9 @@ pub trait EcdsaStats: Send + Sync {
     /// Updates the set of transcripts being tracked currently.
     fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader);
 
+    /// Updates the set of quadruples being tracked currently.
+    fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader);
+
     /// Records the time taken to verify the support share received for a dealing.
     fn record_support_validation(&self, support: &IDkgDealingSupport, duration: Duration);
 
@@ -1397,6 +1542,7 @@ pub trait EcdsaStats: Send + Sync {
 pub struct EcdsaStatsNoOp {}
 impl EcdsaStats for EcdsaStatsNoOp {
     fn update_active_transcripts(&self, _block_reader: &dyn EcdsaBlockReader) {}
+    fn update_active_quadruples(&self, _block_reader: &dyn EcdsaBlockReader) {}
     fn record_support_validation(&self, _support: &IDkgDealingSupport, _duration: Duration) {}
     fn record_support_aggregation(
         &self,

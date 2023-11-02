@@ -104,7 +104,7 @@ pub(crate) fn make_summary(genesis_height: Height) -> Summary {
     summary
 }
 
-fn fake_block_proposal(h: Height) -> BlockProposal {
+pub(crate) fn fake_block_proposal(h: Height) -> BlockProposal {
     let parent = make_genesis(make_summary(h.decrement())).content.block;
     BlockProposal::fake(Block::from_parent(parent.as_ref()), node_test_id(0))
 }

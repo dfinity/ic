@@ -1,17 +1,19 @@
 syntax = "proto3";
 package state.metadata.v1;
+
 import "bitcoin/v1/bitcoin.proto";
-import "types/v1/types.proto";
-import "state/ingress/v1/ingress.proto";
-import "state/queues/v1/queues.proto";
-import "state/canister_state_bits/v1/canister_state_bits.proto";
+import "google/protobuf/wrappers.proto";
+import "registry/crypto/v1/crypto.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
-import "registry/crypto/v1/crypto.proto";
-import "google/protobuf/wrappers.proto";
+import "state/canister_state_bits/v1/canister_state_bits.proto";
+import "state/ingress/v1/ingress.proto";
+import "state/queues/v1/queues.proto";
+import "types/v1/types.proto";
 
-message Time { uint64 time_nanos = 1; }
-
+message Time {
+  uint64 time_nanos = 1;
+}
 
 message SubnetTopologyEntry {
   types.v1.NodeId node_id = 1;
@@ -146,14 +148,45 @@ message BitcoinSendTransactionInternalContextTree {
   BitcoinSendTransactionInternalContext context = 2;
 }
 
-message InstallCodeContext {
+// TODO(EXC-1454): Deprecated.
+message InstallCodeRequest {
   state.queues.v1.Request request = 1;
   Time time = 2;
+  types.v1.CanisterId effective_canister_id = 3;
 }
 
-message InstallCodeContextTree {
-  uint64 callback_id = 1;
-  InstallCodeContext context = 2;
+message InstallCodeCall {
+  oneof canister_call {
+    state.queues.v1.Request request = 1;
+    ingress.v1.Ingress ingress = 2;
+  }
+  Time time = 3;
+  types.v1.CanisterId effective_canister_id = 4;
+}
+
+// TODO(EXC-1454): Deprecated.
+message InstallCodeRequestTree {
+  uint64 request_id = 1;
+  InstallCodeRequest request = 2;
+}
+
+message InstallCodeCallTree {
+  uint64 call_id = 1;
+  InstallCodeCall call = 2;
+}
+
+message StopCanisterCall {
+  oneof canister_call {
+    state.queues.v1.Request request = 1;
+    ingress.v1.Ingress ingress = 2;
+  }
+  Time time = 3;
+  types.v1.CanisterId effective_canister_id = 4;
+}
+
+message StopCanisterCallTree {
+  uint64 call_id = 1;
+  StopCanisterCall call = 2;
 }
 
 message SubnetCallContextManager {
@@ -167,9 +200,15 @@ message SubnetCallContextManager {
   repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
   repeated EcdsaDealingsContextTree ecdsa_dealings_contexts = 7;
   repeated BitcoinGetSuccessorsContextTree bitcoin_get_successors_contexts = 8;
-  repeated BitcoinSendTransactionInternalContextTree
-      bitcoin_send_transaction_internal_contexts = 9;
-  repeated InstallCodeContextTree install_code_contexts = 10;    
+  repeated BitcoinSendTransactionInternalContextTree bitcoin_send_transaction_internal_contexts = 9;
+  reserved 10;
+  // TODO(EXC-1454): Deprecated.
+  repeated InstallCodeRequestTree install_code_requests = 11;
+  uint64 next_install_code_call_id = 12;
+  reserved "next_install_code_request_id";
+  repeated InstallCodeCallTree install_code_calls = 13;
+  uint64 next_stop_canister_call_id = 14;
+  repeated StopCanisterCallTree stop_canister_calls = 15;
 }
 
 message SubnetMetrics {
@@ -178,6 +217,13 @@ message SubnetMetrics {
   types.v1.NominalCycles consumed_cycles_ecdsa_outcalls = 3;
   optional uint64 ecdsa_signature_agreements = 4;
   repeated canister_state_bits.v1.ConsumedCyclesByUseCase consumed_cycles_by_use_case = 5;
+  optional uint64 num_canisters = 6;
+  reserved 7;
+  reserved "total_canister_state";
+  reserved 8;
+  reserved "num_update_transactions";
+  optional uint64 canister_state_bytes = 9;
+  optional uint64 update_transactions_total = 10;
 }
 
 message BitcoinGetSuccessorsFollowUpResponses {
@@ -185,10 +231,14 @@ message BitcoinGetSuccessorsFollowUpResponses {
   repeated bytes payloads = 2;
 }
 
+message NodePublicKeyEntry {
+  types.v1.NodeId node_id = 1;
+  bytes public_key = 2;
+}
+
 message SystemMetadata {
   reserved 1, 4, 12, 14;
-  reserved "generated_id_counter", "ingress_history", "stable_memory_delta_estimate",
-      "time_of_last_allocation_charge_nanos";
+  reserved "generated_id_counter", "ingress_history", "stable_memory_delta_estimate", "time_of_last_allocation_charge_nanos";
 
   google.protobuf.BytesValue prev_state_hash = 2;
   uint64 batch_time_nanos = 3;
@@ -221,11 +271,14 @@ message SystemMetadata {
 
   SubnetMetrics subnet_metrics = 15;
 
-  repeated BitcoinGetSuccessorsFollowUpResponses
-      bitcoin_get_successors_follow_up_responses = 18;
+  repeated BitcoinGetSuccessorsFollowUpResponses bitcoin_get_successors_follow_up_responses = 18;
+
+  repeated NodePublicKeyEntry node_public_keys = 19;
 }
 
-message StableMemory { bytes memory = 1; }
+message StableMemory {
+  bytes memory = 1;
+}
 
 message SplitFrom {
   // If present, the subnet is mid-way through a split. Identifies the original

@@ -49,6 +49,26 @@ const LOG_PREFIX: &str = "[SNS-WASM] ";
 
 const INITIAL_CANISTER_CREATION_CYCLES: u64 = ONE_TRILLION;
 
+/// The number of canisters that the SNS-WASM canister will install when deploying
+/// an SNS. This constant is different than `SNS_CANISTER_COUNT` due to the Archive
+/// canister being spawned by the Ledger canister, and not the directly by the
+/// SNS-WASM canister. The canisters being installed are the:
+///   - SNS Governance Canister
+///   - SNS Root Canister
+///   - SNS Swap Canister
+///   - ICRC Ledger Canister
+///   - ICRC Index Canister
+pub const SNS_CANISTER_COUNT_AT_INSTALL: u64 = 5;
+
+/// The total number of SNS canister types that make up an SNS. These are:
+///   - SNS Governance Canister
+///   - SNS Root Canister
+///   - SNS Swap Canister
+///   - ICRC Ledger Canister
+///   - ICRC Index Canister
+///   - ICRC Ledger Archive Canister
+pub const SNS_CANISTER_TYPE_COUNT: u64 = 6;
+
 impl From<SnsCanisterIds> for DeployedSns {
     fn from(src: SnsCanisterIds) -> Self {
         Self {
@@ -580,7 +600,7 @@ where
     }
 
     /// If the caller is NNS Governance, always allow, as this would indicate a proposal was passed
-    /// to create a new SNS.  
+    /// to create a new SNS.
     /// If the given caller exists in the `allowed_principals` whitelist return `true`,
     /// otherwise return `false`.
     ///
@@ -626,7 +646,7 @@ where
         caller: &PrincipalId,
     ) -> Result<(SubnetId, SnsCanisterIds, Vec<Canister>), DeployError> {
         let sns_init_payload = deploy_new_sns_request
-            .get_and_validate_sns_init_payload()
+            .get_and_validate_sns_init_payload(caller)
             .map_err(validation_deploy_error)?;
 
         let dapp_canisters = &sns_init_payload
@@ -634,12 +654,6 @@ where
             .as_ref()
             .map(|dapp_canisters| dapp_canisters.canisters.as_slice())
             .unwrap_or_default();
-
-        if caller != &GOVERNANCE_CANISTER_ID.get() && !dapp_canisters.is_empty() {
-            return Err(validation_deploy_error(
-                "Only NNS Governance may deploy an SNS with dapp_canisters at init".to_string(),
-            ));
-        }
 
         let subnet_id = thread_safe_sns
             .with(|sns_canister| sns_canister.borrow().get_available_sns_subnet())
@@ -669,19 +683,16 @@ where
         // The dapps will be returned to these controllers because it is not necessarily true
         // that fallback_controller_ids == dapp_canisters_original_controllers.
         let dapp_canisters_original_controllers: BTreeMap<Canister, Vec<PrincipalId>> =
-            Self::get_controllers_of_nns_root_owned_canisters(
-                nns_root_canister_client,
-                dapp_canisters,
-            )
-            .await
-            .map_err(|err| {
-                DeployError::Reversible(ReversibleDeployError {
-                    message: err,
-                    canisters_to_delete: None,
-                    subnet: None,
-                    dapp_canisters_to_restore: btreemap! {}, // None to restore as no work was done
-                })
-            })?;
+            Self::get_original_dapp_controllers(nns_root_canister_client, dapp_canisters)
+                .await
+                .map_err(|err| {
+                    DeployError::Reversible(ReversibleDeployError {
+                        message: err,
+                        canisters_to_delete: None,
+                        subnet: None,
+                        dapp_canisters_to_restore: btreemap! {}, // None to restore as no work was done
+                    })
+                })?;
 
         // Request that NNS Root claim sole control of all dapp_canisters. If there are any failures
         // the SNS creation process cannot continue. This may be due to dapp co-controllers backing
@@ -860,7 +871,9 @@ where
             canister_api.accept_message_cycles(None)?
         } else {
             // We are loaning to the SNS a specific amount if we are not getting it from caller
-            SNS_CREATION_FEE.saturating_sub(INITIAL_CANISTER_CREATION_CYCLES.saturating_mul(5))
+            SNS_CREATION_FEE.saturating_sub(
+                INITIAL_CANISTER_CREATION_CYCLES.saturating_mul(SNS_CANISTER_COUNT_AT_INSTALL),
+            )
         };
         // We only collect the INITIAL_CANISTER_CREATION_CYCLES for the other 5 canisters because
         // archive will be created by the ledger post deploy.  In order to split whole allocation
@@ -868,7 +881,7 @@ where
         let uncollected_allocation_for_archive = INITIAL_CANISTER_CREATION_CYCLES;
         let cycles_per_canister = (remaining_unaccepted_cycles
             .saturating_sub(uncollected_allocation_for_archive))
-        .saturating_div(6);
+        .saturating_div(SNS_CANISTER_TYPE_COUNT);
 
         let results = futures::future::join_all(canisters.into_named_tuples().into_iter().map(
             |(label, canister_id)| async move {
@@ -1055,7 +1068,6 @@ where
             ])
             .await,
         )
-        .into_iter()
         .map(|(label, result)| {
             result.map_err(|e| format!("Error installing {} WASM: {}", label, e))
         })
@@ -1290,6 +1302,38 @@ where
         }
     }
 
+    /// Get the original controllers of the target canisters. If any of the sets of controllers
+    /// is empty, return an error.
+    async fn get_original_dapp_controllers(
+        nns_root_canister_client: &impl NnsRootCanisterClient,
+        target_canisters: &[Canister],
+    ) -> Result<BTreeMap<Canister, Vec<PrincipalId>>, String> {
+        let dapp_canisters_original_controllers: BTreeMap<Canister, Vec<PrincipalId>> =
+            Self::get_controllers_of_nns_root_owned_canisters(
+                nns_root_canister_client,
+                target_canisters,
+            )
+            .await?;
+
+        // Make sure that none of the dapp canisters will be black holed if a deployment error occurs.
+        let canister_ids_with_empty_controller_sets = dapp_canisters_original_controllers
+            .iter()
+            .filter(|(_, controllers)| controllers.is_empty())
+            .map(|(canister, _)| canister.id.unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+
+        if !canister_ids_with_empty_controller_sets.is_empty() {
+            return Err(
+                format!(
+                    "The following dapp canister(s) did not have any controllers, cannot transfer to an SNS. {:?}",
+                    canister_ids_with_empty_controller_sets.join("\n")
+                )
+            );
+        }
+
+        Ok(dapp_canisters_original_controllers)
+    }
+
     /// Request NNS Root to change the controllers of the targeted canisters to the desired
     /// new controllers. This method attempts to transfer all target_canisters, and does not
     /// stop if one fails.
@@ -1301,6 +1345,17 @@ where
 
         // TODO: parallelize
         for (canister, new_controllers) in dapp_canisters_to_new_controllers {
+            // This condition should never be reached due to prior validation, but in case the
+            // new controllers is empty, do not change the controllers of the dapp canister.
+            if new_controllers.is_empty() {
+                result.failed.push(FailedChangeCanisterControllersRequest {
+                    canister: *canister,
+                    reason: "Tried to request NNS Root to set controllers to an empty set"
+                        .to_string(),
+                });
+                continue;
+            }
+
             match Self::change_controllers_of_nns_root_owned_canister(
                 nns_root_canister_client,
                 *canister,
@@ -1385,23 +1440,27 @@ where
             )
             .await
             {
-                Ok(mut controllers) => {
-                    // We want to remove the NNS Root canister from the original controllers
-                    controllers.retain(|controller| *controller != ROOT_CANISTER_ID.get());
+                Ok(controllers) => {
+                    // It is deliberate that NNS Root is kept in this list of original controllers
+                    // for two reasons:
+                    // 1. If developers remove themselves and leave NNS Root as the sole controller
+                    //    we want to avoid black-holing the canister.
+                    // 2. Other co-controllers can decide to remove NNS Root after a failed SNS
+                    //    creation.
                     result.insert(*canister, controllers);
                 }
                 Err(failure_reason) => defects.push(failure_reason),
             };
         }
 
-        return if defects.is_empty() {
+        if defects.is_empty() {
             Ok(result)
         } else {
             Err(format!(
                 "Could not get the controllers of all dapp_canisters for the following reason(s):\n  -{}",
                 defects.join("\n  -"),
             ))
-        };
+        }
     }
 
     /// Dispatch the the CanisterStatus call to NNS Root and handle error cases.
@@ -1771,24 +1830,27 @@ impl UpgradePath {
 }
 
 impl DeployNewSnsRequest {
-    pub fn get_and_validate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
-        self.sns_init_payload
+    /// Validates that the payload is valid w.r.t. the sender - the NNS
+    /// governance canister can only create an SNS using the one-proposal flow,
+    /// while other canisters can only create an SNS using the legacy flow.
+    pub fn get_and_validate_sns_init_payload(
+        &self,
+        caller: &PrincipalId,
+    ) -> Result<SnsInitPayload, String> {
+        let init_payload = self
+            .sns_init_payload
             .as_ref()
             // Validate presence
-            .ok_or_else(|| "sns_init_payload is a required field".to_string())
-            // Validate contents
-            // TODO 2296: Validate based on caller()
-            .and_then(|init_payload| {
-                if init_payload.is_legacy_flow() {
-                    init_payload
-                        .validate_legacy_init()
-                        .map_err(|e| e.to_string())
-                } else {
-                    init_payload
-                        .validate_pre_execution()
-                        .map_err(|e| e.to_string())
-                }
-            })
+            .ok_or("sns_init_payload is a required field")?;
+
+        // The legacy flow cannot be initiated by the NNS governance canister canister,
+        // while the one proposal flow must be initiated by the NNS governance canister
+        match (init_payload.is_legacy_flow()?, caller == &GOVERNANCE_CANISTER_ID.get()) {
+            (true, false) => init_payload.validate_legacy_init(),
+            (false, true) => init_payload.validate_post_execution(),
+            (true, true) => Err("The legacy (non-one-proposal) flow cannot be initiated by the NNS Governance Canister".to_string()),
+            (false, false) => Err("The one-proposal flow can only be initiated by the NNS Governance Canister".to_string()),
+        }
     }
 }
 
@@ -1872,7 +1934,7 @@ mod test {
     use async_trait::async_trait;
     use candid::{Decode, Encode};
     use ic_base_types::PrincipalId;
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use ic_icrc1_ledger::LedgerArgument;
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
     use ic_nns_handler_root_interface::client::{
@@ -3045,16 +3107,15 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_missing_init_payload() {
+    async fn test_missing_init_payload_legacy() {
         let canister_api = new_canister_api();
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_legacy(
             None,
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            false,
             false,
             vec![],
             vec![],
@@ -3075,18 +3136,17 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_invalid_init_payload() {
+    async fn test_invalid_init_payload_legacy() {
         let canister_api = new_canister_api();
-        let mut payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut payload = SnsInitPayload::with_valid_legacy_values_for_testing();
         payload.token_symbol = None;
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_legacy(
             Some(payload),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            false,
             false,
             vec![],
             vec![],
@@ -3107,16 +3167,15 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_missing_available_subnet() {
+    async fn test_missing_available_subnet_legacy() {
         let canister_api = new_canister_api();
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        test_deploy_new_sns_request_legacy(
+            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             None,
             true,
-            false,
             false,
             vec![],
             vec![],
@@ -3137,16 +3196,15 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_wasms_not_available() {
+    async fn test_wasms_not_available_legacy() {
         let canister_api = new_canister_api();
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        test_deploy_new_sns_request_legacy(
+            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             false,
-            false, // wasm_available
             false,
             vec![],
             vec![],
@@ -3167,17 +3225,16 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_insufficient_cycles_in_request() {
+    async fn test_insufficient_cycles_in_request_legacy() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(100000));
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        test_deploy_new_sns_request_legacy(
+            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            false,
             false,
             vec![],
             vec![],
@@ -3201,7 +3258,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_failure_if_canisters_cannot_be_created() {
+    async fn test_failure_if_canisters_cannot_be_created_legacy() {
         let canister_api = new_canister_api();
         canister_api
             .errors_on_create_canister
@@ -3216,13 +3273,12 @@ mod test {
         let ledger_id = canister_test_id(3);
         let swap_id = canister_test_id(4);
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        test_deploy_new_sns_request_legacy(
+            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_id),
             true,
-            false,
             true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
@@ -3254,7 +3310,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_failure_if_canisters_cannot_be_created_with_dapp_canisters() {
+    async fn test_failure_if_canisters_cannot_be_created_with_dapp_canisters_legacy() {
         let mut canister_api = new_canister_api();
         canister_api
             .errors_on_create_canister
@@ -3274,8 +3330,7 @@ mod test {
         let dapp_id = canister_test_id(1000).get();
         let original_dapp_controller = PrincipalId::new_user_test_id(10);
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
-        add_dapp_canisters(&mut sns_init_payload, &[dapp_id]);
+        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
             // The first call to get the controllers of the dapp_canister
@@ -3290,21 +3345,22 @@ mod test {
             SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(),
         ]);
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_id),
             true,
-            true,
-            false,
             vec![],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id],
             vec![],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (dapp_id, vec![original_dapp_controller]),
+                (
+                    dapp_id,
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_id],
             DeployNewSnsResponse {
@@ -3331,7 +3387,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_install_wasms() {
+    async fn fail_install_wasms_legacy() {
         let canister_api = new_canister_api();
         // don't throw an error until 3rd call to API
         canister_api
@@ -3368,13 +3424,12 @@ mod test {
         let swap_id = canister_test_id(4);
         let index_id = canister_test_id(5);
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        test_deploy_new_sns_request_legacy(
+            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_id),
             true,
-            false,
             true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
@@ -3449,21 +3504,22 @@ mod test {
             SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(),
         ]);
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_id),
             true,
-            true,
-            false,
             vec![],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
             vec![],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (dapp_id, vec![original_dapp_controller]),
+                (
+                    dapp_id,
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_id],
             DeployNewSnsResponse {
@@ -3489,7 +3545,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_add_controllers() {
+    async fn fail_add_controllers_legacy() {
         let canister_api = new_canister_api();
         canister_api
             .errors_on_set_controller
@@ -3512,13 +3568,12 @@ mod test {
         let swap_id = canister_test_id(4);
         let index_id = canister_test_id(5);
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        test_deploy_new_sns_request_legacy(
+            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_id),
             true,
-            false,
             true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
@@ -3580,8 +3635,7 @@ mod test {
         let dapp_id = canister_test_id(1000).get();
         let original_dapp_controller = PrincipalId::new_user_test_id(10);
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
-        add_dapp_canisters(&mut sns_init_payload, &[dapp_id]);
+        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
             // The first call to get the controllers of the dapp_canister
@@ -3596,14 +3650,12 @@ mod test {
             SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(),
         ]);
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_id),
             true,
-            true,
-            false,
             vec![],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
@@ -3616,7 +3668,10 @@ mod test {
             ],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (dapp_id, vec![original_dapp_controller]),
+                (
+                    dapp_id,
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_id],
             DeployNewSnsResponse {
@@ -3644,7 +3699,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_remove_self_as_controllers() {
+    async fn fail_remove_self_as_controllers_legacy() {
         let canister_api = new_canister_api();
         let mut errors = vec![
             None,
@@ -3675,13 +3730,12 @@ mod test {
         let sent_cycles =
             (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        test_deploy_new_sns_request_legacy(
+            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            false,
             true,
             vec![
                 CANISTER_CREATION_CYCLES,
@@ -3791,14 +3845,12 @@ mod test {
             SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(),
         ]);
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_id),
             true,
-            true,
-            false,
             vec![],
             vec![
                 (root_id, sent_cycles),
@@ -3825,7 +3877,10 @@ mod test {
             ],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (dapp_id, vec![original_dapp_controller]),
+                (
+                    dapp_id,
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_id],
             DeployNewSnsResponse {
@@ -3854,7 +3909,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_cleanup() {
+    async fn fail_cleanup_legacy() {
         let canister_api = new_canister_api();
         canister_api
             .errors_on_install_wasms
@@ -3886,13 +3941,12 @@ mod test {
         let swap_id = canister_test_id(4);
         let index_id = canister_test_id(5);
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        test_deploy_new_sns_request_legacy(
+            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            false,
             true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
@@ -3948,14 +4002,17 @@ mod test {
         let sent_cycles =
             (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
-        test_deploy_new_sns_request(
-            Some(SnsInitPayload::with_valid_values_for_testing()),
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: Some(DappCanisters::default()),
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            true,
-            false,
             vec![],
             vec![
                 (root_id, sent_cycles),
@@ -4002,13 +4059,51 @@ mod test {
         .await;
     }
 
-    async fn test_deploy_new_sns_request(
+    async fn test_deploy_new_sns_request_one_proposal(
         sns_init_payload: Option<SnsInitPayload>,
         canister_api: TestCanisterApi,
         nns_root_canister_client: &SpyNnsRootCanisterClient,
         available_subnet: Option<SubnetId>,
         wasm_available: bool,
-        is_governance_caller: bool,
+        expected_accepted_cycles: Vec<u64>,
+        expected_sent_cycles: Vec<(CanisterId, u64)>,
+        expected_canisters_destroyed: Vec<CanisterId>,
+        expected_set_controllers_calls: Vec<(CanisterId, Vec<PrincipalId>)>,
+        expected_change_canister_controllers_calls: Vec<(PrincipalId, Vec<PrincipalId>)>,
+        expected_canister_status_calls: Vec<PrincipalId>,
+        expected_response: DeployNewSnsResponse,
+    ) {
+        thread_local! {
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
+        }
+
+        let caller = GOVERNANCE_CANISTER_ID.get();
+
+        test_deploy_new_sns_request(
+            &CANISTER_WRAPPER,
+            sns_init_payload,
+            canister_api,
+            nns_root_canister_client,
+            available_subnet,
+            wasm_available,
+            caller,
+            expected_accepted_cycles,
+            expected_sent_cycles,
+            expected_canisters_destroyed,
+            expected_set_controllers_calls,
+            expected_change_canister_controllers_calls,
+            expected_canister_status_calls,
+            expected_response,
+        )
+        .await;
+    }
+
+    async fn test_deploy_new_sns_request_legacy(
+        sns_init_payload: Option<SnsInitPayload>,
+        canister_api: TestCanisterApi,
+        nns_root_canister_client: &SpyNnsRootCanisterClient,
+        available_subnet: Option<SubnetId>,
+        wasm_available: bool,
         should_caller_be_removed_from_whitelist: bool,
         expected_accepted_cycles: Vec<u64>,
         expected_sent_cycles: Vec<(CanisterId, u64)>,
@@ -4018,7 +4113,7 @@ mod test {
         expected_canister_status_calls: Vec<PrincipalId>,
         expected_response: DeployNewSnsResponse,
     ) {
-        let allowed_principal = PrincipalId::new_user_test_id(1);
+        let caller = PrincipalId::new_user_test_id(1);
 
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
@@ -4026,7 +4121,7 @@ mod test {
         CANISTER_WRAPPER.with(|sns_wasm| {
             sns_wasm.borrow_mut().update_allowed_principals(
                 UpdateAllowedPrincipalsRequest {
-                    added_principals: vec![allowed_principal],
+                    added_principals: vec![caller],
                     removed_principals: vec![],
                 },
                 GOVERNANCE_CANISTER_ID.into(),
@@ -4038,10 +4133,57 @@ mod test {
 
         assert_eq!(
             get_allowed_principals_response.allowed_principals,
-            vec![allowed_principal]
+            vec![caller]
         );
 
-        CANISTER_WRAPPER.with(|c| {
+        test_deploy_new_sns_request(
+            &CANISTER_WRAPPER,
+            sns_init_payload,
+            canister_api,
+            nns_root_canister_client,
+            available_subnet,
+            wasm_available,
+            caller,
+            expected_accepted_cycles,
+            expected_sent_cycles,
+            expected_canisters_destroyed,
+            expected_set_controllers_calls,
+            expected_change_canister_controllers_calls,
+            expected_canister_status_calls,
+            expected_response,
+        )
+        .await;
+
+        let get_allowed_principals_response =
+            CANISTER_WRAPPER.with(|c| c.borrow_mut().get_allowed_principals());
+
+        if should_caller_be_removed_from_whitelist {
+            assert_eq!(get_allowed_principals_response.allowed_principals, vec![]);
+        } else {
+            assert_eq!(
+                get_allowed_principals_response.allowed_principals,
+                vec![caller]
+            );
+        }
+    }
+
+    async fn test_deploy_new_sns_request(
+        canister_wrapper: &'static LocalKey<RefCell<SnsWasmCanister<TestCanisterStableMemory>>>,
+        sns_init_payload: Option<SnsInitPayload>,
+        canister_api: TestCanisterApi,
+        nns_root_canister_client: &SpyNnsRootCanisterClient,
+        available_subnet: Option<SubnetId>,
+        wasm_available: bool,
+        caller: PrincipalId,
+        expected_accepted_cycles: Vec<u64>,
+        expected_sent_cycles: Vec<(CanisterId, u64)>,
+        expected_canisters_destroyed: Vec<CanisterId>,
+        expected_set_controllers_calls: Vec<(CanisterId, Vec<PrincipalId>)>,
+        expected_change_canister_controllers_calls: Vec<(PrincipalId, Vec<PrincipalId>)>,
+        expected_canister_status_calls: Vec<PrincipalId>,
+        expected_response: DeployNewSnsResponse,
+    ) {
+        canister_wrapper.with(|c| {
             if available_subnet.is_some() {
                 c.borrow_mut()
                     .set_sns_subnets(vec![available_subnet.unwrap()]);
@@ -4052,15 +4194,11 @@ mod test {
         });
 
         let response = SnsWasmCanister::deploy_new_sns(
-            &CANISTER_WRAPPER,
+            canister_wrapper,
             &canister_api,
             nns_root_canister_client,
             DeployNewSnsRequest { sns_init_payload },
-            if is_governance_caller {
-                GOVERNANCE_CANISTER_ID.get()
-            } else {
-                allowed_principal
-            },
+            caller,
         )
         .await;
 
@@ -4078,18 +4216,6 @@ mod test {
 
         let set_controllers_calls = &*canister_api.set_controllers_calls.lock().unwrap();
         assert_eq!(&expected_set_controllers_calls, set_controllers_calls);
-
-        let get_allowed_principals_response =
-            CANISTER_WRAPPER.with(|c| c.borrow_mut().get_allowed_principals());
-
-        if should_caller_be_removed_from_whitelist {
-            assert_eq!(get_allowed_principals_response.allowed_principals, vec![]);
-        } else {
-            assert_eq!(
-                get_allowed_principals_response.allowed_principals,
-                vec![allowed_principal]
-            );
-        }
 
         assert_nns_root_calls(
             nns_root_canister_client,
@@ -4158,7 +4284,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_deploy_new_sns_to_subnet_creates_canisters_and_installs_with_correct_params() {
+    async fn test_deploy_new_sns_to_subnet_creates_canisters_and_installs_with_correct_params_legacy(
+    ) {
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
@@ -4178,7 +4305,7 @@ mod test {
             add_dummy_wasms(&mut c.borrow_mut(), None).5
         });
 
-        let init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE + 100));
 
@@ -4331,7 +4458,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_deploy_new_sns_records_root_canisters() {
+    async fn test_deploy_new_sns_records_root_canisters_legacy() {
         let test_id = subnet_test_id(1);
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE));
@@ -4360,7 +4487,7 @@ mod test {
             &canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             DeployNewSnsRequest {
-                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+                sns_init_payload: Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             },
             PrincipalId::new_user_test_id(1),
         )
@@ -4386,7 +4513,7 @@ mod test {
             &canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             DeployNewSnsRequest {
-                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+                sns_init_payload: Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
             },
             PrincipalId::new_user_test_id(1),
         )
@@ -4436,12 +4563,46 @@ mod test {
             add_dummy_wasms(&mut c.borrow_mut(), None);
         });
 
+        let original_dapp_controller = PrincipalId::new_user_test_id(10);
+        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let root_canister_calls = sns_init_payload
+            .dapp_canisters
+            .clone()
+            .unwrap_or_default()
+            .canisters
+            .iter()
+            .map(|_| {
+                SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![
+                    original_dapp_controller,
+                    ROOT_CANISTER_ID.get(),
+                ])
+            })
+            .chain(
+                sns_init_payload
+                    .dapp_canisters
+                    .clone()
+                    .unwrap_or_default()
+                    .canisters
+                    .iter()
+                    .flat_map(|_| {
+                        vec![
+                            // Transfer to NNS root
+                            SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(
+                            ),
+                            // Transfer to SNS root
+                            SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(
+                            ),
+                        ]
+                    }),
+            )
+            .collect();
+
         let response = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
             &canister_api,
-            &SpyNnsRootCanisterClient::new(vec![]),
+            &SpyNnsRootCanisterClient::new(root_canister_calls),
             DeployNewSnsRequest {
-                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+                sns_init_payload: Some(sns_init_payload),
             },
             GOVERNANCE_CANISTER_ID.get(),
         )
@@ -4533,7 +4694,7 @@ mod test {
             add_dummy_wasms(&mut sns_wasm, None);
         });
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut sns_init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
         add_dapp_canisters(&mut sns_init_payload, &[CanisterId::from_u64(1000).get()]);
 
         let response = SnsWasmCanister::deploy_new_sns(
@@ -4550,7 +4711,50 @@ mod test {
         assert_eq!(
             response.error,
             Some(SnsWasmError {
-                message: "Only NNS Governance may deploy an SNS with dapp_canisters at init"
+                message: "Could not determine whether the SNS init payload is using the one-proposal flow or the legacy because it contains a mix of set and unset one proposal parameters"
+                    .to_string()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_deploy_new_sns_without_dapp_canisters_not_possible_by_nns_governance() {
+        let test_id = subnet_test_id(1);
+
+        thread_local! {
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
+        }
+
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
+
+        CANISTER_WRAPPER.with(|sns_wasm| {
+            let mut sns_wasm = sns_wasm.borrow_mut();
+            sns_wasm.set_sns_subnets(vec![test_id]);
+            add_dummy_wasms(&mut sns_wasm, None);
+        });
+
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: None,
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+
+        let response = SnsWasmCanister::deploy_new_sns(
+            &CANISTER_WRAPPER,
+            &canister_api,
+            &SpyNnsRootCanisterClient::new(vec![]),
+            DeployNewSnsRequest {
+                sns_init_payload: Some(sns_init_payload),
+            },
+            GOVERNANCE_CANISTER_ID.into(),
+        )
+        .await;
+
+        assert_eq!(
+            response.error,
+            Some(SnsWasmError {
+                message: "Could not determine whether the SNS init payload is using the one-proposal flow or the legacy because it contains a mix of set and unset one proposal parameters"
                     .to_string()
             })
         );
@@ -4569,8 +4773,15 @@ mod test {
         ];
         let original_dapp_controller = PrincipalId::new_user_test_id(10);
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
-        add_dapp_canisters(&mut sns_init_payload, &dapp_ids);
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: Some(DappCanisters {
+                canisters: dapp_ids
+                    .iter()
+                    .map(|id| Canister { id: Some(*id) })
+                    .collect(),
+            }),
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
             SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![
@@ -4597,14 +4808,12 @@ mod test {
             SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(),
         ]);
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_test_id(1)),
             true,
-            true,
-            false,
             vec![],
             vec![],
             vec![],
@@ -4613,7 +4822,10 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![original_dapp_controller]),
+                (
+                    dapp_ids[0],
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
             DeployNewSnsResponse {
@@ -4700,14 +4912,12 @@ mod test {
         let sent_cycles =
             (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_id),
             true,
-            true,
-            false,
             vec![],
             vec![
                 (root_id, sent_cycles),
@@ -4739,8 +4949,14 @@ mod test {
                 (dapp_ids[0], vec![root_id.get()]),
                 (dapp_ids[1], vec![root_id.get()]),
                 (dapp_ids[2], vec![root_id.get()]),
-                (dapp_ids[1], vec![original_dapp_controller]),
-                (dapp_ids[2], vec![original_dapp_controller]),
+                (
+                    dapp_ids[1],
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
+                (
+                    dapp_ids[2],
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
             DeployNewSnsResponse {
@@ -4801,14 +5017,12 @@ mod test {
             ),
         ]);
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_test_id(1)),
             true,
-            true,
-            false,
             vec![],
             vec![],
             vec![],
@@ -4823,6 +5037,65 @@ mod test {
                     -Could not get the controllers of CanisterId(heic2-yaaaa-aaaaa-aapuq-cai) due to an error from the replica. None:\"Something went wrong\"\n  \
                     -Could not get the controllers of CanisterId(hnljg-oiaaa-aaaaa-aapva-cai) due to an error from the replica. None:\"Something else went wrong\""
                     .to_string(),
+                }),
+                dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
+                    restored_dapp_canisters: vec![],
+                    nns_controlled_dapp_canisters: vec![],
+                    sns_controlled_dapp_canisters: vec![],
+                }),
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn get_controllers_of_dapp_canisters_returns_empty_set() {
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
+
+        let original_dapp_controller = PrincipalId::new_user_test_id(10);
+
+        let dapp_ids = vec![
+            canister_test_id(1000).get(),
+            canister_test_id(1001).get(),
+            canister_test_id(1002).get(),
+        ];
+
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        add_dapp_canisters(&mut sns_init_payload, &dapp_ids);
+
+        let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
+            SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![
+                original_dapp_controller,
+                ROOT_CANISTER_ID.get(),
+            ]),
+            SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![]),
+            SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![
+                original_dapp_controller,
+                ROOT_CANISTER_ID.get(),
+            ]),
+        ]);
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
+            canister_api,
+            &spy_nns_root_client,
+            Some(subnet_test_id(1)),
+            true,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
+            DeployNewSnsResponse {
+                subnet_id: None,
+                canisters: None,
+                error: Some(SnsWasmError {
+                    message: "The following dapp canister(s) did not have any controllers, cannot \
+                        transfer to an SNS. \"heic2-yaaaa-aaaaa-aapuq-cai\""
+                        .to_string(),
                 }),
                 dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
                     restored_dapp_canisters: vec![],
@@ -4893,14 +5166,12 @@ mod test {
             ),
         ]);
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_id),
             true,
-            true,
-            false,
             vec![],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
@@ -4909,9 +5180,9 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![original_dapp_controller]),
-                (dapp_ids[1], vec![original_dapp_controller]),
-                (dapp_ids[2], vec![original_dapp_controller]),
+                (dapp_ids[0], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
+                (dapp_ids[1], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
             ],
             vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
             DeployNewSnsResponse {
@@ -5022,14 +5293,12 @@ mod test {
         let sent_cycles =
             (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
-        test_deploy_new_sns_request(
+        test_deploy_new_sns_request_one_proposal(
             Some(sns_init_payload),
             canister_api,
             &spy_nns_root_client,
             Some(subnet_id),
             true,
-            true,
-            false,
             vec![],
             vec![
                 (root_id, sent_cycles),
@@ -5061,8 +5330,8 @@ mod test {
                 (dapp_ids[0], vec![root_id.get()]),
                 (dapp_ids[1], vec![root_id.get()]),
                 (dapp_ids[2], vec![root_id.get()]),
-                (dapp_ids[1], vec![original_dapp_controller]),
-                (dapp_ids[2], vec![original_dapp_controller]),
+                (dapp_ids[1], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
             ],
             vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
             DeployNewSnsResponse {

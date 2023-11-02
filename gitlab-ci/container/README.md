@@ -7,7 +7,7 @@ See [Dockerfile](Dockerfile) for info about required dependencies.
 ## Requirements
 
 - x86-64 based system (at least 8 CPUs, 16 GB MEM/SWAP, 100 GB available disk space)
-- Ubuntu 20.04 or newer
+- Ubuntu 22.04 or newer
 - [Podman](https://podman.io/getting-started/installation)
 
 **Note:** With *Ubuntu 20.10* and newer, you can simply do `sudo apt install -y podman`. With older versions see Ubuntu section of [Podman Installation Guide](https://podman.io/getting-started/installation). It's recommended to use Ubuntu 22.04.
@@ -99,4 +99,13 @@ PODMAN_RUN_USR_ARGS=(
     --mount type=bind,source=${HOME}/.config/fish,target=/home/ubuntu/.config/fish
     -e TESTVARIABLE="something-i-expect"
 )
+```
+
+### How to run parallel bazel tests
+
+By default `container-run.sh` bind-mounts `~/.cache` which is used for (output_base)[https://bazel.build/docs/user-manual#output-base]. If you need to run 2nd build/test in parallel but not interfere with the 1st one, follow the steps below.
+
+```bash
+mkdir ~/.cache2
+./gitlab-ci/container/container-run.sh -c ~/.cache2
 ```

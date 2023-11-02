@@ -2,7 +2,7 @@
   extends:
     - .ubuntu-cargo-k8s
   rules:
-    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
+    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
       when: manual
       allow_failure: true
     - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
@@ -23,18 +23,6 @@
     when: always
     paths:
       - $CI_JOB_STAGE/$CI_JOB_NAME
-
-.prod-stress-test:
-  extends: .prod-test
-  resource_group: $TESTNET
-  variables:
-    cd_target_env: "STRESS"
-
-.prod-hourly-test:
-  extends: .prod-test
-  resource_group: $TESTNET
-  variables:
-    cd_target_env: "HOURLY"
 
 .prod-nightly-test:
   extends: .prod-test
@@ -64,13 +52,6 @@
     cd_debug_target: "true"
   resource_group: $TESTNET2
 
-.prod-slo-test:
-  extends: .prod-test
-  resource_group: $TESTNET
-  variables:
-    cd_target_env: "SLO"
-  timeout: 3 hours
-
 # TESTING NOTE:
 # $SHELL_WRAPPER allows us to emulate CI runs without actually executing the complicated and time-consuming
 #      operations.
@@ -79,114 +60,7 @@
 
 # NIGHTLY TESTS
 
-# rejoin_test: 15min runtime, 8 canisters installed
-# Kill one node for the majority of time during the 15min runtime, restart it and check if it contributes to IC later
-rejoin-nightly:
-  extends: .prod-nightly-test-group-2
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 46m ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# SCENARIO TEST deploy_nns_prod_state: Tests the NNS state deployment script
-nns-state-deployment-test-nightly:
-  extends: .prod-nightly-test-group-2
-  allow_failure: true #nns state deployment is not needed for release of replica
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-      $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/nns_state_deployment_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# SCENARIO TEST rejoin: 15min runtime, 8 canisters installed
-# Kill one node for the majority of time during the 15min runtime, restart it and check if it contributes to IC later
-rejoin-test-slo:
-  extends: .prod-slo-test
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 large "$CI_JOB_STAGE/$CI_JOB_NAME"
-
 .with-monitoring:
   variables:
     # we need debug-level logs from the following components for IC policy monitoring
     REPLICA_LOG_DEBUG_OVERRIDES: "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors,ic_consensus::consensus,ic_transport::control_plane"
-
-# Stress tests: Run given job sequence every N minutes so we can easily collect failure data
-icos-deploy-stress:
-  extends: .prod-stress-test
-  parallel:
-    matrix:
-      - DEPLOY_FLAVOR: single-dc
-        TESTNET:
-        - cdhourlydebug01
-        - cdhourlydebug02
-      - DEPLOY_FLAVOR: multi-dc
-        TESTNET:
-        - cdhourlydebug03
-        - cdhourlydebug04
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 10m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
-
-.prod-hotfix-test:
-  extends:
-    - .prod-test
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/'
-      when: always
-    - if: '$CD_ENV == $cd_target_env && ( $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i )'
-    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-  variables:
-    cd_target_env: "HOTFIX"
-  timeout: 55 minutes
-
-rejoin-hotfix:
-  extends: .prod-hotfix-test
-  variables:
-    TESTNET: $TESTNET2
-  resource_group: $TESTNET2
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-ingress-manager-proptests-nightly:
-  extends:
-    - .prod-test
-  variables:
-    cd_target_env: "NIGHTLY"
-  timeout: 70 minutes
-  script:
-    - |
-      cd "${CI_PROJECT_DIR}/rs"
-      $SHELL_WRAPPER cargo test --release -p ic-ingress-manager proptest

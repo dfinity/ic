@@ -20,9 +20,10 @@ use ic_sns_governance::{
         },
         neuron::{DissolveState, Followees},
         proposal::Action,
-        GetNeuron, GetProposal, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        ManageNeuronResponse, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId, Vote,
+        GetMaturityModulationRequest, GetMaturityModulationResponse, GetNeuron, GetProposal,
+        Governance as GovernanceProto, GovernanceError, ManageNeuron, ManageNeuronResponse,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, Proposal, ProposalData, ProposalId, Vote,
     },
     types::Environment,
 };
@@ -90,11 +91,6 @@ impl ICRC1Ledger for LedgerFixture {
             amount_e8s,
             fee_e8s
         );
-
-        let _to_e8s = ledger_fixture_state
-            .accounts
-            .get(&to)
-            .ok_or_else(|| NervousSystemError::new_with_message("Target account doesn't exist"))?;
 
         // Only change SNS governance's SNS token balance when transferring from
         // a non-default account. This is because when transferring from the
@@ -205,15 +201,15 @@ impl LedgerFixtureBuilder {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct CmcFixture {
-    maturity_modulation: i32,
+    pub maturity_modulation: Arc<Mutex<i32>>,
 }
 
 impl CmcFixture {
     pub fn new(maturity_modulation: i32) -> Self {
         Self {
-            maturity_modulation,
+            maturity_modulation: Arc::new(Mutex::new(maturity_modulation)),
         }
     }
 }
@@ -221,7 +217,7 @@ impl CmcFixture {
 #[async_trait]
 impl CMC for CmcFixture {
     async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
-        Ok(self.maturity_modulation)
+        Ok(*self.maturity_modulation.try_lock().unwrap())
     }
 }
 
@@ -421,6 +417,7 @@ pub struct GovernanceCanisterFixture {
     pub environment_fixture: EnvironmentFixture,
     pub icp_ledger_fixture: LedgerFixture,
     pub sns_ledger_fixture: LedgerFixture,
+    pub cmc_fixture: CmcFixture,
     pub governance: Governance,
     pub(crate) initial_state: Option<GovernanceState>,
 }
@@ -795,6 +792,11 @@ impl GovernanceCanisterFixture {
             _ => panic!("Unexpected command response when making a proposal"),
         }
     }
+
+    pub fn get_maturity_modulation(&mut self) -> GetMaturityModulationResponse {
+        self.governance
+            .get_maturity_modulation(GetMaturityModulationRequest::default())
+    }
 }
 
 pub type LedgerTransform = Box<dyn FnOnce(Box<dyn ICRC1Ledger>) -> Box<dyn ICRC1Ledger>>;
@@ -907,6 +909,7 @@ impl GovernanceCanisterFixtureBuilder {
             environment_fixture: environment_fixture.clone(),
             icp_ledger_fixture,
             sns_ledger_fixture,
+            cmc_fixture: self.cmc_fixture.clone(),
             governance: Governance::new(
                 valid_governance,
                 Box::new(environment_fixture),

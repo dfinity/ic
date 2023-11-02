@@ -4,174 +4,188 @@ syntax = "proto3";
 package types.v1;
 
 import "bitcoin/v1/bitcoin.proto";
-import "canister_http/v1/canister_http.proto";
-import "types/v1/types.proto";
+import "messaging/xnet/v1/certification.proto";
+import "messaging/xnet/v1/certified_stream_slice.proto";
 import "types/v1/dkg.proto";
 import "types/v1/ecdsa.proto";
-import "messaging/xnet/v1/certified_stream_slice.proto";
+import "types/v1/types.proto";
+
+message CertificationMessage {
+  oneof msg {
+    messaging.xnet.v1.Certification certification = 1;
+    messaging.xnet.v1.CertificationShare certification_share = 2;
+  }
+}
 
 message ValidatedConsensusArtifact {
-	ConsensusMessage msg = 1;
-	uint64 timestamp = 2;
+  ConsensusMessage msg = 1;
+  uint64 timestamp = 2;
 }
 
 message CatchUpPackage {
-	bytes content = 1;
-	bytes signature = 2;
-	NiDkgId signer = 3;
+  bytes content = 1;
+  bytes signature = 2;
+  NiDkgId signer = 3;
 }
 
 message CatchUpPackageShare {
-	string version = 1;
-	RandomBeacon random_beacon = 2;
-	bytes state_hash = 3;
-	bytes block_hash = 4;
-	bytes random_beacon_hash = 5;
-	bytes signature = 6;
-	NodeId signer = 7;
+  string version = 1;
+  RandomBeacon random_beacon = 2;
+  bytes state_hash = 3;
+  bytes block_hash = 4;
+  bytes random_beacon_hash = 5;
+  bytes signature = 6;
+  NodeId signer = 7;
 }
 
 message CatchUpContent {
-	Block block = 1;
-	RandomBeacon random_beacon = 2;
-	bytes state_hash = 3;
-	bytes block_hash = 4;
-	bytes random_beacon_hash = 5;
+  Block block = 1;
+  RandomBeacon random_beacon = 2;
+  bytes state_hash = 3;
+  bytes block_hash = 4;
+  bytes random_beacon_hash = 5;
 }
 
 message Block {
-	string version = 1;
-	bytes parent = 2;
-	DkgPayload dkg_payload = 3;
-	uint64 height = 4;
-	uint64 rank = 5;
-	// ValidationContext
-	uint64 time = 6;
-	uint64 registry_version = 7;
-	uint64 certified_height = 8;
-	// Payloads
-	IngressPayload ingress_payload = 9;
-	XNetPayload xnet_payload = 10;
-	SelfValidatingPayload self_validating_payload = 12;
-	EcdsaPayload ecdsa_payload = 13;
-	CanisterHttpPayload canister_http_payload = 14;
-	bytes canister_http_payload_bytes = 15;
-	bytes payload_hash = 11;
+  string version = 1;
+  bytes parent = 2;
+  DkgPayload dkg_payload = 3;
+  uint64 height = 4;
+  uint64 rank = 5;
+  // ValidationContext
+  uint64 time = 6;
+  uint64 registry_version = 7;
+  uint64 certified_height = 8;
+  // Payloads
+  IngressPayload ingress_payload = 9;
+  XNetPayload xnet_payload = 10;
+  SelfValidatingPayload self_validating_payload = 12;
+  EcdsaPayload ecdsa_payload = 13;
+  reserved 14;
+  bytes canister_http_payload_bytes = 15;
+  bytes query_stats_payload_bytes = 16;
+  bytes payload_hash = 11;
 }
 
 message ConsensusMessage {
-	oneof msg {
-		RandomBeacon random_beacon = 1;
-		Finalization finalization = 2;
-		Notarization notarization = 3;
-		BlockProposal block_proposal = 4;
-		RandomBeaconShare random_beacon_share = 5;
-		NotarizationShare notarization_share = 6;
-		FinalizationShare finalization_share = 7;
-		RandomTape random_tape = 8;
-		RandomTapeShare random_tape_share = 9;
-		CatchUpPackage cup = 10;
-		CatchUpPackageShare cup_share = 11;
-	}
+  oneof msg {
+    RandomBeacon random_beacon = 1;
+    Finalization finalization = 2;
+    Notarization notarization = 3;
+    BlockProposal block_proposal = 4;
+    RandomBeaconShare random_beacon_share = 5;
+    NotarizationShare notarization_share = 6;
+    FinalizationShare finalization_share = 7;
+    RandomTape random_tape = 8;
+    RandomTapeShare random_tape_share = 9;
+    CatchUpPackage cup = 10;
+    CatchUpPackageShare cup_share = 11;
+  }
 }
 
 message BlockProposal {
-	bytes hash = 1;
-	Block value = 2;
-	bytes signature = 3;
-	reserved 4;
-	NodeId signer = 5;
+  bytes hash = 1;
+  Block value = 2;
+  bytes signature = 3;
+  reserved 4;
+  NodeId signer = 5;
 }
 
 message RandomBeacon {
-	string version = 1;
-	uint64 height = 2;
-	bytes parent = 3;
-	bytes signature = 4;
-	NiDkgId signer = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes parent = 3;
+  bytes signature = 4;
+  NiDkgId signer = 5;
 }
 
 message RandomBeaconShare {
-	string version = 1;
-	uint64 height = 2;
-	bytes parent = 3;
-	bytes signature = 4;
-	NodeId signer = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes parent = 3;
+  bytes signature = 4;
+  NodeId signer = 5;
 }
 
 message RandomTape {
-	string version = 1;
-	uint64 height = 2;
-	bytes signature = 3;
-	NiDkgId signer = 4;
+  string version = 1;
+  uint64 height = 2;
+  bytes signature = 3;
+  NiDkgId signer = 4;
 }
 
 message RandomTapeShare {
-	string version = 1;
-	uint64 height = 2;
-	bytes signature = 3;
-	NodeId signer = 4;
+  string version = 1;
+  uint64 height = 2;
+  bytes signature = 3;
+  NodeId signer = 4;
 }
 
 message Finalization {
-	string version = 1;
-	uint64 height = 2;
-	bytes block = 3;
-	bytes signature = 4;
-	repeated bytes signers = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes block = 3;
+  bytes signature = 4;
+  repeated bytes signers = 5;
 }
 
 message FinalizationShare {
-	string version = 1;
-	uint64 height = 2;
-	bytes block = 3;
-	bytes signature = 4;
-	NodeId signer = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes block = 3;
+  bytes signature = 4;
+  NodeId signer = 5;
 }
 
 message Notarization {
-	string version = 1;
-	uint64 height = 2;
-	bytes block = 3;
-	bytes signature = 4;
-	repeated bytes signers = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes block = 3;
+  bytes signature = 4;
+  repeated bytes signers = 5;
 }
 
 message NotarizationShare {
-	string version = 1;
-	uint64 height = 2;
-	bytes block = 3;
-	bytes signature = 4;
-	NodeId signer = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes block = 3;
+  bytes signature = 4;
+  NodeId signer = 5;
 }
 
 message SubnetStreamSlice {
-	SubnetId subnet_id = 1;
-	messaging.xnet.v1.CertifiedStreamSlice stream_slice = 2;
+  SubnetId subnet_id = 1;
+  messaging.xnet.v1.CertifiedStreamSlice stream_slice = 2;
 }
 
 message SelfValidatingPayload {
-	// Responses from the Bitcoin Adapter talking to the Bitcoin testnet.
-	repeated bitcoin.v1.BitcoinAdapterResponse bitcoin_testnet_payload = 1;
+  // Responses from the Bitcoin Adapter talking to the Bitcoin testnet.
+  repeated bitcoin.v1.BitcoinAdapterResponse bitcoin_testnet_payload = 1;
 }
 
 message XNetPayload {
-	repeated SubnetStreamSlice stream_slices = 1;
+  repeated SubnetStreamSlice stream_slices = 1;
 }
 
-message CanisterHttpPayload {
-	repeated canister_http.v1.CanisterHttpResponseWithConsensus responses = 1;
-	repeated uint64 timeouts = 2;
-	repeated canister_http.v1.CanisterHttpResponseDivergence divergence_responses = 3;
+message QueryStatsPayload {
+  repeated QueryStatsPayloadInner canister_stats = 1;
+}
+
+message QueryStatsPayloadInner {
+  types.v1.CanisterId canister_id = 1;
+  uint32 num_calls = 2;
+  uint64 num_instructions = 3;
+  uint64 ingress_payload_size = 4;
+  uint64 egress_payload_size = 5;
 }
 
 message IngressIdOffset {
-	uint64 expiry = 1;
-	bytes message_id = 2;
-	uint64 offset = 3;
+  uint64 expiry = 1;
+  bytes message_id = 2;
+  uint64 offset = 3;
 }
 
 message IngressPayload {
-	repeated IngressIdOffset id_and_pos = 1;
-	bytes buffer = 2;
+  repeated IngressIdOffset id_and_pos = 1;
+  bytes buffer = 2;
 }

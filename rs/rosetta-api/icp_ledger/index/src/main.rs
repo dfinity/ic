@@ -6,9 +6,10 @@ use ic_cdk_timers::TimerId;
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, InitArg, Log, LogEntry, Priority, Status,
-    TransactionWithId,
+    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, InitArg, Log, LogEntry,
+    Priority, Status, TransactionWithId,
 };
+use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -20,6 +21,8 @@ use icp_ledger::{
     AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
     GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
 };
+use icrc_ledger_types::icrc1::account::Account;
+use num_traits::cast::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -109,11 +112,6 @@ impl Storable for State {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            log!(
-                P1,
-                "[to_bytes]: failed to encode index config:{}",
-                err.to_string()
-            );
             ic_cdk::api::trap(&format!("{:?}", err));
         });
         Cow::Owned(buf)
@@ -121,11 +119,6 @@ impl Storable for State {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            log!(
-                P1,
-                "[from_bytes]: failed to decode index options:{}",
-                err.to_string()
-            );
             ic_cdk::api::trap(&format!("{:?}", err));
         })
     }
@@ -146,11 +139,6 @@ impl Storable for AccountIdentifierDataType {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         if bytes.len() != 1 {
-            log!(
-                P1,
-                "[from_bytes] Expected a single byte for AccountDataType but found {}",
-                bytes.len()
-            );
             ic_cdk::api::trap(&format!(
                 "Expected a single byte for AccountDataType but found {}",
                 bytes.len()
@@ -159,7 +147,6 @@ impl Storable for AccountIdentifierDataType {
         if bytes[0] == 0x00 {
             Self::Balance
         } else {
-            log!(P1, "[from_bytes] Unknown AccountDataType {}", bytes[0]);
             ic_cdk::api::trap(&format!("Unknown AccountDataType {}", bytes[0]));
         }
     }
@@ -185,7 +172,6 @@ fn mutate_state(f: impl FnOnce(&mut State)) {
             borrowed.set(state)
         })
         .unwrap_or_else(|err| {
-            log!(P0, "[mutate_state]: could not mutate state:{:?}", err);
             ic_cdk::api::trap(&format!("{:?}", err));
         });
 }
@@ -355,7 +341,7 @@ pub async fn build_index() -> Result<(), String> {
     let wait_time = compute_wait_time(tx_indexed_count);
     log!(P0, "[build_index]: new wait time is {:?}", wait_time);
     ic_cdk::eprintln!("Indexed: {} waiting : {:?}", tx_indexed_count, wait_time);
-    mutate_state(|mut state| state.last_wait_time = wait_time);
+    mutate_state(|state| state.last_wait_time = wait_time);
     ScopeGuard::into_inner(failure_guard);
     set_build_index_timer(wait_time);
     Ok(())
@@ -421,20 +407,19 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) -> Result<(), String> {
 
 fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(), String> {
     match block.transaction.operation {
-        Operation::Burn { from, amount } => debit(block_index, from, amount.get_e8s()),
+        Operation::Burn { from, amount, .. } => debit(block_index, from, amount.get_e8s()),
         Operation::Mint { to, amount } => credit(block_index, to, amount.get_e8s()),
         Operation::Transfer {
             from,
             to,
             amount,
             fee,
+            ..
         } => {
             debit(block_index, from, amount.get_e8s() + fee.get_e8s());
             credit(block_index, to, amount.get_e8s())
         }
-        _ => {
-            return Err("[process_balance_changes]: Indexer only supports Burn, Mint and Transfer Operations".to_owned());
-        }
+        Operation::Approve { from, fee, .. } => debit(block_index, from, fee.get_e8s()),
     };
     Ok(())
 }
@@ -442,11 +427,6 @@ fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(),
 fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if balance < amount {
-            log!(
-                P1,
-                "[debit]: Block {} caused an underflow for account_identifier {} when calculating balance {} - amount {}",
-                block_index, account_identifier, balance, amount
-            );
             ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
                 block_index, account_identifier, balance, amount))
         }
@@ -457,11 +437,6 @@ fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount:
 fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if u64::MAX - balance < amount {
-            log!(
-                P1,
-                "[credit]: Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
-                block_index, account_identifier, balance, amount
-            );
             ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
                 block_index, account_identifier, balance, amount))
         }
@@ -483,10 +458,7 @@ fn get_account_identifiers(block: &Block) -> Result<Vec<AccountIdentifier>, Stri
         Operation::Burn { from, .. } => Ok(vec![from]),
         Operation::Mint { to, .. } => Ok(vec![to]),
         Operation::Transfer { from, to, .. } => Ok(vec![from, to]),
-        _ => Err(
-            "[get_account_identifiers]: Indexer only supports Burn, Mint and Transfer Operations"
-                .to_owned(),
-        ),
+        Operation::Approve { from, spender, .. } => Ok(vec![from, spender]),
     }
 }
 
@@ -585,19 +557,12 @@ fn get_blocks(
     req: icrc_ledger_types::icrc3::blocks::GetBlocksRequest,
 ) -> ic_icp_index::GetBlocksResponse {
     let chain_length = with_blocks(|blocks| blocks.len());
-    let (start, length) = req.as_start_and_length().unwrap_or_else(|msg| {
-        log!(P1, "[get_blocks]: cannot get start and length: {:?}", msg);
-        ic_cdk::api::trap(&msg)
-    });
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
 
-    let blocks = get_block_range_from_stable_memory(start, length).unwrap_or_else(|msg| {
-        log!(
-            P1,
-            "[get_blocks]: cannot get block range from stable memory: {:?}",
-            msg
-        );
-        ic_cdk::api::trap(&msg)
-    });
+    let blocks = get_block_range_from_stable_memory(start, length)
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
     ic_icp_index::GetBlocksResponse {
         chain_length,
         blocks,
@@ -621,7 +586,8 @@ fn get_account_identifier_transactions(
         account_identifier_block_ids
             .range(key..)
             // old txs of the requested account_identifier and skip the start index
-            .filter(|(k, _)| k.0 == key.0 && k.1 .0 != start)
+            .take_while(|(k, _)| k.0 == key.0)
+            .filter(|(k, _)| k.1 .0 < start)
             .take(length)
             .map(|(k, _)| k.1 .0)
             .collect::<Vec<BlockIndex>>()
@@ -629,11 +595,6 @@ fn get_account_identifier_transactions(
     for id in indices {
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
-                log!(
-                    P1,
-                    "[get_account_identifier_transactions]: could not find block with id: {}",
-                    id,
-                );
                 ic_cdk::api::trap(&format!(
                     "Block {} not found in the block log, account_identifier blocks map is corrupted!",
                     id
@@ -642,11 +603,6 @@ fn get_account_identifier_transactions(
         });
         let transaction = decode_encoded_block(id, block.into())
             .unwrap_or_else(|_| {
-                log!(
-                    P1,
-                    "[get_account_identifier_transactions]: could not find block with id: {}",
-                    id,
-                );
                 ic_cdk::api::trap(&format!(
                 "Block {} not found in the block log, account_identifier blocks map is corrupted!",id
             ));
@@ -661,6 +617,23 @@ fn get_account_identifier_transactions(
         balance,
         transactions,
         oldest_tx_id,
+    })
+}
+
+#[query]
+#[candid_method(query)]
+fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
+    get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
+        account_identifier: arg.account.into(),
+        max_results: arg
+            .max_results
+            .0
+            .to_u64()
+            .unwrap_or_else(|| ic_cdk::trap("Conversion from candid Nat to u64 failed")),
+        start: arg.start.map(|s| {
+            s.0.to_u64()
+                .unwrap_or_else(|| ic_cdk::trap("Conversion from candid Nat to u64 failed"))
+        }),
     })
 }
 
@@ -715,6 +688,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 #[candid_method(query)]
 fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 {
     get_balance(account_identifier)
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc1_balance_of(account: Account) -> u64 {
+    get_balance(account.into())
 }
 
 #[query]

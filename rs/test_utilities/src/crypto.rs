@@ -1,17 +1,19 @@
 pub mod fake_tls_handshake;
 
 pub use ic_crypto_test_utils::files as temp_dir;
+use ic_crypto_tls_interfaces::{AllowedClients, TlsConfig, TlsConfigError};
+use tokio_rustls::rustls::{ClientConfig, PrivateKey, RootCertStore, ServerConfig};
 
 use crate::types::ids::node_test_id;
+use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
-    IDkgKeyRotationResult, IDkgProtocol, KeyManager, LoadTranscriptResult, NiDkgAlgorithm,
-    ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+    IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
+    LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
@@ -26,7 +28,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    config::NiDkgConfig, DkgId, NiDkgDealing, NiDkgId, NiDkgTranscript,
+    config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTranscript,
 };
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
@@ -40,6 +42,11 @@ use ic_types::{NodeId, RegistryVersion};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
+
+const DUMMY_EDDSA_PRIVATE_KEY: [u8; 48] = [
+    48, 46, 2, 1, 0, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
 
 pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {
     Arc::new(FakeRegistryClient::new(Arc::new(
@@ -65,6 +72,7 @@ fn empty_ni_dkg_dealing() -> NiDkgDealing {
 }
 
 pub use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts_with_committee;
+use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types_test_utils::ids::NODE_1;
 
 #[derive(Default)]
@@ -173,7 +181,11 @@ impl<T: Signable> MultiSigVerifier<T> for CryptoReturningOk {
 }
 
 impl<T: Signable> ThresholdSigner<T> for CryptoReturningOk {
-    fn sign_threshold(&self, _message: &T, _dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
+    fn sign_threshold(
+        &self,
+        _message: &T,
+        _dkg_id: NiDkgId,
+    ) -> CryptoResult<ThresholdSigShareOf<T>> {
         Ok(ThresholdSigShareOf::new(ThresholdSigShare(vec![])))
     }
 }
@@ -183,7 +195,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &ThresholdSigShareOf<T>,
         _message: &T,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
         _signer: NodeId,
     ) -> CryptoResult<()> {
         Ok(())
@@ -192,7 +204,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
     fn combine_threshold_sig_shares(
         &self,
         _shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
         Ok(CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])))
     }
@@ -201,7 +213,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &CombinedThresholdSigOf<T>,
         _message: &T,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
     ) -> CryptoResult<()> {
         Ok(())
     }
@@ -225,7 +237,7 @@ impl<T: Signable> CanisterSigVerifier<T> for CryptoReturningOk {
         _signature: &CanisterSigOf<T>,
         _signed_bytes: &T,
         _public_key: &UserPublicKey,
-        _registry_version: RegistryVersion,
+        _root_of_trust: &IcRootOfTrust,
     ) -> CryptoResult<()> {
         Ok(())
     }
@@ -473,6 +485,45 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
         _signature: &ThresholdEcdsaCombinedSignature,
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
         Ok(())
+    }
+}
+
+impl TlsConfig for CryptoReturningOk {
+    fn server_config(
+        &self,
+        _allowed_clients: AllowedClients,
+        _registry_version: RegistryVersion,
+    ) -> Result<ServerConfig, TlsConfigError> {
+        Ok(ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            // Random Ed25519 private key since valid format is checked when building the config.
+            .with_single_cert(Vec::new(), PrivateKey(DUMMY_EDDSA_PRIVATE_KEY.to_vec()))
+            .expect("bad certificate/key"))
+    }
+    fn server_config_without_client_auth(
+        &self,
+        _registry_version: RegistryVersion,
+    ) -> Result<ServerConfig, TlsConfigError> {
+        Ok(ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(
+                Vec::new(),
+                // Random Ed25519 private key since valid format is checked when building the config.
+                PrivateKey(DUMMY_EDDSA_PRIVATE_KEY.to_vec()),
+            )
+            .expect("bad certificate/key"))
+    }
+    fn client_config(
+        &self,
+        _server: NodeId,
+        _registry_version: RegistryVersion,
+    ) -> Result<ClientConfig, TlsConfigError> {
+        Ok(ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(RootCertStore { roots: Vec::new() })
+            .with_no_client_auth())
     }
 }
 

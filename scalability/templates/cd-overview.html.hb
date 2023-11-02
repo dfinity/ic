@@ -30,12 +30,75 @@
     <div style="position: absolute; top: 0px; right: 0px; padding: 2em;">
       <img src="fully_on_chain-default-bg_dark.svg" alt="On-chain logo" style="width: 10em;" />
     </div>
+
+    <h1>Estimated mainnet performance</h1>
+
+    <div>
+      Based on numbers from: <span class="timestamp">{{last_generated}}</span><br />
+      Assuming mainnet has <span class="w3-tag w3-light-grey exp_value">{{num_app_subnets}}</span> application subnets running
+      <span class="w3-tag w3-light-grey exp_value">{{num_app_nodes}}</span> nodes.
+    </div>
+
+    Per subnet, that is:
+    <div class="w3-btn w3-green w3-large">
+      {{latest_approx_mainnet_subnet_update_performance}} updates/s
+    </div>
+
+    and per IC node:
+    <div class="w3-btn w3-green w3-large">
+      {{latest_approx_mainnet_node_query_performance}} querys/s
+    </div>
+
+    <div>
+      Extrapolated from those latest performance runs, mainnet would sustain the following load:
+    </div>
+
+    <div class="w3-btn w3-green w3-large">
+      {{latest_approx_mainnet_update_performance}} updates/s
+    </div>
+
+    <div class="w3-btn w3-green w3-large">
+      {{latest_approx_mainnet_query_performance}} querys/s
+    </div>
+
+    <p>
+    Copy the following to <a href="https://wiki.internetcomputer.org/w/index.php?title=Internet_Computer_performance&veaction=edit" target="_blank">the wiki</a>:
+    </p>
+
+    <p>
+    We evaluate the capacity of the IC with a benchmark run against a test setup using a single subnet composed of 13 nodes with a configuration close to the IC nodes on mainnet.
+    We scale up those numbers to the current number of nodes and subnetworks on mainnet, which yields the following numbers:
+    </p>
+
+    <p>
+    Query calls: {{latest_approx_mainnet_node_query_performance}} queries/s
+    ({{latest_approx_mainnet_subnet_update_performance}} queries/s per node scaled up to {{num_app_nodes}} nodes in application subnetworks)
+    </p>
+
+    <p>
+    Update calls: {{latest_approx_mainnet_subnet_update_performance}}  updates/s
+    ({{latest_approx_mainnet_node_query_performance}} updates/s per subnetwork scaled up to {{num_app_subnets}} application subnetworks)
+    </p>
+
+    <p>
+    Above calculation is based on measurements from: {{last_generated_formatted}}.
+    </p>
+
+    <p>
+    All benchmark run against a small number of canister that simply return, as the goal of this benchmark is to measure the maximum throughput
+    for the current system overhead.
+    </p>
+
+    <p>
+    Canister code can be (almost) arbitrarily complex and therefor significantly lower the throughput if canister execution is becoming the bottleneck (and not messaging).
+    </p>
+
     <h1>CD performance results</h1>
 
     <p>
-      This page containes history data of our internal performance evaluation pipeline.
+      This page contains history data of our internal performance evaluation pipeline.
       We run our benchmarks on a dedicated testnet, which aims to accurately represent
-      performance of a mainnet subnet (hoever, in reality, though, testnets only have about half
+      performance of a mainnet subnet (however, in reality, though, testnets only have about half
       of the compute capacity as nodes on mainnet).<br />
       Data on this page is aggregated from individual benchmark runs.
     </p>
@@ -89,7 +152,7 @@
     </script>
 
     <p>
-      For query workloads the follwing plots show latency and failure rates. Each plot tracks the latency or failure rate over time.
+      For query workloads the following plots show latency and failure rates. Each plot tracks the latency or failure rate over time.
       As we have changed the requests rates that we are running in weekly benchmarks, some plots end and other ones start.
       The goal is for all of them to never increase over time.
     </p>
@@ -116,6 +179,10 @@
     </script>
 
     <h4>Latency</h4>
+
+    <p>Older data is not displayed, as query latencies used to have an unreasonable high time out and
+    therefore make the plot unreadable.</p>
+
     <div id="plot_exp1_query_latency" class="plot"></div>
     <script>
       const plot_exp1_links_latency = new Map();
@@ -162,6 +229,107 @@
       }, false);
     </script>
 
+    <h4>Failure rate</h4>
+
+    <div id="plot_exp1_update_failure_rate" class="plot"></div>
+    <script>
+      const plot_exp1_update_links_failure_rate = new Map();
+      {{#each plot_exp1_update_failure_rate.data}}
+        plot_exp1_update_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp1_update_failure_rate');
+          Plotly.newPlot(plot, {{{plot_exp1_update_failure_rate.plot}}},  {{{plot_exp1_update_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_update_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h4>Latency</h4>
+
+    <p>Older data is not displayed, as query latencies used to have an unreasonable high time out and
+    therefore make the plot unreadable.</p>
+
+    <div id="plot_exp1_update_latency" class="plot"></div>
+    <script>
+      const plot_exp1_update_links_latency = new Map();
+      {{#each plot_exp1_update_latency.data}}
+        plot_exp1_update_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp1_update_latency');
+          Plotly.newPlot(plot, {{{plot_exp1_update_latency.plot}}},  {{{plot_exp1_update_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_update_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h2>Boundary node performance</h2>
+    <a name="boundary-nodes" />
+
+    <p>
+      The following analyses end-to-end performance of an IC instance when called through boundary nodes.
+      This basically executes the same benchmark as <a href="#sys-baseline-queries">above</a>, but through boundary nodes.
+    </p>
+
+    <h3>Query calls</h3>
+
+    <h4>Failure rate</h4>
+    <div id="plot_boundary_nodes_query_failure_rate" class="plot"></div>
+    <script>
+      const plot_boundary_nodes_links_failure_rate = new Map();
+      {{#each plot_boundary_nodes_query_failure_rate.data}}
+        plot_boundary_nodes_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_boundary_nodes_query_failure_rate');
+          Plotly.newPlot(plot, {{{plot_boundary_nodes_query_failure_rate.plot}}},  {{{plot_boundary_nodes_query_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_boundary_nodes_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h4>Latency</h4>
+
+    <div id="plot_boundary_nodes_query_latency" class="plot"></div>
+    <script>
+      const plot_boundary_nodes_links_latency = new Map();
+      {{#each plot_boundary_nodes_query_latency.data}}
+        plot_boundary_nodes_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_boundary_nodes_query_latency');
+          Plotly.newPlot(plot, {{{plot_boundary_nodes_query_latency.plot}}},  {{{plot_boundary_nodes_query_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_boundary_nodes_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+
     <h2>Experiment 2: Memory under load</h2>
     <a name="memory" />
 
@@ -198,6 +366,50 @@
               window.open(link, "_self");
           });
 
+      }, false);
+    </script>
+
+    <h3>Failure rate</h4>
+    <div id="plot_exp2_update_failure_rate" class="plot"></div>
+    <script>
+      const plot_exp2_update_links_failure_rate = new Map();
+      {{#each plot_exp2_update_failure_rate.data}}
+        plot_exp2_update_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp2_update_failure_rate');
+          Plotly.newPlot(plot, {{{plot_exp2_update_failure_rate.plot}}},  {{{plot_exp2_update_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp2_update_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h3>Latency</h4>
+
+
+    <div id="plot_exp2_update_latency" class="plot"></div>
+    <script>
+      const plot_exp2_update_links_latency = new Map();
+      {{#each plot_exp2_update_latency.data}}
+        plot_exp2_update_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp2_update_latency');
+          Plotly.newPlot(plot, {{{plot_exp2_update_latency.plot}}},  {{{plot_exp2_update_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp2_update_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
       }, false);
     </script>
 
@@ -292,6 +504,53 @@
       }, false);
     </script>
 
+  <h2>Threshold ECDSA</h2>
+    <a name="tecdsa" />
+
+    <h3>Failure rate</h4>
+    <div id="tecdsa_failure_rate" class="plot"></div>
+    <script>
+      const tecdsa_links_failure_rate = new Map();
+      {{#each tecdsa_failure_rate.data}}
+        tecdsa_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('tecdsa_failure_rate');
+          Plotly.newPlot(plot, {{{tecdsa_failure_rate.plot}}},  {{{tecdsa_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = tecdsa_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h3>Latency</h4>
+
+
+    <div id="tecdsa_latency" class="plot"></div>
+    <script>
+      const tecdsa_links_latency = new Map();
+      {{#each tecdsa_latency.data}}
+        tecdsa_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('tecdsa_latency');
+          Plotly.newPlot(plot, {{{tecdsa_latency.plot}}},  {{{tecdsa_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = tecdsa_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
     <h2>Motoko sha256 performance</h2>
     <a name="motoko-sha256" />
 
@@ -372,7 +631,7 @@
     }
 )'
       </pre><br />
-      The other 4 call <pre>check_response</pre> using with payload <pre>4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267</pre> whitch is:
+      The other 4 call <pre>check_response</pre> using with payload <pre>4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267</pre> which is:
       <pre>
 '( "https://www.example.com" )'
       </pre>

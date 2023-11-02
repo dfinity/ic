@@ -481,6 +481,7 @@ mod tests {
                     payment: Cycles::zero(),
                     method_name: "".to_string(),
                     method_payload: vec![],
+                    metadata: None,
                 },
                 nodes_in_target_subnet: BTreeSet::new(),
                 target_id: TARGET_ID,

@@ -42,7 +42,7 @@ impl ProofOfEqualOpeningsInstance {
         let g = EccPoint::generator_g(curve_type);
         let h = EccPoint::generator_h(curve_type);
         let a = EccPoint::pedersen(secret, masking)?;
-        let b = EccPoint::mul_by_g(secret)?;
+        let b = EccPoint::mul_by_g(secret);
         Ok(Self {
             curve_type,
             g,
@@ -98,8 +98,8 @@ impl ProofOfEqualOpenings {
         let instance = ProofOfEqualOpeningsInstance::from_witness(secret, masking)?;
 
         // Create the blinding commitment
-        let mut rng = seed.into_rng();
-        let r = EccScalar::random(instance.curve_type, &mut rng);
+        let rng = &mut seed.into_rng();
+        let r = EccScalar::random(instance.curve_type, rng);
         let r_com = instance.h.scalar_mul(&r)?;
 
         // Create challenge
@@ -214,7 +214,7 @@ impl ProofOfProductInstance {
         &self,
         proof: &ProofOfProduct,
     ) -> ThresholdEcdsaResult<(EccPoint, EccPoint)> {
-        let r1_com = EccPoint::mul_by_g(&proof.response1)?
+        let r1_com = EccPoint::mul_by_g(&proof.response1)
             .sub_points(&self.lhs_com.scalar_mul(&proof.challenge)?)?;
 
         let r2_com =
@@ -257,12 +257,12 @@ impl ProofOfProduct {
             ProofOfProductInstance::from_witness(lhs, rhs, rhs_masking, product, product_masking)?;
 
         // Compute blinding commitments:
-        let mut rng = seed.into_rng();
+        let rng = &mut seed.into_rng();
 
-        let r1 = EccScalar::random(instance.curve_type, &mut rng);
+        let r1 = EccScalar::random(instance.curve_type, rng);
         let r1_com = instance.g.scalar_mul(&r1)?;
 
-        let r2 = EccScalar::random(instance.curve_type, &mut rng);
+        let r2 = EccScalar::random(instance.curve_type, rng);
         let r2_com = EccPoint::mul_2_points(&instance.rhs_com, &r1, &instance.h, &r2)?;
 
         // Compute the challenge:
@@ -357,11 +357,10 @@ impl ProofOfDLogEquivalenceInstance {
         &self,
         proof: &ProofOfDLogEquivalence,
     ) -> ThresholdEcdsaResult<(EccPoint, EccPoint)> {
-        let g_z = self.g.scalar_mul(&proof.response)?;
-        let h_z = self.h.scalar_mul(&proof.response)?;
+        let nchallenge = proof.challenge.negate();
 
-        let g_r = g_z.sub_points(&self.g_x.scalar_mul(&proof.challenge)?)?;
-        let h_r = h_z.sub_points(&self.h_x.scalar_mul(&proof.challenge)?)?;
+        let g_r = EccPoint::mul_2_points(&self.g, &proof.response, &self.g_x, &nchallenge)?;
+        let h_r = EccPoint::mul_2_points(&self.h, &proof.response, &self.h_x, &nchallenge)?;
 
         Ok((g_r, h_r))
     }
@@ -396,8 +395,8 @@ impl ProofOfDLogEquivalence {
         let instance = ProofOfDLogEquivalenceInstance::from_witness(g, h, x)?;
 
         // Compute blinding commitments:
-        let mut rng = seed.into_rng();
-        let r = EccScalar::random(instance.curve_type, &mut rng);
+        let rng = &mut seed.into_rng();
+        let r = EccScalar::random(instance.curve_type, rng);
         let r_com_g = g.scalar_mul(&r)?;
         let r_com_h = h.scalar_mul(&r)?;
 

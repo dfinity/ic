@@ -1,5 +1,5 @@
-load("//bazel:prost.bzl", "generated_files_check")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,7 +9,7 @@ filegroup(
 )
 
 COMMON_DEPS = [
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "@crate_index//:base32",

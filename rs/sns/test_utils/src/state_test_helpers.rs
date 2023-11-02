@@ -25,6 +25,7 @@ use ic_sns_root::pb::v1::{
     RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
     RegisterDappCanistersResponse,
 };
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{
     self as swap_pb, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateResponse,
     GetBuyersTotalResponse, GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
@@ -198,7 +199,7 @@ pub fn participate_in_swap(
     swap_canister_id: CanisterId,
     participant_principal_id: PrincipalId,
     amount: ExplosiveTokens,
-) {
+) -> RefreshBuyerTokensResponse {
     // First, transfer ICP to swap. Needs to go into a special subaccount...
     send_participation_funds(
         state_machine,
@@ -208,7 +209,7 @@ pub fn participate_in_swap(
     );
 
     // ... then, swap must be notified about that transfer.
-    state_machine
+    let response = state_machine
         .execute_ingress(
             swap_canister_id,
             "refresh_buyer_tokens",
@@ -219,6 +220,17 @@ pub fn participate_in_swap(
             .unwrap(),
         )
         .unwrap();
+    let response = match response {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "refresh_buyer_tokens was rejected by the swap canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    Decode!(&response, RefreshBuyerTokensResponse).unwrap()
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SnsCanisterType {
@@ -626,7 +638,7 @@ pub fn open_sale(env: &StateMachine, swap_id: &CanisterId, params: Option<Params
                 min_participants: 1,
                 min_icp_e8s: 1,
                 max_icp_e8s: 10_000_000,
-                min_participant_icp_e8s: 1_010_000,
+                min_participant_icp_e8s: 2_020_000,
                 max_participant_icp_e8s: 10_000_000,
                 swap_due_timestamp_seconds: env
                     .time()
@@ -636,7 +648,7 @@ pub fn open_sale(env: &StateMachine, swap_id: &CanisterId, params: Option<Params
                     + 13 * SECONDS_PER_DAY,
                 sns_token_e8s: 10_000_000,
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 1,
+                    count: 2,
                     dissolve_delay_interval_seconds: 1,
                 }),
                 sale_delay_seconds: None,
@@ -678,10 +690,25 @@ pub fn finalize_swap(env: &StateMachine, swap_id: &CanisterId) -> FinalizeSwapRe
         .unwrap();
     Decode!(&res.bytes(), FinalizeSwapResponse).unwrap()
 }
+
 pub fn get_buyers_total(env: &StateMachine, swap_id: &CanisterId) -> GetBuyersTotalResponse {
     let args = Encode!(&swap_pb::GetBuyersTotalRequest {}).unwrap();
     let res = env
         .execute_ingress(*swap_id, "get_buyers_total", args)
         .unwrap();
     Decode!(&res.bytes(), GetBuyersTotalResponse).unwrap()
+}
+
+pub fn get_sns_canisters_summary(
+    env: &StateMachine,
+    root_id: &CanisterId,
+) -> GetSnsCanistersSummaryResponse {
+    let args = Encode!(&GetSnsCanistersSummaryRequest {
+        update_canister_list: None
+    })
+    .unwrap();
+    let response = env
+        .execute_ingress(*root_id, "get_sns_canisters_summary", args)
+        .unwrap();
+    Decode!(&response.bytes(), GetSnsCanistersSummaryResponse).unwrap()
 }

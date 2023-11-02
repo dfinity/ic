@@ -17,12 +17,13 @@ use ic_replicated_state::{
         execution_state::{
             CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
         },
+        system_state::CyclesUseCase,
         testing::new_canister_queues_for_test,
     },
     metadata_state::subnet_call_context_manager::{
-        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext,
+        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
     },
-    metadata_state::Stream,
+    metadata_state::{Stream, SubnetMetrics},
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
@@ -33,6 +34,7 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
+    nominal_cycles::NominalCycles,
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, PrincipalId,
     SubnetId, Time,
@@ -120,26 +122,24 @@ impl ReplicatedStateBuilder {
         for request in self.bitcoin_adapter_requests.into_iter() {
             match request {
                 BitcoinAdapterRequestWrapper::GetSuccessorsRequest(payload) => {
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
                             request: RequestBuilder::default().build(),
                             payload,
                             time: mock_time(),
-                        });
+                        }),
+                    );
                 }
                 BitcoinAdapterRequestWrapper::SendTransactionRequest(payload) => {
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .push_bitcoin_send_transaction_internal_request(
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::BitcoinSendTransactionInternal(
                             BitcoinSendTransactionInternalContext {
                                 request: RequestBuilder::default().build(),
                                 payload,
                                 time: mock_time(),
                             },
-                        );
+                        ),
+                    );
                 }
             }
         }
@@ -261,19 +261,19 @@ impl CanisterStateBuilder {
 
     pub fn build(self) -> CanisterState {
         let mut system_state = match self.status {
-            CanisterStatusType::Running => SystemState::new_running(
+            CanisterStatusType::Running => SystemState::new_running_for_testing(
                 self.canister_id,
                 self.controller,
                 self.cycles,
                 self.freeze_threshold,
             ),
-            CanisterStatusType::Stopping => SystemState::new_stopping(
+            CanisterStatusType::Stopping => SystemState::new_stopping_for_testing(
                 self.canister_id,
                 self.controller,
                 self.cycles,
                 self.freeze_threshold,
             ),
-            CanisterStatusType::Stopped => SystemState::new_stopped(
+            CanisterStatusType::Stopped => SystemState::new_stopped_for_testing(
                 self.canister_id,
                 self.controller,
                 self.cycles,
@@ -378,7 +378,7 @@ pub struct SystemStateBuilder {
 impl Default for SystemStateBuilder {
     fn default() -> Self {
         Self {
-            system_state: SystemState::new_running(
+            system_state: SystemState::new_running_for_testing(
                 canister_test_id(42),
                 user_test_id(24).get(),
                 INITIAL_CYCLES,
@@ -391,7 +391,7 @@ impl Default for SystemStateBuilder {
 impl SystemStateBuilder {
     pub fn new() -> Self {
         Self {
-            system_state: SystemState::new_running(
+            system_state: SystemState::new_running_for_testing(
                 canister_test_id(42),
                 user_test_id(24).get(),
                 INITIAL_CYCLES,
@@ -558,7 +558,7 @@ pub fn get_running_canister_with_args(
     initial_cycles: Cycles,
 ) -> CanisterState {
     CanisterState {
-        system_state: SystemState::new_running(
+        system_state: SystemState::new_running_for_testing(
             canister_id,
             controller,
             initial_cycles,
@@ -582,7 +582,7 @@ pub fn get_stopping_canister_with_controller(
     controller: PrincipalId,
 ) -> CanisterState {
     CanisterState {
-        system_state: SystemState::new_stopping(
+        system_state: SystemState::new_stopping_for_testing(
             canister_id,
             controller,
             INITIAL_CYCLES,
@@ -606,7 +606,7 @@ pub fn get_stopped_canister_with_controller(
     controller: PrincipalId,
 ) -> CanisterState {
     CanisterState {
-        system_state: SystemState::new_stopped(
+        system_state: SystemState::new_stopped_for_testing(
             canister_id,
             controller,
             INITIAL_CYCLES,
@@ -708,8 +708,12 @@ pub fn new_canister_state(
     freeze_threshold: NumSeconds,
 ) -> CanisterState {
     let scheduler_state = SchedulerState::default();
-    let system_state =
-        SystemState::new_running(canister_id, controller, initial_cycles, freeze_threshold);
+    let system_state = SystemState::new_running_for_testing(
+        canister_id,
+        controller,
+        initial_cycles,
+        freeze_threshold,
+    );
     CanisterState::new(system_state, None, scheduler_state)
 }
 
@@ -786,12 +790,15 @@ prop_compose! {
     /// reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, sig_min_size: usize, sig_max_size: usize)(
         msg_start in 0..10000u64,
-        reqs in prop::collection::vec(arbitrary::request(), min_size..=max_size),
+        msgs in prop::collection::vec(
+            arbitrary::request_or_response(),
+            min_size..=max_size
+        ),
         (signals_end, reject_signals) in arb_reject_signals(sig_min_size, sig_max_size),
     ) -> Stream {
         let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(msg_start));
-        for r in reqs {
-            messages.push(r.into())
+        for m in msgs {
+            messages.push(m)
         }
 
         Stream::with_signals(messages, signals_end, reject_signals)
@@ -847,6 +854,66 @@ prop_compose! {
             Some(max_receivers) => 1 + random % (max_receivers - 1),
             None => usize::MAX,
         }
+    }
+}
+
+prop_compose! {
+    pub(crate) fn arb_nominal_cycles()(cycles in any::<u64>()) -> NominalCycles {
+        NominalCycles::from(cycles as u128)
+    }
+}
+
+prop_compose! {
+    pub(crate) fn arb_num_bytes()(bytes in any::<u64>()) -> NumBytes {
+        NumBytes::from(bytes)
+    }
+}
+
+pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
+    prop_oneof![
+        Just(CyclesUseCase::Memory),
+        Just(CyclesUseCase::ComputeAllocation),
+        Just(CyclesUseCase::IngressInduction),
+        Just(CyclesUseCase::Instructions),
+        Just(CyclesUseCase::RequestAndResponseTransmission),
+        Just(CyclesUseCase::Uninstall),
+        Just(CyclesUseCase::CanisterCreation),
+        Just(CyclesUseCase::ECDSAOutcalls),
+        Just(CyclesUseCase::HTTPOutcalls),
+        Just(CyclesUseCase::DeletedCanisters),
+        Just(CyclesUseCase::NonConsumed),
+    ]
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`SubnetMetrics`] (with only the fields relevant to
+    /// its canonical representation filled).
+    pub fn arb_subnet_metrics()(
+        consumed_cycles_by_deleted_canisters in arb_nominal_cycles(),
+        consumed_cycles_http_outcalls in arb_nominal_cycles(),
+        consumed_cycles_ecdsa_outcalls in arb_nominal_cycles(),
+        num_canisters in any::<u64>(),
+        canister_state_bytes in arb_num_bytes(),
+        update_transactions_total in any::<u64>(),
+        consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
+    ) -> SubnetMetrics {
+        let mut metrics = SubnetMetrics::default();
+
+        metrics.consumed_cycles_by_deleted_canisters = consumed_cycles_by_deleted_canisters;
+        metrics.consumed_cycles_http_outcalls = consumed_cycles_http_outcalls;
+        metrics.consumed_cycles_ecdsa_outcalls = consumed_cycles_ecdsa_outcalls;
+        metrics.num_canisters = num_canisters;
+        metrics.canister_state_bytes = canister_state_bytes;
+        metrics.update_transactions_total = update_transactions_total;
+
+        for (use_case, cycles) in consumed_cycles_by_use_case {
+            metrics.observe_consumed_cycles_with_use_case(
+                use_case,
+                cycles,
+            );
+        }
+
+        metrics
     }
 }
 

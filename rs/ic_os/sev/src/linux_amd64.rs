@@ -24,7 +24,7 @@ use ic_types::{NodeId, RegistryVersion};
 use openssl::ecdsa::EcdsaSig;
 use openssl::x509::X509;
 use serde::{Deserialize, Serialize};
-use sev::firmware::guest::types::AttestationReport;
+use sev::firmware::guest::AttestationReport;
 use sha2::Digest;
 use std::fs;
 use std::sync::Arc;
@@ -156,7 +156,7 @@ where
         // Read seed_id, peer_tls_certificate, my tls_certificate from registry.
         let transport_info = self
             .registry
-            .get_transport_info(peer, registry_version)
+            .get_node_record(peer, registry_version)
             .map_err(ValidateAttestationError::RegistryError)?
             .ok_or(ValidateAttestationError::RegistryDataMissing {
                 node_id: peer,
@@ -203,10 +203,8 @@ where
         let tls_cert_hash = sha2::Sha256::digest(tls_certificate.certificate_der.as_slice());
         let mut report_data = [0u8; 64];
         report_data[..32].copy_from_slice(tls_cert_hash.as_slice());
-        let mut report_request =
-            sev::firmware::guest::types::SnpReportReq::new(Some(report_data), 0 /* VMPL0 */);
         let report = guest_firmware
-            .snp_get_report(None, &mut report_request)
+            .get_report(None, Some(report_data), Some(0) /* VMPL0 */)
             .map_err(|_| ValidateAttestationError::HandshakeError {
                 description: "unable to get attestation report".into(),
             })?;
@@ -240,7 +238,7 @@ where
         read_into_buffer(&mut stream, &mut serialized_len).await?;
         let len = u32::from_le_bytes(serialized_len.try_into().map_err(|_| {
             ValidateAttestationError::HandshakeError {
-                description: "unable to conver serialized length".into(),
+                description: "unable to convert serialized length".into(),
             }
         })?);
         let mut buffer: Vec<u8> = Vec::new();

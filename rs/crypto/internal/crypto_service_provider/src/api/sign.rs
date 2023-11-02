@@ -52,10 +52,10 @@ pub trait CspSigner {
         signer: CspPublicKey,
     ) -> CryptoResult<()>;
 
-    /// Verify a proof of posession (PoP).
+    /// Verify a proof of possession (PoP).
     ///
     /// # Arguments
-    /// * `pop` the proof of posession
+    /// * `pop` the proof of possession
     /// * `algorithm_id` the signature algorithm
     /// * `public_key` the public key of the signer
     /// # Errors

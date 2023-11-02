@@ -634,7 +634,7 @@ fn test_event_handler_drop() {
     rt.block_on(async {
         assert!(
             handle.next_request().await.is_none(),
-            "Dropped transport so we don't exepct any messages."
+            "Dropped transport so we don't expect any messages."
         );
     });
 }

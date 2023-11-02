@@ -1,15 +1,14 @@
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
-use axum_server::{
-    accept::Accept,
-    tls_rustls::{RustlsAcceptor, RustlsConfig},
-};
+use axum_server::{accept::Accept, tls_rustls::RustlsAcceptor};
 use futures_util::future::BoxFuture;
+use instant_acme::{Account, AccountCredentials, NewAccount};
 use mockall::automock;
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
 use std::{
     fs,
+    fs::File,
     io::{self, ErrorKind},
     path::PathBuf,
     sync::Arc,
@@ -291,7 +290,7 @@ impl<P: Provision, L: Load<(String, String)>> Provision for WithLoad<P, L> {
                 // attempt to ensure they are valid
                 // otherwise proceed to provision new ones
                 let validity = extract_cert_validity(name, cert.as_bytes())
-                    .context("failed to extract certificiate validity")?;
+                    .context("failed to extract certificate validity")?;
 
                 if let Some(validity) = validity {
                     let (expiration, now) = (
@@ -351,232 +350,46 @@ fn extract_cert_validity(name: &str, data: &[u8]) -> Result<Option<Validity>, Er
     Ok(None)
 }
 
-#[cfg(test)]
-mod test {
-    use std::time::Duration;
+pub async fn load_or_create_acme_account(
+    path: &PathBuf,
+    acme_provider_url: &str,
+    http_client: Box<dyn instant_acme::HttpClient>,
+) -> Result<Account, Error> {
+    let f = File::open(path).context("failed to open credentials file for reading");
 
-    use anyhow::{bail, Error};
-    use mockall::predicate;
-    use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, DnValue};
-    use x509_parser::time::ASN1Time;
+    // Credentials already exist
+    if let Ok(f) = f {
+        let creds: AccountCredentials =
+            serde_json::from_reader(f).context("failed to json parse existing acme credentials")?;
 
-    use crate::tls::{
-        extract_cert_validity, LoadError, MockLoad, MockProvision, MockStore, Provision, WithLoad,
-        WithStore,
-    };
+        let account =
+            Account::from_credentials(creds).context("failed to load account from credentials")?;
 
-    fn generate_certificate_chain(
-        name: &str,
-        not_before: (i32, u8, u8),
-        not_after: (i32, u8, u8),
-    ) -> Result<Vec<u8>, Error> {
-        // Root
-        let root_cert = Certificate::from_params(CertificateParams::new(vec![
-            "root.example.com".into(), // SAN
-        ]))?;
-
-        // Intermediate
-        let intermediate_cert = Certificate::from_params(CertificateParams::new(vec![
-            "intermediate.example.com".into(), // SAN
-        ]))?;
-
-        // Leaf
-        let leaf_cert = Certificate::from_params({
-            let mut params = CertificateParams::new(vec![
-                name.into(), // SAN
-            ]);
-
-            // Set common name
-            let mut dn = DistinguishedName::new();
-            dn.push(DnType::CommonName, DnValue::PrintableString(name.into()));
-            params.distinguished_name = dn;
-
-            // Set validity
-            params.not_before = rcgen::date_time_ymd(not_before.0, not_before.1, not_before.2);
-            params.not_after = rcgen::date_time_ymd(not_after.0, not_after.1, not_after.2);
-
-            params
-        })?;
-
-        Ok([
-            root_cert.serialize_pem()?.into_bytes(),
-            intermediate_cert.serialize_pem()?.into_bytes(),
-            leaf_cert.serialize_pem()?.into_bytes(),
-        ]
-        .concat())
+        return Ok(account);
     }
 
-    #[tokio::test]
-    async fn extract_cert_validity_found_test() -> Result<(), Error> {
-        // Create a certificate
-        let not_before = (2000, 1, 1);
-        let not_after = (2001, 1, 1);
+    // Create new account
+    let account = Account::create_with_http(
+        &NewAccount {
+            contact: &[],
+            terms_of_service_agreed: true,
+            only_return_existing: false,
+        },
+        acme_provider_url,
+        None,
+        http_client,
+    )
+    .await
+    .context("failed to create acme account")?;
 
-        let cert_chain = generate_certificate_chain(
-            "leaf-1.example.com", // name
-            not_before,           // not_before
-            not_after,            // not_after
-        )?;
+    // Store credentials
+    let f = File::create(path).context("failed to open credentials file for writing")?;
 
-        // Extract validity
-        let v = extract_cert_validity(
-            "leaf-1.example.com", // name
-            &cert_chain,          // cert_chain
-        )?
-        .expect("validity not found");
+    serde_json::to_writer_pretty(f, &account.credentials())
+        .context("failed to serialize acme credentials")?;
 
-        let not_before =
-            rcgen::date_time_ymd(not_before.0, not_before.1, not_before.2).unix_timestamp();
-
-        let not_after =
-            rcgen::date_time_ymd(not_after.0, not_after.1, not_after.2).unix_timestamp();
-
-        assert_eq!(not_before, v.not_before.timestamp());
-        assert_eq!(not_after, v.not_after.timestamp());
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn extract_cert_validity_not_found_test() -> Result<(), Error> {
-        // Create a certificate
-        let not_before = (2000, 1, 1);
-        let not_after = (2001, 1, 1);
-
-        let cert_chain = generate_certificate_chain(
-            "leaf-1.example.com", // name
-            not_before,           // not_before
-            not_after,            // not_after
-        )?;
-
-        // Extract validity
-        let v = extract_cert_validity(
-            "leaf-2.example.com", // name
-            &cert_chain,          // cert_chain
-        )?;
-
-        if v.is_some() {
-            bail!("expected certificate to not be found");
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn with_load_not_found_test() -> Result<(), Error> {
-        let mut p = MockProvision::new();
-        p.expect_provision()
-            .times(1)
-            .with(predicate::eq("example.com"))
-            .returning(|_| Ok(("cert".into(), "pkey".into())));
-
-        let mut l = MockLoad::new();
-        l.expect_load()
-            .times(1)
-            .returning(|| Err(LoadError::NotFound));
-
-        let mut p = WithLoad(
-            p,                      // provisioner
-            l,                      // loader
-            Duration::from_secs(1), // remaining cert validity
-        );
-
-        let out = p.provision("example.com").await?;
-        assert_eq!(out, ("cert".into(), "pkey".into()));
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn with_load_expired_test() -> Result<(), Error> {
-        // Generate expired certificate
-        let not_before = (2000, 1, 1);
-        let not_after = (2001, 1, 1);
-
-        let cert_chain = generate_certificate_chain(
-            "example.com", // name
-            not_before,    // not_before
-            not_after,     // not_after
-        )?;
-        let cert_chain = String::from_utf8(cert_chain)?;
-
-        let mut p = MockProvision::new();
-        p.expect_provision()
-            .times(1)
-            .with(predicate::eq("example.com"))
-            .returning(|_| Ok(("cert".into(), "pkey".into())));
-
-        let mut l = MockLoad::new();
-        l.expect_load()
-            .times(1)
-            .returning(move || Ok((cert_chain.clone(), "pkey".into())));
-
-        let mut p = WithLoad(
-            p,                      // provisioner
-            l,                      // loader
-            Duration::from_secs(1), // remaining cert validity
-        );
-
-        let out = p.provision("example.com").await?;
-        assert_eq!(out, ("cert".into(), "pkey".into()));
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn with_load_valid_test() -> Result<(), Error> {
-        // Generate expired certificate
-        let not_before = (2000, 1, 1);
-        let not_after = (3000, 1, 1);
-
-        let cert_chain = generate_certificate_chain(
-            "example.com", // name
-            not_before,    // not_before
-            not_after,     // not_after
-        )?;
-        let cert_chain = String::from_utf8(cert_chain)?;
-
-        let mut p = MockProvision::new();
-        p.expect_provision().times(0);
-
-        let mut l = MockLoad::new();
-
-        let cert_chain_cpy = cert_chain.clone();
-        l.expect_load()
-            .times(1)
-            .returning(move || Ok((cert_chain_cpy.clone(), "pkey".into())));
-
-        let mut p = WithLoad(
-            p,                      // provisioner
-            l,                      // loader
-            Duration::from_secs(1), // remaining cert validity
-        );
-
-        let out = p.provision("example.com").await?;
-        assert_eq!(out, (cert_chain, "pkey".into()));
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn with_store_test() -> Result<(), Error> {
-        let mut p = MockProvision::new();
-        p.expect_provision()
-            .times(1)
-            .with(predicate::eq("example.com"))
-            .returning(|_| Ok(("cert".into(), "pkey".into())));
-
-        let mut s = MockStore::new();
-        s.expect_store()
-            .times(1)
-            .with(predicate::eq(("cert".into(), "pkey".into())))
-            .returning(|_| Ok(()));
-
-        let mut p = WithStore(p, s);
-
-        let out = p.provision("example.com").await?;
-        assert_eq!(out, ("cert".into(), "pkey".into()));
-
-        Ok(())
-    }
+    Ok(account)
 }
+
+#[cfg(test)]
+pub mod test;

@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 fe-derive = { path = "fe-derive" }
-ic-crypto-sha = { path = "../../../../sha" }
+ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-crypto-internal-seed = { path = "../../seed" }
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-internal-hmac = { path = "../../hmac" }
@@ -25,11 +25,13 @@ subtle = "2.4"
 serde = "1.0.130"
 serde_cbor = "0.11.1"
 serde_bytes = "0.11"
+strum = "0.23.0"
+strum_macros = "0.23.0"
 lazy_static = "1.4.0"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-criterion = { version = "0.3", features = ["html_reports"] }
+criterion = { version = "0.5", features = ["html_reports"] }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 bip32 = { version = "0.4", features = ["secp256k1"] }
 num-traits = { version = "0.2.15" }
@@ -56,4 +58,8 @@ harness = false
 
 [[bench]]
 name = "group_ops"
+harness = false
+
+[[bench]]
+name = "key_derivation"
 harness = false

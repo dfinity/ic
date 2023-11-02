@@ -9,10 +9,12 @@ message SecretKeyV1 {
   // Rust's `to_string()` of `Scope`
   string scope = 2;
 }
+
 // SecretKeyStore stores secret keys.
 message SecretKeyStore {
   // Mapping from KeyId to serialised CspSecretKey.
-  reserved "key_id_to_csp_secret_key"; reserved 1;
+  reserved "key_id_to_csp_secret_key";
+  reserved 1;
 
   // Version of SecretKeyStore
   uint32 version = 2;

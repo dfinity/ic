@@ -100,10 +100,10 @@ mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, JoinGuard},
+    artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
     artifact_pool::{
-        ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
+        UnvalidatedArtifactEvent, ValidatedPoolReader,
     },
     canister_http::CanisterHttpChangeSet,
     certification::ChangeSet as CertificationChangeSet,
@@ -115,7 +115,7 @@ use ic_interfaces::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
-use prometheus::{histogram_opts, labels, Histogram};
+use prometheus::{histogram_opts, labels, Histogram, IntCounter, Opts};
 use std::sync::{
     atomic::{AtomicBool, Ordering::SeqCst},
     Arc, RwLock,
@@ -123,12 +123,16 @@ use std::sync::{
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use std::time::Duration;
 
+type ArtifactEventSender<Artifact> = Sender<UnvalidatedArtifactEvent<Artifact>>;
+
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
     /// The processing time histogram.
     processing_time: Histogram,
     /// The processing interval histogram.
     processing_interval: Histogram,
+    outbound_artifacts: IntCounter,
+    outbound_artifact_bytes: IntCounter,
     /// The last update time.
     last_update: std::time::Instant,
 }
@@ -136,6 +140,7 @@ struct ArtifactProcessorMetrics {
 impl ArtifactProcessorMetrics {
     /// The constructor creates a `ArtifactProcessorMetrics` instance.
     fn new(metrics_registry: MetricsRegistry, client: String) -> Self {
+        let const_labels = labels! {"client".to_string() => client.to_string()};
         let processing_time = metrics_registry.register(
             Histogram::with_opts(histogram_opts!(
                 "artifact_manager_client_processing_time_seconds",
@@ -144,7 +149,7 @@ impl ArtifactProcessorMetrics {
                     0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
                     10.0, 15.0, 20.0, 50.0,
                 ],
-                labels! {"client".to_string() => client.clone()}
+                const_labels.clone()
             ))
             .unwrap(),
         );
@@ -156,14 +161,38 @@ impl ArtifactProcessorMetrics {
                     0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
                     10.0, 15.0, 20.0, 50.0,
                 ],
-                labels! {"client".to_string() => client}
+                const_labels.clone()
             ))
             .unwrap(),
         );
+        let outbound_artifacts_opts = Opts {
+            name: "artifact_manager_outbound_artifacts_total".to_string(),
+            help: "Total number of artifacts that should be delivered to all peers.".to_string(),
+            const_labels: const_labels.clone(),
+            variable_labels: vec![],
+            subsystem: "".to_string(),
+            namespace: "".to_string(),
+        };
+        let outbound_artifacts =
+            metrics_registry.register(IntCounter::with_opts(outbound_artifacts_opts).unwrap());
+
+        let outbound_artifact_bytes_opts = Opts {
+            name: "artifact_manager_outbound_artifact_bytes_total".to_string(),
+            help: "Total number of bytes from artifacts that should be delivered to all peers."
+                .to_string(),
+            const_labels,
+            variable_labels: vec![],
+            subsystem: "".to_string(),
+            namespace: "".to_string(),
+        };
+        let outbound_artifact_bytes =
+            metrics_registry.register(IntCounter::with_opts(outbound_artifact_bytes_opts).unwrap());
 
         Self {
             processing_time,
             processing_interval,
+            outbound_artifacts,
+            outbound_artifact_bytes,
             last_update: std::time::Instant::now(),
         }
     }
@@ -206,25 +235,23 @@ impl Drop for ArtifactProcessorJoinGuard {
 
 pub fn run_artifact_processor<
     Artifact: ArtifactKind + 'static,
-    S: Fn(Advert<Artifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
 >(
     time_source: Arc<SysTimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: S,
-) -> (
-    Box<dyn JoinGuard>,
-    Sender<UnvalidatedArtifact<Artifact::Message>>,
-)
+) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>)
 where
     <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
+    <Artifact as ic_types::artifact::ArtifactKind>::Id: Send,
 {
     // Making this channel bounded can be problematic since we don't have true multiplexing
     // of P2P messages.
     // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
     // will result on slow consuption of chunks. Slow consumption of chunks will in turn
     // result in slower consumptions of adverts. Ideally adverts are consumed at rate
-    // independant of consensus.
+    // independent of consensus.
     let (sender, receiver) = crossbeam_channel::unbounded();
     let shutdown = Arc::new(AtomicBool::new(false));
 
@@ -252,11 +279,14 @@ where
 
 // The artifact processor thread loop
 #[allow(clippy::too_many_arguments)]
-fn process_messages<Artifact: ArtifactKind + 'static, S: Fn(Advert<Artifact>) + Send + 'static>(
+fn process_messages<
+    Artifact: ArtifactKind + 'static,
+    S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
+>(
     time_source: Arc<SysTimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Box<S>,
-    receiver: Receiver<UnvalidatedArtifact<Artifact::Message>>,
+    receiver: Receiver<UnvalidatedArtifactEvent<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -270,9 +300,9 @@ fn process_messages<Artifact: ArtifactKind + 'static, S: Fn(Advert<Artifact>) + 
             Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
         };
         let recv_artifact = receiver.recv_timeout(recv_timeout);
-        let batched_artifacts = match recv_artifact {
-            Ok(artifact) => {
-                let mut artifacts = vec![artifact];
+        let batched_artifact_events = match recv_artifact {
+            Ok(artifact_event) => {
+                let mut artifacts = vec![artifact_event];
                 while let Ok(artifact) = receiver.try_recv() {
                     artifacts.push(artifact);
                 }
@@ -282,10 +312,18 @@ fn process_messages<Artifact: ArtifactKind + 'static, S: Fn(Advert<Artifact>) + 
             Err(RecvTimeoutError::Disconnected) => return,
         };
         time_source.update_time().ok();
-        let (adverts, on_state_change_result) = metrics
-            .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifacts));
-        adverts.into_iter().for_each(&send_advert);
-        last_on_state_change_result = on_state_change_result;
+        let ChangeResult {
+            adverts,
+            purged: _,
+            changed,
+        } = metrics
+            .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
+        for advert in adverts {
+            metrics.outbound_artifacts.inc();
+            metrics.outbound_artifact_bytes.inc_by(advert.size as u64);
+            send_advert(ArtifactProcessorEvent::Advert(advert));
+        }
+        last_on_state_change_result = changed;
     }
 }
 
@@ -295,8 +333,10 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 /// The struct contains all relevant interfaces for P2P to operate.
 pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
     /// To send the process requests
-    pub sender: Sender<UnvalidatedArtifact<Artifact::Message>>,
+    pub sender: Sender<UnvalidatedArtifactEvent<Artifact>>,
     /// Reference to the artifact client.
+    /// TODO: long term we can remove the 'ArtifactClient' and directly use
+    /// 'ValidatedPoolReader' and ' PriorityFnAndFilterProducer' traits.
     pub pool_reader: Box<dyn ArtifactClient<Artifact>>,
     pub time_source: Arc<dyn TimeSource>,
 }
@@ -308,7 +348,7 @@ pub fn create_ingress_handlers<
         + ValidatedPoolReader<IngressArtifact>
         + 'static,
     G: PriorityFnAndFilterProducer<IngressArtifact, PoolIngress> + 'static,
-    S: Fn(Advert<IngressArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<IngressArtifact>) + Send + 'static,
 >(
     send_advert: S,
     time_source: Arc<SysTimeSource>,
@@ -350,7 +390,7 @@ pub fn create_consensus_handlers<
         + 'static,
     C: ChangeSetProducer<PoolConsensus, ChangeSet = ConsensusChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<ConsensusArtifact, PoolConsensus> + 'static,
-    S: Fn(Advert<ConsensusArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<ConsensusArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (consensus, consensus_gossip): (C, G),
@@ -386,7 +426,7 @@ pub fn create_certification_handlers<
         + 'static,
     C: ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<CertificationArtifact, PoolCertification> + 'static,
-    S: Fn(Advert<CertificationArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<CertificationArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (certifier, certifier_gossip): (C, G),
@@ -425,7 +465,7 @@ pub fn create_dkg_handlers<
         + 'static,
     C: ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<DkgArtifact, PoolDkg> + 'static,
-    S: Fn(Advert<DkgArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<DkgArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (dkg, dkg_gossip): (C, G),
@@ -458,7 +498,7 @@ pub fn create_ecdsa_handlers<
         + 'static,
     C: ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<EcdsaArtifact, PoolEcdsa> + 'static,
-    S: Fn(Advert<EcdsaArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<EcdsaArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (ecdsa, ecdsa_gossip): (C, G),
@@ -491,7 +531,7 @@ pub fn create_https_outcalls_handlers<
         + 'static,
     C: ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
-    S: Fn(Advert<CanisterHttpArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<CanisterHttpArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (pool_manager, canister_http_gossip): (C, G),

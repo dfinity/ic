@@ -6,7 +6,7 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::{node::v1::Protocol, subnet::v1::SubnetListRecord};
+use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
@@ -181,7 +181,6 @@ fn get_registry_for_test() -> Arc<dyn RegistryClient> {
                     xnet: Some(ConnectionEndpoint {
                         ip_addr: "127.0.0.1".to_string(),
                         port: i as u32,
-                        protocol: Protocol::Http1 as i32,
                     }),
                     ..Default::default()
                 }),

@@ -5,6 +5,8 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Hash;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::{DataCertificate, GetBlocksRequest, GetBlocksResponse};
 
 #[derive(Debug)]
@@ -167,6 +169,24 @@ impl Icrc1Agent {
     ) -> Result<Result<Nat, TransferError>, Icrc1AgentError> {
         Ok(
             Decode!(&self.update("icrc1_transfer", &Encode!(&args)?).await?, Result<Nat, TransferError>)?,
+        )
+    }
+
+    pub async fn approve(
+        &self,
+        args: ApproveArgs,
+    ) -> Result<Result<Nat, ApproveError>, Icrc1AgentError> {
+        Ok(
+            Decode!(&self.update("icrc2_approve", &Encode!(&args)?).await?, Result<Nat, ApproveError>)?,
+        )
+    }
+
+    pub async fn transfer_from(
+        &self,
+        args: TransferFromArgs,
+    ) -> Result<Result<Nat, TransferFromError>, Icrc1AgentError> {
+        Ok(
+            Decode!(&self.update("icrc2_transfer_from", &Encode!(&args)?).await?, Result<Nat, TransferFromError>)?,
         )
     }
 

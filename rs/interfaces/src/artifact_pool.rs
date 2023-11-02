@@ -52,9 +52,7 @@ pub trait MutablePool<Artifact: ArtifactKind, C> {
     fn insert(&mut self, msg: UnvalidatedArtifact<Artifact::Message>);
 
     /// Removes a message from the unvalidated part of the pool.
-    fn remove(&mut self, _id: &Artifact::Id) {
-        unimplemented!()
-    }
+    fn remove(&mut self, id: &Artifact::Id);
 
     /// Applies a set of change actions to the pool.
     fn apply_changes(
@@ -117,6 +115,11 @@ impl<T> ValidatedArtifact<T> {
             timestamp: self.timestamp,
         }
     }
+}
+
+pub enum UnvalidatedArtifactEvent<Artifact: ArtifactKind> {
+    Insert(UnvalidatedArtifact<Artifact::Message>),
+    Remove(Artifact::Id),
 }
 
 /// Unvalidated artifact

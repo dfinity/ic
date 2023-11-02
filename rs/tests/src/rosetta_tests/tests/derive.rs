@@ -44,7 +44,7 @@ async fn test_derive_neuron_address(client: &RosettaApiClient, logger: &Logger) 
     let account_id = derived.account_identifier.unwrap();
     let subaccount_bytes = {
         const DOMAIN: &[u8] = b"neuron-stake";
-        let mut hasher = ic_crypto_sha::Sha256::new();
+        let mut hasher = ic_crypto_sha2::Sha256::new();
         hasher.write(&[DOMAIN.len() as u8]);
         hasher.write(DOMAIN);
         hasher.write(pid.as_slice());

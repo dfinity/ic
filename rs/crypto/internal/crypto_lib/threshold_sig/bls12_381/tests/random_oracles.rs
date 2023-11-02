@@ -1,6 +1,6 @@
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::random_oracles::*;
-use ic_crypto_sha::{DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 
 struct StructToBeHashed {
     point: G1Affine,

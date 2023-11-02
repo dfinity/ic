@@ -193,7 +193,7 @@ impl HttpClient {
 
         let is_update_call = uri.path().ends_with("/call");
 
-        // update calls with a response code of 200 indicates an error ocurred.
+        // update calls with a response code of 200 indicates an error occurred.
         if !status.is_success() || (is_update_call && status == StatusCode::OK) {
             let readable_response = if is_update_call {
                 format!("{:?}", serde_cbor::from_slice::<Value>(&parsed_body))

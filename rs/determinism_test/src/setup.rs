@@ -118,6 +118,7 @@ pub(crate) fn setup() -> (
         subnet_id,
         subnet_config.cycles_account_manager_config,
     ));
+
     let state_manager = Arc::new(StateManagerImpl::new(
         Arc::new(FakeVerifier::new()),
         replica_config.subnet_id,

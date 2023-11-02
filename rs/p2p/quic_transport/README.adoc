@@ -1,0 +1,52 @@
+
+= Transport = 
+:toc:
+
+== Overview ==
+
+The IC Transport layer enables message deliver between nodes within a subnet.
+
+== Requirements ==
+
+[cols="1,1"]
+|===
+| **What ?**
+| **Why ?**
+
+
+| https://en.wikipedia.org/wiki/Reliability_(computer_networking)[Reliable data delivery] - the sender knows if a message was delivered succesfully to the recepient.
+| Applications on top of the transport layer are simpler to implement when this abtraction exists. E.g. they don't need to re-implement TCP or QUIC.
+
+| https://en.wikipedia.org/wiki/Multiplexing[Multiplexing] - messages are sent and delivered simultaniously over a single connection.
+| Prevents different head-of-line blocking scenarios. E.g. if each message type is handled with different latency unless there is multiplexing, slower consumption of some message types will result in slower consumption for the rest.
+
+| https://en.wikipedia.org/wiki/Network_congestion#Congestion_control[Fair congestion control] - if a server is at capacity regardless of the reason then messages should be processed fairly across different connections.
+| In cases where a replica receives more requests than it can handle (e.g. malicious peer, bug, or it just cannot keep up with processing), messages from particular peer should not be favoured over other messages because it is unknown which peers are malicious.
+
+| Application specific handshake - TLS, SEV-SNP attestation.
+| Security.
+
+| Persistent connections.
+| P2P applications require fast exchange of data (e.g. ICP consensus protocol) so opening, closing and performing TLS handshake introduces prohibitive high latency overhead.
+
+| Bounded memory
+| There should be no operational burden. Having unbounded data structures implies there is high risk of nodes OOMing. If an OOM event happens most likely an operation mitigation is required in order to decrease the memory usage.
+
+|===
+
+== Architecture ==
+
+Transport is devided into two logical parts - sending and receiving.
+
+For the sending side, transport exposes two API calls - `+rpc+` and `+push+`. The key difference between the two is that the `+push+` method doesn't return a response from the receving side.
+It is effectively the same as `+rpc+` just slightly more performant because there is less data to be exchanged. For either the `+push+` or `+rpc+` method calls, the caller specifies
+destination, payload and an URI.
+
+The receiving side, is a collection of callbacks, called handlers. Each possible URI is associated with a single handler. When a message for a given URI is received the transport layer invokes the corresponding handler.
+
+== Handlers ==
+
+When a message is received by transport, a handler is chosen by the URI and invoked with the payload.
+As a rule of thumb, if a handler doesn't return a response the sender should use the `+push+` method for sending data.
+
+A handler implements an async interface. This implies that a handler must satisfy all Tokio requirements for async code.

@@ -1,82 +1,83 @@
 syntax = "proto3";
 package state.ingress.v1;
+
 import "types/v1/types.proto";
 
 message IngressStatusUnknown {}
 
 message IngressStatusProcessing {
-    types.v1.UserId user_id = 1;
-    uint64 time_nanos = 2;
-    types.v1.PrincipalId receiver = 3;
+  types.v1.UserId user_id = 1;
+  uint64 time_nanos = 2;
+  types.v1.PrincipalId receiver = 3;
 }
 
 message IngressStatusReceived {
-    types.v1.UserId user_id = 1;
-    uint64 time_nanos = 2;
-    types.v1.PrincipalId receiver = 3;
+  types.v1.UserId user_id = 1;
+  uint64 time_nanos = 2;
+  types.v1.PrincipalId receiver = 3;
 }
 
 message IngressStatusCompleted {
-    types.v1.UserId user_id = 1;
-    oneof wasm_result {
-        bytes reply = 2;
-        string reject = 3;
-    };
-    uint64 time_nanos = 4;
-    types.v1.PrincipalId receiver = 5;
+  types.v1.UserId user_id = 1;
+  oneof wasm_result {
+    bytes reply = 2;
+    string reject = 3;
+  }
+  uint64 time_nanos = 4;
+  types.v1.PrincipalId receiver = 5;
 }
 
 message IngressStatusFailed {
-    types.v1.UserId user_id = 1;
-    uint64 err_code = 2;
-    string err_description = 3;
-    uint64 time_nanos = 4;
-    types.v1.PrincipalId receiver = 5;
+  types.v1.UserId user_id = 1;
+  uint64 err_code = 2;
+  string err_description = 3;
+  uint64 time_nanos = 4;
+  types.v1.PrincipalId receiver = 5;
 }
 
 message IngressStatusDone {
-    types.v1.UserId user_id = 1;
-    uint64 time_nanos = 2;
-    types.v1.PrincipalId receiver = 3;
+  types.v1.UserId user_id = 1;
+  uint64 time_nanos = 2;
+  types.v1.PrincipalId receiver = 3;
 }
 
 message PruningEntry {
-    uint64 time_nanos = 1;
-    repeated bytes messages = 2;
+  uint64 time_nanos = 1;
+  repeated bytes messages = 2;
 }
 
 message IngressStatus {
-    oneof status {
-        IngressStatusUnknown unknown = 1;
-        IngressStatusProcessing processing = 2;
-        IngressStatusReceived received = 3;
-        IngressStatusCompleted completed = 4;
-        IngressStatusFailed failed = 5;
-        IngressStatusDone done = 6;
-    };
+  oneof status {
+    IngressStatusUnknown unknown = 1;
+    IngressStatusProcessing processing = 2;
+    IngressStatusReceived received = 3;
+    IngressStatusCompleted completed = 4;
+    IngressStatusFailed failed = 5;
+    IngressStatusDone done = 6;
+  }
 }
 
 message IngressStatusEntry {
-    bytes message_id = 1;
-    IngressStatus status = 2;
+  bytes message_id = 1;
+  IngressStatus status = 2;
 }
 
 message IngressHistoryState {
-    repeated IngressStatusEntry statuses = 1;
-    repeated PruningEntry pruning_times = 2;
-    // The earliest time in `pruning_times` with associated message IDs that
-    // may still be of type completed or failed.
-    uint64 next_terminal_time = 3;
+  repeated IngressStatusEntry statuses = 1;
+  repeated PruningEntry pruning_times = 2;
+  // The earliest time in `pruning_times` with associated message IDs that
+  // may still be of type completed or failed.
+  uint64 next_terminal_time = 3;
 }
 
 message Ingress {
-    types.v1.UserId source = 1;
-    types.v1.CanisterId receiver = 2;
-    string method_name = 3;
-    bytes method_payload = 4;
-    bytes message_id = 5;
-    uint64 expiry_time_nanos = 6;
-    // It may be present for a subnet message.
-    // Represents the id of the canister that the message is targeting.
-    types.v1.CanisterId effective_canister_id = 7;
+  types.v1.UserId source = 1;
+  types.v1.CanisterId receiver = 2;
+  string method_name = 3;
+  bytes method_payload = 4;
+  bytes message_id = 5;
+  uint64 expiry_time_nanos = 6;
+  // It may be present for a subnet message.
+  // Represents the id of the canister that the message is targeting.
+  types.v1.CanisterId effective_canister_id = 7;
 }

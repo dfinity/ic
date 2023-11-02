@@ -281,7 +281,7 @@ impl Polynomial {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CommitmentOpening {
     Simple(EccScalar),
     Pedersen(EccScalar, EccScalar),
@@ -428,7 +428,7 @@ impl SimpleCommitment {
         let mut points = Vec::with_capacity(num_coefficients);
 
         for i in 0..num_coefficients {
-            points.push(EccPoint::mul_by_g(&poly.coeff(i))?);
+            points.push(EccPoint::mul_by_g(&poly.coeff(i)));
         }
 
         Ok(Self::new(points))
@@ -442,9 +442,14 @@ impl SimpleCommitment {
         &self,
         eval_point: NodeIndex,
         value: &EccScalar,
-    ) -> ThresholdEcdsaResult<bool> {
+    ) -> ThresholdEcdsaResult<()> {
         let eval = self.evaluate_at(eval_point)?;
-        Ok(eval == EccPoint::mul_by_g(value)?)
+
+        if eval == EccPoint::mul_by_g(value) {
+            Ok(())
+        } else {
+            Err(ThresholdEcdsaError::InvalidCommitment)
+        }
     }
 }
 
@@ -505,9 +510,13 @@ impl PedersenCommitment {
         eval_point: NodeIndex,
         value: &EccScalar,
         mask: &EccScalar,
-    ) -> ThresholdEcdsaResult<bool> {
+    ) -> ThresholdEcdsaResult<()> {
         let eval = self.evaluate_at(eval_point)?;
-        Ok(eval == EccPoint::pedersen(value, mask)?)
+        if eval == EccPoint::pedersen(value, mask)? {
+            Ok(())
+        } else {
+            Err(ThresholdEcdsaError::InvalidCommitment)
+        }
     }
 }
 
@@ -608,11 +617,9 @@ impl PolynomialCommitment {
         index: NodeIndex,
         opening: &CommitmentOpening,
     ) -> ThresholdEcdsaResult<CommitmentOpening> {
-        if self.check_opening(index, opening)? {
-            Ok(opening.clone())
-        } else {
-            Err(ThresholdEcdsaError::InvalidCommitment)
-        }
+        // returns an Err if the commitment was invalid:
+        self.check_opening(index, opening)?;
+        Ok(opening.clone())
     }
 
     pub fn verify_is(
@@ -635,7 +642,7 @@ impl PolynomialCommitment {
         &self,
         eval_point: NodeIndex,
         opening: &CommitmentOpening,
-    ) -> ThresholdEcdsaResult<bool> {
+    ) -> ThresholdEcdsaResult<()> {
         match (self, opening) {
             (PolynomialCommitment::Simple(c), CommitmentOpening::Simple(value)) => {
                 c.check_opening(eval_point, value)
@@ -677,7 +684,7 @@ impl LagrangeCoefficients {
         }
         let point_scalar_refs: Vec<(&EccPoint, &EccScalar)> =
             y.iter().zip(self.coefficients.iter()).collect();
-        // The coefficents are public (being derived from the node indexes)
+        // The coefficients are public (being derived from the node indexes)
         // and so it is safe to use a variable-time multiplication algorithm.
         let result = EccPoint::mul_n_points_vartime(&point_scalar_refs[..])?;
 

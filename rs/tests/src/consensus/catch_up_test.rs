@@ -1,7 +1,7 @@
 /* tag::catalog[]
 Title:: Catch Up Test
 
-Goal:: Demonstrate catch up behaviour of nodes when both exectution and state sync are slow.
+Goal:: Demonstrate catch up behaviour of nodes when both execution and state sync are slow.
 
 Runbook::
 . Set up a malicious (defect) node that uses delays to simulate slow execution and state sync
@@ -95,7 +95,7 @@ fn config(env: TestEnv, execution_delay_factor: f64, state_sync_delay_factor: f6
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 }
 
 fn test(env: TestEnv, expect_catch_up: bool) {
@@ -157,7 +157,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
         info!(log, "Checking node catch up via metrics");
 
         // Regularly check whether the `state_manager_max_resident_height` metric of the malicious
-        // node reaches the values of the healty nodes
+        // node reaches the values of the healthy nodes
         let healthy_node_metrics = MetricsFetcher::new(
             topology.root_subnet().nodes(),
             vec![STATE_MANAGER_MAX_RESIDENT_HEIGHT.to_string()],
@@ -173,17 +173,19 @@ fn test(env: TestEnv, expect_catch_up: bool) {
             std::thread::sleep(Duration::from_secs(5));
             info!(log, "Try {}", try_idx);
 
-            let (healthy_heights, unhealthy_height) =
-                match join!(healthy_node_metrics.fetch(), malicious_node_metrics.fetch()) {
-                    (Ok(healthy), Ok(unhealthy)) => (
-                        healthy[STATE_MANAGER_MAX_RESIDENT_HEIGHT].clone(),
-                        unhealthy[STATE_MANAGER_MAX_RESIDENT_HEIGHT][0],
-                    ),
-                    _ => {
-                        info!(log, "Could not connect to the nodes yet");
-                        continue;
-                    }
-                };
+            let (healthy_heights, unhealthy_height) = match join!(
+                healthy_node_metrics.fetch::<u64>(),
+                malicious_node_metrics.fetch::<u64>()
+            ) {
+                (Ok(healthy), Ok(unhealthy)) => (
+                    healthy[STATE_MANAGER_MAX_RESIDENT_HEIGHT].clone(),
+                    unhealthy[STATE_MANAGER_MAX_RESIDENT_HEIGHT][0],
+                ),
+                _ => {
+                    info!(log, "Could not connect to the nodes yet");
+                    continue;
+                }
+            };
 
             let average_healthy_height =
                 healthy_heights.iter().sum::<u64>() as f64 / healthy_heights.len() as f64;

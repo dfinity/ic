@@ -18,9 +18,9 @@ use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
 };
 use mockall::automock;
-use opentelemetry::{global, sdk::Resource, KeyValue};
-use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{Encoder, TextEncoder};
+use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
+use opentelemetry_prometheus::exporter;
+use prometheus::{labels, Encoder, Registry, TextEncoder};
 use serde::Deserialize;
 use tokio::{task, time::Instant};
 use tracing::info;
@@ -61,20 +61,24 @@ async fn main() -> Result<(), Error> {
 
     tracing::subscriber::set_global_default(subscriber).expect("failed to set global subscriber");
 
-    let exporter = opentelemetry_prometheus::exporter()
-        .with_resource(Resource::new(vec![KeyValue::new(
-            "service",
-            "ic-balance-exporter",
-        )]))
-        .init();
+    // Metrics
+    let service_name = "ic-balance-exporter";
 
-    let meter = global::meter("ic-balance-exporter");
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => service_name.into()}),
+    )
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let meter = provider.meter(service_name);
 
     let wallet_balances: Arc<DashMap<String, u64>> = Arc::new(DashMap::new());
     let wallet_balances_m = Arc::clone(&wallet_balances);
 
     meter
-        .u64_value_observer("wallet_balance", move |o| {
+        .u64_observable_gauge("wallet_balance")
+        .with_callback(move |o| {
             for r in wallet_balances_m.iter() {
                 let (wallet, balance) = (r.key(), r.value());
                 o.observe(*balance, &[KeyValue::new("wallet", wallet.clone())]);
@@ -83,7 +87,7 @@ async fn main() -> Result<(), Error> {
         .with_description("wallet balance")
         .init();
 
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     let f = File::open(cli.identity_path).context("failed to open identity file")?;
@@ -143,14 +147,14 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
     _: Request<Body>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -219,10 +223,10 @@ impl Scraper {
 impl Scrape for Scraper {
     async fn scrape(&self, wallet: &Principal) -> Result<u64, Error> {
         let agent = Arc::clone(&self.0);
-
+        let arg = candid::Encode!()?;
         let result = agent
             .query(wallet, "wallet_balance")
-            .with_arg(candid::Encode!()?)
+            .with_arg(arg)
             .call()
             .await
             .context("failed to query canister")?;

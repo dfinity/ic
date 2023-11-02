@@ -79,7 +79,7 @@ impl CanisterAgent {
                 .call()
                 .await
         } else {
-            let mut update = self
+            let update = self
                 .agent
                 .update(&request.canister_id(), request.method_name());
             let update_with_arg = update.with_arg(request.payload());

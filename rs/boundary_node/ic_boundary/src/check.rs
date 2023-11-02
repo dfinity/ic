@@ -1,6 +1,7 @@
 use std::{
     fmt,
     num::Wrapping,
+    str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -12,17 +13,20 @@ use async_trait::async_trait;
 use bytes::Buf;
 use candid::Principal;
 use dashmap::DashMap;
+use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use opentelemetry::{baggage::BaggageExt, trace::FutureExt, Context as TlmContext, KeyValue};
 use simple_moving_average::{SingleSumSMA, SMA};
-use tracing::{error, info, warn};
+use tracing::info;
+use url::Url;
 
 use crate::{
+    core::{Run, WithRetryLimited},
+    http::HttpClient,
+    metrics::{MetricParams, WithMetrics},
     persist::Persist,
     snapshot::RoutingTable,
     snapshot::{Node, Subnet},
-    Run, WithRetryLimited,
 };
 
 struct NodeState {
@@ -54,11 +58,11 @@ pub enum CheckError {
 impl CheckError {
     pub fn short(&self) -> &str {
         match self {
-            Self::Generic(e) => "generic",
-            Self::Network(e) => "network",
-            Self::Http(code) => "http",
-            Self::ReadBody(e) => "read_body",
-            Self::Cbor(e) => "cbor",
+            Self::Generic(_) => "generic",
+            Self::Network(_) => "network",
+            Self::Http(_) => "http",
+            Self::ReadBody(_) => "read_body",
+            Self::Cbor(_) => "cbor",
             Self::Health => "health",
         }
     }
@@ -77,8 +81,8 @@ impl fmt::Display for CheckError {
     }
 }
 
-pub struct Runner<'a, P: Persist, C: Check> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
+pub struct Runner<P: Persist, C: Check> {
+    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
     node_states: Arc<DashMap<Principal, NodeState>>,
     last_check_id: Wrapping<u64>,
     min_ok_count: u8,
@@ -99,7 +103,7 @@ fn nodes_sort_by_score(mut nodes: Vec<NodeCheckResult>) -> Vec<Node> {
     let latency_max = latencies.into_iter().reduce(f32::max).unwrap_or(0.0);
 
     // Normalize latency to 0..1 range
-    nodes.iter_mut().for_each(|mut x| {
+    nodes.iter_mut().for_each(|x| {
         x.average_latency = (x.average_latency - latency_min) / (latency_max - latency_min)
     });
 
@@ -110,9 +114,9 @@ fn nodes_sort_by_score(mut nodes: Vec<NodeCheckResult>) -> Vec<Node> {
     nodes.into_iter().map(|x| x.node).collect()
 }
 
-impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
+impl<P: Persist, C: Check> Runner<P, C> {
     pub fn new(
-        published_routing_table: &'a ArcSwapOption<RoutingTable>,
+        published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
         min_ok_count: u8,
         max_height_lag: u64,
         persist: P,
@@ -131,14 +135,8 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
 
     // Perform a health check on a given node
     async fn check_node(&self, node: Node) -> Result<NodeCheckResult, CheckError> {
-        let ctx = TlmContext::current_with_baggage(vec![
-            KeyValue::new("subnet_id", node.subnet_id.to_string()),
-            KeyValue::new("node_id", node.id.to_string()),
-            KeyValue::new("addr", format!("[{}]:{}", node.addr, node.port)),
-        ]);
-
         // Perform Health Check
-        let check_result = self.checker.check(&node).with_context(ctx.clone()).await;
+        let check_result = self.checker.check(&node).await;
 
         // Look up the node state and get a mutable reference if there's any
         // Locking behavior on DashMap is relevant to multiple locks from a single thread
@@ -252,7 +250,7 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
         };
 
         // Filter out nodes that fail the predicates
-        let mut nodes = nodes
+        let nodes = nodes
             .into_iter()
             .filter(|x| x.height >= min_height) // Filter below min_height
             .filter(|x| x.ok_count >= self.min_ok_count) // Filter below min_ok_count
@@ -264,7 +262,7 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
 }
 
 #[async_trait]
-impl<'a, P: Persist, C: Check> Run for Runner<'a, P, C> {
+impl<P: Persist, C: Check> Run for Runner<P, C> {
     async fn run(&mut self) -> Result<(), Error> {
         // Clone the the latest routing table from the registry if there's one
         let routing_table = self
@@ -319,33 +317,33 @@ pub trait Check: Send + Sync {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError>;
 }
 
-pub struct Checker<'a> {
-    http_client: &'a reqwest::Client,
+pub struct Checker {
+    http_client: Arc<dyn HttpClient>,
 }
 
-impl<'a> Checker<'a> {
-    pub fn new(http_client: &'a reqwest::Client) -> Self {
+impl Checker {
+    pub fn new(http_client: Arc<dyn HttpClient>) -> Self {
         Self { http_client }
     }
 }
 
 #[async_trait]
-impl<'a> Check for Checker<'a> {
+impl Check for Checker {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
-        let request = match self
-            .http_client
-            .get(format!("https://{}:{}/api/v2/status", node.id, node.port))
-            .build()
-        {
-            Ok(v) => v,
-            Err(e) => return Err(CheckError::Generic(e.to_string())),
-        };
+        // Create request
+        let u = Url::from_str(&format!("https://{}:{}/api/v2/status", node.id, node.port))
+            .map_err(|err| CheckError::Generic(err.to_string()))?;
 
+        let request = reqwest::Request::new(Method::GET, u);
+
+        // Execute request
         let start_time = Instant::now();
-        let response = match self.http_client.execute(request).await {
-            Ok(v) => v,
-            Err(e) => return Err(CheckError::Network(e.to_string())),
-        };
+
+        let response = self
+            .http_client
+            .execute(request)
+            .await
+            .map_err(|err| CheckError::Network(err.to_string()))?;
 
         let latency = start_time.elapsed();
 
@@ -393,7 +391,7 @@ impl<T: Check> Check for WithRetryLimited<T> {
         loop {
             let start_time = Instant::now();
 
-            let out = self.0.check(node).with_context(TlmContext::current()).await;
+            let out = self.0.check(node).await;
             // Retry only on network errors
             match &out {
                 Ok(_) => return out,
@@ -413,6 +411,58 @@ impl<T: Check> Check for WithRetryLimited<T> {
                 tokio::time::sleep(attempt_interval - duration).await;
             }
         }
+    }
+}
+
+#[async_trait]
+impl<T: Check> Check for WithMetrics<T> {
+    async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
+        let start_time = Instant::now();
+        let out = self.0.check(node).await;
+        let duration = start_time.elapsed().as_secs_f64();
+
+        let status = match &out {
+            Ok(_) => "ok".to_string(),
+            Err(e) => format!("error_{}", e.short()),
+        };
+
+        let (block_height, replica_version) = out.as_ref().map_or((-1, "unknown"), |out| {
+            (out.height as i64, out.replica_version.as_str())
+        });
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let subnet_id = node.subnet_id.to_string();
+        let node_id = node.id.to_string();
+        let node_addr = node.addr.to_string();
+
+        let labels = &[
+            status.as_str(),
+            subnet_id.as_str(),
+            node_id.as_str(),
+            node_addr.as_str(),
+        ];
+
+        counter.with_label_values(labels).inc();
+        recorder.with_label_values(labels).observe(duration);
+
+        info!(
+            action,
+            status,
+            duration,
+            block_height,
+            replica_version,
+            subnet_id,
+            node_id,
+            node_addr,
+            error = ?out.as_ref().err(),
+        );
+
+        out
     }
 }
 

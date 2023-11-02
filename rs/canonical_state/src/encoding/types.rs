@@ -13,7 +13,7 @@
 use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::xnet::StreamIndex;
+use ic_types::{xnet::StreamIndex, Time};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
@@ -50,6 +50,16 @@ pub struct RequestOrResponse {
     pub response: Option<Response>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RequestMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_tree_depth: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_tree_start_time: Option<Time>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_subtree_deadline: Option<Time>,
+}
+
 /// Canonical representation of `ic_types::messages::Request`.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,6 +75,8 @@ pub struct Request {
     pub method_payload: Bytes,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_payment: Option<Cycles>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<RequestMetadata>,
 }
 
 /// Canonical representation of `ic_types::messages::Response`.
@@ -131,6 +143,20 @@ pub struct SystemMetadata {
     pub id_counter: Option<u64>,
     /// Hash bytes of the previous (partial) canonical state.
     pub prev_state_hash: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubnetMetrics {
+    /// The number of canisters on this subnet.
+    pub num_canisters: u64,
+    /// The total size of the state taken by canisters on this subnet in bytes.
+    pub canister_state_bytes: u64,
+    /// The total number of cycles consumed by all current and deleted canisters
+    /// on this subnet.
+    pub consumed_cycles_total: Cycles,
+    /// The total number of update transactions processed on this subnet.
+    /// Update transactions include all replicated message executions.
+    pub update_transactions_total: u64,
 }
 
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeader {
@@ -231,6 +257,16 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
     }
 }
 
+impl From<&ic_types::messages::RequestMetadata> for RequestMetadata {
+    fn from(metadata: &ic_types::messages::RequestMetadata) -> Self {
+        RequestMetadata {
+            call_tree_depth: metadata.call_tree_depth,
+            call_tree_start_time: metadata.call_tree_start_time,
+            call_subtree_deadline: metadata.call_subtree_deadline,
+        }
+    }
+}
+
 impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
@@ -239,6 +275,18 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             cycles: (&request.payment, certification_version).into(),
             icp: 0,
         };
+        let metadata = match request.metadata.as_ref() {
+            Some(ic_types::messages::RequestMetadata {
+                call_tree_depth: None,
+                call_tree_start_time: None,
+                call_subtree_deadline: None,
+            })
+            | None => None,
+            Some(metadata) => {
+                (certification_version >= CertificationVersion::V14).then_some(metadata.into())
+            }
+        };
+
         Self {
             receiver: request.receiver.get().to_vec(),
             sender: request.sender.get().to_vec(),
@@ -247,6 +295,17 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
+            metadata,
+        }
+    }
+}
+
+impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
+    fn from(metadata: RequestMetadata) -> Self {
+        ic_types::messages::RequestMetadata {
+            call_tree_depth: metadata.call_tree_depth,
+            call_tree_start_time: metadata.call_tree_start_time,
+            call_subtree_deadline: metadata.call_subtree_deadline,
         }
     }
 }
@@ -268,6 +327,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             payment,
             method_name: request.method_name,
             method_payload: request.method_payload,
+            metadata: request.metadata.map(From::from),
         })
     }
 }
@@ -404,8 +464,8 @@ impl From<(&ic_types::messages::RejectContext, CertificationVersion)> for Reject
         ),
     ) -> Self {
         Self {
-            code: context.code as u8,
-            message: context.message.clone(),
+            code: context.code() as u8,
+            message: context.message().clone(),
         }
     }
 }
@@ -414,15 +474,15 @@ impl TryFrom<RejectContext> for ic_types::messages::RejectContext {
     type Error = ProxyDecodeError;
 
     fn try_from(context: RejectContext) -> Result<Self, Self::Error> {
-        Ok(Self {
-            code: (context.code as u64).try_into().map_err(|err| match err {
+        Ok(Self::from_canonical(
+            (context.code as u64).try_into().map_err(|err| match err {
                 TryFromError::ValueOutOfRange(code) => ProxyDecodeError::ValueOutOfRange {
                     typ: "RejectContext",
                     err: code.to_string(),
                 },
             })?,
-            message: context.message,
-        })
+            context.message,
+        ))
     }
 }
 
@@ -448,6 +508,31 @@ impl
                 .prev_state_hash
                 .as_ref()
                 .map(|h| h.get_ref().0.clone()),
+        }
+    }
+}
+
+impl
+    From<(
+        &ic_replicated_state::metadata_state::SubnetMetrics,
+        CertificationVersion,
+    )> for SubnetMetrics
+{
+    fn from(
+        (metrics, _certification_version): (
+            &ic_replicated_state::metadata_state::SubnetMetrics,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        let (high, low) = metrics.consumed_cycles_total().into_parts();
+        Self {
+            num_canisters: metrics.num_canisters,
+            canister_state_bytes: metrics.canister_state_bytes.get(),
+            consumed_cycles_total: Cycles {
+                low,
+                high: Some(high),
+            },
+            update_transactions_total: metrics.update_transactions_total,
         }
     }
 }

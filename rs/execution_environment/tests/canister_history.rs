@@ -1,5 +1,6 @@
+use ic00::CanisterSettingsArgsBuilder;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_ic00_types::{
@@ -11,7 +12,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
     CanisterHistory, MAX_CANISTER_HISTORY_CHANGES,
 };
-use ic_state_machine_tests::{CanisterSettingsArgs, PrincipalId, StateMachine, StateMachineConfig};
+use ic_state_machine_tests::{PrincipalId, StateMachine, StateMachineConfig};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
@@ -117,12 +118,11 @@ fn canister_history_tracks_create_install_reinstall() {
             ic00::Method::ProvisionalCreateCanisterWithCycles,
             ic00::ProvisionalCreateCanisterWithCyclesArgs {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![user_id1, user_id2]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id1, user_id2])
+                        .build(),
+                ),
                 specified_id: None,
                 sender_canister_version: None,
             }
@@ -255,12 +255,11 @@ fn canister_history_tracks_upgrade() {
             ic00::Method::ProvisionalCreateCanisterWithCycles,
             ic00::ProvisionalCreateCanisterWithCyclesArgs {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![user_id1, user_id2]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id1, user_id2])
+                        .build(),
+                ),
                 specified_id: None,
                 sender_canister_version: None,
             }
@@ -369,12 +368,11 @@ fn canister_history_tracks_uninstall() {
             ic00::Method::ProvisionalCreateCanisterWithCycles,
             ic00::ProvisionalCreateCanisterWithCyclesArgs {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![user_id1, user_id2]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id1, user_id2])
+                        .build(),
+                ),
                 specified_id: None,
                 sender_canister_version: None,
             }
@@ -474,12 +472,11 @@ fn canister_history_tracks_controllers_change() {
             ic00::Method::ProvisionalCreateCanisterWithCycles,
             ic00::ProvisionalCreateCanisterWithCyclesArgs {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![user_id1, user_id2]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id1, user_id2])
+                        .build(),
+                ),
                 specified_id: None,
                 sender_canister_version: None,
             }
@@ -512,12 +509,9 @@ fn canister_history_tracks_controllers_change() {
             Method::UpdateSettings,
             UpdateSettingsArgs {
                 canister_id: canister_id.into(),
-                settings: CanisterSettingsArgs::new(
-                    Some(new_controllers.clone()),
-                    None,
-                    None,
-                    None,
-                ),
+                settings: CanisterSettingsArgsBuilder::new()
+                    .with_controllers(new_controllers.clone())
+                    .build(),
                 sender_canister_version: Some(666), // ignored for ingress messages
             }
             .encode(),
@@ -563,12 +557,11 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
             ic00::Method::ProvisionalCreateCanisterWithCycles,
             ic00::ProvisionalCreateCanisterWithCyclesArgs {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![user_id1, user_id2]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id1, user_id2])
+                        .build(),
+                ),
                 specified_id: None,
                 sender_canister_version: None,
             }
@@ -660,12 +653,11 @@ fn canister_history_tracks_changes_from_canister() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs::new(
-                Some(vec![anonymous_user, user_id1, user_id2]),
-                None,
-                None,
-                None,
-            )),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![anonymous_user, user_id1, user_id2])
+                    .build(),
+            ),
             INITIAL_CYCLES_BALANCE * 2_u64,
         )
         .unwrap();
@@ -678,12 +670,11 @@ fn canister_history_tracks_changes_from_canister() {
         &PrincipalId::default(),
         "create_canister",
         CreateCanisterArgs {
-            settings: Some(CanisterSettingsArgs::new(
-                Some(vec![ucan.into(), user_id1, user_id2]),
-                None,
-                None,
-                None,
-            )),
+            settings: Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![ucan.into(), user_id1, user_id2])
+                    .build(),
+            ),
             sender_canister_version: Some(3), // specified sender_canister_version
         }
         .encode(),
@@ -773,12 +764,11 @@ fn canister_history_fails_with_incorrect_sender_version() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs::new(
-                Some(vec![anonymous_user, user_id1, user_id2]),
-                None,
-                None,
-                None,
-            )),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![anonymous_user, user_id1, user_id2])
+                    .build(),
+            ),
             INITIAL_CYCLES_BALANCE * 2_u64,
         )
         .unwrap();
@@ -791,12 +781,11 @@ fn canister_history_fails_with_incorrect_sender_version() {
             ic00::Method::ProvisionalCreateCanisterWithCycles,
             ic00::ProvisionalCreateCanisterWithCyclesArgs {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![ucan.into(), user_id1, user_id2]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![ucan.into(), user_id1, user_id2])
+                        .build(),
+                ),
                 specified_id: None,
                 sender_canister_version: None,
             }
@@ -877,12 +866,11 @@ fn canister_info_retrieval() {
             ic00::Method::ProvisionalCreateCanisterWithCycles,
             ic00::ProvisionalCreateCanisterWithCyclesArgs {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![user_id1, user_id2]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id1, user_id2])
+                        .build(),
+                ),
                 specified_id: None,
                 sender_canister_version: None,
             }
@@ -966,12 +954,11 @@ fn canister_info_retrieval() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs::new(
-                Some(vec![anonymous_user, user_id1, user_id2]),
-                None,
-                None,
-                None,
-            )),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![anonymous_user, user_id1, user_id2])
+                    .build(),
+            ),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();

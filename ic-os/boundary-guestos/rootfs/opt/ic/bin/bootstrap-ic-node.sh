@@ -68,6 +68,7 @@ function process_bootstrap() {
         nns.conf
         pre_isolation_canisters.txt
         prober_identity.pem
+        raw_domains.txt
     )
 
     for FILE in ${FILES[@]}; do

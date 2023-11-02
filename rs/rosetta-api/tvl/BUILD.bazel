@@ -21,7 +21,6 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
 ]
 
@@ -82,57 +81,14 @@ DEV_ENV = {
 }
 
 DEPENDENCIES_TEST = [
-    "//rs/canister_client/sender",
-    "//rs/config",
-    "//rs/crypto/node_key_generation",
-    "//rs/crypto/sha",
-    "//rs/nervous_system/common",
-    "//rs/nervous_system/common/test_keys",
-    "//rs/nervous_system/root",
-    "//rs/nns/cmc",
-    "//rs/nns/common",
-    "//rs/nns/constants",
-    "//rs/nns/governance",
-    "//rs/nns/gtc",
-    "//rs/nns/gtc_accounts",
-    "//rs/nns/handlers/lifeline/impl:lifeline",
-    "//rs/nns/handlers/root/impl:root",
-    "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
-    "//rs/protobuf",
-    "//rs/registry/canister",
-    "//rs/registry/keys",
-    "//rs/registry/routing_table",
-    "//rs/registry/subnet_type",
-    "//rs/registry/transport",
     "//rs/rosetta-api/tvl",
     "//rs/rosetta-api/tvl/xrc_mock",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rust_canisters/canister_test",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_json",
-    "//rs/rust_canisters/on_wire",
-    "//rs/sns/governance",
-    "//rs/sns/init",
     "//rs/state_machine_tests",
-    "//rs/test_utilities",
-    "//rs/types/base_types",
-    "//rs/types/ic00_types",
-    "//rs/types/types",
     "//rs/test_utilities/load_wasm",
-    "//rs/utils",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
-    "@crate_index//:futures",
-    "@crate_index//:maplit",
-    "@crate_index//:num-traits",
-    "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",
-    "@crate_index//:serde",
-    "@crate_index//:tokio",
-    "@crate_index//:walrus",
 ]
 
 DEV_DATA = [

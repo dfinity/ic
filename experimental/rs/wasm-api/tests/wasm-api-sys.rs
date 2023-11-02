@@ -7,8 +7,8 @@ fn wasm_api_sys_hello() {
         let store: *mut wasm_store_t = wasm_store_new(engine);
 
         let file_name = "tests/hello.wasm";
-        let file_conents = std::fs::read_to_string(file_name).unwrap();
-        let file_size = file_conents.len();
+        let file_contents = std::fs::read_to_string(file_name).unwrap();
+        let file_size = file_contents.len();
         println!(
             "> module file name: {:?}, size: {} bytes",
             file_name, file_size
@@ -18,7 +18,7 @@ fn wasm_api_sys_hello() {
             wasm_byte_vec_new(
                 &mut bytes,
                 file_size,
-                file_conents.as_ptr() as *const std::os::raw::c_char,
+                file_contents.as_ptr() as *const std::os::raw::c_char,
             );
             let module = wasm_module_new(store, &bytes);
             assert!(!module.is_null());

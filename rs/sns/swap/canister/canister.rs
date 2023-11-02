@@ -23,7 +23,8 @@ use ic_sns_swap::{
     memory::UPGRADES_MEMORY,
     pb::v1::{
         ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
-        GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
+        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
+        GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
         GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
         GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
         GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
@@ -284,6 +285,20 @@ fn get_lifecycle() {
 fn get_lifecycle_(request: GetLifecycleRequest) -> GetLifecycleResponse {
     log!(INFO, "get_lifecycle");
     swap().get_lifecycle(&request)
+}
+
+/// Return the status of auto-finalization
+#[export_name = "canister_query get_auto_finalization_status"]
+fn get_auto_finalization_status() {
+    over(candid_one, get_auto_finalization_status_)
+}
+
+#[candid_method(query, rename = "get_auto_finalization_status")]
+fn get_auto_finalization_status_(
+    request: GetAutoFinalizationStatusRequest,
+) -> GetAutoFinalizationStatusResponse {
+    log!(INFO, "get_auto_finalization_status");
+    swap().get_auto_finalization_status(&request)
 }
 
 /// Returns the initialization data of the canister
@@ -592,17 +607,17 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_participant_total_icp_e8s",
-        swap().participant_total_icp_e8s() as f64,
+        swap().current_total_participation_e8s() as f64,
         "The total amount of ICP contributed by direct investors and the Community Fund",
     )?;
     w.encode_gauge(
         "sale_direct_investor_total_icp_e8s",
-        swap().direct_investor_total_icp_e8s() as f64,
+        swap().current_direct_participation_e8s() as f64,
         "The total amount of ICP contributed by direct investors",
     )?;
     w.encode_gauge(
         "sale_cf_total_icp_e8s",
-        swap().cf_total_icp_e8s() as f64,
+        swap().current_neurons_fund_participation_e8s() as f64,
         "The total amount of ICP contributed by the Community Fund",
     )?;
 

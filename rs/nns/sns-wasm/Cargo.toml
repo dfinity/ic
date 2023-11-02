@@ -11,19 +11,16 @@ path = "canister/canister.rs"
 path = "src/lib.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
-
 async-trait = "0.1.42"
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
-futures = "0.3.21"
+futures = { workspace = true }
 hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-ic-crypto-sha = { path = "../../crypto/sha/" }
+ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
@@ -40,7 +37,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.85"
-prost = "0.11.0"
+prost = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-protobuf = { path = "../../protobuf" }
@@ -53,7 +50,7 @@ ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
@@ -65,7 +62,6 @@ ic-sns-swap = { path = "../../sns/swap" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = "1.2.1"
-on_wire = { path = "../../rust_canisters/on_wire" }
 
 [features]
 test = ["ic-sns-init/test"]

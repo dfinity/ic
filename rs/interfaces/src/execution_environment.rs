@@ -45,6 +45,18 @@ pub struct InstanceStats {
     /// Number of times a write access is handled when the page has not yet been
     /// read.
     pub direct_write_count: usize,
+
+    /// Number of sigsegv handled.
+    pub sigsegv_count: usize,
+
+    /// Number of calls to mmap.
+    pub mmap_count: usize,
+
+    /// Number of calls to mprotect.
+    pub mprotect_count: usize,
+
+    /// Number of pages loaded by copying the data.
+    pub copy_page_count: usize,
 }
 
 /// Errors that can be returned when fetching the available memory on a subnet.
@@ -172,6 +184,10 @@ pub struct SubnetAvailableMemory {
     message_memory: i64,
     /// The memory available for Wasm custom sections.
     wasm_custom_sections_memory: i64,
+    /// Specifies the factor by which the subnet available memory was scaled
+    /// using the division operator. It is useful for approximating the global
+    /// available memory from the per-thread available memory.
+    scaling_factor: i64,
 }
 
 impl SubnetAvailableMemory {
@@ -184,6 +200,9 @@ impl SubnetAvailableMemory {
             execution_memory,
             message_memory,
             wasm_custom_sections_memory,
+            // The newly created value is not scaled (divided), which
+            // corresponds to the scaling factor of 1.
+            scaling_factor: 1,
         }
     }
 
@@ -203,13 +222,25 @@ impl SubnetAvailableMemory {
         self.wasm_custom_sections_memory
     }
 
-    /// Try to use some memory capacity and fail if not enough is available
+    /// Returns the scaling factor that specifies by how much the initial
+    /// available memory was scaled using the division operator.
     ///
-    /// `self.execution_memory`, `self.message_memory` and `self.wasm_custom_sections_memory`
-    /// are independent of each other. However, this function will not allocate anything if
-    /// there is not enough of either one of them (and return an error instead).
-    pub fn try_decrement(
-        &mut self,
+    /// It is useful for approximating the global available memory from the
+    /// per-thread available memory. Note that the approximation may be off in
+    /// both directions because there is no way to deterministically know how
+    /// much other threads have allocated.
+    pub fn get_scaling_factor(&self) -> i64 {
+        self.scaling_factor
+    }
+
+    /// Returns `Ok(())` if the subnet has enough available room for allocating
+    /// the given bytes in each of the memory types.
+    /// Otherwise, it returns an error.
+    ///
+    /// Note that memory types are independent from each other and their limits
+    /// are checked independently.
+    pub fn check_available_memory(
+        &self,
         execution_requested: NumBytes,
         message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
@@ -227,9 +258,6 @@ impl SubnetAvailableMemory {
                 self.wasm_custom_sections_memory,
             )
         {
-            self.execution_memory -= execution_requested.get() as i64;
-            self.message_memory -= message_requested.get() as i64;
-            self.wasm_custom_sections_memory -= wasm_custom_sections_requested.get() as i64;
             Ok(())
         } else {
             Err(SubnetAvailableMemoryError::InsufficientMemory {
@@ -241,6 +269,28 @@ impl SubnetAvailableMemory {
                 available_wasm_custom_sections: self.wasm_custom_sections_memory,
             })
         }
+    }
+
+    /// Try to use some memory capacity and fail if not enough is available.
+    ///
+    /// `self.execution_memory`, `self.message_memory` and `self.wasm_custom_sections_memory`
+    /// are independent of each other. However, this function will not allocate anything if
+    /// there is not enough of either one of them (and return an error instead).
+    pub fn try_decrement(
+        &mut self,
+        execution_requested: NumBytes,
+        message_requested: NumBytes,
+        wasm_custom_sections_requested: NumBytes,
+    ) -> Result<(), SubnetAvailableMemoryError> {
+        self.check_available_memory(
+            execution_requested,
+            message_requested,
+            wasm_custom_sections_requested,
+        )?;
+        self.execution_memory -= execution_requested.get() as i64;
+        self.message_memory -= message_requested.get() as i64;
+        self.wasm_custom_sections_memory -= wasm_custom_sections_requested.get() as i64;
+        Ok(())
     }
 
     pub fn increment(
@@ -289,6 +339,7 @@ impl ops::Div<i64> for SubnetAvailableMemory {
             execution_memory: self.execution_memory / rhs,
             message_memory: self.message_memory / rhs,
             wasm_custom_sections_memory: self.wasm_custom_sections_memory / rhs,
+            scaling_factor: self.scaling_factor * rhs,
         }
     }
 }
@@ -313,9 +364,18 @@ pub type IngressFilterService = BoxCloneService<
     Infallible,
 >;
 
+/// Errors that can occur when handling a query execution request.
+pub enum QueryExecutionError {
+    CertifiedStateUnavailable,
+}
+
+/// The response type to a `call()` request in [`QueryExecutionService`].
+/// An Ok response contains the response from the canister and the batch time at the time of execution.
+pub type QueryExecutionResponse = Result<(HttpQueryResponse, Time), QueryExecutionError>;
+
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, Infallible>;
+    BoxCloneService<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
 
 /// Interface for the component to execute queries on canisters.  It can be used
 /// by the HttpHandler and other system components to execute queries.
@@ -464,6 +524,9 @@ pub trait SystemApi {
     /// Returns the number of instructions executed in the current slice.
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions;
 
+    /// Canister id of the executing canister.
+    fn canister_id(&self) -> ic_types::CanisterId;
+
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister
     /// id in case of requests or the user id in case of an ingress message.
@@ -472,6 +535,17 @@ pub trait SystemApi {
         dst: u32,
         offset: u32,
         size: u32,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Copies `size` bytes starting from `offset` inside the opaque caller blob
+    /// and copies them to heap[dst..dst+size]. The caller is the canister
+    /// id in case of requests or the user id in case of an ingress message.
+    fn ic0_msg_caller_copy_64(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -491,6 +565,16 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    /// Copies `length` bytes from msg.payload[offset..offset+size] to
+    /// memory[dst..dst+size].
+    fn ic0_msg_arg_data_copy_64(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Used to look up the size of the method_name that the message wants to
     /// call. Can only be called in the context of inspecting messages.
     fn ic0_msg_method_name_size(&self) -> HypervisorResult<u32>;
@@ -502,6 +586,16 @@ pub trait SystemApi {
         dst: u32,
         offset: u32,
         size: u32,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Used to copy the method_name that the message wants to call to heap. Can
+    /// only be called in the context of inspecting messages.
+    fn ic0_msg_method_name_copy_64(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -519,6 +613,15 @@ pub trait SystemApi {
         heap: &[u8],
     ) -> HypervisorResult<()>;
 
+    /// Copies the data referred to by src/size out of the canister and appends
+    /// it to the (initially empty) data reply.
+    fn ic0_msg_reply_data_append_64(
+        &mut self,
+        src: u64,
+        size: u64,
+        heap: &[u8],
+    ) -> HypervisorResult<()>;
+
     /// Replies to the sender with the data assembled using
     /// `msg_reply_data_append`.
     fn ic0_msg_reply(&mut self) -> HypervisorResult<()>;
@@ -532,6 +635,9 @@ pub trait SystemApi {
 
     /// Replies to sender with an error message
     fn ic0_msg_reject(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+
+    /// Replies to sender with an error message
+    fn ic0_msg_reject_64(&mut self, src: u64, size: u64, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Returns the length of the reject message in bytes.
     ///
@@ -556,6 +662,22 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    /// Copies length bytes from self.reject_msg[offset..offset+size] to
+    /// memory[dst..dst+size]
+    ///
+    /// # Panics
+    ///
+    /// This traps if offset+size is greater than the size of the reject
+    /// message, or if dst+size exceeds the size of the Wasm memory, or if not
+    /// called from inside a reject callback.
+    fn ic0_msg_reject_msg_copy_64(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Returns the size of the blob corresponding to the id of the canister.
     fn ic0_canister_self_size(&self) -> HypervisorResult<usize>;
 
@@ -569,11 +691,27 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    /// Copies `size` bytes starting from `offset` in the id blob of the
+    /// canister to heap[dst..dst+size].
+    fn ic0_canister_self_copy_64(
+        &mut self,
+        dst: u64,
+        offset: u64,
+        size: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Outputs the specified bytes on the heap as a string on STDOUT.
     fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
+    /// Outputs the specified bytes on the heap as a string on STDOUT.
+    fn ic0_debug_print_64(&self, src: u64, size: u64, heap: &[u8]) -> HypervisorResult<()>;
+
     /// Traps, with a possibly helpful message
     fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+
+    /// Traps, with a possibly helpful message
+    fn ic0_trap_64(&self, src: u64, size: u64, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Begins assembling a call to the canister specified by
     /// callee_src/callee_size at method name_src/name_size. Two mandatory
@@ -598,10 +736,39 @@ pub trait SystemApi {
         heap: &[u8],
     ) -> HypervisorResult<()>;
 
+    /// Begins assembling a call to the canister specified by
+    /// callee_src/callee_size at method name_src/name_size. Two mandatory
+    /// callbacks are recorded which will be invoked on success and error
+    /// respectively.
+    ///
+    /// Subsequent calls to other `call_*` apis set further attributes of this
+    /// call until the call is concluded (with `ic0.call_perform) or discarded
+    /// (by returning without calling `ic0.call_perform` or by starting a new
+    /// call with `ic0.call_new`).
+    #[allow(clippy::too_many_arguments)]
+    fn ic0_call_new_64(
+        &mut self,
+        callee_src: u64,
+        callee_size: u64,
+        name_src: u64,
+        name_len: u64,
+        reply_fun: u32,
+        reply_env: u32,
+        reject_fun: u32,
+        reject_env: u32,
+        heap: &[u8],
+    ) -> HypervisorResult<()>;
+
     /// Appends the specified bytes to the argument of the call. Initially, the
     /// argument is empty. This can be called multiple times between
     /// `ic0.call_new` and `ic0.call_perform`.
     fn ic0_call_data_append(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+
+    /// Appends the specified bytes to the argument of the call. Initially, the
+    /// argument is empty. This can be called multiple times between
+    /// `ic0.call_new` and `ic0.call_perform`.
+    fn ic0_call_data_append_64(&mut self, src: u64, size: u64, heap: &[u8])
+        -> HypervisorResult<()>;
 
     /// Specifies the closure to be called if the reply/reject closures trap.
     /// Can be called at most once between `ic0.call_new` and
@@ -821,6 +988,14 @@ pub trait SystemApi {
     /// starting at the location `dst`.
     fn ic0_canister_cycle_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
 
+    /// This system call indicates the current cycle balance
+    /// of the canister.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_canister_cycle_balance128_64(&self, dst: u64, heap: &mut [u8]) -> HypervisorResult<()>;
+
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
     /// This API supports only 64-bit values.
     ///
@@ -837,6 +1012,14 @@ pub trait SystemApi {
     /// starting at the location `dst`.
     fn ic0_msg_cycles_available128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
 
+    /// This system call indicates the amount of cycles sent
+    /// in the current call and still available.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_msg_cycles_available128_64(&self, dst: u64, heap: &mut [u8]) -> HypervisorResult<()>;
+
     /// (deprecated) Please use `ic0_msg_cycles_refunded128` instead.
     /// This API supports only 64-bit values.
     ///
@@ -852,6 +1035,14 @@ pub trait SystemApi {
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
     fn ic0_msg_cycles_refunded128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+
+    /// This system call indicates the amount of cycles sent
+    /// that came back with the response as a refund.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_msg_cycles_refunded128_64(&self, dst: u64, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_accept128` instead.
     /// This API supports only 64-bit values.
@@ -901,9 +1092,43 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    /// This moves cycles from the call to the canister balance.
+    /// It can be called multiple times, each time adding more cycles to the
+    /// balance.
+    ///
+    /// It moves no more cycles than `max_amount`.
+    ///
+    /// It moves no more cycles than available according to
+    /// `ic0.msg_cycles_available128`, and
+    ///
+    /// The canister balance afterwards does not exceed
+    /// maximum amount of cycles it can hold (public spec refers to this
+    /// constant as MAX_CANISTER_BALANCE) minus any possible outstanding
+    /// balances. However, canisters on system subnets have no balance
+    /// limit.
+    ///
+    /// EXE-117: the last point is not properly handled yet.  In particular, a
+    /// refund can come back to the canister after this call finishes which
+    /// causes the canister's balance to overflow.
+    fn ic0_msg_cycles_accept128_64(
+        &mut self,
+        max_amount: Cycles,
+        dst: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Sets the certified data for the canister.
     /// See: <https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-certified-data>
     fn ic0_certified_data_set(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+
+    /// Sets the certified data for the canister.
+    /// See: <https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-certified-data>
+    fn ic0_certified_data_set_64(
+        &mut self,
+        src: u64,
+        size: u64,
+        heap: &[u8],
+    ) -> HypervisorResult<()>;
 
     /// If run in non-replicated execution (i.e. query),
     /// returns 1 if the data certificate is present, 0 otherwise.
@@ -924,6 +1149,17 @@ pub trait SystemApi {
         dst: u32,
         offset: u32,
         size: u32,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Copies the data certificate into the heap if it is present
+    /// (i.e. data_certificate_present returns 1).
+    /// Traps if data_certificate_present returns 0.
+    fn ic0_data_certificate_copy_64(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -949,6 +1185,13 @@ pub trait SystemApi {
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
     fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32>;
+
+    /// Checks whether the principal identified by src/size is one of the
+    /// controllers of the canister. If yes, then a value of 1 is returned,
+    /// otherwise a 0 is returned. It can be called multiple times.
+    ///
+    /// This system call traps if src+size exceeds the size of the WebAssembly memory.
+    fn ic0_is_controller_64(&self, src: u64, size: u64, heap: &[u8]) -> HypervisorResult<u32>;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

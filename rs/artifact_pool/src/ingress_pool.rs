@@ -285,6 +285,11 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
         );
     }
 
+    /// Removes an unvalidated ingress message from the unvalidated section.
+    fn remove(&mut self, id: &IngressMessageId) {
+        self.unvalidated.remove(id);
+    }
+
     /// Apply changeset to the Ingress Pool
     fn apply_changes(
         &mut self,
@@ -583,6 +588,31 @@ mod tests {
                 // Ingress message not in the pool
                 let ingress_msg = SignedIngressBuilder::new().nonce(3).build();
                 assert!(!ingress_pool.contains(&IngressMessageId::from(&ingress_msg)));
+            })
+        })
+    }
+
+    #[test]
+    fn test_insert_remove() {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let time_source = FastForwardTimeSource::new();
+                let metrics_registry = MetricsRegistry::new();
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+
+                let ingress_msg = SignedIngressBuilder::new().nonce(1).build();
+                let message_id = IngressMessageId::from(&ingress_msg);
+
+                ingress_pool.insert(UnvalidatedArtifact {
+                    message: ingress_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: time_source.get_relative_time(),
+                });
+                assert!(ingress_pool.contains(&message_id));
+
+                ingress_pool.remove(&message_id);
+                assert!(!ingress_pool.contains(&message_id));
             })
         })
     }

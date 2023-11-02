@@ -1,6 +1,10 @@
 use clap::Parser;
-use ic_recovery::{cli, util, NeuronArgs, RecoveryArgs};
-use ic_subnet_splitting::subnet_splitting::{SubnetSplitting, SubnetSplittingArgs};
+use ic_base_types::SubnetId;
+use ic_recovery::{cli, error::RecoveryResult, util, NeuronArgs, RecoveryArgs};
+use ic_subnet_splitting::{
+    subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
+    validation::validate_artifacts,
+};
 use ic_types::ReplicaVersion;
 use slog::Logger;
 use url::Url;
@@ -8,8 +12,7 @@ use url::Url;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[clap(version = "1.0")]
-struct Args {
+struct SplitArgs {
     #[clap(
         short = 'r',
         long,
@@ -40,6 +43,47 @@ struct Args {
     subnet_splitting_args: SubnetSplittingArgs,
 }
 
+#[derive(Parser)]
+struct ValidateArgs {
+    /// Path to the State Tree signed by the NNS
+    #[clap(long, parse(from_os_str))]
+    state_tree_path: PathBuf,
+
+    /// (Optional) path to the NNS public key. If not set, the built-in public key is used.
+    #[clap(long, parse(from_os_str))]
+    nns_public_key_path: Option<PathBuf>,
+
+    /// Path to the original, pre-split, CUP retrieved from the Source Subnet.
+    #[clap(long, parse(from_os_str))]
+    cup_path: PathBuf,
+
+    /// Path to the original, pre-split, state manifest computed from the state on the Source
+    /// Subnet.
+    #[clap(long, parse(from_os_str))]
+    state_manifest_path: PathBuf,
+
+    /// SubnetId of the subnet being split.
+    #[clap(long, parse(try_from_str=ic_recovery::util::subnet_id_from_str))]
+    source_subnet_id: SubnetId,
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Parser)]
+enum Subcommand {
+    /// Perform Subnet Splitting
+    Split(SplitArgs),
+
+    /// Validate artifacts produced during subnet splitting
+    Validate(ValidateArgs),
+}
+
+#[derive(Parser)]
+#[clap(version = "1.0")]
+struct SubnetSplittingToolArgs {
+    #[clap(subcommand)]
+    subcommand: Subcommand,
+}
+
 fn subnet_splitting(
     logger: Logger,
     recovery_args: RecoveryArgs,
@@ -64,9 +108,7 @@ fn subnet_splitting(
     cli::execute_steps(&logger, subnet_splitting);
 }
 
-fn main() {
-    let logger = util::make_logger();
-    let args = Args::parse();
+fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
     let recovery_args = RecoveryArgs {
         dir: args.dir,
         nns_url: args.nns_url,
@@ -84,4 +126,28 @@ fn main() {
         subnet_splitting_state.subcommand_args,
         subnet_splitting_state.neuron_args,
     );
+
+    Ok(())
+}
+
+fn do_validate(args: ValidateArgs, logger: Logger) -> RecoveryResult<()> {
+    validate_artifacts(
+        args.state_tree_path,
+        args.nns_public_key_path.as_deref(),
+        args.cup_path,
+        args.state_manifest_path,
+        args.source_subnet_id,
+        &logger,
+    )
+}
+
+fn main() -> RecoveryResult<()> {
+    let args = SubnetSplittingToolArgs::parse();
+
+    let logger = util::make_logger();
+
+    match args.subcommand {
+        Subcommand::Split(split_args) => do_split(split_args, logger),
+        Subcommand::Validate(validate_args) => do_validate(validate_args, logger),
+    }
 }

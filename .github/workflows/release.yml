@@ -20,14 +20,16 @@ jobs:
         run: |
           set -euxo pipefail
 
-          REVS_FILE="testnet/mainnet_revisions.json"
-          NNS_RELEASE="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' $REVS_FILE)"
-          DOWNLOAD_PREFIX="http://download.dfinity.systems/ic/${NNS_RELEASE}"
+          DOWNLOAD_PREFIX="http://download.dfinity.systems/ic/$GITHUB_SHA"
 
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.gz" -o setup-os-img.tar.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.gz" -o update-os-img.tar.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/ic-admin.gz" -o ic-admin-x86_64-linux.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/ic-admin.gz" -o ic-admin-x86_64-darwin.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/drun.gz" -o drun-x86_64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/drun.gz" -o drun-x86_64-darwin.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/pocket-ic.gz" -o pocket-ic-x86_64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/pocket-ic.gz" -o pocket-ic-x86_64-darwin.gz
           sha256sum *.gz > sha256sums.txt
 
           echo "DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX}" >> "$GITHUB_ENV"
@@ -65,8 +67,9 @@ jobs:
           mkdir canisters && pushd canisters
           for C in "${CANISTERS[@]}"; do
             curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.gz" -O
+            curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.did" -O
           done
-          tar -cf canisters.tar *.gz
+          tar -cf canisters.tar *.gz *.did
           mv canisters.tar ..
           popd
 
@@ -84,4 +87,8 @@ jobs:
             update-os-img.tar.gz
             ic-admin-x86_64-linux.gz
             ic-admin-x86_64-darwin.gz
+            drun-x86_64-linux.gz
+            drun-x86_64-darwin.gz
+            pocket-ic-x86_64-linux.gz
+            pocket-ic-x86_64-darwin.gz
             sha256sums.txt

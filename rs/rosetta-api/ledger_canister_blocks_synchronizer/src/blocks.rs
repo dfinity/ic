@@ -48,7 +48,7 @@ mod database_access {
         Ok(())
     }
 
-    pub const INSERT_INTO_TRANSACTIONS_STATEMENT: &str = "INSERT INTO transactions (block_idx, tx_hash, operation_type, from_account, to_account, amount, fee, created_at_time, memo, icrc1_memo) VALUES (:index, :tx_hash, :op, :from, :to, :tokens, :fee, :created_at_time, :memo, :icrc1_memo)";
+    pub const INSERT_INTO_TRANSACTIONS_STATEMENT: &str = "INSERT INTO transactions (block_idx, tx_hash, operation_type, from_account, to_account, amount, fee, created_at_time, memo, icrc1_memo, spender_account, allowance, expected_allowance, expires_at) VALUES (:index, :tx_hash, :op, :from, :to, :tokens, :fee, :created_at_time, :memo, :icrc1_memo, :spender, :allowance, :expected_allowance, :expires_at)";
 
     pub fn push_transaction(
         connection: &mut Connection,
@@ -79,7 +79,7 @@ mod database_access {
         let icrc1_memo = tx.icrc1_memo.as_ref().map(|memo| memo.to_vec());
         let operation_type = tx.operation.clone();
         match operation_type {
-            Operation::Burn { from, amount } => {
+            Operation::Burn { from, amount, .. } => {
                 let op_string: &str = operation_type.into();
                 let from_account = from.to_hex();
                 let tokens = amount.get_e8s();
@@ -119,13 +119,43 @@ mod database_access {
                 })
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
-            Operation::Approve { .. } => todo!(),
-            Operation::TransferFrom { .. } => todo!(),
+            Operation::Approve {
+                from,
+                spender,
+                allowance,
+                expected_allowance,
+                expires_at,
+                fee,
+            } => {
+                let op_string: &str = operation_type.into();
+                let from_account = from.to_hex();
+                let allowance = allowance.get_e8s();
+                let expected_allowance = expected_allowance.map(|a| a.get_e8s());
+                let spender_account = spender.to_hex();
+                let expires_at = expires_at.map(timestamp_to_iso8601);
+                let fees = fee.get_e8s();
+                stmt.execute(named_params! {
+                    ":index": index,
+                    ":tx_hash": tx_hash,
+                    ":op": op_string,
+                    ":from": from_account,
+                    ":spender": spender_account,
+                    ":allowance": allowance,
+                    ":expected_allowance": expected_allowance,
+                    ":expires_at": expires_at,
+                    ":fee": fees,
+                    ":created_at_time": created_at_time,
+                    ":memo": memo,
+                    ":icrc1_memo": icrc1_memo,
+                })
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            }
             Operation::Transfer {
                 from,
                 to,
                 amount,
                 fee,
+                ..
             } => {
                 let op_string: &str = operation_type.into();
                 let from_account = from.to_hex();
@@ -414,7 +444,7 @@ mod database_access {
                 Ok(account_balance_opt)
             };
         match operation_type {
-            Operation::Burn { from, amount } => {
+            Operation::Burn { from, amount, .. } => {
                 let account_balance_opt = extract_latest_balance(from)?;
                 match account_balance_opt {
                     Some(mut balance) => {
@@ -466,12 +496,6 @@ mod database_access {
                 }
             }
             Operation::Transfer {
-                from,
-                to,
-                amount,
-                fee,
-            }
-            | Operation::TransferFrom {
                 from,
                 to,
                 amount,
@@ -756,9 +780,13 @@ impl Blocks {
                 operation_type VARCHAR NOT NULL,
                 from_account VARCHAR(64),
                 to_account VARCHAR(64),
-                amount INTEGER NOT NULL,
+                spender_account VARCHAR(64),
+                amount INTEGER,
+                allowance INTEGER,
+                expected_allowance INTEGER,
                 fee INTEGER,
                 created_at_time TEXT,
+                expires_at TEXT,
                 memo TEXT,
                 icrc1_memo BLOB,
                 PRIMARY KEY(block_idx),

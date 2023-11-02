@@ -1,12 +1,14 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::ReplicatedState;
 use ic_types::nominal_cycles::NominalCycles;
 
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    self as ic00, CanisterChange, CanisterHttpRequestArgs, CanisterIdRecord,
+    self as ic00, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs, CanisterIdRecord,
     CanisterStatusResultV2, CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     HttpMethod, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, TransformContext, TransformFunc, IC_00,
@@ -35,6 +37,7 @@ use ic_types::{
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm};
+use maplit::btreemap;
 use std::mem::size_of;
 
 #[cfg(test)]
@@ -354,10 +357,7 @@ fn callee_can_reject() {
         assert_eq!(msg.respondent, canister_id);
         assert_eq!(
             msg.response_payload,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: "MONOLORD".to_string()
-            })
+            Payload::Reject(RejectContext::new(RejectCode::CanisterReject, "MONOLORD"))
         );
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -410,10 +410,7 @@ fn response_callback_can_reject() {
         assert_eq!(msg.respondent, b_id);
         assert_eq!(
             msg.response_payload,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: "error".to_string()
-            })
+            Payload::Reject(RejectContext::new(RejectCode::CanisterReject, "error"))
         );
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -497,10 +494,10 @@ fn stopping_canister_rejects_requests() {
         assert_eq!(msg.respondent, b_id);
         assert_eq!(
             msg.response_payload,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: format!("IC0509: Canister {} is not running", b_id)
-            })
+            Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!("IC0509: Canister {} is not running", b_id)
+            ))
         );
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -542,10 +539,10 @@ fn stopped_canister_rejects_requests() {
         assert_eq!(msg.respondent, b_id);
         assert_eq!(
             msg.response_payload,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: format!("IC0508: Canister {} is not running", b_id)
-            })
+            Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!("IC0508: Canister {} is not running", b_id)
+            ))
         );
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -844,6 +841,422 @@ fn stop_canister_from_another_canister() {
 }
 
 #[test]
+fn stop_canister_creates_entry_in_subnet_call_context_manager() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id, controllers)
+        .unwrap();
+
+    // SubnetCallContextManager does not contain any stop canister requests before executing the message.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    // Inject a stop canister request.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    assert_eq!(
+        CanisterStatusType::Running,
+        test.canister_state(canister_id).status()
+    );
+
+    test.execute_subnet_message();
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id).status()
+    );
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .ready_to_stop());
+    // SubnetCallContextManager contains a stop canister requests after executing the message.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    // Inject another stop canister request.
+    // Executing this request will add another entry in the SubnetCallContextManager.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id).status()
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        2
+    );
+
+    // Stops canister and removes all the stop canister requests from SubnetCallContextManager.
+    test.process_stopping_canisters();
+
+    // SubnetCallContextManager does not contain any stop canister requests after processing the requests.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    // Test metrics are observed for stopping canister functionality.
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[
+                    (
+                        "method_name",
+                        "ic00_provisional_create_canister_with_cycles"
+                    ),
+                    ("outcome", "finished"),
+                    ("status", "success"),
+                ],
+                1
+            ),
+            (
+                &[
+                    ("method_name", "ic00_stop_canister"),
+                    ("outcome", "finished"),
+                    ("status", "success"),
+                ],
+                2
+            ),
+            (
+                &[
+                    ("method_name", "ic00_update_settings"),
+                    ("outcome", "finished"),
+                    ("status", "success"),
+                ],
+                1
+            )
+        ]),
+        fetch_histogram_vec_count(
+            test.metrics_registry(),
+            "execution_subnet_message_duration_seconds"
+        )
+    );
+}
+
+#[test]
+fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create two canisters.
+    let canister_id_1 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let canister_id_2 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id_1, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(canister_id_2, controllers)
+        .unwrap();
+
+    // SubnetCallContextManager does not contain any entries before executing the messages.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    //
+    // Test stop canister call with canister request origin.
+    //
+
+    // `stop_canister()` only puts the canister in state `Stopping`. The state gets
+    // changed from `Stopping` to `Stopped` (if there are no open call contexts) at
+    // the end of the round, but the test never executes a full round.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id_1)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Canister 1 is now in state `Stopping`.
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id_1).status()
+    );
+    // And `SubnetCallContextManager` contains one `StopCanisterCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    // Helper function for invoking `after_split()`.
+    fn after_split(state: &mut ReplicatedState) {
+        state.metadata.split_from = Some(state.metadata.own_subnet_id);
+        state.after_split();
+    }
+
+    // A no-op subnet split (no canisters migrated).
+    after_split(test.state_mut());
+
+    // Retains the `StopCanisterCall` and does not produce a response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Simulate a subnet split that migrates canister 1 to another subnet.
+    test.state_mut().take_canister_state(&canister_id_1);
+    after_split(test.state_mut());
+
+    // Should have removed the `StopCanisterCall` and produced a reject response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+
+    //
+    // Test stop canister call with ingress origin.
+    //
+    let ingress_id = test.stop_canister(canister_id_2);
+
+    // Canister 2 is now in state `Stopping`.
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id_2).status()
+    );
+    // And `SubnetCallContextManager` contains one `StopCanisterCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    // A no-op subnet split (no canisters migrated).
+    after_split(test.state_mut());
+
+    // Retains the `StopCanisterCall` and does not change the ingress state.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+    assert_matches!(
+        test.ingress_status(&ingress_id),
+        IngressStatus::Unknown // As opposed to `Known::Failed`.
+    );
+
+    // Simulate a subnet split that migrates canister 2 to another subnet.
+    test.state_mut().take_canister_state(&canister_id_2);
+    after_split(test.state_mut());
+
+    // Should have removed the `StopCanisterCall` and set the ingress state to `Failed`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+    assert_eq!(
+        check_ingress_status(test.ingress_status(&ingress_id)),
+        Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {} migrated during a subnet split", canister_id_2),
+        ))
+    );
+}
+
+/// Ensures that in-progress stop canister calls are left in a consistent state
+/// after a subnet split: i.e. there is no stop canister call that is tracked by
+/// a canister, but not by the subnet call context manager; or the other way
+/// around.
+#[test]
+fn consistent_stop_canister_calls_after_split() {
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(subnet_a)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(subnet_a, caller_canister)
+        .build();
+
+    // Create two canisters.
+    let canister_id_1 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let canister_id_2 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id_1, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(canister_id_2, controllers)
+        .unwrap();
+
+    // No in-progress stop canister calls across the subnet.
+    assert_consistent_stop_canister_calls(test.state(), 0);
+
+    // Start executing one stop canister call as canister request on each canister.
+    //
+    // `stop_canister()` only puts the canister in state `Stopping`. The state gets
+    // changed from `Stopping` to `Stopped` (if there are no open call contexts) at
+    // the end of the round, but the test never executes a full round.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id_1)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id_2)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Start executing one stop canister call as ingress message on each canister.
+    test.stop_canister(canister_id_1);
+    test.stop_canister(canister_id_2);
+
+    // 4 in-progress stop canister calls across the subnet.
+    assert_consistent_stop_canister_calls(test.state(), 4);
+
+    // Retain canister 1 on subnet A, migrate canister 2 to subnet B.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: canister_id_1, end: canister_id_1} => subnet_a,
+        CanisterIdRange {start: canister_id_2, end: canister_id_2} => subnet_b,
+    })
+    .unwrap();
+
+    // Split subnet A'.
+    let mut state_a = test
+        .state()
+        .clone()
+        .split(subnet_a, &routing_table, None)
+        .unwrap();
+
+    // Restore consistency between stop canister calls tracked by canisters and subnet.
+    state_a.after_split();
+
+    // 2 in-progress stop canister calls across subnet A'.
+    assert_consistent_stop_canister_calls(&state_a, 2);
+
+    // Split subnet B.
+    let mut state_b = test
+        .state()
+        .clone()
+        .split(subnet_b, &routing_table, None)
+        .unwrap();
+
+    // Restore consistency between stop canister calls tracked by canisters and subnet.
+    state_b.after_split();
+
+    // 0 in-progress stop canister calls across subnet B.
+    assert_consistent_stop_canister_calls(&state_b, 0);
+}
+
+/// Helper function asserting that there is an exact match between in-progress
+/// stop canister calls tracked by the subnet call context manager on the one
+/// hand; and by the canisters, on the other.
+fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls: usize) {
+    // Collect all `StopCanisterContexts` from all stopping canisters.
+    let canister_stop_canister_contexts: Vec<_> = state
+        .canister_states
+        .values()
+        .filter_map(|canister| {
+            if let CanisterStatus::Stopping {
+                call_context_manager: _,
+                stop_contexts,
+            } = &canister.system_state.status
+            {
+                Some(stop_contexts.iter().cloned())
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .collect();
+    assert_eq!(expected_calls, canister_stop_canister_contexts.len());
+
+    // Clone the `SubnetCallContextManager` and remove all calls collected above from it.
+    let mut subnet_call_context_manager = state.metadata.subnet_call_context_manager.clone();
+    for context in canister_stop_canister_contexts {
+        subnet_call_context_manager
+            .remove_stop_canister_call(context.call_id().unwrap())
+            .unwrap_or_else(|| {
+                panic!(
+                    "Canister StopCanisterContext without matching subnet StopCanisterCall: {:?}",
+                    context
+                )
+            });
+    }
+
+    // And ensure that no `StopCanisterCalls` are left over in the `SubnetCallContextManager`.
+    assert!(
+            subnet_call_context_manager.stop_canister_calls_len() == 0,
+            "StopCanisterCalls in SubnetCallContextManager without matching canister StopCanisterContexts: {:?}",
+            subnet_call_context_manager.remove_non_local_stop_canister_calls(|_| false)
+        );
+}
+
+#[test]
 fn starting_a_stopping_canister_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
@@ -1071,14 +1484,14 @@ fn setup_initial_dkg_sender_not_on_nns() {
             respondent: CanisterId::from(own_subnet),
             originator_reply_callback: CallbackId::new(0),
             refund: test.canister_creation_fee(),
-            response_payload: Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: format!(
+            response_payload: Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!(
                     "{} is called by {}. It can only be called by NNS.",
                     ic00::Method::SetupInitialDKG,
                     other_canister,
                 )
-            })
+            ))
         }
         .into()
     );
@@ -1087,10 +1500,9 @@ fn setup_initial_dkg_sender_not_on_nns() {
 #[test]
 fn metrics_are_observed_for_subnet_messages() {
     let mut test = ExecutionTestBuilder::new().build();
-    let methods: [ic00::Method; 6] = [
+    let methods: [ic00::Method; 5] = [
         ic00::Method::CreateCanister,
         ic00::Method::InstallCode,
-        ic00::Method::SetController,
         ic00::Method::StartCanister,
         ic00::Method::StopCanister,
         ic00::Method::DeleteCanister,
@@ -1116,14 +1528,6 @@ fn metrics_are_observed_for_subnet_messages() {
             (
                 &[
                     ("method_name", "ic00_install_code"),
-                    ("outcome", "error"),
-                    ("status", "InvalidManagementPayload"),
-                ],
-                1
-            ),
-            (
-                &[
-                    ("method_name", "ic00_set_controller"),
                     ("outcome", "error"),
                     ("status", "InvalidManagementPayload"),
                 ],
@@ -1250,6 +1654,23 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
         .should_accept_ingress_message(canister, "", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
+}
+
+#[test]
+fn should_accept_ingress_filters_correctly_on_method_type() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+
+    let result = test.should_accept_ingress_message(canister, "update", vec![]);
+    assert_eq!(Ok(()), result);
+
+    let result = test.should_accept_ingress_message(canister, "query", vec![]);
+    assert_eq!(Ok(()), result);
+
+    let err = test
+        .should_accept_ingress_message(canister, "composite_query", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CompositeQueryCalledInReplicatedMode, err.code());
 }
 
 #[test]
@@ -1436,7 +1857,7 @@ fn execute_canister_http_request() {
     let args = CanisterHttpRequestArgs {
         url: url.clone(),
         max_response_bytes: Some(response_size_limit),
-        headers: Vec::new(),
+        headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,
         transform: Some(TransformContext {
@@ -1515,7 +1936,7 @@ fn execute_canister_http_request_disabled() {
     let args = CanisterHttpRequestArgs {
         url,
         max_response_bytes: None,
-        headers: Vec::new(),
+        headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,
         transform: Some(TransformContext {
@@ -1544,7 +1965,7 @@ fn get_reject_message(response: RequestOrResponse) -> String {
         RequestOrResponse::Request(_) => panic!("Expected Response"),
         RequestOrResponse::Response(resp) => match &resp.response_payload {
             Payload::Data(_) => panic!("Expected Reject"),
-            Payload::Reject(reject) => reject.message.clone(),
+            Payload::Reject(reject) => reject.message().clone(),
         },
     }
 }
@@ -2194,7 +2615,7 @@ fn replicated_query_refunds_all_sent_cycles() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transfered_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000u128);
 
     let b_callback = wasm().message_payload().append_and_reply().build();
 
@@ -2203,7 +2624,7 @@ fn replicated_query_refunds_all_sent_cycles() {
             b_id.get(),
             "query",
             call_args().other_side(b_callback.clone()),
-            transfered_cycles,
+            transferred_cycles,
         )
         .build();
 
@@ -2227,7 +2648,7 @@ fn replicated_query_refunds_all_sent_cycles() {
     if let RequestOrResponse::Response(msg) = message {
         assert_eq!(msg.originator, a_id);
         assert_eq!(msg.respondent, b_id);
-        assert_eq!(msg.refund, transfered_cycles);
+        assert_eq!(msg.refund, transferred_cycles);
         assert!(matches!(msg.response_payload, Payload::Data(..)));
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -2269,13 +2690,13 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transfered_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000u128);
 
     // Even though canister B is trying to accept cycles
     // it will not accept it since the IC does not allow
     // accepting cycles in replicated queries.
     let b_callback = wasm()
-        .accept_cycles(transfered_cycles)
+        .accept_cycles(transferred_cycles)
         .message_payload()
         .append_and_reply()
         .build();
@@ -2285,7 +2706,7 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
             b_id.get(),
             "query",
             call_args().other_side(b_callback.clone()),
-            transfered_cycles,
+            transferred_cycles,
         )
         .build();
 
@@ -2309,7 +2730,7 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
     let response_payload = if let RequestOrResponse::Response(msg) = message {
         assert_eq!(msg.originator, a_id);
         assert_eq!(msg.respondent, b_id);
-        assert_eq!(msg.refund, transfered_cycles);
+        assert_eq!(msg.refund, transferred_cycles);
         if let Payload::Reject(context) = msg.response_payload.clone() {
             context
         } else {

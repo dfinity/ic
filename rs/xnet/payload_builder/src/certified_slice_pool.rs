@@ -664,19 +664,19 @@ impl Payload {
 
     /// Returns the `FlatMap` contained in a `SubTree`; `Err(InvalidPayload)` if
     /// `tree` is a `Leaf`.
-    fn children_of(tree: PayloadTree) -> CertifiedSliceResult<PayloadTreeMap> {
-        match tree {
-            LabeledTree::SubTree(children) => Ok(children),
+    fn children_of(mut tree: PayloadTree) -> CertifiedSliceResult<PayloadTreeMap> {
+        match &mut tree {
+            LabeledTree::SubTree(children) => Ok(std::mem::take(children)),
             LabeledTree::Leaf(_) => Err(CertifiedSliceError::InvalidPayload(NotASubTree)),
         }
     }
 
     /// Returns the value contained in a `Leaf`; `Err(InvalidPayload)` if `leaf`
     /// is a `SubTree`.
-    fn value_of(leaf: PayloadTree) -> CertifiedSliceResult<Vec<u8>> {
-        match leaf {
+    fn value_of(mut leaf: PayloadTree) -> CertifiedSliceResult<Vec<u8>> {
+        match &mut leaf {
             LabeledTree::SubTree(_) => Err(CertifiedSliceError::InvalidPayload(NotALeaf)),
-            LabeledTree::Leaf(value) => Ok(value),
+            LabeledTree::Leaf(value) => Ok(std::mem::take(value)),
         }
     }
 

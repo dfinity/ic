@@ -207,7 +207,7 @@ impl DkgImpl {
         messages: Vec<&Message>,
     ) -> ChangeSet {
         // Because dealing generation is not entirely deterministic, it is
-        // actually possible to recieve multiple dealings from an honest dealer.
+        // actually possible to receive multiple dealings from an honest dealer.
         // As such, we simply try validating the first message in the list, and
         // get a result for that message. Other messages will be dealt with by
         // subsequent calls to this function.
@@ -361,9 +361,7 @@ pub fn validate_payload(
         // We expect the parent to be valid, so there will be _always_ a DKG start block on the
         // chain.
         .expect("No DKG start block found for the parent block.");
-    let last_dkg_summary = BlockPayload::from(last_summary_block.payload)
-        .into_summary()
-        .dkg;
+    let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
 
     let current_height = parent.height.increment();
     let is_dkg_start_height = last_dkg_summary.get_next_start_height() == current_height;
@@ -403,7 +401,7 @@ pub fn validate_payload(
             crypto,
             pool_reader,
             dkg_pool,
-            &last_dkg_summary,
+            last_dkg_summary,
             payload.dkg_interval_start_height(),
             &payload.as_data().dealings.messages,
             &parent,
@@ -435,9 +433,7 @@ pub fn create_payload(
     let last_summary_block = pool_reader
         .dkg_summary_block(parent)
         .ok_or(TransientError::MissingDkgStartBlock)?;
-    let last_dkg_summary = BlockPayload::from(last_summary_block.payload)
-        .into_summary()
-        .dkg;
+    let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
 
     if last_dkg_summary.get_next_start_height() == height {
         // Since `height` corresponds to the start of a new DKG interval, we create a
@@ -521,7 +517,7 @@ fn create_summary_payload(
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
-    last_summary: Summary,
+    last_summary: &Summary,
     parent: &Block,
     registry_version: RegistryVersion,
     state_manager: &dyn StateManager<State = ReplicatedState>,
@@ -588,7 +584,7 @@ fn create_summary_payload(
         subnet_id,
     )?;
     // Current transcripts come from next transcripts of the last_summary.
-    let current_transcripts = last_summary.into_next_transcripts();
+    let current_transcripts = last_summary.clone().into_next_transcripts();
 
     // If the config for the currently computed DKG intervals requires a transcript
     // resharing (currently for high-threshold DKG only), we are going to re-share
@@ -1075,22 +1071,22 @@ fn create_remote_dkg_configs(
     match (low_thr_config, high_thr_config) {
         (Ok(config0), Ok(config1)) => Ok((config0, config1)),
         (Err(err0), Err(err1)) => {
-            error!(logger, "Failled to create a remote DKG config {}", err0);
-            error!(logger, "Failled to create a remote DKG config {}", err1);
+            error!(logger, "Failed to create a remote DKG config {}", err0);
+            error!(logger, "Failed to create a remote DKG config {}", err1);
             Err(vec![
                 (low_thr_dkg_id, err0.to_string()),
                 (high_thr_dkg_id, err1.to_string()),
             ])
         }
         (Ok(_), Err(err1)) => {
-            error!(logger, "Failled to create a remote DKG config {}", err1);
+            error!(logger, "Failed to create a remote DKG config {}", err1);
             Err(vec![
                 (low_thr_dkg_id, sibl_err),
                 (high_thr_dkg_id, err1.to_string()),
             ])
         }
         (Err(err0), Ok(_)) => {
-            error!(logger, "Failled to create a remote DKG config {}", err0);
+            error!(logger, "Failed to create a remote DKG config {}", err0);
             Err(vec![
                 (low_thr_dkg_id, err0.to_string()),
                 (high_thr_dkg_id, sibl_err),
@@ -1130,16 +1126,18 @@ fn get_dkg_dealings(
         .chain_iterator(block.clone())
         .take_while(|block| !block.payload.is_summary())
         .fold(Default::default(), |mut acc, block| {
-            BlockPayload::from(block.payload)
-                .into_data()
+            block
+                .payload
+                .as_ref()
+                .as_data()
                 .dealings
                 .messages
-                .into_iter()
+                .iter()
                 .for_each(|msg| {
                     let collected_dealings = acc.entry(msg.content.dkg_id).or_default();
                     assert!(
                         collected_dealings
-                            .insert(msg.signature.signer, msg.content.dealing)
+                            .insert(msg.signature.signer, msg.content.dealing.clone())
                             .is_none(),
                         "Dealings from the same dealers discovered."
                     );
@@ -1330,7 +1328,7 @@ fn get_dkg_summary_from_cup_contents(
     // For the first 2 intervals we use the length value contained in the
     // genesis subnet record.
     let interval_length = get_dkg_interval_length(registry, registry_version, subnet_id)
-        .expect("Could not retieve the interval length for the genesis summary.");
+        .expect("Could not retrieve the interval length for the genesis summary.");
     let next_interval_length = interval_length;
     Summary::new(
         configs,
@@ -1511,7 +1509,9 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::{
         CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetRecord,
     };
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::SetupInitialDkgContext;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        SetupInitialDkgContext, SubnetCallContext,
+    };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         consensus::fake::FakeContentSigner,
@@ -1586,7 +1586,7 @@ mod tests {
                 // into the block.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = BlockPayload::from(block.payload).into_data().dealings;
+                let dealings = &block.payload.as_ref().as_data().dealings;
                 if dealings.start_height != Height::from(0) {
                     panic!(
                         "Expected start height in dealings {:?}, but found {:?}",
@@ -1605,7 +1605,7 @@ mod tests {
                 // block anymore.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = BlockPayload::from(block.payload).into_data().dealings;
+                let dealings = &block.payload.as_ref().as_data().dealings;
                 assert_eq!(dealings.messages.len(), 0);
 
                 // Now we empty the dkg pool, add new dealings from this dealer and make sure
@@ -1629,7 +1629,7 @@ mod tests {
                 // Advance the pool and make sure the dealing are not included.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = BlockPayload::from(block.payload).into_data().dealings;
+                let dealings = &block.payload.as_ref().as_data().dealings;
                 assert_eq!(dealings.messages.len(), 0);
 
                 // Create another dealer and add his dealings into the unvalidated pool of
@@ -1680,7 +1680,7 @@ mod tests {
                 // Now we create a new block and make sure, the dealings made into the payload.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = BlockPayload::from(block.payload).into_data().dealings;
+                let dealings = &block.payload.as_ref().as_data().dealings;
                 if dealings.start_height != Height::from(0) {
                     panic!(
                         "Expected start height in dealings {:?}, but found {:?}",
@@ -1724,11 +1724,14 @@ mod tests {
             let genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
             let block = pool.get_cache().finalized_block();
             // This first block is expected to contain the genesis summary.
-            match BlockPayload::from(block.payload) {
-                BlockPayload::Summary(summary) => {
-                    assert_eq!(summary.dkg, genesis_summary, "Unexpected genesis summary.");
-                }
-                _ => panic!("Unexpected DKG payload."),
+            if block.payload.as_ref().is_summary() {
+                assert_eq!(
+                    block.payload.as_ref().as_summary().dkg,
+                    genesis_summary,
+                    "Unexpected genesis summary."
+                );
+            } else {
+                panic!("Unexpected DKG payload.")
             };
 
             // Simulate 3 intervals
@@ -1737,14 +1740,13 @@ mod tests {
                 for _ in 0..dkg_interval_len {
                     pool.advance_round_normal_operation();
                     let block = pool.get_cache().finalized_block();
-                    assert!(!BlockPayload::from(block.payload).is_summary());
+                    assert!(!block.payload.as_ref().is_summary());
                 }
 
                 // Advance one more time and get the summary block.
                 pool.advance_round_normal_operation();
-                let dkg_summary = BlockPayload::from(pool.get_cache().finalized_block().payload)
-                    .into_summary()
-                    .dkg;
+                let block = pool.get_cache().finalized_block();
+                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
 
                 assert_eq!(
                     dkg_summary.registry_version,
@@ -1818,7 +1820,7 @@ mod tests {
         });
     }
 
-    /// Tests, which transcripts get reshared, when DKG succeded or failed.
+    /// Tests, which transcripts get reshared, when DKG succeeded or failed.
     #[test]
     fn test_transcript_resharing() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1848,7 +1850,7 @@ mod tests {
             for _ in 0..dkg_interval_len {
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                assert!(!BlockPayload::from(block.payload).is_summary());
+                assert!(!block.payload.as_ref().is_summary());
             }
 
             let latest_block = pool.get_cache().finalized_block();
@@ -1858,7 +1860,7 @@ mod tests {
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
-                    last_summary.clone(),
+                    &last_summary.clone(),
                     &latest_block,
                     RegistryVersion::from(112),
                     state_manager.as_ref(),
@@ -2158,16 +2160,15 @@ mod tests {
         let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();
 
         if let Some(target_id) = target {
-            state
-                .metadata
-                .subnet_call_context_manager
-                .push_setup_initial_dkg_request(SetupInitialDkgContext {
+            state.metadata.subnet_call_context_manager.push_context(
+                SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
                     request: RequestBuilder::new().build(),
                     nodes_in_target_subnet,
                     target_id,
                     registry_version,
                     time: state.time(),
-                });
+                }),
+            );
         }
 
         let mut mock = state_manager.get_mut();
@@ -2391,7 +2392,7 @@ mod tests {
                     let dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
                     let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
 
-                    // We instantiate the DKG component for node Id = 1 nd Id = 2.
+                    // We instantiate the DKG component for node Id = 1 and Id = 2.
                     let dkg_key_manager_1 = new_dkg_key_manager(
                         crypto.clone(),
                         logger.clone(),
@@ -3295,7 +3296,7 @@ mod tests {
             let parent_block = PoolReader::new(&pool).get_finalized_tip();
             // This will be a regular block, since we are not at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
-            let block_payload = BlockPayload::from(block.payload);
+            let block_payload = block.payload.as_ref();
 
             assert!(validate_payload(
                 subnet_test_id(0),
@@ -3304,7 +3305,7 @@ mod tests {
                 &PoolReader::new(&pool),
                 dkg_pool.read().unwrap().deref(),
                 parent_block,
-                &block_payload,
+                block_payload,
                 state_manager.as_ref(),
                 &context,
                 &mock_metrics(),
@@ -3316,7 +3317,7 @@ mod tests {
             let parent_block = PoolReader::new(&pool).get_finalized_tip();
             // This will be a summary block, since we are at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
-            let summary = BlockPayload::from(block.payload);
+            let summary = block.payload.as_ref();
 
             assert!(validate_payload(
                 subnet_test_id(0),
@@ -3325,7 +3326,7 @@ mod tests {
                 &PoolReader::new(&pool),
                 dkg_pool.read().unwrap().deref(),
                 parent_block,
-                &summary,
+                summary,
                 state_manager.as_ref(),
                 &context,
                 &mock_metrics(),
@@ -3346,7 +3347,7 @@ mod tests {
 
             let parent = Block::from(pool.make_next_block());
             let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
-            let last_summary = BlockPayload::from(last_summary_block.payload).into_summary();
+            let last_summary = last_summary_block.payload.as_ref().as_summary();
 
             let validate_dealings_payload = |messages, parent| {
                 validate_dealings_payload(
@@ -3408,7 +3409,7 @@ mod tests {
                 Err(ValidationError::Permanent(PermanentError::InvalidDealer(_)))
             );
 
-            // Use valid message and valid signer but add messges to parent block as well.
+            // Use valid message and valid signer but add messages to parent block as well.
             // Now the message is already in the blockchain, and `DealerAlreadyDealt` error
             // is returned.
             let messages = vec![Message::fake(valid_dealing_content, node_test_id(0))];
@@ -3520,7 +3521,7 @@ mod tests {
                 RegistryVersion::from(5),
                 "The latest available version was used for the summary block."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
             assert_eq!(dkg_summary.height, Height::from(0));
@@ -3570,7 +3571,7 @@ mod tests {
                 RegistryVersion::from(6),
                 "The newest registry version is used."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
@@ -3624,7 +3625,7 @@ mod tests {
                 RegistryVersion::from(10),
                 "The newest registry version is used."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
@@ -3663,7 +3664,7 @@ mod tests {
                 RegistryVersion::from(10),
                 "The latest registry version is used."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
@@ -3700,7 +3701,7 @@ mod tests {
                 RegistryVersion::from(10),
                 "The latest registry version is used."
             );
-            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
@@ -3895,7 +3896,7 @@ mod tests {
     }
 
     // Since the `DkgKeyManager` component is not running, we need to allow it to
-    // make progess occasionally.
+    // make progress occasionally.
     //
     // This function calls on_state_change and sync, to allow the transcripts to be
     // loaded.

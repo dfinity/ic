@@ -927,7 +927,7 @@ mod tests {
             map_len,
         } = curr_mappings.get_raw_iter().next().unwrap();
 
-        // make sure that we got correct size contiguos range over the slots
+        // make sure that we got correct size contiguous range over the slots
         // we allocated
         assert_eq!(*map_len, 10);
         assert_eq!(SlotMgr::get_slot(*physical_slot), allocated_slots[0]);

@@ -12,7 +12,7 @@ use std::convert::TryFrom;
 use std::num::TryFromIntError;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub mod dealers;
 pub mod errors;
@@ -319,7 +319,7 @@ impl NiDkgThreshold {
     /// A `DkgThreshold` can only be created if the following invariants hold:
     /// * The threshold is at least 1 (error: `ThresholdIsZero`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(threshold: NumberOfNodes) -> Result<Self, NiDkgThresholdZeroError> {
         Self::ensure_threshold_is_not_zero(threshold)?;

@@ -11,7 +11,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_secrets_containers::SecretArray;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_types::{NodeIndex, NumberOfNodes};
 use rand::RngCore;
 use serde::Serialize;
@@ -205,7 +205,7 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
 
     let mut coefficients = vec![];
 
-    let mut rng = Seed::from_bytes(b"ic-crypto-generate-random-bls-coefficients").into_rng();
+    let rng = &mut Seed::from_bytes(b"ic-crypto-generate-random-bls-coefficients").into_rng();
 
     let fixed0 = hex::decode("9772c16106e9c70b2073dfe17989225dd10f3adb675365fc6d833587ad4cbd3ae692ad1e20679003f676b0b089e83feb058b3e8b9fc9552e30787cb4a541a1c3bf67a02e91fc648b2c19f4bb333e14c5c73b9bfbc5ec56dadabb07ff15d45124").unwrap();
     coefficients.push(PublicKeyBytes(fixed0.try_into().expect("Size checked")));

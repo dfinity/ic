@@ -15,9 +15,8 @@ use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
-use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
-
 use self::{instrumentation::instrument, validation::validate_wasm_binary};
+use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
 
 pub mod decoding;
 pub mod instrumentation;
@@ -36,17 +35,13 @@ pub struct WasmImportsDetails {
     pub imports_mint_cycles: bool,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
-pub struct Complexity(u64);
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Complexity(pub u64);
 
 /// Returned as a result of `validate_wasm_binary` and provides
 /// additional information about the validation.
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct WasmValidationDetails {
-    // The number of exported functions that are not in the list of
-    // allowed exports and whose name starts with the reserved
-    // "canister_" prefix.
-    pub reserved_exports: usize,
     pub imports_details: WasmImportsDetails,
     pub wasm_metadata: WasmMetadata,
     pub largest_function_instruction_count: NumInstructions,
@@ -190,7 +185,7 @@ pub struct InstrumentationOutput {
     /// Other methods are assumed to be private to the module and are ignored.
     pub exported_functions: BTreeSet<WasmMethod>,
 
-    /// Data segements.
+    /// Data segments.
     pub data: Segments,
 
     /// Instrumented Wasm binary.
@@ -211,6 +206,7 @@ fn validate_and_instrument(
         config.cost_to_compile_wasm_instruction,
         config.feature_flags.write_barrier,
         config.feature_flags.wasm_native_stable_memory,
+        config.metering_type,
         config.subnet_type,
         config.dirty_page_overhead,
     )?;

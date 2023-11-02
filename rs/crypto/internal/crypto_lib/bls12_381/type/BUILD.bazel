@@ -47,8 +47,9 @@ rust_bench(
     crate_root = "benches/ops.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
-        "@crate_index//:criterion",
         ":type",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:criterion",
     ],
 )
 

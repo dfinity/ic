@@ -23,7 +23,7 @@ use std::convert::TryFrom;
 pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 
 /// A generic struct shared between CatchUpContent and CatchUpContentShare.
-/// Consists of objects all occuring at a specific height which we will refer to
+/// Consists of objects all occurring at a specific height which we will refer to
 /// as the catch up height.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
 pub struct CatchUpContentT<T> {

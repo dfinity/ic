@@ -1,17 +1,141 @@
-type MinterArg = variant {
-    InitArg : record { ecdsa_key_name : text };
-    UpgradeArg;
+type EthereumNetwork = variant {
+    // The public Ethereum mainnet.
+    Mainnet;
+    // The public Ethereum Sepolia testnet.
+    Sepolia;
+};
+
+type BlockTag = variant {
+    /// The latest mined block.
+    Latest;
+
+    /// The latest safe head block.
+    Safe;
+
+    /// The latest finalized block.
+    Finalized;
+};
+
+// The initialization parameters of the minter canister.
+type InitArg = record {
+    // The minter will interact with this Ethereum network.
+    ethereum_network : EthereumNetwork;
+
+    // The name of the ECDSA key to use.
+    // E.g., "dfx_test_key" on the local replica.
+    ecdsa_key_name : text;
+
+    // Address of the helper smart contract.
+    ethereum_contract_address : opt text;
+
+    // The principal of the ledger that handles ckETH transfers.
+    // The default account of the ckETH minter must be configured as
+    // the minting account of the ledger.
+    ledger_id : principal;
+
+    // Determine ethereum block height observed by minter.
+    ethereum_block_height: BlockTag;
+
+    // Minimum amount in Wei that can be withdrawn.
+    minimum_withdrawal_amount : nat;
+
+    // Nonce of the next transaction to be sent to the Ethereum network.
+    next_transaction_nonce : nat
+};
+
+type UpgradeArg = record {
+    // Change the nonce of the next transaction to be sent to the Ethereum network.
+    next_transaction_nonce : opt nat;
+
+    // Change the minimum amount in Wei that can be withdrawn.
+    minimum_withdrawal_amount : opt nat;
+
+    // Change the helper smart contract address.
+    ethereum_contract_address : opt text;
+
+    // Change the ethereum block height observed by the minter.
+    ethereum_block_height : opt BlockTag;
+};
+
+type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
+
+// Estimate price of an EIP-1559 transaction
+// when converting ckETH to ETH, see https://eips.ethereum.org/EIPS/eip-1559
+type Eip1559TransactionPrice = record {
+    // Maximum amount of gas transaction is authorized to consume.
+    gas_limit : nat;
+
+    // Maximum amount of Wei per gas unit that the transaction is willing to pay in total.
+    // This covers the base fee determined by the network and the `max_priority_fee_per_gas`.
+    max_fee_per_gas : nat;
+
+    // Maximum amount of Wei per gas unit that the transaction gives to miners
+    // to incentivize them to include their transaction (priority fee).
+    max_priority_fee_per_gas : nat;
+
+    // Maximum amount of Wei that can be charged for the transaction,
+    // computed as `max_fee_per_gas * gas_limit`
+    max_transaction_fee : nat;
+};
+
+// Retrieve the status of a withdrawal request.
+type RetrieveEthStatus = variant {
+    // Withdrawal request is not found.
+    NotFound;
+
+    // Withdrawal request is waiting to be processed.
+    Pending;
+
+    // Transaction fees were estimated and an Ethereum transaction was created.
+    // Transaction is not signed yet.
+    TxCreated;
+
+    // Ethereum transaction is signed and ready to be sent.
+    TxSigned : record {transaction_hash : text};
+
+    // Ethereum transaction is sent to the network.
+    TxSent : record {transaction_hash : text};
+
+    // Ethereum transaction is confirmed.
+    TxConfirmed : record {transaction_hash : text};
+};
+type WithdrawalArg = record { recipient : text; amount : nat };
+type RetrieveEthRequest = record { block_index : nat };
+type WithdrawalError = variant {
+    // The withdrawal amount is too low.
+    // The payload contains the minimal withdrawal amount.
+    AmountTooLow : record { min_withdrawal_amount : nat };
+    // The ckETH balance of the withdrawal account is too low.
+    InsufficientFunds : record { balance : nat };
+    // The allowance given to the minter is too low.
+    InsufficientAllowance : record { allowance : nat };
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
 };
 
 service : (MinterArg) -> {
+    // Retrieve the Ethereum address controlled by the minter:
+    // * Deposits will be transferred from the helper smart contract to this address
+    // * Withdrawals will originate from this address
+    // IMPORTANT: Do NOT send ETH to this address directly. Use the helper smart contract instead so that the minter
+    // knows to which IC principal the funds should be deposited.
     minter_address : () -> (text);
-    display_logs: (record {
-      address : text;
-      from : text;
-      to : text;
-    }) -> (vec record {
-      to_address : text;
-      value : nat;
-      "principal" : principal;
-    });
+
+    // Address of the helper smart contract.
+    // IMPORTANT:
+    // * Use this address to send ETH to the minter to convert it to ckETH.
+    // * In case the smart contract needs to be updated the returned address will change!
+    //   Always check the address before making a transfer.
+    smart_contract_address : () -> (text) query;
+
+    // Estimate the price of a transaction issued by the minter when converting ckETH to ETH.
+    eip_1559_transaction_price : () -> (Eip1559TransactionPrice);
+
+    // Withdraw the specified amount in Wei to the given Ethereum address.
+    // IMPORTANT: The current gas limit is set to 21,000 for a transaction so withdrawals to smart contract addresses will likely fail.
+    withdraw_eth : (WithdrawalArg) -> (variant { Ok : RetrieveEthRequest; Err : WithdrawalError });
+
+    // Retrieve the status of a withdrawal request.
+    retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
 }

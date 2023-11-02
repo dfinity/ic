@@ -380,7 +380,7 @@ impl IngressManager {
         if let Err(err) = self.request_validator.validate_request(
             signed_ingress.as_ref(),
             context.time,
-            context.registry_version,
+            &self.registry_root_of_trust_provider(context.registry_version),
         ) {
             let message_id = MessageId::from(&ingress_id);
             return Err(ValidationError::Permanent(match err {
@@ -633,7 +633,7 @@ mod tests {
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
                     let attribute = IngressMessageAttribute::new(m);
-                    access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                    access_ingress_pool(&ingress_pool, |ingress_pool| {
                         ingress_pool.insert(UnvalidatedArtifact {
                             message: m.clone(),
                             peer_id: node_test_id(0),
@@ -822,7 +822,7 @@ mod tests {
                     .build();
                 let message_id = IngressMessageId::from(&ingress_msg1);
                 let attribute = IngressMessageAttribute::new(&ingress_msg1);
-                access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg1.clone(),
                         peer_id: node_test_id(0),
@@ -882,7 +882,7 @@ mod tests {
                     .build();
                 let message_id = IngressMessageId::from(&ingress_msg1);
                 let attribute = IngressMessageAttribute::new(&ingress_msg1);
-                access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg1.clone(),
                         peer_id: node_test_id(0),
@@ -957,7 +957,7 @@ mod tests {
                     .build();
 
                 // add them to the pool
-                access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                access_ingress_pool(&ingress_pool, |ingress_pool| {
                     let message_id = IngressMessageId::from(&ingress_msg1);
                     let attribute = IngressMessageAttribute::new(&ingress_msg1);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1047,7 +1047,7 @@ mod tests {
                     .build();
 
                 // add them to the pool
-                access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                access_ingress_pool(&ingress_pool, |ingress_pool| {
                     let message_id = IngressMessageId::from(&ingress_msg1);
                     let attribute = IngressMessageAttribute::new(&ingress_msg1);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1238,7 +1238,7 @@ mod tests {
                 let attribute1 = IngressMessageAttribute::new(&ingress_msg1);
                 let attribute2 = IngressMessageAttribute::new(&ingress_msg2);
 
-                access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg1.clone(),
                         peer_id: node_test_id(0),
@@ -1436,7 +1436,7 @@ mod tests {
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
                     let attribute = IngressMessageAttribute::new(m);
-                    access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                    access_ingress_pool(&ingress_pool, |ingress_pool| {
                         ingress_pool.insert(UnvalidatedArtifact {
                             message: m.clone(),
                             peer_id: node_test_id(0),

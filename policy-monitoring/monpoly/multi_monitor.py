@@ -60,7 +60,7 @@ class MultiMonitor:
         )
 
     def __enter__(self):
-        """Prepare the requied Monpoly sessions"""
+        """Prepare the required Monpoly sessions"""
         for mon in self._monitors:
             mon.__enter__()
         self._timeout_thread.start()

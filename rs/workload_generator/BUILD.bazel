@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -20,17 +20,12 @@ DEPENDENCIES = [
     "@crate_index//:console",
     "@crate_index//:futures",
     "@crate_index//:hex",
-    "@crate_index//:hyper",
-    "@crate_index//:hyper-tls",
     "@crate_index//:indicatif",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
-    "@crate_index//:leaky-bucket",
     "@crate_index//:prometheus",
     "@crate_index//:rand_0_8_4",
-    "@crate_index//:regex",
     "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:slog-scope",

@@ -50,7 +50,10 @@
     crypto: {
         // The directory that should be used to persist crypto state.
         crypto_root: "/var/lib/ic/crypto",
-        csp_vault_type: { unix_socket: "/run/ic-node/crypto-csp/socket" },
+        // The logic and metrics sockets for communicating with the crypto csp vault.
+        // Shall match the values configured in
+        // ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.socket
+        csp_vault_type: { unix_socket: { logic: "/run/ic-node/crypto-csp/socket", metrics: "/run/ic-node/crypto-csp/metrics" } },
     },
 
     // ========================================
@@ -89,9 +92,9 @@
     http_handler: {
         listen_addr: "[{{ ipv6_address }}]:8080",
     },
-    
+
     // ====================================
-    // Configuration of various adapters. 
+    // Configuration of various adapters.
     // ====================================
     adapters_config: {
         // IPC socket and metrics path for BTC Testnet adapter. This UDS path has to be the same as
@@ -108,7 +111,6 @@
         // The canister http adapter socket file is: /ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
         https_outcalls_uds_metrics_path: "/run/ic-node/https-outcalls-adapter/metrics",
-        onchain_observability_uds_metrics_path: "/run/ic-node/onchain-observability-adapter/metrics",
     },
 
     // ==================================================

@@ -42,3 +42,6 @@ mod sns_treasury;
 
 #[cfg(test)]
 mod payment_flow;
+
+#[cfg(test)]
+mod initialization_flow;

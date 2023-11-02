@@ -4,16 +4,34 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+async-trait = "0.1.36"
+axum = "0.6.12"
+bytes = { workspace = true }
+either = "1.6.0"
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-icos-sev = { path = "../../ic_os/sev" }
+ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
+ic-interfaces = { path = "../../interfaces" }
 ic-peer-manager = { path = "../peer_manager" }
 ic-protobuf = { path = "../../protobuf" }
+ic-quic-transport = { path = "../quic_transport" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-local-registry = { path = "../../registry/local_registry" }
+ic-registry-local-store = { path = "../../registry/local_store" }
+ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifacts" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-state-sync-manager = { path = "../state_sync_manager" }
+ic-types = { path = "../../types/types" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
-tokio = { version = "1.15.0", features = ["full"] }
+mockall = "0.11.4"
+quinn = { version = "0.10.2", features = ["ring"] }
+tempfile = "3.0"
+tokio = { version = "1.32.0", features = ["full"] }
+turmoil = "0.5"

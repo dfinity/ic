@@ -38,28 +38,28 @@ fn g2_test_encoding(pt: G2Affine, expected_value: &'static str) {
 fn scalar_miracl_random_generates_expected_values() {
     let seed = hex::decode("4e42f768bab72a9248a43c439a330b94e3d39595c627eb603fff8ff84b7a9914")
         .expect("valid");
-    let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed.try_into().expect("Invalid size"));
+    let rng = &mut rand_chacha::ChaCha20Rng::from_seed(seed.try_into().expect("Invalid size"));
 
     scalar_test_encoding(
-        Scalar::miracl_random(&mut rng),
+        Scalar::miracl_random(rng),
         "0ab77cf4d9338f6bfdcd9541574bf1211e8b552743426917e405739c029407aa",
     );
 
     let seed = hex::decode("8844d58a75db49c9df827e21085ea9d46f0a14e2bc6edaab27aeb640f88c313a")
         .expect("valid");
-    let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed.try_into().expect("Invalid size"));
+    let rng = &mut rand_chacha::ChaCha20Rng::from_seed(seed.try_into().expect("Invalid size"));
 
     scalar_test_encoding(
-        Scalar::miracl_random(&mut rng),
+        Scalar::miracl_random(rng),
         "583912964c0e5c35604b073bf5fe37c4a17f7dc3cd597481116ff9f4c544b2f3",
     );
 }
 
 #[test]
-fn scalar_random_generates_expected_values() {
+fn scalar_random_is_stable() {
     let seed = 802;
 
-    let mut rng = ChaCha20Rng::seed_from_u64(seed);
+    let rng = &mut ChaCha20Rng::seed_from_u64(seed);
     let mut bytes = [0u8; 32];
     rng.fill_bytes(&mut bytes);
     assert_eq!(
@@ -67,19 +67,19 @@ fn scalar_random_generates_expected_values() {
         "b257761dbdaf0bcb97fb808f7b95ed1ec1974557af790021ff073ee14811b3d9"
     );
 
-    let mut rng = ChaCha20Rng::seed_from_u64(seed);
+    let rng = &mut ChaCha20Rng::seed_from_u64(seed);
     scalar_test_encoding(
-        Scalar::random(&mut rng),
+        Scalar::random(rng),
         "3257761dbdaf0bcb97fb808f7b95ed1ec1974557af790021ff073ee14811b3d9",
     );
 }
 
 #[test]
-fn scalar_batch_random_generates_expected_values() {
+fn scalar_batch_random_is_stable() {
     let seed = 802;
 
-    let mut rng = ChaCha20Rng::seed_from_u64(seed);
-    let random = Scalar::batch_random(&mut rng, 2);
+    let rng = &mut ChaCha20Rng::seed_from_u64(seed);
+    let random = Scalar::batch_random(rng, 2);
     assert_eq!(random.len(), 2);
     scalar_test_encoding(
         random[0].clone(),
@@ -93,7 +93,7 @@ fn scalar_batch_random_generates_expected_values() {
 
 #[test]
 fn test_scalar_batch_random_generates_unique_values() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     fn assert_no_duplicates(scalars: &[Scalar]) {
         let mut uniq = std::collections::BTreeSet::new();
@@ -103,7 +103,7 @@ fn test_scalar_batch_random_generates_unique_values() {
     }
 
     for i in 0..100 {
-        let random = Scalar::batch_random(&mut rng, i);
+        let random = Scalar::batch_random(rng, i);
         assert_eq!(random.len(), i);
 
         /*
@@ -113,6 +113,77 @@ fn test_scalar_batch_random_generates_unique_values() {
         the code.
          */
         assert_no_duplicates(&random);
+    }
+}
+
+#[test]
+fn test_polynomial_random_is_stable() {
+    let seed = [1u8; 32];
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let poly = Polynomial::random(3, rng);
+
+    assert_eq!(
+        hex::encode(poly.coeff(0).serialize()),
+        "023f37203a2476c42566a61cc55c3ca875dbb4cc41c0deb789f8e7bf88183638",
+    );
+    assert_eq!(
+        hex::encode(poly.coeff(1).serialize()),
+        "1ecc3686b60ee3b84b6c7d321d70d5c06e9dac63a4d0a79d731b17c0d04d030d",
+    );
+    assert_eq!(
+        hex::encode(poly.coeff(2).serialize()),
+        "01274dd1ee5216c204fb698daea45b52e98b6f0fdd046dcc3a86bb079e36f024",
+    );
+}
+
+#[test]
+fn test_polynomial_addition() {
+    let rng = &mut reproducible_rng();
+
+    for coeff_x in 0..32 {
+        for coeff_y in 0..32 {
+            let x = Polynomial::random(coeff_x, rng);
+            let y = Polynomial::random(coeff_y, rng);
+
+            let z = &x + &y;
+
+            assert_eq!(z.degree(), std::cmp::max(x.degree(), y.degree()));
+
+            for i in 0..z.degree() {
+                assert_eq!(*z.coeff(i), x.coeff(i) + y.coeff(i));
+            }
+        }
+    }
+}
+
+#[test]
+fn test_polynomial_evaluation() {
+    let rng = &mut reproducible_rng();
+
+    for coeff in 0..32 {
+        let p = Polynomial::random(coeff, rng);
+        // Check that f(0) will always just equal the constant term:
+        assert_eq!(p.evaluate_at(&Scalar::zero()), *p.coeff(0));
+
+        // Check that f(1) will equal the sum of the various coefficients:
+        assert_eq!(
+            p.evaluate_at(&Scalar::one()),
+            p.coefficients()
+                .iter()
+                .fold(Scalar::zero(), |acc, s| acc + s)
+        );
+
+        // Compute f(r) for some random r then check it:
+        let r = Scalar::random(rng);
+        let pr = p.evaluate_at(&r);
+
+        assert_eq!(
+            pr,
+            p.coefficients()
+                .iter()
+                .rev()
+                .fold(Scalar::zero(), |acc, s| acc * &r + s)
+        );
     }
 }
 
@@ -163,11 +234,11 @@ fn test_scalar_comparison() {
     assert!(one <= one);
     assert!(one >= one);
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..300 {
-        let a = Scalar::random(&mut rng);
-        let b = Scalar::random(&mut rng);
+        let a = Scalar::random(rng);
+        let b = Scalar::random(rng);
 
         assert_eq!(a.serialize().cmp(&b.serialize()), a.cmp(&b));
         assert_eq!(b.serialize().cmp(&a.serialize()), b.cmp(&a));
@@ -190,7 +261,7 @@ fn test_scalar_comparison() {
 
 #[test]
 fn test_scalar_from_integer_type() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     assert_eq!(Scalar::zero(), Scalar::from_i32(0));
     assert_eq!(Scalar::zero(), Scalar::from_u32(0));
@@ -231,24 +302,24 @@ fn test_scalar_from_integer_type() {
 
 #[test]
 fn test_scalar_small_random() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for bit_size in 1..32 {
         let n = u64::MAX >> (64 - bit_size);
         assert_eq!(bit_size, 64 - n.leading_zeros());
-        let s = Scalar::random_within_range(&mut rng, n);
+        let s = Scalar::random_within_range(rng, n);
         assert!(s < Scalar::from_u64(n));
     }
 
     for n in 1..1024 {
-        let s = Scalar::random_within_range(&mut rng, n);
+        let s = Scalar::random_within_range(rng, n);
         assert!(s < Scalar::from_u64(n));
     }
 
     let range = 1039; // small prime
 
     /*
-    This upper bound is arbitrary and as the test is probabalistic it
+    This upper bound is arbitrary and as the test is probabilistic it
     might occasionally fail. However over 10000 iterations the largest
     number of attempts required was range*15, so using range*30 if the
     test fails it probably does indicate a problem.
@@ -258,7 +329,7 @@ fn test_scalar_small_random() {
     let mut seen = std::collections::HashSet::new();
 
     for _ in 0..max_attempts {
-        let s = Scalar::random_within_range(&mut rng, range);
+        let s = Scalar::random_within_range(rng, range);
         assert!(s < Scalar::from_u64(range));
         seen.insert(s.serialize());
 
@@ -278,11 +349,11 @@ fn test_scalar_is_zero() {
 
 #[test]
 fn test_scalar_addition() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..30 {
-        let s1 = Scalar::random(&mut rng);
-        let s2 = Scalar::random(&mut rng);
+        let s1 = Scalar::random(rng);
+        let s2 = Scalar::random(rng);
 
         let s3 = &s1 + &s2;
 
@@ -299,10 +370,10 @@ fn test_scalar_addition() {
 
 #[test]
 fn test_scalar_neg() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..30 {
-        let scalar = Scalar::random(&mut rng);
+        let scalar = Scalar::random(rng);
         let nscalar = scalar.neg();
         assert_eq!(scalar + nscalar, Scalar::zero());
     }
@@ -310,13 +381,13 @@ fn test_scalar_neg() {
 
 #[test]
 fn test_scalar_inverse() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     assert_eq!(Scalar::zero().inverse(), None);
     assert_eq!(Scalar::one().inverse(), Some(Scalar::one()));
 
     for _ in 0..30 {
-        let scalar = Scalar::random(&mut rng);
+        let scalar = Scalar::random(rng);
 
         match scalar.inverse() {
             None => assert!(scalar.is_zero()),
@@ -361,7 +432,7 @@ fn test_gt_hash_has_no_collisions_in_range() {
 
 #[test]
 fn test_gt_mul_u16_is_correct() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     // We could do an exhaustive search here but because Gt standard
     // mul is so slow it takes several minutes to complete. So instead
@@ -391,15 +462,15 @@ fn test_gt_mul_u16_is_correct_exhaustive_test() {
 
 #[test]
 fn test_pairing_bilinearity() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let g1 = G1Affine::generator();
     let g2 = G2Affine::generator();
 
     for _ in 0..3 {
-        let s1 = Scalar::random(&mut rng);
-        let s2 = Scalar::random(&mut rng);
-        let s3 = Scalar::random(&mut rng);
+        let s1 = Scalar::random(rng);
+        let s2 = Scalar::random(rng);
+        let s3 = Scalar::random(rng);
 
         let mul_123 = Gt::pairing(&(g1 * &s1).into(), &(g2 * &s2).into()) * &s3;
         let mul_132 = Gt::pairing(&(g1 * &s1).into(), &(g2 * &s3).into()) * &s2;
@@ -553,12 +624,12 @@ fn test_multipairing() {
 
     assert_eq!(Gt::multipairing(&[(&g1n, g2p)]), Gt::generator().neg());
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..5 {
-        let a = Scalar::random(&mut rng);
-        let b = Scalar::random(&mut rng);
-        let c = Scalar::random(&mut rng);
+        let a = Scalar::random(rng);
+        let b = Scalar::random(rng);
+        let c = Scalar::random(rng);
 
         let g1a = G1Affine::from(G1Affine::generator() * &a);
         let g1b = G1Affine::from(G1Affine::generator() * &b);
@@ -637,10 +708,10 @@ fn test_g2_deserialize_rejects_out_of_range_x_value() {
 
 #[test]
 fn test_scalar_serialization_round_trips() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 1..30 {
-        let s_orig = Scalar::random(&mut rng);
+        let s_orig = Scalar::random(rng);
         let s_bits = s_orig.serialize();
 
         let s_d = Scalar::deserialize(&s_bits).expect("Invalid serialization");
@@ -788,7 +859,7 @@ fn test_g2_test_vectors() {
 fn test_scalar_muln() {
     use BiasedValue;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     assert_eq!(Scalar::muln_vartime(&[], &[]), Scalar::zero());
 
@@ -797,8 +868,8 @@ fn test_scalar_muln() {
         let mut rhs = Vec::with_capacity(t);
 
         for _ in 0..t {
-            lhs.push(Scalar::biased(&mut rng));
-            rhs.push(Scalar::biased(&mut rng));
+            lhs.push(Scalar::biased(rng));
+            rhs.push(Scalar::biased(rng));
         }
 
         let mut reference_val = Scalar::zero();
@@ -814,9 +885,9 @@ fn test_scalar_muln() {
 
 #[test]
 fn test_verify_bls_signature() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk = Scalar::random(&mut rng);
+    let sk = Scalar::random(rng);
     let pk = G2Affine::from(G2Affine::generator() * &sk);
     let message = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
     let signature = G1Affine::from(&message * &sk);
@@ -911,10 +982,10 @@ const NUM_DUPLICATES: usize = 10;
 
 macro_rules! generic_test_verify_bls_signature_batch {
     ($batch_verification_function:ident) => {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
 
         for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
-            let sks: Vec<_> = (0..num_inputs).map(|_| Scalar::random(&mut rng)).collect();
+            let sks: Vec<_> = (0..num_inputs).map(|_| Scalar::random(rng)).collect();
             let pks: Vec<_> = sks
                 .iter()
                 .map(|sk| G2Affine::from(G2Affine::generator() * sk))
@@ -936,13 +1007,13 @@ macro_rules! generic_test_verify_bls_signature_batch {
 
             assert!($batch_verification_function(
                 &izip!(sigs.iter(), pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
-                &mut rng
+                rng
             ));
 
             // swapped sigs/msgs must not work
             assert!(!$batch_verification_function(
                 &izip!(msgs.iter(), pks.iter(), sigs.iter()).collect::<Vec<_>>()[..],
-                &mut rng
+                rng
             ));
 
             if num_inputs > 1 {
@@ -951,7 +1022,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                 cloned_sigs.swap(0, 1);
                 assert!(!$batch_verification_function(
                     &izip!(cloned_sigs.iter(), pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
-                    &mut rng
+                    rng
                 ));
 
                 // swapped single msgs must not work
@@ -960,7 +1031,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
 
                 assert!(!$batch_verification_function(
                     &izip!(sigs.iter(), pks.iter(), cloned_msgs.iter()).collect::<Vec<_>>()[..],
-                    &mut rng
+                    rng
                 ));
 
                 // swapped single pks must not work
@@ -969,23 +1040,23 @@ macro_rules! generic_test_verify_bls_signature_batch {
 
                 assert!(!$batch_verification_function(
                     &izip!(sigs.iter(), cloned_pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
-                    &mut rng
+                    rng
                 ));
             }
 
             let (sigs_w_dups, pks_w_dups, msgs_w_dups) =
-                with_random_duplicates(NUM_DUPLICATES, &mut rng, &sigs, &pks, &msgs);
+                with_random_duplicates(NUM_DUPLICATES, rng, &sigs, &pks, &msgs);
 
             assert!($batch_verification_function(
                 &izip!(sigs_w_dups.iter(), pks_w_dups.iter(), msgs_w_dups.iter())
                     .collect::<Vec<_>>()[..],
-                &mut rng
+                rng
             ));
 
             let (sigs_w_new_msgs, pks_w_new_msgs, msgs_w_new_msgs) =
                 with_random_new_msgs_signed_by_existing_keys(
                     NUM_DUPLICATES,
-                    &mut rng,
+                    rng,
                     &sks,
                     &sigs,
                     &pks,
@@ -999,7 +1070,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                     msgs_w_new_msgs.iter()
                 )
                 .collect::<Vec<_>>()[..],
-                &mut rng
+                rng
             ));
 
             // corrupt each signature sequentially for not too large batches
@@ -1024,7 +1095,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                             msgs_w_new_msgs.iter()
                         )
                         .collect::<Vec<_>>()[..],
-                        &mut rng
+                        rng
                     ));
                 }
             }
@@ -1032,7 +1103,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
             let (sigs_w_dup_msgs, pks_w_dup_msgs, msgs_w_dup_msgs) =
                 with_random_sigs_of_existing_messages_signed_by_existing_signers(
                     NUM_DUPLICATES,
-                    &mut rng,
+                    rng,
                     &sks,
                     &sigs,
                     &pks,
@@ -1046,7 +1117,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                     msgs_w_dup_msgs.iter()
                 )
                 .collect::<Vec<_>>()[..],
-                &mut rng
+                rng
             ));
         }
     };
@@ -1064,10 +1135,10 @@ fn test_verify_bls_signature_mixed_batch() {
 
 #[test]
 fn test_verify_bls_signature_batch_with_same_msg() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
-        let sks: Vec<_> = (0..num_inputs).map(|_| Scalar::random(&mut rng)).collect();
+        let sks: Vec<_> = (0..num_inputs).map(|_| Scalar::random(rng)).collect();
         let pks: Vec<_> = sks
             .iter()
             .map(|sk| G2Affine::from(G2Affine::generator() * sk))
@@ -1083,7 +1154,7 @@ fn test_verify_bls_signature_batch_with_same_msg() {
         assert!(verify_bls_signature_batch_same_msg(
             &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
             &msg,
-            &mut rng
+            rng
         ));
 
         // the "all-distinct" batched method should also work
@@ -1093,13 +1164,13 @@ fn test_verify_bls_signature_batch_with_same_msg() {
                 .zip(pks.iter())
                 .map(|(sig, pk)| (sig, pk, &msg))
                 .collect::<Vec<_>>()[..],
-            &mut rng
+            rng
         ));
 
         assert!(!verify_bls_signature_batch_same_msg(
             &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
             &G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()),
-            &mut rng
+            rng
         ));
 
         // swapped single sigs/pks must not work
@@ -1110,7 +1181,7 @@ fn test_verify_bls_signature_batch_with_same_msg() {
             assert!(!verify_bls_signature_batch_same_msg(
                 &cloned_sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
                 &msg,
-                &mut rng
+                rng
             ));
 
             let mut cloned_pks = pks.clone();
@@ -1119,13 +1190,13 @@ fn test_verify_bls_signature_batch_with_same_msg() {
             assert!(!verify_bls_signature_batch_same_msg(
                 &sigs.iter().zip(cloned_pks.iter()).collect::<Vec<_>>()[..],
                 &msg,
-                &mut rng
+                rng
             ));
         }
 
         let (sigs_w_dups, pks_w_dups, _msgs_w_dups) = with_random_duplicates(
             NUM_DUPLICATES,
-            &mut rng,
+            rng,
             &sigs,
             &pks,
             &vec![msg.clone(); pks.len()][..],
@@ -1137,17 +1208,17 @@ fn test_verify_bls_signature_batch_with_same_msg() {
                 .zip(pks_w_dups.iter())
                 .collect::<Vec<_>>()[..],
             &msg,
-            &mut rng
+            rng
         ));
     }
 }
 
 #[test]
 fn test_verify_bls_signature_batch_with_same_pk() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
-        let sk = Scalar::random(&mut rng);
+        let sk = Scalar::random(rng);
         let pk = G2Affine::from(G2Affine::generator() * &sk);
         let msgs: Vec<_> = (0..num_inputs)
             .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
@@ -1162,7 +1233,7 @@ fn test_verify_bls_signature_batch_with_same_pk() {
         assert!(verify_bls_signature_batch_same_pk(
             &sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
             &pk,
-            &mut rng
+            rng
         ));
 
         // the "all-distinct" batched method should also work
@@ -1172,13 +1243,13 @@ fn test_verify_bls_signature_batch_with_same_pk() {
                 .zip(msgs.iter())
                 .map(|(sig, msg)| (sig, &pk, msg))
                 .collect::<Vec<_>>()[..],
-            &mut rng
+            rng
         ));
 
         assert!(!verify_bls_signature_batch_same_pk(
             &sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
-            &G2Affine::from(G2Affine::generator() * &Scalar::random(&mut rng)),
-            &mut rng
+            &G2Affine::from(G2Affine::generator() * &Scalar::random(rng)),
+            rng
         ));
 
         // swapped single sigs/msgs must not work
@@ -1189,7 +1260,7 @@ fn test_verify_bls_signature_batch_with_same_pk() {
             assert!(!verify_bls_signature_batch_same_pk(
                 &cloned_sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
                 &pk,
-                &mut rng
+                rng
             ));
 
             let mut cloned_msgs = msgs.clone();
@@ -1198,13 +1269,13 @@ fn test_verify_bls_signature_batch_with_same_pk() {
             assert!(!verify_bls_signature_batch_same_pk(
                 &sigs.iter().zip(cloned_msgs.iter()).collect::<Vec<_>>()[..],
                 &pk,
-                &mut rng
+                rng
             ));
         }
 
         let (sigs_w_dups, _pks_w_dups, msgs_w_dups) = with_random_duplicates(
             NUM_DUPLICATES,
-            &mut rng,
+            rng,
             &sigs[..],
             &vec![pk.clone(); msgs.len()][..],
             &msgs[..],
@@ -1216,7 +1287,7 @@ fn test_verify_bls_signature_batch_with_same_pk() {
                 .zip(msgs_w_dups.iter())
                 .collect::<Vec<_>>()[..],
             &pk,
-            &mut rng
+            rng
         ));
     }
 }
@@ -1304,6 +1375,97 @@ fn test_hash_to_g2_matches_draft() {
         G2Affine::hash(&dst[..], format!("a512_{}", "a".repeat(512)).as_bytes()),
         "91fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d0156901a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534"
     );
+}
+
+fn random_node_indexes<R: rand::Rng>(rng: &mut R, count: usize) -> Vec<NodeIndex> {
+    let mut set = std::collections::BTreeSet::new();
+
+    while set.len() != count {
+        let r = rng.gen::<NodeIndex>();
+        set.insert(r);
+    }
+
+    set.iter().cloned().collect()
+}
+
+#[test]
+fn should_g1_interpolation_at_zero_work() -> Result<(), InterpolationError> {
+    let rng = &mut reproducible_rng();
+
+    for num_coefficients in 1..30 {
+        let poly = Polynomial::random(num_coefficients, rng);
+
+        let sk = poly.coeff(0);
+        let pk = G1Affine::from(G1Affine::generator() * sk);
+
+        let node_ids = random_node_indexes(rng, num_coefficients);
+        let mut node_shares = Vec::with_capacity(num_coefficients);
+
+        for r in &node_ids {
+            let p_r = poly.evaluate_at(&Scalar::from_node_index(*r));
+            let g_p_r = G1Affine::from(G1Affine::generator() * &p_r);
+            node_shares.push(g_p_r);
+        }
+
+        let coefficients = LagrangeCoefficients::at_zero(&node_ids)?;
+        let g0 = coefficients.interpolate_g1(&node_shares)?;
+        assert_eq!(g0, pk);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn should_g2_interpolation_at_zero_work() -> Result<(), InterpolationError> {
+    let rng = &mut reproducible_rng();
+
+    for num_coefficients in 1..30 {
+        let poly = Polynomial::random(num_coefficients, rng);
+
+        let sk = poly.coeff(0);
+        let pk = G2Affine::from(G2Affine::generator() * sk);
+
+        let node_ids = random_node_indexes(rng, num_coefficients);
+        let mut node_shares = Vec::with_capacity(num_coefficients);
+
+        for r in &node_ids {
+            let p_r = poly.evaluate_at(&Scalar::from_node_index(*r));
+            let g_p_r = G2Affine::from(G2Affine::generator() * &p_r);
+            node_shares.push(g_p_r);
+        }
+
+        let coefficients = LagrangeCoefficients::at_zero(&node_ids)?;
+        let g0 = coefficients.interpolate_g2(&node_shares)?;
+        assert_eq!(g0, pk);
+    }
+
+    Ok(())
+}
+
+/// Verify that x_for_index(i) == i+1 (in the field).
+#[test]
+fn test_scalar_from_node_index_returns_correct_value() {
+    // First N values:
+    let mut x = Scalar::one();
+    for i in 0..100 {
+        assert_eq!(Scalar::from_node_index(i), x);
+        x += Scalar::one();
+    }
+    // Binary 0, 1, 11, 111, ... all the way up to the maximum NodeIndex.
+    // The corresponding x values are binary 1, 10, 100, ... and the last value is
+    // one greater than the maximum NodeIndex.
+
+    let two = Scalar::from_u64(2);
+    let mut x = Scalar::one();
+    let mut i: NodeIndex = 0;
+    loop {
+        assert_eq!(Scalar::from_node_index(i), x);
+        if i == NodeIndex::max_value() {
+            break;
+        }
+        i = i * 2 + 1;
+        x *= &two;
+    }
 }
 
 /// A trait generating "biased" values
@@ -1412,7 +1574,7 @@ macro_rules! test_point_operation {
 }
 
 test_point_operation!(serialization_round_trip, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 1..30 {
         let orig = Projective::hash(b"serialization-round-trip-test", &rng.gen::<[u8; 32]>());
@@ -1429,7 +1591,7 @@ test_point_operation!(serialization_round_trip, [g1, g2], {
 });
 
 test_point_operation!(is_torsion_free, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..30 {
         let mut buf = [0u8; Affine::BYTES];
@@ -1465,9 +1627,9 @@ test_point_operation!(negation, [g1, g2, gt], {
     assert_eq!(Affine::identity(), Affine::identity().neg());
     assert_eq!(Projective::identity(), Projective::identity().neg());
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let s = Scalar::random(&mut rng);
+    let s = Scalar::random(rng);
 
     let pt_pos = Affine::generator() * &s;
     let pt_neg = Affine::generator() * s.neg();
@@ -1478,13 +1640,13 @@ test_point_operation!(negation, [g1, g2, gt], {
 });
 
 test_point_operation!(addition, [g1, g2, gt], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let g = Affine::generator();
 
     for _ in 0..1000 {
-        let s0 = Scalar::random(&mut rng);
-        let s1 = Scalar::random(&mut rng);
+        let s0 = Scalar::random(rng);
+        let s1 = Scalar::random(rng);
         let s2 = &s0 - &s1;
 
         let gs0 = g * &s0;
@@ -1497,7 +1659,7 @@ test_point_operation!(addition, [g1, g2, gt], {
 });
 
 test_point_operation!(sum, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let pt = Affine::generator();
 
@@ -1518,7 +1680,7 @@ test_point_operation!(sum, [g1, g2], {
 });
 
 test_point_operation!(multiply, [g1, g2, gt], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let pt = Affine::generator();
 
@@ -1533,7 +1695,7 @@ test_point_operation!(multiply, [g1, g2, gt], {
 });
 
 test_point_operation!(mul_with_precompute, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let g = Affine::hash(b"random-point-for-mul-precompute", &rng.gen::<[u8; 32]>());
 
@@ -1550,17 +1712,17 @@ test_point_operation!(mul_with_precompute, [g1, g2], {
     assert_same_result(Scalar::one());
     assert_same_result(Scalar::one().neg());
     for _ in 0..1000 {
-        assert_same_result(Scalar::random(&mut rng));
+        assert_same_result(Scalar::random(rng));
     }
 });
 
 test_point_operation!(batch_mul, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let pt = Affine::hash(b"ic-crypto-batch-mul-test", &rng.gen::<[u8; 32]>());
 
     for i in 0..20 {
-        let scalars = Scalar::batch_random(&mut rng, i);
+        let scalars = Scalar::batch_random(rng, i);
         assert_eq!(scalars.len(), i);
 
         let batch = Affine::batch_mul(&pt, &scalars);
@@ -1573,7 +1735,7 @@ test_point_operation!(batch_mul, [g1, g2], {
 });
 
 test_point_operation!(mul2, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let g = Projective::generator();
     let zero = Scalar::zero();
@@ -1584,11 +1746,11 @@ test_point_operation!(mul2, [g1, g2], {
     assert_eq!(Projective::mul2(g, &zero, g, &one), *g);
 
     for _ in 0..1000 {
-        let s1 = Scalar::biased(&mut rng);
-        let s2 = Scalar::biased(&mut rng);
+        let s1 = Scalar::biased(rng);
+        let s2 = Scalar::biased(rng);
 
-        let p1 = Projective::biased(&mut rng);
-        let p2 = Projective::biased(&mut rng);
+        let p1 = Projective::biased(rng);
+        let p2 = Projective::biased(rng);
 
         let reference = &p1 * &s1 + &p2 * &s2;
 
@@ -1598,7 +1760,7 @@ test_point_operation!(mul2, [g1, g2], {
 });
 
 test_point_operation!(muln_sparse, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     assert_eq!(
         Projective::muln_affine_sparse_vartime(&[]),
@@ -1633,10 +1795,10 @@ test_point_operation!(muln_sparse, [g1, g2], {
     for hamming_weight in [1, 2, 3, 5, 10, 15, 20, 100] {
         for num_inputs in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 40, 50, 100] {
             let points: Vec<Affine> = (0..num_inputs)
-                .map(|_| Projective::biased(&mut rng).to_affine())
+                .map(|_| Projective::biased(rng).to_affine())
                 .collect();
             let scalars: Vec<Scalar> = (0..num_inputs)
-                .map(|_| gen_rand_sparse_scalar(hamming_weight, &mut rng))
+                .map(|_| gen_rand_sparse_scalar(hamming_weight, rng))
                 .collect();
 
             let reference_val = points
@@ -1656,8 +1818,8 @@ test_point_operation!(muln_sparse, [g1, g2], {
         let mut points = Vec::with_capacity(t);
         let mut scalars = Vec::with_capacity(t);
         for _ in 0..t {
-            points.push(Projective::biased(&mut rng).to_affine());
-            scalars.push(Scalar::biased(&mut rng));
+            points.push(Projective::biased(rng).to_affine());
+            scalars.push(Scalar::biased(rng));
         }
 
         let reference_val = points
@@ -1673,7 +1835,7 @@ test_point_operation!(muln_sparse, [g1, g2], {
 });
 
 test_point_operation!(muln, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     assert_eq!(Projective::muln_vartime(&[], &[]), Projective::identity());
 
@@ -1682,8 +1844,8 @@ test_point_operation!(muln, [g1, g2], {
         let mut scalars = Vec::with_capacity(t);
 
         for _ in 0..t {
-            points.push(Projective::biased(&mut rng));
-            scalars.push(Scalar::biased(&mut rng));
+            points.push(Projective::biased(rng));
+            scalars.push(Scalar::biased(rng));
         }
 
         let reference_val = points
@@ -1698,14 +1860,12 @@ test_point_operation!(muln, [g1, g2], {
 });
 
 test_point_operation!(batch_normalize, [g1, g2], {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let g = Affine::generator();
 
     for i in 0..100 {
-        let inputs = (0..i)
-            .map(|_| g * Scalar::random(&mut rng))
-            .collect::<Vec<_>>();
+        let inputs = (0..i).map(|_| g * Scalar::random(rng)).collect::<Vec<_>>();
 
         let batch_converted = Projective::batch_normalize(&inputs);
 

@@ -2,7 +2,7 @@ use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
 use serde::{Deserialize, Serialize};
-use slog::warn;
+use slog::{info, warn};
 use std::collections::BTreeMap;
 use std::net::Ipv6Addr;
 use url::Url;
@@ -146,7 +146,20 @@ pub fn get_resource_request(
                 test_env.get_malicious_ic_os_img_sha256()?,
                 test_env.get_malicious_ic_os_img_url()?,
             )
+        } else if config.with_mainnet_config {
+            warn!(
+                test_env.logger(),
+                "Using mainnet guestos image for IC config."
+            );
+            (
+                test_env.get_mainnet_ic_os_img_sha256()?,
+                test_env.get_mainnet_ic_os_img_url()?,
+            )
         } else {
+            info!(
+                test_env.logger(),
+                "Using tip-of-branch guestos image for IC config."
+            );
             (
                 test_env.get_ic_os_img_sha256()?,
                 test_env.get_ic_os_img_url()?,
@@ -172,7 +185,7 @@ pub fn get_resource_request(
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "93c094b72786ca1e5a47776ff8dba48d10ffa2bcd28701fc9759baa175e5558b";
+    "e9676384fdbff9713c543ea4e913782e7ef120282c3c7a491b63cb48f9f0748d";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,

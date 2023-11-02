@@ -142,7 +142,7 @@ fn test_node_operator_records_can_be_added_and_removed() {
         )
         .await;
 
-        assert_eq!(node_operator_record.dc_id, "DC");
+        assert_eq!(node_operator_record.dc_id, "dc"); // DC is forced to be lowercase
 
         // Node Operator 2 is removed because it doesn't have associated node records
         let get_value_result = deserialize_get_value_response(

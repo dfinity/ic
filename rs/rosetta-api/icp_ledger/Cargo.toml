@@ -9,24 +9,20 @@ edition = "2021"
 candid = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 crc32fast = "1.2.0"
-dfn_candid = {path = "../../rust_canisters/dfn_candid"}
-dfn_core = {path = "../../rust_canisters/dfn_core"}
-dfn_http = {path = "../../rust_canisters/dfn_http"}
-dfn_http_metrics = {path = "../../rust_canisters/dfn_http_metrics"}
-dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
-hex = {version = "0.4.2", features = ["serde"] }
-ic-base-types = { path="../../types/base_types" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-crypto-sha = { path = "../../crypto/sha/" }
-ic-icrc1 = { path = "../icrc1" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+hex = { version = "0.4.2", features = ["serde"] }
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 lazy_static = "1.4.0"
 num-traits = "0.2.12"
-on_wire = {path = "../../rust_canisters/on_wire"}
-prost = "0.11.0"
+on_wire = { path = "../../rust_canisters/on_wire" }
+prost = { workspace = true }
 prost-derive = "0.11"
 serde = "1.0"
 serde_bytes = "0.11"
@@ -35,8 +31,9 @@ strum = "0.24"
 strum_macros = "0.24"
 
 [dev-dependencies]
-canister-test = {path = "../../rust_canisters/canister_test"}
-ic-canister-client-sender = {path = "../../canister_client/sender"}
+canister-test = { path = "../../rust_canisters/canister_test" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
 proptest = "1"

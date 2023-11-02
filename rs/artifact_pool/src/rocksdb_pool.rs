@@ -369,7 +369,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
     ///
     /// The returned iterator has a lifetime that is independent from the pool
     /// itself so that it can be passed around to perform big chunks of work
-    /// asynchonously.
+    /// asynchronously.
     pub fn iterate<Message: ConsensusMessageHashable + PerTypeCFInfo + 'static>(
         &self,
         min_key: &[u8],
@@ -1236,6 +1236,9 @@ mod tests {
         crate::test_utils::test_as_pool_section::<RocksDBConfig>()
     }
 
+    // This test is disabled because the RocksDB version of the consensus pool does not
+    // implement selective purging, and there is no plan of supporting it.
+    #[ignore]
     #[test]
     fn test_as_height_indexed_pool() {
         crate::test_utils::test_as_height_indexed_pool::<RocksDBConfig>()

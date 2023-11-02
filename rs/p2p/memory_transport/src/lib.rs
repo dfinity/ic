@@ -40,7 +40,7 @@ use axum::{
 };
 use bytes::{Buf, BufMut, Bytes};
 use http::{Request, Response};
-use ic_quic_transport::{Transport, TransportError};
+use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
@@ -277,30 +277,36 @@ fn response_size(r: &Response<Bytes>) -> usize {
 impl Transport for PeerTransport {
     async fn rpc(
         &self,
-        peer: &NodeId,
+        peer_id: &NodeId,
         mut request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, TransportError> {
-        if peer == &self.node_id {
-            return Err(TransportError::Disconnected {
-                connection_error: Some("Can't connect to self".to_string()),
+    ) -> Result<Response<Bytes>, SendError> {
+        if peer_id == &self.node_id {
+            return Err(SendError::ConnectionNotFound {
+                reason: "Can't connect to self".to_string(),
             });
         }
 
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
         request.extensions_mut().insert(self.node_id);
         self.router_request_tx
-            .send((request, *peer, oneshot_tx))
+            .send((request, *peer_id, oneshot_tx))
             .unwrap();
         Ok(oneshot_rx.await.unwrap())
     }
 
-    async fn push(&self, peer: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
-        let _ = self.rpc(peer, request).await?;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
+        let _ = self.rpc(peer_id, request).await?;
         Ok(())
     }
 
-    fn peers(&self) -> Vec<NodeId> {
-        self.global.peers.read().unwrap().keys().cloned().collect()
+    fn peers(&self) -> Vec<(NodeId, ConnId)> {
+        self.global
+            .peers
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(k, _)| (*k, ConnId::from(u64::MAX)))
+            .collect()
     }
 }
 

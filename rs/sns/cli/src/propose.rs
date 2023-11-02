@@ -7,7 +7,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, CreateServiceNervousSystem};
+use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use std::{
     collections::HashSet,
@@ -77,8 +77,7 @@ pub fn exec(args: ProposeArgs) {
     }
 
     // Step 1: Load configuration
-    let proposal =
-        load_configuration_and_validate_or_exit(&network, &init_config_file).upgrade_to_proposal();
+    let proposal = load_configuration_and_validate_or_exit(&network, &init_config_file);
 
     // Step 2: Send the proposal.
     eprintln!("Loaded configuration.");
@@ -118,7 +117,7 @@ pub fn exec(args: ProposeArgs) {
         Ok(MakeProposalResponse {
             proposal_id: Some(ProposalId { id }),
         }) => {
-            println!("🚀 Succes!");
+            println!("🚀 Success!");
             if network == "ic" {
                 println!("View the proposal here:");
                 println!("https://dashboard.internetcomputer.org/proposal/{}", id);
@@ -126,7 +125,6 @@ pub fn exec(args: ProposeArgs) {
                 // TODO: Support other networks.
                 println!("Proposal ID: {}", id);
             }
-            println!("Godspeed!")
         }
         err => {
             println!("{:?}", err);
@@ -142,7 +140,7 @@ pub fn exec(args: ProposeArgs) {
 fn load_configuration_and_validate_or_exit(
     network: &str,
     configuration_file_path: &PathBuf,
-) -> CreateServiceNervousSystem {
+) -> Proposal {
     // Read the file.
     let init_config_file = std::fs::read_to_string(configuration_file_path).unwrap_or_else(|err| {
         eprintln!(
@@ -163,8 +161,20 @@ fn load_configuration_and_validate_or_exit(
         );
         std::process::exit(1);
     });
-    let create_service_nervous_system = init_config_file
-        .try_convert_to_create_service_nervous_system()
+    let base_path = match configuration_file_path.parent() {
+        Some(ok) => ok,
+        None => {
+            // This shouldn't happen since we were already able to read from
+            // configuration_file_path.
+            eprintln!(
+                "Configuration file path ({:?}) has no parent.",
+                configuration_file_path,
+            );
+            std::process::exit(1);
+        }
+    };
+    let proposal = init_config_file
+        .try_convert_to_nns_proposal(base_path)
         .unwrap_or_else(|err| {
             eprintln!(
                 "Unable to parse the SNS configuration file. err = {:?}.\n\
@@ -176,43 +186,47 @@ fn load_configuration_and_validate_or_exit(
 
     // Validate that NNS root is one of the controllers of all dapp canisters,
     // as listed in the configuration file.
-    let canister_ids = &create_service_nervous_system
-        .dapp_canisters
-        .iter()
-        .map(|canister| {
-            let canister_id: PrincipalId = canister.id.unwrap_or_else(|| {
-                eprintln!(
-                    "Internal error: Canister.id was found to be None while \
+    let canister_ids = match &proposal.action {
+        Some(Action::CreateServiceNervousSystem(csns)) => csns
+            .dapp_canisters
+            .iter()
+            .map(|canister| {
+                let canister_id: PrincipalId = canister.id.unwrap_or_else(|| {
+                    eprintln!(
+                        "Internal error: Canister.id was found to be None while \
                      validating the CreateServiceNervousSystem.dapp_canisters \
                      field.",
-                );
-                std::process::exit(1);
-            });
+                    );
+                    std::process::exit(1);
+                });
 
-            CanisterId::try_from(canister_id).unwrap_or_else(|err| {
-                eprintln!(
-                    "{}\n\
+                CanisterId::try_from(canister_id).unwrap_or_else(|err| {
+                    eprintln!(
+                        "{}\n\
                      \n\
                      Internal error: Unable to Convert PrincipalId ({}) to CanisterId.",
-                    err, canister_id,
-                );
-                std::process::exit(1);
+                        err, canister_id,
+                    );
+                    std::process::exit(1);
+                })
             })
-        })
-        .collect::<Vec<_>>();
-    all_canisters_have_all_required_controllers(
-        network,
-        canister_ids,
-        &[PrincipalId::try_from(ROOT_CANISTER_ID)
-            .expect("Internal error: could not convert ROOT_CANISTER_ID to PrincipalId.")],
-    )
-    .unwrap_or_else(|err| {
-        eprintln!("{}", err);
-        std::process::exit(1);
-    });
+            .collect::<Vec<_>>(),
+        _ => {
+            eprintln!(
+                "Internal error: Somehow a proposal was made not of type CreateServiceNervousSystem",
+            );
+            std::process::exit(1);
+        }
+    };
+
+    all_canisters_have_all_required_controllers(network, &canister_ids, &[ROOT_CANISTER_ID.get()])
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            std::process::exit(1);
+        });
 
     // Return as the result.
-    create_service_nervous_system
+    proposal
 }
 
 struct CanistersWithMissingControllers {

@@ -1,34 +1,36 @@
 // Set up a testnet containing:
-// 1-node System and Application subnets, single unassigned node, single boundary node and a p8s (with grafana) VM.
-// All nodes use the following resources: 4 vCPUs, 24GiB of RAM and 50 GiB disk.
+//   one 1-node System and one 1-node Application subnets, one unassigned node, single boundary node, and a p8s (with grafana) VM.
+// All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
-// You can setup this testnet by executing the following commands:
+// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ gitlab-ci/container/container-run.sh
-//   $ ict testnet small -- --test_tmpdir=./small
+//   $ ./gitlab-ci/tools/docker-run
+//   $ ict testnet create small --lifetime-mins=180 --output-dir=./small -- --test_tmpdir=./small
 //
-// The --test_tmpdir=./small will store the test output in the specified directory.
+// The --output-dir=./small will store the debug output of the test driver in the specified directory.
+// The --test_tmpdir=./small will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
-//   $ ssh -i small/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
+//   $ ssh -i small/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
 //
-// Note that you can get the $ipv6 address of the IC node by looking for a log line like:
+// Note that you can get the  address of the IC node from the ict console output:
 //
-//   Apr 11 15:34:10.175 INFO[rs/tests/src/driver/farm.rs:94:0]
-//     VM(h2tf2-odxlp-fx5uw-kvn43-bam4h-i4xmw-th7l2-xxwvv-dxxpz-bs3so-iqe)
-//     Host: ln1-dll10.ln1.dfinity.network
-//     IPv6: 2a0b:21c0:4003:2:5051:85ff:feec:6864
-//     vCPUs: 4
-//     Memory: 25165824 KiB
+//   {
+//     nodes: [
+//       {
+//         id: y4g5e-dpl4n-swwhv-la7ec-32ngk-w7f3f-pr5bt-kqw67-2lmfy-agipc-zae,
+//         ipv6: 2a0b:21c0:4003:2:5034:46ff:fe3c:e76f
+//       }
+//     ],
+//     subnet_id: 5hv4k-srndq-xgw53-r6ldt-wtv4x-6xvbj-6lvpf-sbu5n-sqied-63bgv-eqe,
+//     subnet_type: application
+//   },
 //
-// To get access to P8s and Grafana look for the following log lines:
+// To get access to P8s and Grafana look for the following lines in the ict console output:
 //
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:168:0]
-//     Prometheus Web UI at http://prometheus.small--1681227226065.testnet.farm.dfinity.systems
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
-//     Grafana at http://grafana.small--1681227226065.testnet.farm.dfinity.systems
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
-//     IC Progress Clock at http://grafana.small--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
+//     prometheus: Prometheus Web UI at http://prometheus.small--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.small--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.small--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 
@@ -79,6 +81,6 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }

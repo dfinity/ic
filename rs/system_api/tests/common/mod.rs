@@ -4,7 +4,8 @@ use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -23,7 +24,8 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext},
     methods::SystemMethod,
-    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use maplit::btreemap;
 
@@ -38,13 +40,12 @@ pub fn execution_parameters() -> ExecutionParameters {
             NumInstructions::from(5_000_000_000),
             NumInstructions::from(5_000_000_000),
         ),
-        canister_memory_limit: NumBytes::new(4 << 30),
+        canister_memory_limit: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
         memory_allocation: MemoryAllocation::default(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
-        subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
-        subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+        subnet_memory_saturation: ResourceSaturation::default(),
     }
 }
 
@@ -88,6 +89,7 @@ impl ApiTypeBuilder {
 
     pub fn build_system_task_api() -> ApiType {
         ApiType::system_task(
+            IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             mock_time(),
             CallContextId::from(1),
@@ -97,6 +99,7 @@ impl ApiTypeBuilder {
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {
         ApiType::reply_callback(
             mock_time(),
+            PrincipalId::new_anonymous(),
             vec![],
             incoming_cycles,
             CallContextId::new(1),
@@ -108,6 +111,7 @@ impl ApiTypeBuilder {
     pub fn build_reject_api(reject_context: RejectContext) -> ApiType {
         ApiType::reject_callback(
             mock_time(),
+            PrincipalId::new_anonymous(),
             reject_context,
             Cycles::zero(),
             call_context_test_id(1),
@@ -142,6 +146,7 @@ pub fn get_system_api(
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),

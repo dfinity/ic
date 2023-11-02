@@ -60,7 +60,8 @@ impl TransactionIdentifier {
 
                 let from = icp_ledger::AccountIdentifier::new(from, from_subaccount);
 
-                let hash = Transaction::new(from, to, amount, fee, memo, created_at_time).hash();
+                let hash =
+                    Transaction::new(from, to, None, amount, fee, memo, created_at_time).hash();
 
                 Ok(TransactionIdentifier::from(&hash))
             }

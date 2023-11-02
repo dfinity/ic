@@ -1,18 +1,21 @@
 use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     encoding::{
-        old_types::{RequestOrResponseV3, StreamHeaderV6, SystemMetadataV9},
+        old_types::{RequestOrResponseV13, RequestOrResponseV3, StreamHeaderV6, SystemMetadataV9},
         types::{
-            RequestOrResponse as RequestOrResponseV4, StreamHeader as StreamHeaderV8,
-            SystemMetadata as SystemMetadataV10,
+            RequestOrResponse as RequestOrResponseV14, StreamHeader as StreamHeaderV8,
+            SubnetMetrics as SubnetMetricsV15, SystemMetadata as SystemMetadataV10,
         },
         CborProxyDecoder, CborProxyEncoder,
     },
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::SystemMetadata;
-use ic_test_utilities::{state::arb_stream_header, types::arbitrary};
+use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
+use ic_test_utilities::{
+    state::{arb_stream_header, arb_subnet_metrics},
+    types::arbitrary,
+};
 use ic_types::{
     crypto::CryptoHash, messages::RequestOrResponse, xnet::StreamHeader, CryptoHashOfPartialState,
 };
@@ -77,7 +80,7 @@ pub(crate) fn arb_valid_versioned_stream_header(
         // 8.
         (
             arb_stream_header(/* sig_min_size */ 0, sig_max_size),
-            Just(CertificationVersion::V8..=CertificationVersion::V9)
+            Just(CertificationVersion::V8..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
     ]
 }
@@ -109,7 +112,7 @@ lazy_static! {
         ),
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            CertificationVersion::V0..=CertificationVersion::V9,
+            CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "StreamHeader",
             |v| StreamHeaderV8::proxy_encode(v),
             |v| StreamHeaderV8::proxy_decode(v),
@@ -186,10 +189,24 @@ proptest! {
 /// Produces a `RequestOrResponse` valid at all certification versions in the range.
 pub(crate) fn arb_valid_versioned_message(
 ) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![(
-        arbitrary::request_or_response(),
-        Just(CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-    ),]
+    prop_oneof![
+        (
+            arbitrary::valid_request_or_response_for_certification_version(
+                // Version 14 introduces a new field `metadata` for `Request`. For version 13 and
+                // below, this field is always `None`, which guarantees compatibility for all
+                // certification versions.
+                CertificationVersion::V13
+            ),
+            Just(CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+        (
+            arbitrary::valid_request_or_response_for_certification_version(
+                // From version 14 and on, pairwise comparisons must support the case of `metadata.is_some()`.
+                MAX_SUPPORTED_CERTIFICATION_VERSION
+            ),
+            Just(CertificationVersion::V14..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+    ]
 }
 
 lazy_static! {
@@ -205,10 +222,17 @@ lazy_static! {
         ),
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
+            CertificationVersion::V0..=CertificationVersion::V13,
+            "RequestOrResponseV13",
+            |v| RequestOrResponseV13::proxy_encode(v),
+            |v| RequestOrResponseV13::proxy_decode(v),
+        ),
+        #[allow(clippy::redundant_closure)]
+        VersionedEncoding::new(
             CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "RequestOrResponse",
-            |v| RequestOrResponseV4::proxy_encode(v),
-            |v| RequestOrResponseV4::proxy_decode(v),
+            |v| RequestOrResponseV14::proxy_encode(v),
+            |v| RequestOrResponseV14::proxy_decode(v),
         ),
     ];
 }
@@ -298,6 +322,10 @@ prop_compose! {
 }
 
 /// Produces a `SystemMetadata` valid at all certification versions in the range.
+///
+/// Returns one of two disjoint version ranges, because the encoding of the same
+/// `SystemMetadata` is different between the two version ranges.
+///
 pub(crate) fn arb_valid_system_metadata(
 ) -> impl Strategy<Value = (SystemMetadata, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
@@ -328,6 +356,57 @@ proptest! {
             for encoding in &*SYSTEM_METADATA_ENCODINGS {
                 if encoding.version_range.contains(&version) {
                     let bytes = (encoding.encode)((&metadata, version))
+                        .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
+                    results.push((version, encoding.name, bytes));
+                }
+            }
+            assert!(results.len() > results_before, "No supported encodings for certification version {:?}", version);
+        }
+
+        if results.len() > 1 {
+            let (current_version, current_name, current_bytes) = results.pop().unwrap();
+            for (version, name, bytes) in &results {
+                assert_eq!(&current_bytes, bytes, "Different encodings: {}@{:?} and {}@{:?}", current_name, current_version, name, version);
+            }
+        }
+    }
+}
+
+lazy_static! {
+    /// Current and previous canonical `SubnetMetrics` types and applicable
+    /// certification versions.
+    static ref SUBNET_METRICS_ENCODINGS: Vec<VersionedEncoding<SubnetMetrics>> = vec![
+        #[allow(clippy::redundant_closure)]
+        VersionedEncoding::new(
+            CertificationVersion::V15..=MAX_SUPPORTED_CERTIFICATION_VERSION,
+            "SubnetMetricsV15",
+            |v| SubnetMetricsV15::proxy_encode(v),
+            |_v| unimplemented!(),
+        ),
+    ];
+}
+
+/// Produces a `SubnetMetrics` valid at all certification versions in the range.
+pub(crate) fn arb_valid_subnet_metrics(
+) -> impl Strategy<Value = (SubnetMetrics, RangeInclusive<CertificationVersion>)> {
+    prop_oneof![(
+        arb_subnet_metrics(),
+        Just(CertificationVersion::V15..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+    )]
+}
+
+proptest! {
+    /// Tests that given a `SubnetMetrics` that is valid for a given certification
+    /// version range, all supported canonical type and certification version
+    /// combinations produce the exact same encoding.
+    #[test]
+    fn subnet_metrics_unique_encoding((subnet_metrics, version_range) in arb_valid_subnet_metrics()) {
+        let mut results = vec![];
+        for version in iter(version_range) {
+            let results_before = results.len();
+            for encoding in &*SUBNET_METRICS_ENCODINGS {
+                if encoding.version_range.contains(&version) {
+                    let bytes = (encoding.encode)((&subnet_metrics, version))
                         .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
                     results.push((version, encoding.name, bytes));
                 }

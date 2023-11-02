@@ -2,11 +2,16 @@
 //! Consensus and Message Routing.
 
 mod canister_http;
+mod execution_environment;
 mod ingress;
 mod self_validating;
 mod xnet;
 
 pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
+pub use self::execution_environment::{
+    CanisterQueryStats, EpochStats, EpochStatsMessages, QueryStatsPayload, ReceivedEpochStats,
+    TotalCanisterQueryStats,
+};
 pub use self::ingress::{IngressPayload, IngressPayloadError};
 pub use self::self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES};
 pub use self::xnet::XNetPayload;
@@ -18,6 +23,8 @@ use super::{
 };
 use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_btc_types_internal::BitcoinAdapterResponse;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::EcdsaKeyId;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto};
@@ -47,6 +54,7 @@ pub struct Batch {
 /// The context built by Consensus for deterministic processing. Captures all
 /// fields that have semantic meaning within the Chain Consensus protocol.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ValidationContext {
     /// The registry version to be associated with the payload.
     pub registry_version: RegistryVersion,
@@ -72,11 +80,13 @@ impl ValidationContext {
 ///
 /// Contains ingress messages, XNet messages and self-validating messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct BatchPayload {
     pub ingress: IngressPayload,
     pub xnet: XNetPayload,
     pub self_validating: SelfValidatingPayload,
     pub canister_http: Vec<u8>,
+    pub query_stats: Vec<u8>,
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
@@ -85,6 +95,7 @@ pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
+    pub query_stats: Option<EpochStatsMessages>,
 }
 
 impl BatchPayload {
@@ -97,6 +108,7 @@ impl BatchPayload {
             signed_ingress_msgs: self.ingress.try_into()?,
             certified_stream_slices: self.xnet.stream_slices,
             bitcoin_adapter_responses: self.self_validating.0,
+            query_stats: None,
         })
     }
 

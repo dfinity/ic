@@ -1,51 +1,73 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/internal/crypto_lib/seed",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/secrets_containers",
+    "//rs/protobuf",
+    "//rs/types/types",
+    "@crate_index//:base64",
+    "@crate_index//:curve25519-dalek",
+    "@crate_index//:ed25519-consensus",
+    "@crate_index//:hex",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:serde",
+    "@crate_index//:simple_asn1",
+    "@crate_index//:zeroize",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/test_vectors",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "@crate_index//:assert_matches",
+    "@crate_index//:num-bigint",
+    "@crate_index//:proptest",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:strum",
+    "@crate_index//:wycheproof",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:proptest-derive",
+]
+
+ALIASES = {}
 
 rust_library(
     name = "ed25519",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_ed25519",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     visibility = [
         "//rs/crypto:__subpackages__",
+        "//rs/messaging:__pkg__",
+        "//rs/replicated_state:__pkg__",
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
-    deps = [
-        "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-        "//rs/crypto/internal/crypto_lib/seed",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/secrets_containers",
-        "//rs/protobuf",
-        "//rs/types/types",
-        "@crate_index//:base64",
-        "@crate_index//:curve25519-dalek",
-        "@crate_index//:ed25519-consensus",
-        "@crate_index//:hex",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:serde",
-        "@crate_index//:simple_asn1",
-        "@crate_index//:zeroize",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "ic_crypto_internal_basic_sig_ed25519_test",
+    name = "ed25519_test",
     crate = ":ed25519",
     data = ["test_resources/sign.input"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     },
-    proc_macro_deps = [
-        "@crate_index//:proptest-derive",
-    ],
-    deps = [
-        "//rs/crypto/internal/test_vectors",
-        "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:assert_matches",
-        "@crate_index//:num-bigint",
-        "@crate_index//:proptest",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:strum",
-        "@crate_index//:wycheproof",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "ed25519_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":ed25519"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -63,7 +63,7 @@ impl ThreadPort {
             let deferred_map = &mut *deferred_guard;
             let mut replay = Vec::new();
             let i = 0;
-            let mut deferred = deferred_map.entry(node_id).or_default();
+            let deferred = deferred_map.entry(node_id).or_default();
             while i != deferred.stash.len() {
                 replay.push(deferred.stash.swap_remove(i));
             }

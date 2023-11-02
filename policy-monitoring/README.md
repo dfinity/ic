@@ -24,7 +24,7 @@ Prerequisites
 1. Git
 2. Python 3
 3. VPN connection to reach
-   [http://elasticsearch.testnet.dfinity.systems](http://elasticsearch.testnet.dfinity.systems)
+   [https://elasticsearch.testnet.dfinity.network](https://elasticsearch.testnet.dfinity.network)
 4. Access tokens (TODO)
 
 For example, the following should be enough on Ubuntu 22.04 LTS:

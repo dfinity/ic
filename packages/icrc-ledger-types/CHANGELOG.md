@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.2
+
+- Change ICRC-1 Account to use the standard ICRC-1 Textual Representation
+
+## 0.1.1
+
+## 0.1.0
+
 ### Added
 
+- `icrc1` and `icrc2` types.
 - The `Value` type and the algorithm to compute its hash.
-- The blocks and transactions types for an icrc ledger.
-- The types needed for interacting with the icrc ledgers via an egent (e.g. TransferArg, TransferError)
+
+### Changed
+
+- Updated candid library to the latest version.

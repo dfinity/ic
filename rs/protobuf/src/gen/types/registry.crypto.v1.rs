@@ -42,9 +42,19 @@ pub struct EcdsaKeyId {
     pub name: ::prost::alloc::string::String,
 }
 /// An algorithm ID. This is used to specify the signature algorithm associated with a public key.
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum AlgorithmId {
     Unspecified = 0,
@@ -91,11 +101,44 @@ impl AlgorithmId {
             AlgorithmId::MegaSecp256k1 => "ALGORITHM_ID_MEGA_SECP_256K1",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ALGORITHM_ID_UNSPECIFIED" => Some(Self::Unspecified),
+            "ALGORITHM_ID_MULTI_BLS12_381" => Some(Self::MultiBls12381),
+            "ALGORITHM_ID_THRES_BLS12_381" => Some(Self::ThresBls12381),
+            "ALGORITHM_ID_SCHNORR_SECP256K1" => Some(Self::SchnorrSecp256k1),
+            "ALGORITHM_ID_STATIC_DH_SECP256K1" => Some(Self::StaticDhSecp256k1),
+            "ALGORITHM_ID_HASH_SHA256" => Some(Self::HashSha256),
+            "ALGORITHM_ID_TLS" => Some(Self::Tls),
+            "ALGORITHM_ID_ED25519" => Some(Self::Ed25519),
+            "ALGORITHM_ID_SECP256K1" => Some(Self::Secp256k1),
+            "ALGORITHM_ID_GROTH20_BLS12_381" => Some(Self::Groth20Bls12381),
+            "ALGORITHM_ID_NIDKG_GROTH20_BLS12_381" => Some(Self::NidkgGroth20Bls12381),
+            "ALGORITHM_ID_ECDSA_P256" => Some(Self::EcdsaP256),
+            "ALGORITHM_ID_ECDSA_SECP_256K1" => Some(Self::EcdsaSecp256k1),
+            "ALGORITHM_ID_IC_CANISTER_SIGNATURE" => Some(Self::IcCanisterSignature),
+            "ALGORITHM_ID_RSA_SHA256" => Some(Self::RsaSha256),
+            "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256K1" => Some(Self::ThresholdEcdsaSecp256k1),
+            "ALGORITHM_ID_MEGA_SECP_256K1" => Some(Self::MegaSecp256k1),
+            _ => None,
+        }
+    }
 }
 /// Types of curves that can be used for ECDSA signatures.
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum EcdsaCurve {
     Unspecified = 0,
@@ -110,6 +153,14 @@ impl EcdsaCurve {
         match self {
             EcdsaCurve::Unspecified => "ECDSA_CURVE_UNSPECIFIED",
             EcdsaCurve::Secp256k1 => "ECDSA_CURVE_SECP256K1",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ECDSA_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
+            "ECDSA_CURVE_SECP256K1" => Some(Self::Secp256k1),
+            _ => None,
         }
     }
 }

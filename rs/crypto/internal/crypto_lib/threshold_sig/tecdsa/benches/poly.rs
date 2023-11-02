@@ -1,16 +1,18 @@
 use core::time::Duration;
 use criterion::*;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{CryptoRng, Rng};
 
 fn poly_bench(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     let curve = EccCurveType::K256;
 
-    let mut rng = rand::thread_rng();
-
     for degree in [8, 16, 32] {
-        let poly = Polynomial::random(curve, degree, &mut rng);
+        let poly = Polynomial::random(curve, degree, rng);
 
-        let x = EccScalar::random(curve, &mut rng);
+        let x = EccScalar::random(curve, rng);
 
         c.bench_function(
             &format!("poly evaluate_at({}, degree {})", curve, degree),
@@ -23,7 +25,7 @@ fn poly_bench(c: &mut Criterion) {
 
         let mut samples = Vec::with_capacity(degree + 1);
         for _i in 0..degree + 1 {
-            let r = EccScalar::random(curve, &mut rng);
+            let r = EccScalar::random(curve, rng);
             let p_r = poly.evaluate_at(&r).unwrap();
             samples.push((r, p_r));
         }
@@ -38,7 +40,7 @@ fn poly_bench(c: &mut Criterion) {
             },
         );
 
-        let poly_b = Polynomial::random(curve, degree, &mut rng);
+        let poly_b = Polynomial::random(curve, degree, rng);
 
         c.bench_function(
             &format!("poly simple commitment({}, degree {})", curve, degree),
@@ -60,21 +62,30 @@ fn poly_bench(c: &mut Criterion) {
     }
 }
 
-fn random_point(curve_type: EccCurveType) -> EccPoint {
-    let mut rng = rand::thread_rng();
-    EccPoint::mul_by_g(&EccScalar::random(curve_type, &mut rng)).unwrap()
+fn random_point<R: Rng + CryptoRng>(curve_type: EccCurveType, rng: &mut R) -> EccPoint {
+    EccPoint::mul_by_g(&EccScalar::random(curve_type, rng))
 }
 
-fn random_scalar(curve_type: EccCurveType) -> EccScalar {
-    let mut rng = rand::thread_rng();
-    EccScalar::random(curve_type, &mut rng)
+fn random_scalar<R: Rng + CryptoRng>(curve_type: EccCurveType, rng: &mut R) -> EccScalar {
+    EccScalar::random(curve_type, rng)
 }
 
-fn random_lagrange_coeffs(curve_type: EccCurveType, num_terms: usize) -> LagrangeCoefficients {
-    LagrangeCoefficients::new((0..num_terms).map(|_| random_scalar(curve_type)).collect()).unwrap()
+fn random_lagrange_coeffs<R: Rng + CryptoRng>(
+    curve_type: EccCurveType,
+    num_terms: usize,
+    rng: &mut R,
+) -> LagrangeCoefficients {
+    LagrangeCoefficients::new(
+        (0..num_terms)
+            .map(|_| random_scalar(curve_type, rng))
+            .collect(),
+    )
+    .unwrap()
 }
 
 fn poly_interpolate_point(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_poly_interpolate_point_{}", curve_type));
 
@@ -87,8 +98,8 @@ fn poly_interpolate_point(c: &mut Criterion) {
                     b.iter_batched_ref(
                         || {
                             let points: Vec<_> =
-                                (0..size).map(|_| random_point(curve_type)).collect();
-                            let coeffs = random_lagrange_coeffs(curve_type, degree);
+                                (0..size).map(|_| random_point(curve_type, rng)).collect();
+                            let coeffs = random_lagrange_coeffs(curve_type, degree, rng);
                             (points, coeffs)
                         },
                         |(points, coeffs)| {
@@ -111,6 +122,8 @@ fn poly_interpolate_point(c: &mut Criterion) {
 }
 
 fn poly_interpolate_scalar(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_poly_interpolate_scalar_{}", curve_type));
         // range of arguments for generic functions
@@ -119,8 +132,8 @@ fn poly_interpolate_scalar(c: &mut Criterion) {
                 b.iter_batched_ref(
                     || {
                         let scalars: Vec<_> =
-                            (0..size).map(|_| random_scalar(curve_type)).collect();
-                        let coeffs = random_lagrange_coeffs(curve_type, degree);
+                            (0..size).map(|_| random_scalar(curve_type, rng)).collect();
+                        let coeffs = random_lagrange_coeffs(curve_type, degree, rng);
                         (scalars, coeffs)
                     },
                     |(scalars, coeffs)| coeffs.interpolate_scalar(&scalars[..]),

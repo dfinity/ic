@@ -1,17 +1,18 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
-use anyhow::{anyhow, Error};
+use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
+    metrics::{MetricParams, WithMetrics},
     snapshot::{Node, RoutingTable},
-    Run,
 };
 
+#[derive(Copy, Clone)]
 pub struct PersistResults {
     pub ranges_old: u32,
     pub ranges_new: u32,
@@ -19,6 +20,7 @@ pub struct PersistResults {
     pub nodes_new: u32,
 }
 
+#[derive(Copy, Clone)]
 pub enum PersistStatus {
     Completed(PersistResults),
     SkippedEmpty,
@@ -39,6 +41,7 @@ fn principal_bytes_to_u256(p: &[u8]) -> u256 {
 }
 
 // Converts string principal to a u256
+#[allow(dead_code)] // remove if this is used outside of tests
 fn principal_to_u256(p: &str) -> Result<u256, Error> {
     // Parse textual representation into a byte slice
     let p = Principal::from_text(p)?;
@@ -69,8 +72,8 @@ pub struct Routes {
 
 impl Routes {
     // Look up the subnet by canister_id
-    pub fn lookup(&self, canister_id: &str) -> Result<Arc<RouteSubnet>, Error> {
-        let canister_id_u256 = principal_to_u256(canister_id)?;
+    pub fn lookup(&self, canister_id: Principal) -> Option<Arc<RouteSubnet>> {
+        let canister_id_u256 = principal_bytes_to_u256(canister_id.as_slice());
 
         let idx = match self
             .subnets
@@ -96,10 +99,10 @@ impl Routes {
 
         let subnet = self.subnets[idx].clone();
         if canister_id_u256 < subnet.range_start || canister_id_u256 > subnet.range_end {
-            return Err(anyhow!("Route for canister '{canister_id}' not found"));
+            return None;
         }
 
-        Ok(subnet)
+        Some(subnet)
     }
 }
 
@@ -108,20 +111,20 @@ pub trait Persist: Send + Sync {
     async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error>;
 }
 
-pub struct Persister<'a> {
-    published_routes: &'a ArcSwapOption<Routes>,
+pub struct Persister {
+    published_routes: Arc<ArcSwapOption<Routes>>,
 }
 
-impl<'a> Persister<'a> {
-    pub fn new(published_routes: &'a ArcSwapOption<Routes>) -> Self {
+impl Persister {
+    pub fn new(published_routes: Arc<ArcSwapOption<Routes>>) -> Self {
         Self { published_routes }
     }
 }
 
 #[async_trait]
-impl<'a> Persist for Persister<'a> {
+impl Persist for Persister {
     // Construct a lookup table based on provided routing table
-    async fn persist(&self, mut rt: RoutingTable) -> Result<PersistStatus, Error> {
+    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
         if rt.subnets.is_empty() {
             return Ok(PersistStatus::SkippedEmpty);
         }
@@ -164,10 +167,57 @@ impl<'a> Persist for Persister<'a> {
             nodes_new: rt.node_count,
         };
 
-        // Publish new subnet
+        // Publish new routing table
         self.published_routes.store(Some(rt));
 
         Ok(PersistStatus::Completed(results))
+    }
+}
+
+#[async_trait]
+impl<T: Persist> Persist for WithMetrics<T> {
+    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
+        let start_time = Instant::now();
+        let out = self.0.persist(rt).await;
+        let duration = start_time.elapsed().as_secs_f64();
+
+        match out {
+            Ok(PersistStatus::SkippedEmpty) => {
+                error!("Lookup table is empty!");
+            }
+            Ok(PersistStatus::Completed(s)) => {
+                info!(
+                    "Lookup table published: subnet ranges: {:?} -> {:?}, nodes: {:?} -> {:?}",
+                    s.ranges_old, s.ranges_new, s.nodes_old, s.nodes_new,
+                );
+            }
+            Err(_) => {}
+        }
+
+        let status = match &out {
+            Ok(_) => "ok".to_string(),
+            Err(e) => format!("error_{}", e),
+        };
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        counter.with_label_values(&[status.as_str()]).inc();
+        recorder
+            .with_label_values(&[status.as_str()])
+            .observe(duration);
+
+        info!(
+            action,
+            status,
+            error = ?out.as_ref().err(),
+            duration,
+        );
+
+        out
     }
 }
 

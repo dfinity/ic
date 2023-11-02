@@ -2,8 +2,8 @@
 This module defines utilities for building Rust canisters.
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 def _wasm_rust_transition_impl(_settings, _attr):
     return {
@@ -60,6 +60,7 @@ def rust_canister(name, service_file, **kwargs):
     """
     wasm_name = "_wasm_" + name.replace(".", "_")
     kwargs.setdefault("visibility", ["//visibility:public"])
+    kwargs.setdefault("tags", []).append("canister")
 
     rust_binary(
         name = wasm_name,
@@ -83,6 +84,11 @@ def rust_canister(name, service_file, **kwargs):
         $(location @crate_index//:ic-wasm__ic-wasm) $(location {input_wasm}) -o $@ shrink && \
         $(location @crate_index//:ic-wasm__ic-wasm) $@ -o $@ metadata candid:service --visibility public --file $(location {service_file})
         """.format(input_wasm = name + ".raw", service_file = service_file),
+    )
+
+    native.alias(
+        name = name + ".didfile",
+        actual = service_file,
     )
 
     inject_version_into_wasm(
@@ -109,6 +115,11 @@ def motoko_canister(name, entry, deps):
         idl_out = raw_did,
         wasm_out = raw_wasm,
         deps = deps,
+    )
+
+    native.alias(
+        name = name + ".didfile",
+        actual = raw_did,
     )
 
     inject_version_into_wasm(

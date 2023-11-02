@@ -9,15 +9,7 @@ rust_library(
     version = "0.8.0",
     deps = [
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/constants",
-        "//rs/crypto/sha",
-        "//rs/types/base_types",
-        "//rs/types/ic00_types",
-        "//rs/utils",
         "@crate_index//:candid",
-        "@crate_index//:ciborium",
-        "@crate_index//:hex",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -28,8 +20,6 @@ rust_test(
     name = "ledger_core_test",
     crate = ":ledger_core",
     deps = [
-        "@crate_index//:proptest",
-        "@crate_index//:rand_0_8_4",
     ],
 )
 

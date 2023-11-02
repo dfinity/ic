@@ -22,13 +22,11 @@ use ic_interfaces::execution_environment::{
     ExecutionComplexity, HypervisorError, HypervisorResult, InstanceStats,
     OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_system_api::{
-    system_api_empty::SystemApiEmpty, ExecutionParameters, ModificationTracking, SystemApiImpl,
-};
+use ic_system_api::{ExecutionParameters, ModificationTracking, SystemApiImpl};
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use std::collections::hash_map::DefaultHasher;
@@ -56,7 +54,6 @@ pub trait WasmExecutor: Send + Sync {
         canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-        logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)>;
 }
 
@@ -126,7 +123,7 @@ pub trait PausedWasmExecution: std::fmt::Debug + Send {
     fn abort(self: Box<Self>);
 }
 
-/// Changes in the canister state after a successul Wasm execution.
+/// Changes in the canister state after a successful Wasm execution.
 #[derive(Clone, Debug)]
 pub struct CanisterStateChanges {
     /// The state of the global variables after execution.
@@ -241,7 +238,7 @@ impl WasmExecutor for WasmExecutorImpl {
         let canister_state_changes = match wasm_state_changes {
             Some(wasm_state_changes) => {
                 let system_api = match instance_or_system_api {
-                    Ok(instance) => instance.into_store_data().system_api,
+                    Ok(instance) => instance.into_store_data().system_api.unwrap(),
                     Err(system_api) => system_api,
                 };
                 let system_state_changes = system_api.into_system_state_changes();
@@ -271,7 +268,6 @@ impl WasmExecutor for WasmExecutorImpl {
         canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-        logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         // Compile Wasm binary and cache it.
         let wasm_binary = WasmBinary::new(canister_module);
@@ -285,14 +281,6 @@ impl WasmExecutor for WasmExecutorImpl {
                 _ => panic!("Newly created WasmBinary must be compiled or deserialized."),
             };
         self.observe_metrics(&serialized_module.imports_details);
-        if serialized_module.reserved_exports > 0 {
-            info!(
-                logger,
-                "Canister {} has {} reserved exports.",
-                canister_id,
-                serialized_module.reserved_exports
-            );
-        }
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();
 
@@ -475,8 +463,8 @@ pub fn wasm_execution_error(
 /// dirty pages. The function is public because it is used in
 /// `wasmtime_random_memory_writes` tests.
 #[doc(hidden)]
-pub fn compute_page_delta<'a, S: SystemApi>(
-    instance: &'a mut WasmtimeInstance<S>,
+pub fn compute_page_delta<'a>(
+    instance: &'a mut WasmtimeInstance,
     dirty_pages: &[PageIndex],
     canister_memory_type: CanisterMemoryType,
 ) -> Vec<(PageIndex, &'a PageBytes)> {
@@ -586,7 +574,7 @@ pub fn process(
     SliceExecutionOutput,
     WasmExecutionOutput,
     Option<WasmStateChanges>,
-    Result<WasmtimeInstance<SystemApiImpl>, SystemApiImpl>,
+    Result<WasmtimeInstance, SystemApiImpl>,
 ) {
     let canister_id = sandbox_safe_system_state.canister_id();
     let modification_tracking = api_type.modification_tracking();
@@ -597,6 +585,7 @@ pub fn process(
         execution_parameters,
         subnet_available_memory,
         embedder.config().feature_flags.wasm_native_stable_memory,
+        embedder.config().max_sum_exported_function_name_lengths,
         stable_memory.clone(),
         out_of_instructions_handler,
         logger,
@@ -612,7 +601,7 @@ pub fn process(
         wasm_memory,
         stable_memory,
         modification_tracking,
-        system_api,
+        Some(system_api),
     ) {
         Ok(instance) => instance,
         Err((err, system_api)) => {
@@ -629,7 +618,7 @@ pub fn process(
                     instance_stats: InstanceStats::default(),
                 },
                 None,
-                Err(system_api),
+                Err(system_api.unwrap()), // should be safe because we've passed Some(api) to new_instance
             );
         }
     };
@@ -644,7 +633,9 @@ pub fn process(
 
     // Get the executed/remaining instructions for the message and the slice.
     let instruction_counter = instance.instruction_counter();
-    let system_api = &instance.store_data().system_api;
+    let instance_stats = instance.get_stats();
+    //unwrap should not fail, because we have passed Some(system_api) to the instance above
+    let system_api = instance.store_data_mut().system_api_mut().unwrap();
     let slice_instruction_limit = system_api.slice_instruction_limit();
     // Capping at the limit to preserve the existing behaviour. It should be
     // possible to remove capping after ensuring that all callers can handle
@@ -659,18 +650,13 @@ pub fn process(
         .min(message_instruction_limit);
     let message_instructions_left = message_instruction_limit - message_instructions_executed;
 
-    let instance_stats = instance.get_stats();
-
     // Has the side effect of deallocating memory if message failed and
     // returning cycles from a request that wasn't sent.
-    let mut wasm_result = instance
-        .store_data_mut()
-        .system_api
-        .take_execution_result(run_result.as_ref().err());
+    let mut wasm_result = system_api.take_execution_result(run_result.as_ref().err());
 
     let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
     let wasm_heap_limit =
-        NumWasmPages::from(wasmtime_environ::WASM32_MAX_PAGES as usize) - wasm_reserved_pages;
+        NumWasmPages::from(wasmtime_environ::WASM64_MAX_PAGES as usize) - wasm_reserved_pages;
 
     if wasm_heap_size_after > wasm_heap_limit {
         wasm_result = Err(HypervisorError::WasmReservedPages);
@@ -704,26 +690,19 @@ pub fn process(
                                 ))
                             }
                             FlagStatus::Disabled => {
-                                stable_memory.size =
-                                    instance.store_data().system_api.stable_memory_size();
-                                stable_memory.page_map.update(
-                                    &instance
-                                        .store_data_mut()
-                                        .system_api
-                                        .stable_memory_dirty_pages(),
-                                )
+                                // unwrap should not fail, because we passed Some(system_api) when creating the instance
+                                let sys_api = instance.store_data_mut().system_api_mut().unwrap();
+                                stable_memory.size = sys_api.stable_memory_size();
+                                stable_memory
+                                    .page_map
+                                    .update(&sys_api.stable_memory_dirty_pages())
                             }
                         };
-                    allocated_bytes = instance.store_data().system_api.get_allocated_bytes();
-                    allocated_message_bytes = instance
-                        .store_data()
-                        .system_api
-                        .get_allocated_message_bytes();
-                    execution_complexity = instance
-                        .store_data()
-                        .system_api
-                        .execution_complexity()
-                        .clone();
+                    // unwrap should not fail, because we passed Some(system_api) when creating the instance
+                    let sys_api = instance.store_data().system_api().unwrap();
+                    allocated_bytes = sys_api.get_allocated_bytes();
+                    allocated_message_bytes = sys_api.get_allocated_message_bytes();
+                    execution_complexity = sys_api.execution_complexity().clone();
 
                     Some(WasmStateChanges::new(
                         wasm_memory_delta,
@@ -779,15 +758,6 @@ pub fn get_initial_globals_and_memory(
     );
 
     // Step 2. Instantiate the Wasm module to get the globals and the memory size.
-    //
-    // We are using the wasm instance to initialize the execution state properly.
-    // SystemApi is needed when creating a Wasmtime instance because the Linker
-    // will try to assemble a list of all imports used by the wasm module.
-    //
-    // However, there is no need to initialize a `SystemApiImpl`
-    // as we don't execute any wasm instructions at this point,
-    // so we use an empty SystemApi instead.
-    let system_api = SystemApiEmpty;
     // This runs the module's `start` function, but instrumentation clears the
     // start section and re-exports the start function as `canister_start`.
     let mut instance = match embedder.new_instance(
@@ -797,7 +767,7 @@ pub fn get_initial_globals_and_memory(
         &Memory::new(wasm_page_map.clone(), NumWasmPages::from(0)),
         &Memory::new(stable_memory_page_map.clone(), NumWasmPages::from(0)),
         ModificationTracking::Ignore,
-        system_api,
+        None,
     ) {
         Ok(instance) => instance,
         Err((err, _system_api)) => {

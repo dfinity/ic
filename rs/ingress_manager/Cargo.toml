@@ -4,28 +4,29 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-ic-crypto = { path = "../crypto" }
 ic-constants = { path = "../constants" }
+ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-protobuf = { path = "../protobuf" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
 ic-validator = { path = "../validator" }
-bincode = "1.2.1"
-prometheus = { version = "0.12.0", features = [ "process" ] }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+prometheus = { version = "0.12.0", features = ["process"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 
 [dev-dependencies]
 assert_matches = "1.3.0"
-criterion = "0.3"
+criterion = "0.5"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -37,7 +38,7 @@ ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 proptest = { version = "1.0.0" }
 rand = "0.8"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 
 [[bench]]
 name = "build_payload"

@@ -10,7 +10,10 @@ use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
 use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
-use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
+use ic_ckbtc_minter::updates::retrieve_btc::{
+    RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
+    RetrieveBtcWithApprovalError,
+};
 use ic_ckbtc_minter::updates::{
     self,
     get_btc_address::GetBtcAddressArgs,
@@ -23,6 +26,7 @@ use ic_ckbtc_minter::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 
+#[candid_method(init)]
 #[init]
 fn init(args: MinterArg) {
     match args {
@@ -147,6 +151,15 @@ async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBt
     check_postcondition(updates::retrieve_btc::retrieve_btc(args).await)
 }
 
+#[candid_method(update)]
+#[update]
+async fn retrieve_btc_with_approval(
+    args: RetrieveBtcWithApprovalArgs,
+) -> Result<RetrieveBtcOk, RetrieveBtcWithApprovalError> {
+    check_anonymous_caller();
+    check_postcondition(updates::retrieve_btc::retrieve_btc_with_approval(args).await)
+}
+
 #[candid_method(query)]
 #[query]
 fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
@@ -158,6 +171,19 @@ fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
 async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     check_anonymous_caller();
     check_postcondition(updates::update_balance::update_balance(args).await)
+}
+
+#[candid_method(update)]
+#[update]
+async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
+    ic_cdk::api::management_canister::main::canister_status(
+        ic_cdk::api::management_canister::main::CanisterIdRecord {
+            canister_id: ic_cdk::id(),
+        },
+    )
+    .await
+    .expect("failed to fetch canister status")
+    .0
 }
 
 #[candid_method(query)]
@@ -189,9 +215,12 @@ fn get_deposit_fee() -> u64 {
     read_state(|s| s.kyt_fee)
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
+    if ic_cdk::api::data_certificate().is_none() {
+        ic_cdk::trap("update call rejected");
+    }
+
     if req.path() == "/metrics" {
         let mut writer =
             ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
@@ -297,7 +326,7 @@ fn check_candid_interface_compatibility() {
         }
     }
 
-    fn check_service_compatible(
+    fn check_service_equal(
         new_name: &str,
         new: candid::utils::CandidSource,
         old_name: &str,
@@ -305,7 +334,7 @@ fn check_candid_interface_compatibility() {
     ) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_compatible(new, old) {
+        match candid::utils::service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -329,7 +358,7 @@ fn check_candid_interface_compatibility() {
     let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("ckbtc_minter.did");
 
-    check_service_compatible(
+    check_service_equal(
         "actual ledger candid interface",
         candid::utils::CandidSource::Text(&new_interface),
         "declared candid interface in ckbtc_minter.did file",

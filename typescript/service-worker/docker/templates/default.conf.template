@@ -13,25 +13,12 @@ map $http_host $domain_canister_id {
     "dscvr.ic.local"              "h5aet-waaaa-aaaab-qaamq-cai";
     "nns.ic.local"                "qoctq-giaaa-aaaaa-aaaea-cai";
     "demo.ic.local"               "lfvqp-yaaaa-aaaag-abclq-cai";
+    "nuance.ic.local"             "exwqn-uaaaa-aaaaf-qaeaa-cai";
 }
 
 map $domain_canister_id $domain_canister_id_cookie {
     "" "";
     default "__Secure-IcCanisterId=${domain_canister_id}; Path=/; SameSite=Strict; Secure";
-}
-
-map $http_host $domain_gateway {
-    default                       "";
-    "internetcomputer.ic.local"   "ic0.app";
-    "distrikt.ic.local"           "ic0.app";
-    "dscvr.ic.local"              "ic0.app";
-    "nns.ic.local"                "ic0.app";
-    "demo.ic.local"               "ic0.app";
-}
-
-map $domain_gateway $domain_gateway_cookie {
-    "" "";
-    default "__Secure-IcGateway=${domain_gateway}; Path=/; SameSite=Strict; Secure";
 }
 
 server {
@@ -41,11 +28,9 @@ server {
     server_name localhost *.ic0.local *.ic.local;
 
     # Canister / Gateway (Header)
-    add_header "X-Ic-Gateway" $domain_gateway always;
     add_header "X-Ic-Canister-Id" $domain_canister_id always;
 
     # Canister / Gateway (Cookie)
-    add_header "Set-Cookie" $domain_gateway_cookie always;
     add_header "Set-Cookie" $domain_canister_id_cookie always;
     
     location / {

@@ -32,6 +32,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::{self, WasmMetadata},
+    page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
 };
@@ -57,6 +58,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
+use std::time::Duration;
 
 use crate::{
     as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
@@ -529,8 +531,12 @@ impl SchedulerTest {
     }
 
     pub fn charge_for_resource_allocations(&mut self) {
+        let subnet_size = self.subnet_size();
         self.scheduler
-            .charge_canisters_for_resource_allocation_and_usage(self.state.as_mut().unwrap(), 1)
+            .charge_canisters_for_resource_allocation_and_usage(
+                self.state.as_mut().unwrap(),
+                subnet_size,
+            )
     }
 
     pub fn induct_messages_on_same_subnet(&mut self) {
@@ -579,6 +585,12 @@ impl SchedulerTest {
             response_size_limit,
             self.subnet_size(),
         )
+    }
+
+    pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
+        self.scheduler
+            .cycles_account_manager
+            .memory_cost(bytes, duration, self.subnet_size())
     }
 }
 
@@ -778,7 +790,7 @@ impl SchedulerTestBuilder {
             Arc::clone(&cycles_account_manager),
             Arc::<TestWasmExecutor>::clone(&wasm_executor),
             deterministic_time_slicing,
-            config.cost_to_compile_wasm_instruction,
+            config.embedders_config.cost_to_compile_wasm_instruction,
             SchedulerConfig::application_subnet().dirty_page_overhead,
         );
         let hypervisor = Arc::new(hypervisor);
@@ -796,6 +808,8 @@ impl SchedulerTestBuilder {
             SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
+            self.scheduler_config.scheduler_cores,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
@@ -808,6 +822,7 @@ impl SchedulerTestBuilder {
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
             deterministic_time_slicing,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         SchedulerTest {
             state: Some(state),
@@ -997,7 +1012,6 @@ impl WasmExecutor for TestWasmExecutor {
         _canister_root: PathBuf,
         canister_id: CanisterId,
         _compilation_cache: Arc<CompilationCache>,
-        _logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let mut guard = self.core.lock().unwrap();
         guard.create_execution_state(canister_module, canister_id)
@@ -1102,6 +1116,10 @@ impl TestWasmExecutorCore {
             dirty_pages: message.dirty_pages,
             read_before_write_count: message.dirty_pages,
             direct_write_count: 0,
+            sigsegv_count: 0,
+            mmap_count: 0,
+            mprotect_count: 0,
+            copy_page_count: 0,
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,
@@ -1215,6 +1233,7 @@ impl TestWasmExecutorCore {
             payment: Cycles::zero(),
             method_name: "update".into(),
             method_payload: encode_message_id_as_payload(call_message_id),
+            metadata: None,
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,

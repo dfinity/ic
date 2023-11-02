@@ -23,7 +23,7 @@ use crate::{
 use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
 use std::{
@@ -1198,7 +1198,7 @@ mod tests {
     use candid::Encode;
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -1281,6 +1281,12 @@ mod tests {
         };
         assert_is_ok(validate_default_proposal(&result));
         result
+    }
+
+    fn subaccount_1() -> Subaccount {
+        let mut subaccount = vec![0; 32];
+        subaccount[31] = 1;
+        Subaccount { subaccount }
     }
 
     #[test]
@@ -2232,7 +2238,7 @@ Version {
 ## Memo: 1000"
         );
 
-        // Valid case with sub-account
+        // Valid case with default sub-account
         assert_eq!(
             validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
@@ -2251,7 +2257,30 @@ Version {
 ## Source treasury: ICP Treasury (NNS Ledger)
 ## Amount (e8s): 1000000
 ## Target principal: bg4sm-wzk
-## Target account: 0x0000000000000000000000000000000000000000000000000000000000000000.bg4sm-wzk
+## Target account: bg4sm-wzk
+## Memo: 0"
+        );
+
+        // Valid case with non-default sub-account
+        // The textual representation of ICRC-1 Accounts can be
+        // found at https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/TextualEncoding.md
+        assert_eq!(
+            validate_and_render_transfer_sns_treasury_funds(
+                &TransferSnsTreasuryFunds {
+                    from_treasury: TransferFrom::IcpTreasury.into(),
+                    amount_e8s: 1000000,
+                    memo: None,
+                    to_principal: Some(basic_principal_id()),
+                    to_subaccount: Some(subaccount_1())
+                },
+                0
+            )
+            .unwrap(),
+            r"# Proposal to transfer SNS Treasury funds:
+## Source treasury: ICP Treasury (NNS Ledger)
+## Amount (e8s): 1000000
+## Target principal: bg4sm-wzk
+## Target account: bg4sm-wzk-msokwai.1
 ## Memo: 0"
         );
     }

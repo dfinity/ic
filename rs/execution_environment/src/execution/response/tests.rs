@@ -3,7 +3,6 @@ use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{CanisterStatus, NumWasmPages};
@@ -891,7 +890,7 @@ fn dts_abort_works_in_response_callback() {
         original_system_state.call_context_manager()
     );
 
-    // Execute the response callback again and it should succeeed.
+    // Execute the response callback again and it should succeed.
     test.execute_message(a_id);
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
@@ -1784,7 +1783,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
                 )
                 .on_cleanup(
                     // In cleanup callback exhaust reserved instructions and write to the stable memory
-                    // to make sure that cleanup callback was executed fully and succesfully.
+                    // to make sure that cleanup callback was executed fully and successfully.
                     wasm()
                         .instruction_counter_is_at_least(
                             cleanup_instructions_reserved - stable_grow_and_write_instructions,
@@ -1811,7 +1810,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
 
     // Canister A:
     // - executes a response callback which fails with exceeding instructions limit
-    // - executes a cleanup callback wich exhausts all the instructions and writes to stable memory
+    // - executes a cleanup callback which exhausts all the instructions and writes to stable memory
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
@@ -2408,7 +2407,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // Change the cycles balance to force the response resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance(CyclesUseCase::Memory);
+        .burn_remaining_balance_for_uninstall();
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -2493,7 +2492,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // Change the cycles balance to force the cleanup resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance(CyclesUseCase::Memory);
+        .burn_remaining_balance_for_uninstall();
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -2505,4 +2504,57 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
         available_memory_before_starting_callback,
         test.subnet_available_memory().get_execution_memory()
     );
+}
+
+#[test]
+fn cycles_balance_changes_applied_correctly() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
+    let b_id = test
+        .universal_canister_with_cycles(Cycles::new(81_000_000_000))
+        .unwrap();
+
+    test.ingress(
+        b_id,
+        "update",
+        wasm()
+            .call_with_cycles(
+                a_id.get(),
+                "update",
+                call_args().other_side(wasm().accept_cycles(Cycles::new(u128::MAX))),
+                Cycles::new(60_000_000_000),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let mut b = wasm().accept_cycles(Cycles::new(u128::MAX));
+
+    for _ in 0..400 {
+        b = b.call_simple(a_id, "update", call_args());
+    }
+
+    let b = b.push_int(42).reply_int().build();
+
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args().other_side(b.clone()),
+            Cycles::new(5_000_000_000_000),
+        )
+        .build();
+    let a_balance_old = test.canister_state(a_id).system_state.balance();
+    let b_balance_old = test.canister_state(b_id).system_state.balance();
+    let res = test.ingress(a_id, "update", a).unwrap();
+    match res {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(msg) => unreachable!("rejected : {}", msg),
+    }
+    let a_balance_new = test.canister_state(a_id).system_state.balance();
+    let b_balance_new = test.canister_state(b_id).system_state.balance();
+
+    assert!(a_balance_old + b_balance_old > a_balance_new + b_balance_new);
 }

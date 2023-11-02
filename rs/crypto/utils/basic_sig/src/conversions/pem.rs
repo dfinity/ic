@@ -89,7 +89,7 @@ mod tests {
     const FICTION: &[u8] = b"Zaphod Beeblebrox says hi";
     const PEM_ENCODED_FICTION: &str = r#"
 -----BEGIN PREJUNK-----
-This shoudn't break anything
+This shouldn't break anything
 -----END PREJUNK-----
 -----BEGIN FICTION-----
 WmFwaG9kIEJlZWJsZWJ

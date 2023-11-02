@@ -1,9 +1,10 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
 load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "symlink_dirs", "tip_nns_canisters", "tip_sns_canisters")
 load(":system_tests.bzl", "uvm_config_image")
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "tip_nns_canisters", "tip_sns_canisters")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -98,13 +99,8 @@ filegroup(
 )
 
 sh_binary(
-    name = "create_universal_vm_config_image_sh",
-    srcs = ["create-universal-vm-config-image.sh"],
-)
-
-sh_binary(
-    name = "create_universal_vm_config_image_from_tar_sh",
-    srcs = ["create-universal-vm-config-image-from-tar.sh"],
+    name = "create_universal_vm_config_image_ci_sh",
+    srcs = ["create-universal-vm-config-image-ci.sh"],
 )
 
 tip_nns_canisters(
@@ -219,26 +215,111 @@ uvm_config_image(
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
-symlink_dir(
+run_binary(
+    name = "wabt-tests",
+    outs = [
+        "custom_section_name_with_spaces.wasm",
+        "duplicate_custom_section.wasm",
+        "empty_custom_section_name.wasm",
+        "empty_query_name.wasm",
+        "invalid_canister_composite_query_cq_reta.wasm",
+        "invalid_canister_composite_query_cq_retb.wasm",
+        "invalid_canister_export.wasm",
+        "invalid_canister_global_timer_reta.wasm",
+        "invalid_canister_global_timer_retb.wasm",
+        "invalid_canister_heartbeat_reta.wasm",
+        "invalid_canister_heartbeat_retb.wasm",
+        "invalid_canister_init_reta.wasm",
+        "invalid_canister_init_retb.wasm",
+        "invalid_canister_inspect_message_reta.wasm",
+        "invalid_canister_inspect_message_retb.wasm",
+        "invalid_canister_post_upgrade_reta.wasm",
+        "invalid_canister_post_upgrade_retb.wasm",
+        "invalid_canister_pre_upgrade_reta.wasm",
+        "invalid_canister_pre_upgrade_retb.wasm",
+        "invalid_canister_query_que_reta.wasm",
+        "invalid_canister_query_que_retb.wasm",
+        "invalid_canister_update_upd_reta.wasm",
+        "invalid_canister_update_upd_retb.wasm",
+        "invalid_custom_section.wasm",
+        "invalid_empty_custom_section_name.wasm",
+        "invalid_empty_query_name.wasm",
+        "invalid_import.wasm",
+        "large_custom_sections.wasm",
+        "long_exported_function_names.wasm",
+        "many_custom_sections.wasm",
+        "many_exports.wasm",
+        "many_functions.wasm",
+        "many_globals.wasm",
+        "name_clash_query_composite_query.wasm",
+        "name_clash_update_composite_query.wasm",
+        "name_clash_update_query.wasm",
+        "no_start.wasm",
+        "query_name_with_spaces.wasm",
+        "start.wasm",
+        "too_large_custom_sections.wasm",
+        "too_long_exported_function_names.wasm",
+        "too_many_custom_sections.wasm",
+        "too_many_exports.wasm",
+        "too_many_functions.wasm",
+        "too_many_globals.wasm",
+        "valid_import.wasm",
+    ],
+    args = ["$(location valid_import.wasm)"],  # passing location of an arbitrary output file is a hack, see https://github.com/bazelbuild/bazel-skylib/blob/288731ef9f7f688932bd50e704a91a45ec185f9b/rules/run_binary.bzl#L29
+    target_compatible_with = ["@platforms//os:linux"],
+    tool = "//rs/tests/testing_verification/wabt-tests:generator",
+)
+
+symlink_dirs(
     name = "ic-hs",
+    target_compatible_with = ["@platforms//os:linux"],
     targets = {
-        "@ic-hs//:build/ic-ref-test": "ic-ref-test",
-        "@ic-hs//:test-data": "test-data",
+        "//hs/spec_compliance:ic-ref-test": "bin",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz": "test-data",
+        "//rs/tests:wabt-tests": "test-data",
     },
 )
 
+copy_file(
+    name = "coredns_image",
+    src = "@coredns//image",
+    out = "coredns.tar",
+)
+
+copy_file(
+    name = "pebble_image",
+    src = "@pebble//image",
+    out = "pebble.tar",
+)
+
+copy_file(
+    name = "python3_image",
+    src = "@python3//image",
+    out = "python3.tar",
+)
+
+copy_file(
+    name = "openssl_image",
+    src = "@alpine_openssl//image",
+    out = "openssl.tar",
+)
+
 uvm_config_image(
-    name = "nns_dapp_specs_uvm_config_image",
+    name = "custom_domains_uvm_config_image",
     srcs = [
-        ":activate-systest-uvm-config",
-        "//rs/tests/replicated_tests:nns_dapp_specs_image.tar",
+        # Docker images
+        ":coredns_image",
+        ":openssl_image",
+        ":pebble_image",
+        ":python3_image",
+
+        # Assets
+        ":src/custom_domains_integration/activate.sh",
+        ":src/custom_domains_integration/pebble_cache.py",
+        ":src/custom_domains_integration/cloudflare_api.py",
     ],
     mode = "664",
-    modes = {
-        "activate": "775",
-    },
-    remap_paths = {
-        "/activate-systest-uvm-config": "/activate",
-    },
+    modes = {"activate": "775"},
+    remap_paths = {"/activate.sh": "/activate"},
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

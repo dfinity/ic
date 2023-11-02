@@ -24,7 +24,7 @@ fn n_node_gossip_with_failstop() {
             println!("Stopping node {:?}", p2p_test_context.node_id.get());
             return;
         }
-        println!("Runnning node {:?}", p2p_test_context.node_id.get());
+        println!("Running node {:?}", p2p_test_context.node_id.get());
 
         framework::replica_run_till_height(p2p_test_context, MAX_HEIGHT)
     });

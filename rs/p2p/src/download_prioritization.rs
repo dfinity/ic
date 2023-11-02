@@ -255,7 +255,7 @@ impl DownloadAttemptTracker for AdvertTracker {
     }
 
     fn set_in_progress(&mut self, chunk_id: ChunkId, node_id: &NodeId) {
-        let mut attempt = self
+        let attempt = self
             .download_attempt_map
             .entry(chunk_id)
             .or_insert_with(Default::default);

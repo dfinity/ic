@@ -76,9 +76,14 @@ use crate::{
 };
 use ic_interfaces_transport::TransportPayload;
 use ic_logger::{info, trace, warn};
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
+use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
+use ic_state_manager::state_sync::StateSyncArtifact;
 use ic_types::{
-    artifact::{Artifact, ArtifactFilter, ArtifactId, ArtifactTag},
+    artifact::{Advert, Artifact, ArtifactFilter, ArtifactId, ArtifactKind, ArtifactTag},
+    artifact_kind::{
+        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
+        IngressArtifact,
+    },
     chunkable::{ArtifactErrorCode, ChunkId},
     crypto::CryptoHash,
     p2p::GossipAdvert,
@@ -378,15 +383,44 @@ impl GossipImpl {
             peer_id,
             gossip_chunk.request.artifact_id
         );
-        match self
-            .artifact_manager
-            .on_artifact(completed_artifact, advert, &peer_id)
-        {
-            Ok(_) => (),
-            Err(err) => warn!(
+
+        let advert_matches_completed_artifact = match &completed_artifact {
+            Artifact::ConsensusMessage(msg) => {
+                advert_matches_artifact::<ConsensusArtifact>(msg, &advert)
+            }
+            Artifact::IngressMessage(msg) => {
+                advert_matches_artifact::<IngressArtifact>(msg, &advert)
+            }
+            Artifact::CertificationMessage(msg) => {
+                advert_matches_artifact::<CertificationArtifact>(msg, &advert)
+            }
+            Artifact::DkgMessage(msg) => advert_matches_artifact::<DkgArtifact>(msg, &advert),
+            Artifact::EcdsaMessage(msg) => advert_matches_artifact::<EcdsaArtifact>(msg, &advert),
+            Artifact::CanisterHttpMessage(msg) => {
+                advert_matches_artifact::<CanisterHttpArtifact>(msg, &advert)
+            }
+            // This artifact is used only in tests.
+            Artifact::FileTreeSync(_) => true,
+            Artifact::StateSync(msg) => advert_matches_artifact::<StateSyncArtifact>(msg, &advert),
+        };
+        if advert_matches_completed_artifact {
+            match self
+                .artifact_manager
+                .on_artifact(completed_artifact, &peer_id)
+            {
+                Ok(()) => (),
+                Err(err) => warn!(
+                    self.log,
+                    "Artifact is not processed successfully by Artifact Manager: {:?}", err
+                ),
+            }
+        } else {
+            warn!(
                 self.log,
-                "Artifact is not processed successfully by Artifact Manager: {:?}", err
-            ),
+                "Artifact {:?} dropped because it doesn't match the corresponding advert {:?}",
+                completed_artifact,
+                advert
+            )
         }
     }
 
@@ -960,6 +994,16 @@ impl GossipImpl {
     }
 }
 
+/// Checks if the given advert matches what is computed from the message.
+fn advert_matches_artifact<A: ArtifactKind>(msg: &A::Message, gossip_advert: &GossipAdvert) -> bool
+where
+    Advert<A>: Eq,
+    ic_types::artifact::Advert<A>: TryFrom<ic_types::p2p::GossipAdvert>,
+{
+    let computed = A::message_to_advert(msg);
+    Advert::<A>::try_from(gossip_advert.clone()).is_ok_and(|advert| advert == computed)
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -976,6 +1020,7 @@ pub mod tests {
     use ic_test_utilities::port_allocation::allocate_ports;
     use ic_test_utilities::{
         consensus::MockConsensusCache,
+        consensus::{fake::*, make_genesis},
         p2p::*,
         thread_transport::*,
         types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
@@ -995,6 +1040,7 @@ pub mod tests {
         chunkable::{ArtifactChunk, ArtifactChunkData, Chunkable, ChunkableArtifact},
         Height, NodeId, PrincipalId,
     };
+    use ic_types::{artifact::ArtifactKind, artifact_kind::ConsensusArtifact, consensus::*};
     use parking_lot::Mutex;
     use std::collections::HashSet;
     use std::convert::TryFrom;
@@ -1056,7 +1102,6 @@ pub mod tests {
         fn on_artifact(
             &self,
             mut _msg: artifact::Artifact,
-            _advert: GossipAdvert,
             _peer_id: &NodeId,
         ) -> Result<(), OnArtifactError> {
             Ok(())
@@ -1275,7 +1320,7 @@ pub mod tests {
         registry_client.update_to_latest_version();
         let registry_version = registry_client.get_latest_version();
         let node_records = registry_client
-            .get_subnet_transport_infos(subnet_test_id(P2P_SUBNET_ID_DEFAULT), registry_version)
+            .get_subnet_node_records(subnet_test_id(P2P_SUBNET_ID_DEFAULT), registry_version)
             .unwrap_or(None)
             .unwrap_or_default();
         assert_eq!((num_replicas - 1) as usize, node_records.len());
@@ -1592,7 +1637,6 @@ pub mod tests {
         let payload = Artifact::DkgMessage(receive_check_test_create_message(number));
         let artifact_chunk = ArtifactChunk {
             chunk_id,
-            witness: Vec::with_capacity(0),
             artifact_chunk_data: ArtifactChunkData::UnitChunkData(payload),
         };
 
@@ -1648,7 +1692,7 @@ pub mod tests {
         let artifact_id = ArtifactId::DkgMessage(CryptoHashOf::from(
             ic_types::crypto::crypto_hash(&msg).get(),
         ));
-        for mut advert in &mut adverts {
+        for advert in &mut adverts {
             advert.artifact_id = artifact_id.clone();
         }
 
@@ -1740,5 +1784,19 @@ pub mod tests {
             adverts.len(),
             gossip.metrics.integrity_hash_check_failed.get() as usize
         );
+    }
+
+    #[test]
+    fn test_artifact_advert_match() {
+        // Positive case: advert matches artifact
+        let cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
+        let block = BlockProposal::fake(cup.content.block.into_inner(), node_test_id(0));
+        let msg = block.into_message();
+        let mut advert: ic_types::p2p::GossipAdvert =
+            ConsensusArtifact::message_to_advert(&msg).into();
+        assert!(advert_matches_artifact::<ConsensusArtifact>(&msg, &advert));
+        // Negative case: advert does not match artifact
+        advert.size = 0;
+        assert!(!advert_matches_artifact::<ConsensusArtifact>(&msg, &advert));
     }
 }

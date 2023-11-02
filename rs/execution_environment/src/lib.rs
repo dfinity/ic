@@ -15,6 +15,9 @@ mod scheduler;
 mod types;
 pub mod util;
 
+// We need to expose this for testing purposes
+pub use query_handler::query_stats::init_query_stats;
+
 use crate::anonymous_query_handler::AnonymousQueryHandler;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
@@ -25,6 +28,7 @@ pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_interfaces::batch_payload::BatchPayloadBuilder;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
@@ -84,6 +88,7 @@ pub struct ExecutionServices {
     pub async_query_handler: QueryExecutionService,
     pub anonymous_query_handler: AnonymousQueryService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+    pub query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
 }
 
 impl ExecutionServices {
@@ -120,6 +125,8 @@ impl ExecutionServices {
         let ingress_history_reader =
             Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
+        let (query_stats_collector, query_stats_payload_builder) = init_query_stats(logger.clone());
+
         let exec_env = Arc::new(ExecutionEnvironment::new(
             logger.clone(),
             Arc::clone(&hypervisor),
@@ -130,6 +137,8 @@ impl ExecutionServices {
             SchedulerImpl::compute_capacity_percent(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
+            scheduler_config.scheduler_cores,
+            Arc::clone(&fd_factory),
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
@@ -139,21 +148,12 @@ impl ExecutionServices {
             metrics_registry,
             scheduler_config.max_instructions_per_message_without_dts,
             Arc::clone(&cycles_account_manager),
+            query_stats_collector,
         ));
 
-        // If this is not a system or verified subnet we can double the
-        // number of query execution threads total because the file-backed
-        // allocator is enabled on these subnets and thus we can fit more
-        // concurrent queries in memory.
-        // TODO: remove this once the file-backed allocator is enabled on all subnets.
-        let query_execution_threads_total = if own_subnet_type == SubnetType::Application {
-            config.query_execution_threads_total * 2
-        } else {
-            config.query_execution_threads_total
-        };
         let query_scheduler = QueryScheduler::new(
-            query_execution_threads_total,
-            config.query_execution_threads_per_canister,
+            config.query_execution_threads_total,
+            config.embedders_config.query_execution_threads_per_canister,
             config.query_scheduling_time_slice_per_canister,
             metrics_registry,
             QuerySchedulerFlag::UseNewSchedulingAlgorithm,
@@ -189,6 +189,7 @@ impl ExecutionServices {
             config.rate_limiting_of_heap_delta,
             config.rate_limiting_of_instructions,
             config.deterministic_time_slicing,
+            Arc::clone(&fd_factory),
         ));
 
         Self {
@@ -199,6 +200,7 @@ impl ExecutionServices {
             async_query_handler,
             anonymous_query_handler,
             scheduler,
+            query_stats_payload_builder: Box::new(query_stats_payload_builder),
         }
     }
 

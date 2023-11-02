@@ -28,7 +28,7 @@
 ///         }
 ///     };
 ///     // Configure the workload generation engine
-///     let engine = Engine::new(env.logger(), future_generator, 100 /* RPS */, Duration::from_secs(60));
+///     let engine = Engine::new(env.logger(), future_generator, 100.0 /* RPS */, Duration::from_secs(60));
 ///     // Execute the workload generator and aggregate the metrics
 ///     let metrics = block_on(workload.execute(LoadTestMetrics::default(), LoadTestMetrics::aggregator_fn)).unwrap()
 ///     // Log the metrics s.t. they are added to the system test report.

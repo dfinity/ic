@@ -12,7 +12,7 @@ pub use types::{
     ConsensusRunnerConfig,
 };
 
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
@@ -29,6 +29,8 @@ use ic_types::{
     },
     NodeId, RegistryVersion, SubnetId,
 };
+use rand::{CryptoRng, Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -38,13 +40,14 @@ use std::sync::Arc;
 ///
 /// Return the registry client, catch-up package, and a list of crypto components, one
 /// for each node.
-pub fn setup_subnet(
+pub fn setup_subnet<R: Rng + CryptoRng>(
     subnet_id: SubnetId,
     node_ids: &[NodeId],
+    rng: &mut R,
 ) -> (
     Arc<dyn RegistryClient>,
     CatchUpPackage,
-    Vec<Arc<TempCryptoComponent>>,
+    Vec<Arc<TempCryptoComponentGeneric<ChaCha20Rng>>>,
 ) {
     let initial_version = 1;
     let registry_version = RegistryVersion::from(initial_version);
@@ -65,6 +68,7 @@ pub fn setup_subnet(
                 .with_node_id(*node_id)
                 .with_registry_client_and_data(registry_client.clone(), data_provider.clone())
                 .with_keys(NodeKeysToGenerate::all())
+                .with_rng(ChaCha20Rng::from_seed(rng.gen()))
                 .build_arc()
         })
         .collect();
@@ -95,7 +99,7 @@ pub fn setup_subnet(
             )
         })
         .collect();
-    let random_ni_dkg_target_id = NiDkgTargetId::new(rand::random::<[u8; 32]>());
+    let random_ni_dkg_target_id = NiDkgTargetId::new(rng.gen());
     let node_ids = node_ids.iter().copied().collect::<BTreeSet<_>>();
     let ni_dkg_transcript_low_threshold = initial_dkg_transcript(
         InitialNiDkgConfig::new(
@@ -106,6 +110,7 @@ pub fn setup_subnet(
             registry_version,
         ),
         &dkg_dealing_encryption_pubkeys,
+        rng,
     );
     let ni_dkg_transcript_high_threshold = initial_dkg_transcript(
         InitialNiDkgConfig::new(
@@ -116,6 +121,7 @@ pub fn setup_subnet(
             registry_version,
         ),
         &dkg_dealing_encryption_pubkeys,
+        rng,
     );
     /*
             let subnet_threshold_signing_public_key = PublicKey::from(ThresholdSigPublicKey::from(

@@ -57,6 +57,7 @@ pub trait PayloadBuilder: Send + Sync {
 pub enum PayloadPermanentError {
     XNetPayloadValidationError(InvalidXNetPayload),
     IngressPayloadValidationError(IngressPermanentError),
+    /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
         expected: NumBytes,
         received: NumBytes,

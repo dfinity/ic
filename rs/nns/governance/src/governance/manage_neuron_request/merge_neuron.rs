@@ -7,12 +7,12 @@ use crate::{
             },
             ManageNeuronRequest, ManageNeuronRequestHandler,
         },
-        Governance, LOG_PREFIX,
+        Governance, HeapGovernanceData, LOG_PREFIX,
     },
     pb::v1::{
         governance_error::ErrorType, manage_neuron, manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron_response::MergeResponse, Governance as GovernanceProto, GovernanceError,
-        ManageNeuronResponse, NeuronState, ProposalStatus,
+        manage_neuron_response::MergeResponse, GovernanceError, ManageNeuronResponse, NeuronState,
+        ProposalStatus,
     },
 };
 use async_trait::async_trait;
@@ -47,7 +47,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         let source_id = self.source_neuron_id()?;
         let target_id = self.target_neuron_id();
 
-        let target_neuron = gov.get_neuron(&target_id)?;
+        let target_neuron = gov.neuron_store.with_neuron(&target_id, |n| n.clone())?;
         if !target_neuron.is_authorized_to_simulate_manage_neuron(&caller) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
@@ -55,7 +55,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
             ));
         }
 
-        let source_neuron = gov.get_neuron(&source_id)?;
+        let source_neuron = gov.neuron_store.with_neuron(&source_id, |n| n.clone())?;
         if !source_neuron.is_authorized_to_simulate_manage_neuron(&caller) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
@@ -136,7 +136,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
 
         // Do not allow this command to be called for any neuron that is the
         // involved in an open proposal.
-        fn involved_with_proposal(proto: &GovernanceProto, id: &NeuronId) -> bool {
+        fn involved_with_proposal(proto: &HeapGovernanceData, id: &NeuronId) -> bool {
             proto.proposals.values().any(|p| {
                 p.status() == ProposalStatus::Open
                     && (p.proposer.as_ref() == Some(id)
@@ -151,24 +151,30 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         let source_id = self.source_neuron_id()?;
         let target_id = self.target_neuron_id();
 
-        let target_neuron = gov.get_neuron(&target_id)?;
-        if !target_neuron.is_controlled_by(&caller) {
+        let target_controlled_by_caller = gov
+            .neuron_store
+            .with_neuron(&target_id, |target| target.is_controlled_by(&caller))?;
+
+        if !target_controlled_by_caller {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 "Target neuron must be owned by the caller",
             ));
         }
 
-        let source_neuron = gov.get_neuron(&source_id)?;
-        if !source_neuron.is_controlled_by(&caller) {
+        let source_controlled_by_caller = gov
+            .neuron_store
+            .with_neuron(&source_id, |source| source.is_controlled_by(&caller))?;
+
+        if !source_controlled_by_caller {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 "Source neuron must be owned by the caller",
             ));
         }
 
-        if involved_with_proposal(&gov.proto, &target_id)
-            || involved_with_proposal(&gov.proto, &source_id)
+        if involved_with_proposal(&gov.heap_data, &target_id)
+            || involved_with_proposal(&gov.heap_data, &source_id)
         {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -216,8 +222,8 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
             }
         };
 
-        let source_neuron = gov_proxy.get_neuron(&source_neuron_id)?.clone();
-        let target_neuron = gov_proxy.get_neuron(&target_neuron_id)?.clone();
+        let source_neuron = gov_proxy.with_neuron(&source_neuron_id, |n| n.clone())?;
+        let target_neuron = gov_proxy.with_neuron(&target_neuron_id, |n| n.clone())?;
 
         let now = gov_proxy.now();
         let source_neuron_info = source_neuron.get_neuron_info(now);

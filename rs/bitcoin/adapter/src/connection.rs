@@ -71,7 +71,7 @@ pub enum ConnectionState {
     },
 }
 
-/// This enum is used to track the status of wether or not
+/// This enum is used to track the status of whether or not
 /// a ping needs to be sent to the connected BTC node.
 /// The ping is used to maintain whether or not the connection is stable.
 #[derive(Clone, Debug)]

@@ -155,7 +155,6 @@ pub struct GetSuccessorsResponseComplete {
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub next: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Network {
@@ -175,6 +174,16 @@ impl Network {
             Network::Testnet => "NETWORK_TESTNET",
             Network::Mainnet => "NETWORK_MAINNET",
             Network::Regtest => "NETWORK_REGTEST",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NETWORK_UNSPECIFIED" => Some(Self::Unspecified),
+            "NETWORK_TESTNET" => Some(Self::Testnet),
+            "NETWORK_MAINNET" => Some(Self::Mainnet),
+            "NETWORK_REGTEST" => Some(Self::Regtest),
+            _ => None,
         }
     }
 }

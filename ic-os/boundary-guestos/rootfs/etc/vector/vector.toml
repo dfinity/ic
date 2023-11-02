@@ -175,19 +175,21 @@ database = "default"
 table = "http_access"
 
   [sinks.clickhouse_nginx_access.healthcheck]
-  enabled = true
+  enabled = false
 
   [sinks.clickhouse_nginx_access.batch]
   max_bytes = 10485760 # 10 MB
-  timeout_secs = 5
+  max_events = 25000 # 25k
+  timeout_secs = 10
 
   [sinks.clickhouse_nginx_access.buffer]
-  max_events = 10000 # 10 K
+  max_events = 100000 # 100k
   type = "memory"
-  when_full = "drop_newest"
+  when_full = "block"
 
   [sinks.clickhouse_nginx_access.request]
-  retry_attempts = 3
+  retry_attempts = 5
+  retry_initial_backoff_secs = 2
 
   [sinks.clickhouse_nginx_access.auth]
   strategy = "basic"
@@ -254,57 +256,6 @@ table = "http_access"
     "upstream_status"
   ]
 
-# nginx access (elasticsearch)
-
-[transforms.elasticsearch_nginx_access_2xx_sampled]
-type = "sample"
-inputs = ["nginx_access_by_status.2xx"]
-rate = 100
-
-[transforms.elasticsearch_nginx_access_preprocessed]
-type = "remap"
-inputs = [
-  "nginx_access_by_status.1xx",
-  "elasticsearch_nginx_access_2xx_sampled",
-  "nginx_access_by_status.3xx",
-  "nginx_access_by_status.4xx",
-  "nginx_access_by_status.5xx",
-  "nginx_access_by_status._unmatched",
-]
-source = """
-# Elasticsearch relies on a @timestamp field
-
-.@timestamp, err = to_float(.msec) * 1000
-if err != null {
-  .@timestamp = null
-}
-
-.@timestamp = to_int(.@timestamp)
-if .@timestamp == 0 {
-  .@timestamp = null
-}
-
-tags = [ string(.tags || "") ?? "", "${ELASTICSEARCH_TAGS}" ]
-tags = filter(tags) -> |_index, value| { value != "" }
-
-tags, err = join(tags, ", ")
-if err == null && length(tags) != 0 {
-  .tags = tags
-}
-"""
-
-[sinks.elasticsearch_nginx_access]
-type = "elasticsearch"
-inputs = ["elasticsearch_nginx_access_preprocessed"]
-endpoint = "${ELASTICSEARCH_URL:?ELASTICSEARCH_URL must be provided}"
-mode = "bulk"
-
-  [sinks.elasticsearch_nginx_access.bulk]
-  index = "boundary-node-nginx-access-%Y.%m.%d"
-
-  [sinks.elasticsearch_nginx_access.tls]
-  verify_certificate = false
-
 # nginx error
 
 [transforms.nginx_error]
@@ -361,126 +312,6 @@ inputs = ["nginx_access_metrics", "nginx_error_metrics"]
 address = "${NGINX_PROMETHUS_ADDR?:NGINX_PROMETHUS_ADDR must be provided}"
 default_namespace = "nginx"
 suppress_timestamp = true
-
-# control-plane
-
-[sources.control_plane]
-type = "journald"
-include_units = ["control-plane"]
-
-[transforms.control_plane_json]
-type = "remap"
-inputs = ["control_plane"]
-source = """
-preserved_fields = {}; preserved_keys = ["host"]
-
-for_each(preserved_keys) -> |_, k| {
-  v = get!(., [k])
-  if v != null {
-    preserved_fields = set!(preserved_fields, [k], v)
-  }
-}
-
-. = parse_json!(.message)
-
-.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
-.@timestamp = to_unix_timestamp(.@timestamp, unit: "milliseconds")
-del(.timestamp)
-
-. = merge(., preserved_fields)
-"""
-
-[sinks.elasticsearch_control_plane]
-type = "elasticsearch"
-inputs = ["control_plane_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-
-  [sinks.elasticsearch_control_plane.bulk]
-  index = "boundary-node-control-plane-%Y.%m.%d"
-
-  [sinks.elasticsearch_control_plane.tls]
-  verify_certificate = false
-
-# certificate-issuer
-
-[sources.certificate_issuer]
-type = "journald"
-include_units = ["certificate-issuer"]
-
-[transforms.certificate_issuer_json]
-type = "remap"
-inputs = ["certificate_issuer"]
-source = """
-preserved_fields = {}; preserved_keys = ["host"]
-
-for_each(preserved_keys) -> |_, k| {
-  v = get!(., [k])
-  if v != null {
-    preserved_fields = set!(preserved_fields, [k], v)
-  }
-}
-
-. = parse_json!(.message)
-
-.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
-.@timestamp = to_unix_timestamp(.@timestamp, unit: "milliseconds")
-del(.timestamp)
-
-. = merge(., preserved_fields)
-"""
-
-[sinks.elasticsearch_certificate_issuer]
-type = "elasticsearch"
-inputs = ["certificate_issuer_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-
-  [sinks.elasticsearch_certificate_issuer.bulk]
-  index = "boundary-node-certificate-issuer-%Y.%m.%d"
-
-  [sinks.elasticsearch_certificate_issuer.tls]
-  verify_certificate = false
-
-# certificate-syncer
-
-[sources.certificate_syncer]
-type = "journald"
-include_units = ["certificate-syncer"]
-
-[transforms.certificate_syncer_json]
-type = "remap"
-inputs = ["certificate_syncer"]
-source = """
-preserved_fields = {}; preserved_keys = ["host"]
-
-for_each(preserved_keys) -> |_, k| {
-  v = get!(., [k])
-  if v != null {
-    preserved_fields = set!(preserved_fields, [k], v)
-  }
-}
-
-. = parse_json!(.message)
-
-.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
-.@timestamp = to_unix_timestamp(.@timestamp, unit: "milliseconds")
-del(.timestamp)
-
-. = merge(., preserved_fields)
-"""
-
-[sinks.elasticsearch_certificate_syncer]
-type = "elasticsearch"
-inputs = ["certificate_syncer_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-
-  [sinks.elasticsearch_certificate_syncer.bulk]
-  index = "boundary-node-certificate-syncer-%Y.%m.%d"
-
-  [sinks.elasticsearch_certificate_syncer.tls]
-  verify_certificate = false
 
 # danted (socks proxy)
 

@@ -9,7 +9,7 @@ mod test_utils;
 
 fn run_memory_area_test() {
     let a1_num_pages = 3;
-    // 1. Setup some mmaped memory and register with the handler.
+    // 1. Setup some mmapped memory and register with the handler.
     let a1 = {
         let addr = unsafe {
             libc::mmap(

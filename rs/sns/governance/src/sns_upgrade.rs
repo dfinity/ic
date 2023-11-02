@@ -179,8 +179,12 @@ pub(crate) async fn get_running_version(
         dapps: _,
         archives,
         index: Some(index),
-    } = response else {
-        return Err(format!("CanisterSummary could not be fetched for all canisters: {:?}", response));
+    } = response
+    else {
+        return Err(format!(
+            "CanisterSummary could not be fetched for all canisters: {:?}",
+            response
+        ));
     };
 
     let get_hash = |canister_status: CanisterSummary, label: &str| {

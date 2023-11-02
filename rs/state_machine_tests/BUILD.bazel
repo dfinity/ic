@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/test_utils/keys",
     "//rs/crypto/tree_hash",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
@@ -103,6 +104,7 @@ rust_test(
         "@crate_index//:serde_derive",
     ],
     deps = [
+        "//rs/crypto/tecdsa",
         "@crate_index//:ciborium",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -113,6 +115,7 @@ rust_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
     deps = [
+        "//rs/crypto/tecdsa",
         "@crate_index//:proptest",
     ],
 )

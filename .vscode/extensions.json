@@ -3,7 +3,7 @@
     "rust-lang.rust-analyzer",
     "vadimcn.vscode-lldb",
     "bazelbuild.vscode-bazel",
-    "bungcip.better-toml",
+    "tamasfe.even-better-toml",
     "ms-vscode-remote.vscode-remote-extensionpack",
     "ms-vscode-remote.remote-ssh",
     "ms-vscode-remote.remote-containers"

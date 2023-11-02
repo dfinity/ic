@@ -110,3 +110,7 @@ pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
         NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES
     }
 }
+
+/// Returns whether the Matched Funding feature is enabled.
+/// TODO[NNS1-2610]: Enabled Matched Funding on mainnet
+pub const IS_MATCHED_FUNDING_ENABLED: bool = cfg! { any(test, feature = "test") };

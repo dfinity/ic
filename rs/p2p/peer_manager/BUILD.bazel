@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = [
     "//rs/p2p:__subpackages__",
+    "//rs/replica:__subpackages__",
 ])
 
 DEPENDENCIES = [
@@ -10,7 +11,7 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/registry/helpers",
-    "//rs/types/types",
+    "//rs/types/base_types",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
     "@crate_index//:tokio",
@@ -18,7 +19,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/p2p/test_utils",
-    "//rs/test_utilities",
+    "//rs/types/types_test_utils",
     "//rs/test_utilities/logger",
 ]
 

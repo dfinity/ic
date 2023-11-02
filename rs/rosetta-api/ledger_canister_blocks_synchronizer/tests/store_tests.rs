@@ -87,7 +87,7 @@ async fn store_smoke_test() {
 }
 
 #[actix_rt::test]
-async fn store_coherance_test() {
+async fn store_coherence_test() {
     init_test_logger();
     let tmpdir = create_tmp_dir();
 
@@ -143,7 +143,9 @@ async fn store_account_balances_test() {
         let to_account: Option<String>;
         let from_account: Option<String>;
         match operation {
-            Operation::Burn { from, amount: _ } => {
+            Operation::Burn {
+                from, amount: _, ..
+            } => {
                 from_account = Some(from.to_hex());
                 to_account = None;
             }
@@ -158,10 +160,6 @@ async fn store_account_balances_test() {
             Operation::Approve { from, spender, .. } => {
                 from_account = Some(from.to_hex());
                 to_account = Some(spender.to_hex());
-            }
-            Operation::TransferFrom { from, to, .. } => {
-                from_account = Some(from.to_hex());
-                to_account = Some(to.to_hex());
             }
         }
         if let Some(acc_str) = from_account {

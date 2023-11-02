@@ -1,0 +1,26 @@
+{
+    "push_metrics": false,
+    "backup_instance": "BACKUP_INSTANCE",
+    "nns_url": "https://fake_nns_url.network",
+    "nns_pem": "ic_public_key.pem",
+    "root_dir": "./backup",
+    "excluded_dirs": [
+        "backups",
+        "diverged_checkpoints",
+        "diverged_state_markers",
+        "fs_tmp",
+        "tip",
+        "tmp"
+    ],
+    "metrics_urls": ["https://fake_metrics_url.network"],
+    "network_name": "fake_network_name",
+    "ssh_private_key": "SSH_PRIVATE_KEY_TEMPLATE",
+    "hot_disk_resource_threshold_percentage": 75,
+    "cold_disk_resource_threshold_percentage": 75,
+    "slack_token": "<INSERT SLACK TOKEN>",
+    "cold_storage": {
+        "cold_storage_dir": "/tmp/cold_storage",
+        "versions_hot": 2
+    },
+    "subnets": []
+}

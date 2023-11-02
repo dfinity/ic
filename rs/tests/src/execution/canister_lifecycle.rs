@@ -732,7 +732,7 @@ pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
                 .await;
             assert_reject(res, RejectCode::CanisterReject);
 
-            // Install the wasm with 3GiB memory alloction, it should succeed.
+            // Install the wasm with 3GiB memory allocation, it should succeed.
             mgr.update_settings(&canister_id)
                 .with_memory_allocation(3_u64 << 30)
                 .call_and_wait()

@@ -23,8 +23,7 @@ use crate::{
     addressbook::{
         validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
     },
-    common::DEFAULT_CHANNEL_BUFFER_SIZE,
-    common::*,
+    common::{BlockHeight, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,

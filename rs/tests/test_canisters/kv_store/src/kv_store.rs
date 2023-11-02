@@ -1,10 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, convert::AsRef, hash::Hash};
 
-use ic_cdk::export::candid::CandidType;
+use candid::CandidType;
 use serde::Deserialize;
 
 #[derive(CandidType, Deserialize, Default)]
-#[candid_path("ic_cdk::export::candid")]
 pub struct KVStore<K, V>
 where
     K: Eq + Hash + AsRef<[u8]> + 'static,

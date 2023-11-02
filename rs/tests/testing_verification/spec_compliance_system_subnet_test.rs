@@ -20,15 +20,25 @@ use ic_tests::spec_compliance::{config_impl, test_subnet};
 use ic_tests::systest;
 
 pub fn config(env: TestEnv) {
-    config_impl(env);
+    config_impl(env, true, true);
 }
 
 pub fn test(env: TestEnv) {
     test_subnet(
         env,
+        true,
+        true,
         None,
         Some(SubnetType::Application),
-        vec!["($0 ~ /API availability/)"],
+        vec![
+            "($0 ~ /NNS canisters/)",
+            "($0 ~ /API availability/)",
+            "($0 ~ /canister history/)",
+            "($0 ~ /canister version/)",
+            "($0 ~ /canister global timer/)",
+            "($0 ~ /canister http calls/)",
+            "($0 ~ /WebAssembly module validation/)",
+        ],
         vec![],
     );
 }

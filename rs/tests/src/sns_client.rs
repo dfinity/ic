@@ -8,12 +8,12 @@ use dfn_candid::candid_one;
 use ic_agent::{Agent, AgentError};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_client::Sender;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
-use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image, Percentage, Tokens};
+use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_governance::pb::v1::create_service_nervous_system::governance_parameters::VotingRewardParameters;
@@ -122,17 +122,13 @@ impl SnsClient {
         &self,
         env: &TestEnv,
         create_service_nervous_system_proposal: CreateServiceNervousSystem,
-        community_fund_investment_e8s: u64,
     ) {
         let log = env.logger();
         let swap_id = self.sns_canisters.swap();
         info!(log, "Sending open token swap proposal");
         let payload = {
-            let mut payload = open_sns_token_swap_payload(
-                swap_id.get(),
-                create_service_nervous_system_proposal,
-                community_fund_investment_e8s,
-            );
+            let mut payload =
+                open_sns_token_swap_payload(swap_id.get(), create_service_nervous_system_proposal);
             // Make sure there's no delay. (Therefore, the sale will be opened immediately.)
             payload.params.as_mut().unwrap().sale_delay_seconds = Some(0);
             payload
@@ -198,7 +194,6 @@ impl SnsClient {
             wallet_canister_id,
             sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };
-        block_on(sns_client.assert_state(env, Lifecycle::Pending, Mode::PreInitializationSwap));
         sns_client.write_attribute(env);
 
         info!(
@@ -253,9 +248,9 @@ impl SnsClient {
         block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
 
         info!(log, "Sending deploy_new_sns to SNS WASM canister");
-        let init = create_service_nervous_system_proposal
-            .to_legacy_sns_init_payload()
-            .expect("invalid init payload");
+        let init = SnsInitPayload::try_from(create_service_nervous_system_proposal)
+            .expect("invalid init payload")
+            .strip_non_legacy_parameters();
         let res =
             block_on(deploy_new_sns_legacy(&wallet_canister, init)).expect("Deploy new SNS failed");
         info!(log, "Received {res:?}");
@@ -350,15 +345,17 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
             }),
             confirmation_text: None,
             restricted_countries: None,
-            start_time: GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
+            // With a start time of None, NNS Governance in the test configuration should start the swap immediately.
+            start_time: None,
             duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
+            neurons_fund_investment_icp: Some(Tokens::from_tokens(100)),
         }),
         ledger_parameters: Some(LedgerParameters {
             transaction_fee: Some(Tokens::from_e8s(100_000)),
             token_name: Some("MySnsToken".to_string()),
             token_symbol: Some("MST".to_string()),
             token_logo: Some(Image {
-                base64_encoding: Some("Base64-encoded PNG".to_string()),
+                base64_encoding: init.token_logo,
             }),
         }),
         governance_parameters: Some(GovernanceParameters {
@@ -377,6 +374,35 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
                 reward_rate_transition_duration: Some(Duration::from_secs(0)),
             }),
         }),
+    }
+}
+
+/// A reasonable starting point for create_service_nervous_system proposals,
+/// based on the openchat SNS parameters.
+pub fn test_create_service_nervous_system_proposal(
+    min_participants: u64,
+) -> CreateServiceNervousSystem {
+    let openchat_parameters = openchat_create_service_nervous_system_proposal();
+    CreateServiceNervousSystem {
+        swap_parameters: Some(
+            ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
+                minimum_participants: Some(min_participants),
+                minimum_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S)),
+                maximum_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S)),
+                minimum_participant_icp: Some(Tokens::from_e8s(
+                    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+                )),
+                maximum_participant_icp: Some(Tokens::from_e8s(
+                    SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
+                )),
+                ..openchat_parameters
+                    .swap_parameters
+                    .as_ref()
+                    .unwrap()
+                    .clone()
+            },
+        ),
+        ..openchat_parameters
     }
 }
 
@@ -617,16 +643,23 @@ pub fn two_days_from_now_in_secs() -> u64 {
 fn open_sns_token_swap_payload(
     sns_swap_canister_id: PrincipalId,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
-    community_fund_investment_e8s: u64,
 ) -> OpenSnsTokenSwap {
     let params = create_service_nervous_system_into_params(
-        create_service_nervous_system_proposal,
+        create_service_nervous_system_proposal.clone(),
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
     )
     .unwrap();
+
+    let community_fund_investment_e8s = create_service_nervous_system_proposal
+        .swap_parameters
+        .unwrap()
+        .neurons_fund_investment_icp
+        .unwrap()
+        .e8s
+        .unwrap();
     OpenSnsTokenSwap {
         target_swap_canister_id: Some(sns_swap_canister_id),
         // Taken (mostly) from https://github.com/open-ic/open-chat/blob/master/sns_proposal.sh
@@ -663,6 +696,7 @@ async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
             nns_proposal_id: None,                       // TODO[NNS1-2339]
             neurons_fund_participants: None,             // TODO[NNS1-2339]
             should_auto_finalize: Some(true),
+            neurons_fund_participation_constraints: None,
         })
         .unwrap();
 

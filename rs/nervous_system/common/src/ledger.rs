@@ -2,13 +2,14 @@ use crate::NervousSystemError;
 use async_trait::async_trait;
 use dfn_core::{api::PrincipalId, call, CanisterId};
 use dfn_protobuf::protobuf;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_ledger_core::block::BlockIndex;
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs,
     Subaccount as IcpSubaccount, Tokens, TotalSupplyArgs,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use mockall::automock;
 
 pub struct IcpLedgerCanister {
     id: CanisterId,
@@ -48,6 +49,7 @@ pub trait ICRC1Ledger: Send + Sync {
 }
 
 /// A trait defining common patterns for accessing the Ledger canister.
+#[automock]
 #[async_trait]
 pub trait IcpLedger: Send + Sync {
     /// Transfers funds from one of this canister's subaccount to

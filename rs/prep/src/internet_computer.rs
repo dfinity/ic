@@ -23,6 +23,10 @@ use url::Url;
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
+use ic_nns_common::registry::encode_or_panic;
+use ic_protobuf::registry::firewall::v1::{
+    FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
+};
 use ic_protobuf::registry::{
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
@@ -34,9 +38,10 @@ use ic_protobuf::registry::{
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_node_operator_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_unassigned_nodes_config_record_key, ROOT_SUBNET_ID_KEY,
+    make_blessed_replica_versions_key, make_firewall_rules_record_key,
+    make_node_operator_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
+    make_routing_table_record_key, make_subnet_list_record_key,
+    make_unassigned_nodes_config_record_key, FirewallRulesScope, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -45,6 +50,7 @@ use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, RoutingTable, WellFormedError,
     CANISTER_IDS_PER_SUBNET,
 };
+use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_types::{
     CanisterId, PrincipalId, PrincipalIdParseError, RegistryVersion, ReplicaVersion, SubnetId,
@@ -70,7 +76,7 @@ pub const IC_ROOT_PUB_KEY_PATH: &str = "nns_public_key.pem";
 ///
 /// For testing purposes, the bootstrapped nodes can be configured to have a
 /// node operator. The corresponding allowance is the number of configured
-/// initial nodes mulitplied by this value.
+/// initial nodes multiplied by this value.
 pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 2;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
@@ -204,7 +210,7 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
                 .node_provider_principal_id
                 .map(|x| x.to_vec())
                 .unwrap_or_else(Vec::new),
-            dc_id: item.dc_id,
+            dc_id: item.dc_id.to_lowercase(),
             rewardable_nodes: item.rewardable_nodes,
             ipv6: item.ipv6,
         }
@@ -268,6 +274,10 @@ pub struct IcConfig {
 
     /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
     initial_guest_launch_measurement_sha256_hex: Option<String>,
+
+    /// Whitelisted firewall prefixes for initial registry state, separated by
+    /// commas.
+    whitelisted_prefixes: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -332,6 +342,12 @@ impl IcConfig {
         self.provisional_whitelist = Some(provisional_whitelist);
     }
 
+    /// Set whitelisted firewall prefixes for initial registry state, where
+    /// each are separated by commas.
+    pub fn set_whitelisted_prefixes(&mut self, whitelisted_prefixes: Option<String>) {
+        self.whitelisted_prefixes = whitelisted_prefixes;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
@@ -363,6 +379,7 @@ impl IcConfig {
             ssh_readonly_access_to_unassigned_nodes,
             use_specified_ids_allocation_range: false,
             initial_guest_launch_measurement_sha256_hex,
+            whitelisted_prefixes: None,
         }
     }
 
@@ -379,9 +396,29 @@ impl IcConfig {
     /// * ... a registry file to be used as a static registry
     pub fn initialize(mut self) -> Result<InitializedIc, InitializeError> {
         let version = INITIAL_REGISTRY_VERSION;
+
+        let mut mutations = self.initial_mutations.clone();
+
+        if let Some(prefixes) = self.whitelisted_prefixes {
+            mutations.extend(vec![insert(
+                make_firewall_rules_record_key(&FirewallRulesScope::Global),
+                encode_or_panic(&FirewallRuleSet {
+                    entries: vec![FirewallRule {
+                        ipv4_prefixes: Vec::new(),
+                        ipv6_prefixes: prefixes.split(',').map(|v| v.to_string()).collect(),
+                        ports: vec![8080],
+                        action: FirewallAction::Allow as i32,
+                        comment: "Globally allow provided prefixes for testing".to_string(),
+                        user: None,
+                        direction: Some(FirewallRuleDirection::Inbound as i32),
+                    }],
+                }),
+            )]);
+        }
+
         let data_provider = ProtoRegistryDataProvider::new();
         data_provider
-            .add_mutations(self.initial_mutations.clone())
+            .add_mutations(mutations)
             .expect("Failed to add initial mutations");
         let mut initialized_topology = InitializedTopology::new();
 
@@ -435,8 +472,12 @@ impl IcConfig {
         // Set the routing table after initializing the subnet ids
         let routing_table_record = if self.generate_subnet_records {
             PbRoutingTable::from(if self.use_specified_ids_allocation_range {
-                self.topology_config.get_routing_table_with_specified_ids_allocation_range(
-                ).expect("Failed to create a routing table with an allocation range for the creation of canisters with specified Canister IDs.")
+                self.topology_config
+                    .get_routing_table_with_specified_ids_allocation_range()
+                    .expect(
+                        "Failed to create a routing table with an allocation range \
+                         for the creation of canisters with specified Canister IDs.",
+                    )
             } else {
                 self.topology_config
                     .get_routing_table(self.nns_subnet_index.as_ref())

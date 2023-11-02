@@ -26,6 +26,24 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--cfg-validate-job-name",
+        help="Validate the CI job names",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--cfg-bash-linter",
+        help="Validate the CI jobs with bash linter",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--cfg-gitlab-linter",
+        help="Validate the CI jobs with gitlab linter",
+        action="store_true",
+    )
+
+    parser.add_argument(
         "--cfg-dump-all",
         help="Dump the CI config for all jobs to the provided file or stdout",
         action="store_true",
@@ -110,6 +128,15 @@ if __name__ == "__main__":
     if args.cfg_validate:
         gitlab.ci_cfg_lint()
         logging.info("CI config validation complete")
+
+    if args.cfg_validate_job_name:
+        gitlab._ci_cfg_lint_with_job_name_linter(verbose=True)
+
+    if args.cfg_bash_linter:
+        gitlab._ci_cfg_lint_with_bash_linter(verbose=True)
+
+    if args.cfg_gitlab_linter:
+        gitlab._ci_cfg_lint_with_gitlab_linter()
 
     if args.cfg_dump_all:
         with args.out as f:

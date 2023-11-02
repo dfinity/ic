@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_motoko//motoko:defs.bzl", "external_actor")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "motoko_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -77,11 +77,11 @@ rust_test(
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = [
+        "//rs/nervous_system/clients",
         "//rs/nervous_system/common",
         "//rs/nervous_system/root",
         "//rs/nns/common",
         "//rs/nns/test_utils",
         "//rs/rust_canisters/dfn_candid",
-        "//rs/types/ic00_types",
     ],
 )

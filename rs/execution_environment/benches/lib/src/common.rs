@@ -6,7 +6,7 @@ use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
     as_round_instructions, CompilationCostHandling, ExecutionEnvironment, Hypervisor,
@@ -15,7 +15,6 @@ use ic_execution_environment::{
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
-use ic_interfaces::messages::CanisterMessage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
@@ -32,7 +31,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_types::{
-    messages::{CallbackId, Payload, RejectContext},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
@@ -136,10 +135,7 @@ where
             .into(),
     );
     // Create a reject
-    let reject = Payload::Reject(RejectContext {
-        code: RejectCode::SysFatal,
-        message: "reject message".to_string(),
-    });
+    let reject = Payload::Reject(RejectContext::new(RejectCode::SysFatal, "reject message"));
 
     // Create execution parameters
     let execution_parameters = ExecutionParameters {
@@ -153,8 +149,7 @@ where
         compute_allocation: canister_state.compute_allocation(),
         subnet_type: hypervisor.subnet_type(),
         execution_mode: ExecutionMode::Replicated,
-        subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
-        subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+        subnet_memory_saturation: ResourceSaturation::default(),
     };
 
     let subnets = vec![own_subnet_id, nns_subnet_id];
@@ -278,6 +273,8 @@ where
         100,
         config,
         cycles_account_manager,
+        SchedulerConfig::application_subnet().scheduler_cores,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(

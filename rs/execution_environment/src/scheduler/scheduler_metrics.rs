@@ -84,12 +84,15 @@ pub(super) struct SchedulerMetrics {
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
     pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) total_canister_balance: Gauge,
+    pub(super) total_canister_reserved_balance: Gauge,
     pub(super) canister_paused_execution: Histogram,
     pub(super) canister_aborted_execution: Histogram,
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
     pub(super) ecdsa_signature_agreements: IntGauge,
+    // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
+    pub(super) stop_canister_calls_without_call_id: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -551,6 +554,10 @@ impl SchedulerMetrics {
                 "scheduler_canister_balance_cycles_total",
                 "Total canister balance in Cycles.",
             ),
+            total_canister_reserved_balance: metrics_registry.gauge(
+                "scheduler_canister_reserved_balance_cycles_total",
+                "Total canister reserved balance in Cycles.",
+            ),
             canister_paused_execution: dts_pause_or_abort_histogram(
                 "scheduler_canister_paused_execution",
                 "Number of canisters that have a paused execution.",
@@ -575,6 +582,10 @@ impl SchedulerMetrics {
                 "scheduler_inducted_messages_total",
                 "Number of messages inducted, by destination.",
                 &["destination"],
+            ),
+            stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
+                "scheduler_stop_canister_calls_without_call_id",
+                "Number of stop canister calls with missing call ID.",
             ),
         }
     }

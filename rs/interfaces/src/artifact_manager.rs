@@ -1,7 +1,8 @@
 //! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
-use crate::{artifact_pool::UnvalidatedArtifact, time_source::TimeSource};
+use crate::artifact_pool::{ChangeResult, UnvalidatedArtifactEvent};
+use crate::time_source::TimeSource;
 use derive_more::From;
-use ic_types::artifact::{ArtifactPriorityFn, PriorityFn};
+use ic_types::artifact::{Advert, ArtifactKind, ArtifactPriorityFn, PriorityFn};
 use ic_types::{artifact, chunkable, p2p, NodeId};
 
 /// Event loops/actors that implement a graceful shutdown on destruction implement this trait.
@@ -9,33 +10,17 @@ use ic_types::{artifact, chunkable, p2p, NodeId};
 /// that does the shutdown is required.
 pub trait JoinGuard {}
 
-/// The trait is used by all P2P clients in order to (broadcast) transfer a message
-/// to all recipients simultaneously. Where the (peers) receipients are determined by the
-/// subnet membership at the time of execution.
-pub trait AdvertBroadcaster {
-    /// The method completes "fast", otherwise it can negatively impact consensus' finalization rate.
-    /// Implementers update their internal state to refelect the most recent artifact pool content.
-    /// The eventual delivery of the artifact pools, done by P2P, doesn't affect the time it takes
-    /// for the method to complete.
-    /// The passed in advert can be either a deletion or an insertion
-    /// (the deletion marker is part of the type).
-    fn process_delta(&self, advert: p2p::GossipAdvert);
-}
-
 #[derive(From, Debug)]
 /// An error type that combines 'NotProcessed' status with an actual
 /// error that might be returned by artifact pools. It is used as
 /// the return type for the `on_artifact` function of `ArtifactManager`.
 pub enum OnArtifactError {
     NotProcessed,
-    AdvertMismatch(AdvertMismatchError),
-    MessageConversionfailed(p2p::GossipAdvert),
 }
 
-#[derive(Debug)]
-pub struct AdvertMismatchError {
-    pub received: p2p::GossipAdvert,
-    pub expected: p2p::GossipAdvert,
+pub enum ArtifactProcessorEvent<Artifact: ArtifactKind> {
+    Advert(Advert<Artifact>),
+    Purge(Artifact::Id),
 }
 
 /// An abstraction of artifact processing for a sub-type of the overall
@@ -126,15 +111,15 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
     /// As part of the processing, it may also modify its own state
     /// including both unvalidated and validated pools. The return
     /// result includes a list of adverts for P2P to disseminate to
-    /// peers, as well as a result flag indicating if there are more
-    /// changes to be processed so that the caller can decide whether
-    /// this function should be called again immediately, or after
-    /// certain period of time.
+    /// peers, deleted artifact,  as well as a result flag indicating
+    /// if there are more changes to be processed so that the caller
+    /// can decide whether this function should be called again
+    /// immediately, or after certain period of time.
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        new_artifacts: Vec<UnvalidatedArtifact<Artifact::Message>>,
-    ) -> (Vec<artifact::Advert<Artifact>>, bool);
+        new_artifact_events: Vec<UnvalidatedArtifactEvent<Artifact>>,
+    ) -> ChangeResult<Artifact>;
 }
 
 /// The Artifact Manager stores artifacts to be used by this and other nodes in
@@ -154,12 +139,8 @@ pub trait ArtifactManager: Send + Sync {
     ///
     /// See `ArtifactClient::on_artifact` for more details.
     #[allow(clippy::result_large_err)]
-    fn on_artifact(
-        &self,
-        msg: artifact::Artifact,
-        advert: p2p::GossipAdvert,
-        peer_id: &NodeId,
-    ) -> Result<(), OnArtifactError>;
+    fn on_artifact(&self, msg: artifact::Artifact, peer_id: &NodeId)
+        -> Result<(), OnArtifactError>;
 
     /// Check if the artifact specified by the id already exists in the
     /// corresponding artifact pool.

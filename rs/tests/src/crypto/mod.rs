@@ -1,3 +1,5 @@
+pub mod ic_crypto_csp_metrics_test;
+pub mod ic_crypto_csp_socket_test;
 pub mod ic_crypto_csp_umask_test;
 pub mod request_signature_test;
 pub mod rpc_csp_vault_reconnection_test;

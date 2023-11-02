@@ -1,0 +1,63 @@
+bazel-build-fuzzers:
+  extends:
+    - .bazel-test-all
+    - .ic-build-legacy-image
+  tags:
+    - zh
+    - dfinity-ic
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing --build_tag_filters=libfuzzer"
+    BAZEL_COMMAND: "build"
+    BAZEL_TARGETS: "//rs/..."
+
+bazel-build-fuzzers-afl:
+  extends:
+    - .bazel-test-all
+    - .ic-build-legacy-image
+  tags:
+    - zh
+    - dfinity-ic
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=afl"
+    BAZEL_COMMAND: "build"
+    BAZEL_TARGETS: "//rs/..."
+
+bazel-build-fuzzers-weekly:
+  extends:
+    - .bazel-test-all
+    - .ic-build-legacy-image
+  tags:
+    - zh
+    - dfinity-ic
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-fuzzers-to-clusterfuzz"'
+  needs: []  # don't wait on other jobs
+  script:
+    - |
+      set -euo pipefail
+      cd "${CI_PROJECT_DIR}"/bin
+      gcloud auth activate-service-account --key-file "${FUZZING_GCP_SERVICE_KEY}"
+      ./build-all-fuzzers.sh --zip
+      cd fuzzer_build
+      gsutil -m cp libfuzzer_linux_*.zip gs://ic_fuzzer_builds
+      gsutil -m cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
+
+bazel-build-fuzzers-archives:
+  extends:
+    - .bazel-test-all
+    - .ic-build-legacy-image
+  tags:
+    - zh
+    - dfinity-ic
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - gitlab-ci/config/fuzzers.yml
+        - bin/build-all-fuzzers.sh
+        - bazel/fuzz_testing.bzl
+  needs: []  # don't wait on other jobs
+  script:
+    - |
+      set -euo pipefail
+      cd "${CI_PROJECT_DIR}"/bin
+      ./build-all-fuzzers.sh --zip

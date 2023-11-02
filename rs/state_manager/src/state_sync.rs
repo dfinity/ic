@@ -8,7 +8,7 @@ use crate::{
 use ic_base_types::NodeId;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor},
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{ChangeResult, UnvalidatedArtifact, UnvalidatedArtifactEvent},
     state_sync_client::StateSyncClient,
     time_source::{SysTimeSource, TimeSource},
 };
@@ -306,67 +306,75 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
     fn process_changes(
         &self,
         _time_source: &dyn TimeSource,
-        artifacts: Vec<UnvalidatedArtifact<StateSyncMessage>>,
-    ) -> (Vec<Advert<StateSyncArtifact>>, bool) {
+        artifact_events: Vec<UnvalidatedArtifactEvent<StateSyncArtifact>>,
+    ) -> ChangeResult<StateSyncArtifact> {
         // Processes received state sync artifacts.
-        for UnvalidatedArtifact {
-            message,
-            peer_id,
-            timestamp: _,
-        } in artifacts
-        {
-            let height = message.height;
-            info!(
-                self.log,
-                "Received state {} from peer {}", message.height, peer_id
-            );
+        for artifact_event in artifact_events {
+            match artifact_event {
+                UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
+                    message,
+                    peer_id,
+                    timestamp: _,
+                }) => {
+                    let height = message.height;
+                    info!(
+                        self.log,
+                        "Received state {} from peer {}", message.height, peer_id
+                    );
 
-            let ro_layout = self
-                .state_manager
-                .state_layout
-                .checkpoint(height)
-                .expect("failed to create checkpoint layout");
-            let state = crate::checkpoint::load_checkpoint_parallel(
-                &ro_layout,
-                self.state_manager.own_subnet_type,
-                &self.state_manager.metrics.checkpoint_metrics,
-                self.state_manager.get_fd_factory(),
-            )
-            .expect("failed to recover checkpoint");
+                    let ro_layout = self
+                        .state_manager
+                        .state_layout
+                        .checkpoint(height)
+                        .expect("failed to create checkpoint layout");
+                    let state = crate::checkpoint::load_checkpoint_parallel(
+                        &ro_layout,
+                        self.state_manager.own_subnet_type,
+                        &self.state_manager.metrics.checkpoint_metrics,
+                        self.state_manager.get_fd_factory(),
+                    )
+                    .expect("failed to recover checkpoint");
 
-            self.state_manager.on_synced_checkpoint(
-                state,
-                height,
-                message.manifest,
-                message.meta_manifest,
-                message.root_hash,
-            );
+                    self.state_manager.on_synced_checkpoint(
+                        state,
+                        height,
+                        message.manifest,
+                        message.meta_manifest,
+                        message.root_hash,
+                    );
+                }
+                UnvalidatedArtifactEvent::Remove(_) => {}
+            }
         }
 
         let filter = StateSyncFilter {
             height: self.state_manager.states.read().last_advertised,
         };
-        let artifacts = self.get_all_validated_by_filter(&filter);
-        if let Some(artifact) = artifacts.last() {
+        let adverts = self.get_all_validated_by_filter(&filter);
+        if let Some(artifact) = adverts.last() {
             self.state_manager.states.write().last_advertised = artifact.id.height;
         }
 
-        (artifacts, false)
+        ChangeResult {
+            adverts,
+            purged: Vec::new(),
+            changed: false,
+        }
     }
 }
 
 impl StateSyncClient for StateSync {
     /// Non-blocking.
-    fn latest_state(&self) -> Option<StateSyncArtifactId> {
+    fn available_states(&self) -> Vec<StateSyncArtifactId> {
         // Using height 0 here is sane because for state sync `get_all_validated_by_filter`
         // return at most the number of states present on the node. Currently this is usually 1-2.
         let filter = StateSyncFilter {
             height: Height::from(0),
         };
         self.get_all_validated_by_filter(&filter)
-            .last()
-            .cloned()
+            .into_iter()
             .map(|a| a.id)
+            .collect()
     }
 
     /// Non-blocking.
@@ -395,11 +403,11 @@ impl StateSyncClient for StateSync {
     fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
         let _ = self.process_changes(
             &SysTimeSource::new(),
-            vec![UnvalidatedArtifact {
+            vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                 message: msg,
                 peer_id,
                 timestamp: UNIX_EPOCH,
-            }],
+            })],
         );
     }
 }

@@ -12,7 +12,7 @@ use ic_ic00_types::{
     IC_00,
 };
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
     execution_environment::{IngressHistoryReader, QueryHandler},
     time_source::{SysTimeSource, TimeSource},
 };
@@ -21,7 +21,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
 use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};
-use ic_prep_lib::subnet_configuration::SubnetConfig;
+use ic_prep_lib::subnet_configuration::{SubnetConfig, SubnetRunningState};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -35,6 +35,7 @@ use ic_test_utilities::{
     universal_canister::UNIVERSAL_CANISTER_WASM,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_types::artifact_kind::IngressArtifact;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
@@ -45,6 +46,8 @@ use ic_types::{
 use prost::Message;
 use slog_scope::info;
 use std::collections::BTreeMap;
+use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::sleep;
@@ -63,18 +66,18 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &CrossbeamSender<UnvalidatedArtifact<SignedIngress>>,
+    ingress_tx: &CrossbeamSender<UnvalidatedArtifactEvent<IngressArtifact>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifact {
+        .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
             message: msg,
             peer_id: node_test_id(1),
             timestamp: SysTimeSource::new().get_relative_time(),
-        })
+        }))
         .unwrap();
 
     let start = Instant::now();
@@ -154,7 +157,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub ingress_sender: CrossbeamSender<UnvalidatedArtifact<SignedIngress>>,
+    pub ingress_sender: CrossbeamSender<UnvalidatedArtifactEvent<IngressArtifact>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -215,11 +218,9 @@ pub fn get_ic_config() -> IcConfig {
     subnet_nodes.insert(
         NODE_INDEX_DEFAULT,
         NodeConfiguration {
-            xnet_api: "http://0.0.0.1:0".parse().expect("can't fail"),
-            public_api: "http://128.0.0.1:10000".parse().expect("can't fail"),
-            p2p_addr: "org.internetcomputer.p2p1://128.0.0.1:10000"
-                .parse()
-                .expect("can't fail"),
+            xnet_api: SocketAddr::from_str("0.0.0.1:0").expect("can't fail"),
+            public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
+            p2p_addr: SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
             chip_id: vec![],
@@ -250,6 +251,7 @@ pub fn get_ic_config() -> IcConfig {
             None,
             vec![],
             vec![],
+            SubnetRunningState::Active,
         ),
     );
 
@@ -331,7 +333,7 @@ where
         let subnet_id = subnet_ids[0];
         config.transport = TransportConfig {
             node_ip: "0.0.0.0".to_string(),
-            listening_port: 1234,
+            listening_port: 0,
             send_queue_size: 0,
             ..Default::default()
         };
@@ -340,9 +342,10 @@ where
             ic_replica::setup_ic_stack::construct_ic_stack(
                 &logger,
                 &metrics_registry,
-                tokio::runtime::Handle::current(),
-                tokio::runtime::Handle::current(),
-                tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
                 config.clone(),
                 temp_node,
                 subnet_id,

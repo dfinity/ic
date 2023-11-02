@@ -4,8 +4,9 @@
 use super::super::Polynomial;
 use super::PublicCoefficients;
 use crate::types::{PublicKey, ThresholdError};
-use ic_crypto_internal_bls12_381_type::{G2Affine, G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Affine, G2Projective, NodeIndex, Scalar};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::Rng;
 use std::ops::MulAssign;
 
 fn uint_to_g2(num: u32) -> G2Projective {
@@ -45,13 +46,13 @@ fn integer_polynomial_evaluation_is_correct() {
 }
 
 pub fn uints_to_polynomial(integer_coefficients: &[u32]) -> Polynomial {
-    Polynomial {
-        coefficients: integer_coefficients
-            .iter()
-            .cloned()
-            .map(Scalar::from_u32)
-            .collect(),
-    }
+    let v: Vec<Scalar> = integer_coefficients
+        .iter()
+        .cloned()
+        .map(Scalar::from_u32)
+        .collect();
+
+    Polynomial::new(v)
 }
 
 pub fn uints_to_public_coefficients(integer_coefficients: &[u32]) -> PublicCoefficients {
@@ -67,7 +68,7 @@ pub fn uints_to_public_coefficients(integer_coefficients: &[u32]) -> PublicCoeff
 
 mod public_coefficients {
     //! Third parties should be able to verify that the public part of a key
-    //! share is indeed consistent with the committment. Additionally, the
+    //! share is indeed consistent with the commitment. Additionally, the
     //! share holder should be able to verify that their secret key matches the
     //! public key assigned to them.
     //!
@@ -153,8 +154,8 @@ mod public_coefficients {
     #[test]
     #[allow(clippy::identity_op)]
     fn test_lagrange_coefficients_are_correct() {
-        let x_values = [1, 3, 4, 7];
-        let x_values_as_fr: Vec<Scalar> = x_values.iter().map(|x| Scalar::from_u32(*x)).collect();
+        let x_values = [0, 2, 3, 6];
+
         let lagrange_coefficients: Vec<Scalar> = {
             // The lagrange coefficient numerators and denominators:
             let as_integers = [
@@ -180,24 +181,24 @@ mod public_coefficients {
                 .collect();
             divided
         };
-        let observed = PublicCoefficients::lagrange_coefficients_at_zero(&x_values_as_fr)
+        let observed = PublicCoefficients::lagrange_coefficients_at_zero(&x_values)
             .expect("Cannot fail because all the x values are distinct");
         assert_eq!(lagrange_coefficients[..], observed[..]);
     }
 
     #[test]
     fn test_lagrange_coefficients_at_zero_rejects_duplicate_points() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
 
         for num_coefficients in 1..50 {
             let mut inputs = vec![];
 
-            let dup_r = Scalar::random(&mut rng);
+            let dup_r = rng.gen::<NodeIndex>();
 
-            inputs.push(dup_r.clone());
+            inputs.push(dup_r);
 
             for _i in 0..=num_coefficients {
-                let r = Scalar::random(&mut rng);
+                let r = rng.gen::<NodeIndex>();
                 inputs.push(r);
             }
             inputs.push(dup_r);
@@ -211,49 +212,11 @@ mod public_coefficients {
     }
 
     #[test]
-    fn test_interpolation_is_resilient_to_duplicate_points() {
-        let mut rng = reproducible_rng();
-
-        for num_coefficients in 1..50 {
-            let poly = Polynomial::random(num_coefficients, &mut rng);
-
-            let mut samples = vec![];
-
-            let dup_r = Scalar::random(&mut rng);
-            let dup_p_r = poly.evaluate_at(&dup_r);
-
-            for _i in 0..=num_coefficients {
-                samples.push((dup_r.clone(), dup_p_r.clone()));
-            }
-
-            for _i in 0..=num_coefficients {
-                let r = Scalar::random(&mut rng);
-                let p_r = poly.evaluate_at(&r);
-                samples.push((r, p_r));
-                samples.push((dup_r.clone(), dup_p_r.clone()));
-            }
-
-            let interp = Polynomial::interpolate(&samples);
-
-            assert_eq!(poly, interp);
-        }
-    }
-
-    #[test]
     fn test_public_interpolation_is_correct() {
         let polynomial = [2, 4, 9];
-        let x_5 = (
-            Scalar::from_u32(5),
-            uint_to_g2(evaluate_integer_polynomial(5, &polynomial)),
-        );
-        let x_3 = (
-            Scalar::from_u32(3),
-            uint_to_g2(evaluate_integer_polynomial(3, &polynomial)),
-        );
-        let x_8 = (
-            Scalar::from_u32(8),
-            uint_to_g2(evaluate_integer_polynomial(8, &polynomial)),
-        );
+        let x_5 = (4, uint_to_g2(evaluate_integer_polynomial(5, &polynomial)));
+        let x_3 = (2, uint_to_g2(evaluate_integer_polynomial(3, &polynomial)));
+        let x_8 = (7, uint_to_g2(evaluate_integer_polynomial(8, &polynomial)));
         let random_points = [x_5, x_3, x_8];
         let interpolated_polynomial_at_0 =
             PublicCoefficients::interpolate_g2(&random_points).expect("Failed to interpolate");

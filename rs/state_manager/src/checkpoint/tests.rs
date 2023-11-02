@@ -24,8 +24,9 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
-    malicious_flags::MaliciousFlags, messages::StopCanisterContext, CanisterId, Cycles,
-    ExecutionRound, Height,
+    malicious_flags::MaliciousFlags,
+    messages::{StopCanisterCallId, StopCanisterContext},
+    CanisterId, Cycles, ExecutionRound, Height,
 };
 use ic_wasm_types::CanisterModule;
 use std::{collections::BTreeSet, fs::OpenOptions};
@@ -408,7 +409,7 @@ fn can_recover_a_stopping_canister() {
         let controller = user_test_id(24).get();
 
         let mut canister_state = CanisterState {
-            system_state: SystemState::new_stopping(
+            system_state: SystemState::new_stopping_for_testing(
                 canister_id,
                 controller,
                 INITIAL_CYCLES,
@@ -421,6 +422,7 @@ fn can_recover_a_stopping_canister() {
         let stop_context = StopCanisterContext::Ingress {
             sender: user_test_id(0),
             message_id: message_test_id(0),
+            call_id: Some(StopCanisterCallId::new(0)),
         };
         canister_state
             .system_state
@@ -474,7 +476,7 @@ fn can_recover_a_stopped_canister() {
         let controller = user_test_id(24).get();
 
         let canister_state = CanisterState {
-            system_state: SystemState::new_stopped(
+            system_state: SystemState::new_stopped_for_testing(
                 canister_id,
                 controller,
                 INITIAL_CYCLES,
@@ -526,7 +528,7 @@ fn can_recover_a_running_canister() {
         let controller = user_test_id(24).get();
 
         let canister_state = CanisterState {
-            system_state: SystemState::new_running(
+            system_state: SystemState::new_running_for_testing(
                 canister_id,
                 controller,
                 INITIAL_CYCLES,

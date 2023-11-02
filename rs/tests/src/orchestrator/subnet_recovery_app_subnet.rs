@@ -152,7 +152,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
                 &logger,
             )
         } else {
-            enable_ecdsa_on_nns(
+            enable_ecdsa_on_subnet(
                 &nns_node,
                 &nns_canister,
                 root_subnet_id,
@@ -246,6 +246,8 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         subnet_id,
         upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
+        upgrade_image_url: env.get_ic_os_update_img_test_url().ok(),
+        upgrade_image_hash: env.get_ic_os_update_img_test_sha256().ok(),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         pub_key: Some(pub_key),
         download_node: None,
@@ -253,6 +255,13 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         ecdsa_subnet_id: ecdsa.then_some(root_subnet_id),
         next_step: None,
     };
+
+    info!(
+        logger,
+        "Starting recovery of subnet {} with {:?}",
+        subnet_id.to_string(),
+        &subnet_args
+    );
 
     let mut subnet_recovery = AppSubnetRecovery::new(
         env.logger(),
@@ -288,12 +297,6 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
 
     subnet_recovery.params.download_node = Some(download_node.0.get_ip_addr());
 
-    info!(
-        logger,
-        "Starting recovery of subnet {}",
-        subnet_id.to_string()
-    );
-
     for (step_type, step) in subnet_recovery {
         info!(logger, "Next step: {:?}", step_type);
 
@@ -308,7 +311,6 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
 
     print_app_and_unassigned_nodes(&env, &logger);
 
-    // Confirm that ALL nodes are now healthy and running on the new version
     let all_app_nodes: Vec<IcNodeSnapshot> = topology_snapshot
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)

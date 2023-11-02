@@ -24,6 +24,17 @@ RUN mkdir -p /boot/config \
              /boot/grub
 COPY etc /etc
 
+# Change the permissions of /etc/{hosts,hostname,resolv.conf} in the rootfs source dir
+# as they get (re)copied to the container. 
+
+# Container engines do wacky things with these files - they bind mount them to reflect
+# what's on the host. The actual rootfs files do indeed get copied to the result tar
+# file. But changes to them by the RUN command don't have effect. COPY --chmod seems to
+# work
+COPY --chmod=644 etc/hosts /etc/hosts
+COPY --chmod=644 etc/hostname /etc/hostname
+COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
@@ -93,8 +104,16 @@ RUN systemctl enable \
     systemd-resolved \
     systemd-journal-gatewayd
 
-# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump
-RUN faketime "1970-1-1 0" systemd-sysusers
+# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump. 
+## `systemd-sysusers` does not honor the SOURCE_DATE_EPOCH env var. 
+## With `podman --timestamp=0` each file gets written with timestamp of the Unix epoch. 
+## When systemd-sysusers writes the shadow entry for these users, the 2nd field in the row (# days since the epoch) is set to (today - unix epoch). 
+## This is not reproducible. 
+## Reset the passwords to the locked password ("!!"). `usermod` honors SOURCE_DATE_EPOCH (set in the base dockerfile). This removes the password timestamp.
+## Why not use `faketime`? Doesn't work with `podman --timestamp=0`.
+RUN systemd-sysusers && \
+    usermod -p '!!' systemd-timesync && \
+    usermod -p '!!' systemd-coredump
 
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
 RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
@@ -120,14 +139,6 @@ RUN addgroup ic-http-adapter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC Canister HTTP Adapter" ic-http-adapter && \
     adduser ic-http-adapter ic-http-adapter
 
-# The "onchain-observability" account. Used to run `ic-onchain-observability-adapter` binary
-# to send connectivity data to the observability canister.
-RUN addgroup onchain-observability && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC Onchain Observability Adapter" onchain-observability && \
-    adduser onchain-observability onchain-observability && \ 
-    adduser onchain-observability ic-csp-vault-socket && \
-    adduser onchain-observability ic-registry-local-store
-
 # User which will run the replica service.
 RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-home ic-replica && \
     adduser ic-replica backup && \
@@ -135,7 +146,6 @@ RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-
     adduser ic-replica nonconfidential && \
     adduser ic-replica ic-registry-local-store && \
     adduser ic-replica ic-http-adapter && \
-    adduser ic-replica onchain-observability && \
     adduser ic-replica vsock
 
 # Accounts to allow remote access to state bits
@@ -167,20 +177,17 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
-# The "journalbeat" account. Used to run journalbeat binary to send logs of the
+# The "filebeat" account. Used to run filebeat binary to send logs of the
 # GuestOS.
-RUN addgroup journalbeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Journalbeat" journalbeat && \
-    adduser journalbeat journalbeat && \
-    adduser journalbeat systemd-journal && \
-    chown root:root /etc/journalbeat/*.yml \
-                    /usr/local/bin/journalbeat && \
-    chown journalbeat:journalbeat /var/lib/journalbeat \
-                                  /var/log/journalbeat && \
-    chmod 0755 /etc/journalbeat && \
-    chmod 0750 /var/lib/journalbeat \
-               /var/log/journalbeat && \
-    chmod 0644 /etc/journalbeat/*.yml
+RUN addgroup filebeat && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Filebeat" filebeat && \
+    adduser filebeat filebeat && \
+    adduser filebeat systemd-journal && \
+    chown root:root /usr/local/bin/filebeat && \
+    chown filebeat:filebeat /var/lib/filebeat \
+                            /var/log/filebeat && \
+    chmod 0750 /var/lib/filebeat \
+               /var/log/filebeat
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
@@ -239,6 +246,9 @@ RUN update-ca-certificates
 # The above steps are also used for dev-sev image
 FROM output_dev as output_dev-sev
 
+RUN echo "UNUSED DOCKERFILE LAYER. This line must exist to not fail."
+
 FROM output_${BUILD_TYPE}
 
 USER root:root
+

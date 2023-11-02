@@ -2,6 +2,7 @@ pub mod blocks;
 mod compact_account;
 pub mod endpoints;
 pub mod hash;
+pub(crate) mod known_tags;
 
 use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
@@ -10,25 +11,25 @@ use ic_ledger_core::{
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
-    Tokens,
+    tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(bound = "")]
 #[serde(tag = "op")]
-pub enum Operation {
+pub enum Operation<Tokens: TokensType> {
     #[serde(rename = "mint")]
     Mint {
         #[serde(with = "compact_account")]
         to: Account,
         #[serde(rename = "amt")]
-        amount: u64,
+        amount: Tokens,
     },
     #[serde(rename = "xfer")]
     Transfer {
@@ -43,9 +44,9 @@ pub enum Operation {
         )]
         spender: Option<Account>,
         #[serde(rename = "amt")]
-        amount: u64,
+        amount: Tokens,
         #[serde(skip_serializing_if = "Option::is_none")]
-        fee: Option<u64>,
+        fee: Option<Tokens>,
     },
     #[serde(rename = "burn")]
     Burn {
@@ -58,7 +59,7 @@ pub enum Operation {
         )]
         spender: Option<Account>,
         #[serde(rename = "amt")]
-        amount: u64,
+        amount: Tokens,
     },
     #[serde(rename = "approve")]
     Approve {
@@ -67,20 +68,21 @@ pub enum Operation {
         #[serde(with = "compact_account")]
         spender: Account,
         #[serde(rename = "amt")]
-        amount: u64,
+        amount: Tokens,
         #[serde(skip_serializing_if = "Option::is_none")]
         expected_allowance: Option<Tokens>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        expires_at: Option<TimeStamp>,
+        expires_at: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        fee: Option<u64>,
+        fee: Option<Tokens>,
     },
 }
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Transaction {
+#[serde(bound = "")]
+pub struct Transaction<Tokens: TokensType> {
     #[serde(flatten)]
-    pub operation: Operation,
+    pub operation: Operation<Tokens>,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -92,7 +94,7 @@ pub struct Transaction {
     pub memo: Option<Memo>,
 }
 
-impl LedgerTransaction for Transaction {
+impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
     type AccountId = Account;
     type Tokens = Tokens;
 
@@ -107,7 +109,28 @@ impl LedgerTransaction for Transaction {
             operation: Operation::Burn {
                 from,
                 spender,
-                amount: amount.get_e8s(),
+                amount,
+            },
+            created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+            memo: memo.map(Memo::from),
+        }
+    }
+
+    fn approve(
+        from: Self::AccountId,
+        spender: Self::AccountId,
+        amount: Self::Tokens,
+        created_at_time: Option<TimeStamp>,
+        memo: Option<u64>,
+    ) -> Self {
+        Self {
+            operation: Operation::Approve {
+                from,
+                spender,
+                amount,
+                expected_allowance: None,
+                expires_at: None,
+                fee: None,
             },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo: memo.map(Memo::from),
@@ -153,32 +176,29 @@ impl LedgerTransaction for Transaction {
                 amount,
                 fee,
             } => {
-                let fee = fee.map(Tokens::from_e8s).unwrap_or(effective_fee);
+                let fee = fee.unwrap_or(effective_fee);
                 if spender.is_none() || from == &spender.unwrap() {
-                    context.balances_mut().transfer(
-                        from,
-                        to,
-                        Tokens::from_e8s(*amount),
-                        fee,
-                        fee_collector,
-                    )?;
+                    context
+                        .balances_mut()
+                        .transfer(from, to, *amount, fee, fee_collector)?;
                     return Ok(());
                 }
 
                 let allowance = context.approvals().allowance(from, &spender.unwrap(), now);
-                let used_allowance = Tokens::from_e8s(*amount + fee.get_e8s());
+                let used_allowance =
+                    amount
+                        .checked_add(&fee)
+                        .ok_or(TxApplyError::InsufficientAllowance {
+                            allowance: allowance.amount,
+                        })?;
                 if allowance.amount < used_allowance {
                     return Err(TxApplyError::InsufficientAllowance {
                         allowance: allowance.amount,
                     });
                 }
-                context.balances_mut().transfer(
-                    from,
-                    to,
-                    Tokens::from_e8s(*amount),
-                    fee,
-                    fee_collector,
-                )?;
+                context
+                    .balances_mut()
+                    .transfer(from, to, *amount, fee, fee_collector)?;
                 context
                     .approvals_mut()
                     .use_allowance(from, &spender.unwrap(), used_allowance, now)
@@ -189,26 +209,23 @@ impl LedgerTransaction for Transaction {
                 spender,
                 amount,
             } => {
-                let amount_tokens = Tokens::from_e8s(*amount);
                 if spender.is_some() && from != &spender.unwrap() {
                     let allowance = context.approvals().allowance(from, &spender.unwrap(), now);
-                    if allowance.amount < amount_tokens {
+                    if allowance.amount < *amount {
                         return Err(TxApplyError::InsufficientAllowance {
                             allowance: allowance.amount,
                         });
                     }
                 }
-                context.balances_mut().burn(from, amount_tokens)?;
+                context.balances_mut().burn(from, *amount)?;
                 if spender.is_some() && from != &spender.unwrap() {
                     context
                         .approvals_mut()
-                        .use_allowance(from, &spender.unwrap(), amount_tokens, now)
+                        .use_allowance(from, &spender.unwrap(), *amount, now)
                         .expect("bug: cannot use allowance");
                 }
             }
-            Operation::Mint { to, amount } => {
-                context.balances_mut().mint(to, Tokens::from_e8s(*amount))?
-            }
+            Operation::Mint { to, amount } => context.balances_mut().mint(to, *amount)?,
             Operation::Approve {
                 from,
                 spender,
@@ -219,14 +236,14 @@ impl LedgerTransaction for Transaction {
             } => {
                 context
                     .balances_mut()
-                    .burn(from, fee.map(Tokens::from_e8s).unwrap_or(effective_fee))?;
+                    .burn(from, fee.unwrap_or(effective_fee))?;
                 let result = context
                     .approvals_mut()
                     .approve(
                         from,
                         spender,
-                        Tokens::from_e8s(*amount),
-                        *expires_at,
+                        *amount,
+                        expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
                         now,
                         *expected_allowance,
                     )
@@ -234,7 +251,7 @@ impl LedgerTransaction for Transaction {
                 if let Err(e) = result {
                     context
                         .balances_mut()
-                        .mint(from, fee.map(Tokens::from_e8s).unwrap_or(effective_fee))
+                        .mint(from, fee.unwrap_or(effective_fee))
                         .expect("bug: failed to refund approval fee");
                     return Err(e);
                 }
@@ -244,7 +261,7 @@ impl LedgerTransaction for Transaction {
     }
 }
 
-impl Transaction {
+impl<Tokens: TokensType> Transaction<Tokens> {
     pub fn mint(
         to: Account,
         amount: Tokens,
@@ -252,10 +269,7 @@ impl Transaction {
         memo: Option<Memo>,
     ) -> Self {
         Self {
-            operation: Operation::Mint {
-                to,
-                amount: amount.get_e8s(),
-            },
+            operation: Operation::Mint { to, amount },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo,
         }
@@ -275,8 +289,8 @@ impl Transaction {
                 from,
                 to,
                 spender,
-                amount: amount.get_e8s(),
-                fee: fee.map(Tokens::get_e8s),
+                amount,
+                fee: fee.map(From::from),
             },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo,
@@ -284,17 +298,16 @@ impl Transaction {
     }
 }
 
-impl TryFrom<icrc_ledger_types::icrc3::transactions::Transaction> for Transaction {
+impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transaction>
+    for Transaction<Tokens>
+{
     type Error = String;
     fn try_from(
         value: icrc_ledger_types::icrc3::transactions::Transaction,
     ) -> Result<Self, Self::Error> {
         if let Some(mint) = value.mint {
-            let amount = mint
-                .amount
-                .0
-                .to_u64()
-                .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
+            let amount = Tokens::try_from(mint.amount)
+                .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
             let operation = Operation::Mint {
                 to: mint.to,
                 amount,
@@ -306,11 +319,8 @@ impl TryFrom<icrc_ledger_types::icrc3::transactions::Transaction> for Transactio
             });
         }
         if let Some(burn) = value.burn {
-            let amount = burn
-                .amount
-                .0
-                .to_u64()
-                .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
+            let amount = Tokens::try_from(burn.amount)
+                .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
             let operation = Operation::Burn {
                 from: burn.from,
                 spender: burn.spender,
@@ -323,17 +333,12 @@ impl TryFrom<icrc_ledger_types::icrc3::transactions::Transaction> for Transactio
             });
         }
         if let Some(transfer) = value.transfer {
-            let amount = transfer
-                .amount
-                .0
-                .to_u64()
-                .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
+            let amount = Tokens::try_from(transfer.amount)
+                .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
             match transfer.fee {
                 Some(fee) => {
-                    let fee = fee
-                        .0
-                        .to_u64()
-                        .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
+                    let fee = Tokens::try_from(fee)
+                        .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
 
                     let operation = Operation::Transfer {
                         to: transfer.to,
@@ -369,17 +374,18 @@ impl TryFrom<icrc_ledger_types::icrc3::transactions::Transaction> for Transactio
 }
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Block {
+#[serde(bound = "")]
+pub struct Block<Tokens: TokensType> {
     #[serde(rename = "phash")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_hash: Option<HashOf<EncodedBlock>>,
 
     #[serde(rename = "tx")]
-    pub transaction: Transaction,
+    pub transaction: Transaction<Tokens>,
 
     #[serde(rename = "fee")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub effective_fee: Option<u64>,
+    pub effective_fee: Option<Tokens>,
 
     #[serde(rename = "ts")]
     pub timestamp: u64,
@@ -394,23 +400,23 @@ pub struct Block {
     pub fee_collector_block_index: Option<u64>,
 }
 
-type TaggedBlock = Required<Block, 55799>;
+type TaggedBlock<Tokens> = Required<Block<Tokens>, 55799>;
 
-impl BlockType for Block {
-    type Transaction = Transaction;
+impl<Tokens: TokensType> BlockType for Block<Tokens> {
+    type Transaction = Transaction<Tokens>;
     type AccountId = Account;
     type Tokens = Tokens;
 
     fn encode(self) -> EncodedBlock {
         let mut bytes = vec![];
-        let value: TaggedBlock = Required(self);
+        let value: TaggedBlock<Tokens> = Required(self);
         ciborium::ser::into_writer(&value, &mut bytes).expect("bug: failed to encode a block");
         EncodedBlock::from_vec(bytes)
     }
 
     fn decode(encoded_block: EncodedBlock) -> Result<Self, String> {
         let bytes = encoded_block.into_vec();
-        let tagged_block: TaggedBlock = ciborium::de::from_reader(&bytes[..])
+        let tagged_block: TaggedBlock<Tokens> = ciborium::de::from_reader(&bytes[..])
             .map_err(|e| format!("failed to decode a block: {}", e))?;
         Ok(tagged_block.0)
     }
@@ -442,10 +448,10 @@ impl BlockType for Block {
         effective_fee: Tokens,
         fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
-        let effective_fee = if let Operation::Transfer { fee, .. } = &transaction.operation {
-            fee.is_none().then_some(effective_fee.get_e8s())
-        } else {
-            None
+        let effective_fee = match &transaction.operation {
+            Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
+            Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
+            _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {
@@ -466,4 +472,4 @@ impl BlockType for Block {
     }
 }
 
-pub type LedgerBalances = Balances<HashMap<Account, Tokens>>;
+pub type LedgerBalances<Tokens> = Balances<BTreeMap<Account, Tokens>>;

@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/canonical_state/certification_version",
     "//rs/config",
     "//rs/constants",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/phantom_newtype",
@@ -40,6 +40,8 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/test_utils/keys",
     "//rs/criterion_time",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
@@ -49,6 +51,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde_cbor",
+    "@crate_index//:static_assertions",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

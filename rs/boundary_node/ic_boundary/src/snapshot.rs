@@ -1,35 +1,19 @@
-use std::{
-    collections::HashMap,
-    fmt,
-    net::{IpAddr, SocketAddr, ToSocketAddrs},
-    str::FromStr,
-    sync::Arc,
-    time::SystemTime,
-};
-
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
-use hyper::client::connect::dns::Name;
 use ic_protobuf::registry::subnet::v1::SubnetType;
-use ic_registry_client::client::{RegistryClient, RegistryDataProvider};
+use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
-use ic_types::replica_version::ReplicaVersion;
-use reqwest::dns::{Addrs, Resolve, Resolving};
-use rustls::{
-    client::{ServerCertVerified, ServerCertVerifier},
-    Certificate, CertificateError, Error as RustlsError, ServerName,
-};
-use tracing::warn;
-use x509_parser::{certificate::X509Certificate, prelude::FromDer, time::ASN1Time};
+use std::{collections::HashMap, fmt, net::IpAddr, str::FromStr, sync::Arc};
+use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
-use crate::Run;
+use crate::core::Run;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
@@ -77,14 +61,14 @@ pub struct RoutingTable {
     pub nodes: HashMap<String, Node>,
 }
 
-pub struct Runner<'a> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
+pub struct Runner {
+    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
     registry_client: Arc<dyn RegistryClient>,
 }
 
-impl<'a> Runner<'a> {
+impl Runner {
     pub fn new(
-        published_routing_table: &'a ArcSwapOption<RoutingTable>,
+        published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
         registry_client: Arc<dyn RegistryClient>,
     ) -> Self {
         Self {
@@ -162,8 +146,8 @@ impl<'a> Runner<'a> {
                     .map(|node_id| {
                         let transport_info = self
                             .registry_client
-                            .get_transport_info(node_id, version)
-                            .context("failed to get transport info")? // Result
+                            .get_node_record(node_id, version)
+                            .context("failed to get node record")? // Result
                             .context("transport info not available")?; // Option
 
                         let http_endpoint =
@@ -224,149 +208,12 @@ impl<'a> Runner<'a> {
 }
 
 #[async_trait]
-impl<'a> Run for Runner<'a> {
+impl Run for Runner {
     async fn run(&mut self) -> Result<(), Error> {
         // Obtain routing table & publish it
         let rt = self.get_routing_table()?;
         self.published_routing_table.store(Some(Arc::new(rt)));
         Ok(())
-    }
-}
-
-pub struct TlsVerifier<'a> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
-}
-
-impl<'a> TlsVerifier<'a> {
-    pub fn new(published_routing_table: &'a ArcSwapOption<RoutingTable>) -> Self {
-        Self {
-            published_routing_table,
-        }
-    }
-}
-
-pub struct DnsResolver<'a> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
-}
-
-impl<'a> DnsResolver<'a> {
-    pub fn new(published_routing_table: &'a ArcSwapOption<RoutingTable>) -> Self {
-        Self {
-            published_routing_table,
-        }
-    }
-}
-
-// Implement the certificate verifier which ensures that the certificate
-// that was provided by node during TLS handshake matches its public key from the registry
-// This trait is used by Rustls in reqwest under the hood
-// We don't really check CommonName since the resolver makes sure we connect to the right IP
-impl<'a> ServerCertVerifier for TlsVerifier<'a> {
-    fn verify_server_cert(
-        &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
-        ocsp_response: &[u8],
-        now: SystemTime,
-    ) -> Result<ServerCertVerified, RustlsError> {
-        // Load a routing table if we have one
-        let rt = self
-            .published_routing_table
-            .load_full()
-            .ok_or_else(|| RustlsError::General("no routing table published".into()))?;
-
-        // Look up a node in the routing table based on the hostname provided by rustls
-        let node = match server_name {
-            // Currently support only DnsName
-            ServerName::DnsName(v) => {
-                match rt.nodes.get(v.as_ref()) {
-                    // If the requested node is not in the routing table
-                    None => {
-                        return Err(RustlsError::General(format!(
-                            "Node '{}' not found in a routing table",
-                            v.as_ref()
-                        )));
-                    }
-
-                    // Found
-                    Some(v) => v,
-                }
-            }
-
-            // Unsupported for now, can be removed later if not needed at all
-            ServerName::IpAddress(_) => return Err(RustlsError::UnsupportedNameType),
-
-            // Enum is marked non_exhaustive
-            &_ => return Err(RustlsError::UnsupportedNameType),
-        };
-
-        // Cert is parsed & checked when we read it from the registry - if we got here then it's correct
-        // It's a zero-copy view over byte array
-        // Storing X509Certificate directly in Node is problematic since it does not own the data
-        let (_, node_cert) = X509Certificate::from_der(&node.tls_certificate).unwrap();
-
-        // Parse the certificate provided by server
-        let (_, provided_cert) = X509Certificate::from_der(&end_entity.0)
-            .map_err(|x| RustlsError::InvalidCertificate(CertificateError::BadEncoding))?;
-
-        // Verify the provided self-signed certificate using the public key from registry
-        provided_cert
-            .verify_signature(Some(&node_cert.tbs_certificate.subject_pki))
-            .map_err(|x| RustlsError::InvalidCertificate(CertificateError::BadSignature))?;
-
-        // Check if the certificate is valid at provided `now` time
-        if !provided_cert.validity.is_valid_at(
-            ASN1Time::from_timestamp(
-                now.duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64,
-            )
-            .unwrap(),
-        ) {
-            return Err(RustlsError::InvalidCertificate(CertificateError::Expired));
-        }
-
-        Ok(ServerCertVerified::assertion())
-    }
-}
-
-// Implement resolver based on the routing table
-// It's used by reqwest to resolve node IDs to an IP address
-impl<'a> Resolve for DnsResolver<'a> {
-    fn resolve(&self, name: Name) -> Resolving {
-        // Load a routing table if we have one
-        let rt = self.published_routing_table.load_full();
-
-        if rt.is_none() {
-            let err = Box::<dyn std::error::Error + Send + Sync>::from(
-                "no routing table published".to_string(),
-            );
-
-            return Box::pin(futures_util::future::ready(Err(err)));
-        }
-
-        let rt = rt.unwrap();
-
-        match rt.nodes.get(name.as_str()) {
-            // If there's no node with given id - return future with error
-            None => {
-                let err = Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                    "Node '{name}' not found in routing table",
-                ));
-
-                Box::pin(futures_util::future::ready(Err(err)))
-            }
-
-            // Return future that resolves to an iterator with a node IP address
-            Some(n) => {
-                let addrs = vec![SocketAddr::new(n.addr, 0)]; // Port here is unused by reqwest
-                let addrs: Addrs = Box::new(addrs.into_iter());
-
-                Box::pin(futures_util::future::ready(Ok(addrs)))
-            }
-        }
     }
 }
 

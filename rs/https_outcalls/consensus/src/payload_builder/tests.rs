@@ -597,7 +597,7 @@ fn registry_unavailable_validation() {
 #[test]
 fn feature_disabled_validation() {
     let validation_result = run_validatation_test(
-        |_, mut metadata| {
+        |_, metadata| {
             // Set registry version to 0
             metadata.registry_version = RegistryVersion::new(0);
         },
@@ -893,18 +893,16 @@ pub(crate) fn metadata_to_shares(
     metadata: &CanisterHttpResponseMetadata,
 ) -> Vec<CanisterHttpResponseShare> {
     (0..num_nodes)
-        .into_iter()
         .map(|id| metadata_to_share(id.try_into().unwrap(), metadata))
         .collect()
 }
 
-/// Mock up a test node, which has the feauture enabled
+/// Mock up a test node, which has the feature enabled
 pub(crate) fn test_config_with_http_feature<T>(
     num_nodes: usize,
     run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>) -> T,
 ) -> T {
     let committee = (0..num_nodes)
-        .into_iter()
         .map(|id| node_test_id(id as u64))
         .collect::<Vec<_>>();
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {

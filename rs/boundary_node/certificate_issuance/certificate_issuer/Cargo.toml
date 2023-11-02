@@ -11,36 +11,31 @@ anyhow = "1.0.66"
 async-trait = "0.1.58"
 axum = { version = "0.6.1", features = ["json"] }
 candid = { workspace = true }
-cfg-if = "1.0.0"
 chacha20poly1305 = "0.10.0"
-chrono = { version = "0.4.19", default-features = false, features = ["clock"] }
 clap = { version = "4.0.18", features = ["derive"] }
 cloudflare = "0.9.1"
 flate2 = "1.0.22"
-futures = "0.3.25"
-hyper = { version = "0.14.20", features = ["full"] }
-hyper-rustls = "0.24.0"
+futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
-ic-response-verification = "0.2.1"
+ic-response-verification = "1.2.0"
 idna = "0.3.0"
-instant-acme = "0.2.1"
+instant-acme = "0.3.2"
 leb128 = "0.2.5"
 mockall = "0.11.3"
-opentelemetry = "0.18.0"
-opentelemetry-prometheus = "0.11.0"
+opentelemetry = { version = "0.20", features = ["metrics"] }
+opentelemetry-prometheus = "0.13.0"
 pem = "1.1.0"
 prometheus = "0.13.3"
 rcgen = "0.10.0"
 reqwest = "0.11.13"
 serde = { version = "1.0.147", features = ["serde_derive"] }
-serde_bytes = "0.11.7"
 serde_cbor = "0.11.2"
 serde_json = "1.0.87"
 sha2 = "0.10.6"
 thiserror = "1.0.37"
-tokio = { version = "1.21.2", features = ["full"] }
-tower = { version = "0.4.13", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
+tower = { workspace = true }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["json"] }
 trust-dns-resolver = "0.22.0"

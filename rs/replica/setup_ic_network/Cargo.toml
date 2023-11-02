@@ -5,14 +5,18 @@ edition = "2021"
 
 [dependencies]
 crossbeam-channel = "0.5.5"
+either = "1.6.0"
 ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
 ic-consensus-utils = { path = "../../consensus/utils" }
+ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
+ic-execution-environment = { path = "../../execution_environment" }
 ic-https-outcalls-consensus = { path = "../../https_outcalls/consensus" }
+ic-icos-sev = { path = "../../ic_os/sev" }
 ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }
@@ -23,15 +27,18 @@ ic-interfaces-transport = { path = "../../interfaces/transport" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-p2p = { path = "../../p2p" }
+ic-peer-manager = { path = "../../p2p/peer_manager" }
 ic-protobuf = { path = "../../protobuf" }
+ic-quic-transport = { path = "../../p2p/quic_transport" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-manager = { path = "../../state_manager" }
+ic-state-sync-manager = { path = "../../p2p/state_sync_manager" }
 ic-transport = { path = "../../transport" }
 ic-types = { path = "../../types/types" }
 parking_lot = "0.12.1"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 threadpool = "1.8.1"
-tokio = { version = "1.15.0", features = ["full"] }
-tower = { version = "0.4.11", features = ["load-shed", "buffer", "limit", "util"] }
+tokio = { version = "1.32.0", features = ["full"] }
+tower = { workspace = true }
 

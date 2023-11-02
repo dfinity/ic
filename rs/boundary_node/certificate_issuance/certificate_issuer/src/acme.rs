@@ -113,7 +113,10 @@ impl Finalize for Acme {
             .await
             .context("failed to create new order")?;
 
-        let state = order.state();
+        let state = order
+            .refresh()
+            .await
+            .context("failed to refresh order state")?;
 
         if state.status != OrderStatus::Ready {
             return Err(FinalizeError::OrderNotReady(format!("{:?}", state.status)));

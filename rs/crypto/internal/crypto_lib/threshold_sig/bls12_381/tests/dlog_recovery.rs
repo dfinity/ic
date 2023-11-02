@@ -5,7 +5,7 @@ use rand::Rng;
 
 // Returns a random element of Gt
 fn gt_rand() -> Gt {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let g1 = G1Affine::hash(b"ic-crypto-test-gt-random", &rng.gen::<[u8; 32]>());
     let g2 = G2Affine::generator();
     Gt::pairing(&g1, g2)
@@ -97,7 +97,7 @@ fn honest_dealer_search_works_exhaustive_test() {
 fn honest_dealer_search_works_randomized_test() {
     let search = HonestDealerDlogLookupTable::new();
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let mut dlogs = (0..500).map(|_| rng.gen::<u16>()).collect::<Vec<_>>();
 
@@ -196,7 +196,7 @@ fn slightly_dishonest_dlog() {
 }
 
 fn cheating_dlog_instance(m: usize) -> (Scalar, Gt) {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let z = 1069531200 * 16 * m as u64;
 

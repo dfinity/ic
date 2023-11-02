@@ -110,7 +110,7 @@ Example: workloads/canister-http-benchmark.toml
 
 Provides a foundation for stress tests using the Python agent. Python code is parallelized through processes as well as asyncio.
 
-Very flexible, since code can be writte in Python. Allows to implement statefull or flow based benchmarks, where calls are not
+Very flexible, since code can be written in Python. Allows to implement statefull or flow based benchmarks, where calls are not
 identical to each other (as with the workload generator), but can be customized for each call.
 
 Has delegation support.
@@ -124,7 +124,7 @@ Example: experiments/run_delegation_experiment.py
 Experiments that don't require workload generators (directly inheriting from `experiment.py`) require *one* testnet:
 the testnet on which we install canisters to benchmark.
 It should ideally be close to the hardware we are running in mainnet.
-Currently, testnets `benchmarklarge`, `benchmarksmall01` and `benchmarksmall02` are good candidates.
+Currently, testnet `benchmarklarge`is a good candidate.
 
 Experiments using workload generators (based on `workload_experiment.py`) require *two* testnets in order to
 guarantee a consistent setup of the workload generator machines.
@@ -178,7 +178,7 @@ Many benchmarks come with a custom canister to run requests against. There are m
  1. `scalability/canisters` with `$NAME.wasm` and `$NAME.wasm.gz`
  2. The IC's canister artifacts. Those are downloaded automatically by the suite. To trigger a new download, make sure to `rm ../artifacts`
 
-The latter is prefered if the canisters source code is part of the IC repo to avoid redundancy. Option 1 might still make sense during development, as it results in a faster development cycle.
+The latter is preferred if the canisters source code is part of the IC repo to avoid redundancy. Option 1 might still make sense during development, as it results in a faster development cycle.
 
 In order to add a new experiment:
 
@@ -196,11 +196,11 @@ Consider other experiments `run_experiment_*.py` for inspiration. Notable `run_s
 
 The scalability suite is designed such that it provides stable results and collect a lot of data for report generation.
 
-However, when running manually, it is sometimes desireable to skip some of those features to achieve a faster feedback cycles.
+However, when running manually, it is sometimes desirable to skip some of those features to achieve a faster feedback cycles.
 
  - Use `--iter_duration=60` or `--scale_duration=0.2` (for workload experiments) for shorter measurement duration
  - Set `--no_prometheus=True --no_instrument=True` to disable some extra steps for acquiering more data
- - Use `--wg_testnet localhost --workload_generator_machines localhost` to run the workload generator on the local machine. While this is easier to setup (no second testnet is neede), the quality of the results might be degraded due to load generation becoming the bottleneck
+ - Use `--wg_testnet localhost --workload_generator_machines localhost` to run the workload generator on the local machine. While this is easier to setup (no second testnet is needed), the quality of the results might be degraded due to load generation becoming the bottleneck
  - Use `--cache_path=/tmp/cache` to use caching for some of the lookups (e.g. the IC topology). The cache has to be manually deleted when the testnet is redeployed, as cached data in that case will be incorrect and the suite will fail with an incorrect cache.
 
 ## Debugging

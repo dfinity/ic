@@ -28,7 +28,8 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, NumBytes};
 use ic_cdk::api::call::RejectionCode;
 use ic_ic00_types::{
-    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext, TransformFunc,
+    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+    TransformFunc,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities::{mock_time, types::messages::RequestBuilder};
@@ -85,7 +86,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("http://[{webserver_ipv6}]:20443"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -112,7 +113,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -127,7 +128,7 @@ pub fn test(env: TestEnv) {
                     cycles: 500_000_000_000,
                 },
                 |response| {
-                    let r = response.clone().expect("Http call should suceed");
+                    let r = response.clone().expect("Http call should succeed");
                     r.headers.len() == 1 && r.headers[0].0 == "hello" && r.headers[0].1 == "bonjour"
                 },
             )
@@ -142,7 +143,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("http://[{webserver_ipv6}]:20443"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -164,7 +165,7 @@ pub fn test(env: TestEnv) {
         // Formula: 400M + (2*response_size_limit + 2*request_size) * 50000
         let request = CanisterHttpRequestArgs {
             url: format!("https://[{webserver_ipv6}]:20443"),
-            headers: vec![],
+            headers: BoundedHttpHeaders::new(vec![]),
             method: HttpMethod::GET,
             body: Some("".as_bytes().to_vec()),
             transform: Some(TransformContext {
@@ -214,7 +215,7 @@ pub fn test(env: TestEnv) {
         // Formula: 400M + (2*response_size_limit + 2*request_size) * 50000
         let request = CanisterHttpRequestArgs {
             url: format!("https://[{webserver_ipv6}]:20443"),
-            headers: vec![],
+            headers: BoundedHttpHeaders::new(vec![]),
             method: HttpMethod::GET,
             body: Some("".as_bytes().to_vec()),
             transform: Some(TransformContext {
@@ -269,7 +270,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -296,7 +297,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -323,7 +324,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -350,10 +351,10 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443/post"),
-                        headers: vec![HttpHeader {
+                        headers: BoundedHttpHeaders::new(vec![HttpHeader {
                             name: "Content-Type".to_string(),
                             value: "application/x-www-form-urlencoded".to_string(),
-                        }],
+                        }]),
                         method: HttpMethod::POST,
                         body: Some("satoshi=me".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -380,7 +381,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443/bytes/100000"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -408,7 +409,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443/delay/40"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -435,7 +436,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443/redirect/10"),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {
@@ -462,7 +463,7 @@ pub fn test(env: TestEnv) {
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{}]:9090", node.get_ip_addr()),
-                        headers: vec![],
+                        headers: BoundedHttpHeaders::new(vec![]),
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
                         transform: Some(TransformContext {

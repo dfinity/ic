@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/constants",
@@ -18,8 +18,6 @@ BASE_DEPENDENCIES = [
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_json",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
     "//rs/sns/root",
@@ -28,9 +26,7 @@ BASE_DEPENDENCIES = [
     "//rs/types/ic00_types",
     "//rs/types/types",
     "//rs/universal_canister/lib",
-    "@crate_index//:byteorder",
     "@crate_index//:candid",
-    "@crate_index//:hex",
     "@crate_index//:maplit",
     "@crate_index//:pretty-bytes",
     "@crate_index//:proptest",
@@ -43,13 +39,11 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/cli",
     "//rs/sns/init",
     "//rs/sns/test_utils",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/cli:cli--test_feature",
     "//rs/sns/init:init--test_feature",
     "//rs/sns/test_utils:test_utils--test_feature",
 ]
@@ -62,6 +56,7 @@ BASE_DEV_DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/crypto",
     "//rs/nervous_system/clients",
+    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nns/common",
     "//rs/protobuf",
@@ -71,7 +66,6 @@ BASE_DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
-    "@crate_index//:num-traits",
     "@crate_index//:pretty_assertions",
     "@crate_index//:rust_decimal",
     "@crate_index//:tokio",

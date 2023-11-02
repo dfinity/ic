@@ -11,8 +11,8 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
     artifact_pool::{ChangeResult, MutablePool, ValidatedPoolReader},
     consensus_pool::{
-        ChainIterator, ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain,
-        ConsensusPool, ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
+        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
+        ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     time_source::TimeSource,
@@ -25,7 +25,7 @@ use ic_types::{
     artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
 };
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
-use std::{cmp::Ordering, marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]
 pub enum PoolSectionOp<T> {
@@ -501,9 +501,9 @@ impl ConsensusPoolImpl {
         }
     }
 
-    // Checks if the artifacts to be backed up contain a new finalization, and if it is the case, we simply traverse the blockchain starting from the hash
-    // of the new finalization back to the previous finalization and add to the list of artifacts
-    // all block proposals that are now provably belong to the finalized chain.
+    // Persists consensus artifacts required for backup validation. If the provided artifacts contain a new finalization,
+    // the function traverses the blockchain backwards to the last available finalization and additionally persists all
+    // block proposals with their notarizations that are now provably belong to the finalized chain.
     fn backup_artifacts(
         &self,
         backup: &Backup,
@@ -535,17 +535,28 @@ impl ConsensusPoolImpl {
             })
         });
 
-        if let Some(proposal) = finalized_proposal {
-            artifacts_for_backup.extend(
-                ChainIterator::new(self, proposal.content.into_inner(), None)
-                    .take_while(|block| block.height > latest_finalization_height)
-                    .filter_map(|block| {
-                        find_proposal_by(block.height, &|proposal: &BlockProposal| {
-                            proposal.content.as_ref() == &block
-                        })
+        if let Some(finalized_proposal) = finalized_proposal {
+            for proposal in self
+                .as_cache()
+                .chain_iterator(self, finalized_proposal.content.into_inner())
+                .take_while(|block| block.height > latest_finalization_height)
+                .filter_map(|block| {
+                    find_proposal_by(block.height, &|proposal: &BlockProposal| {
+                        proposal.content.as_ref() == &block
                     })
-                    .map(ConsensusMessage::BlockProposal),
-            );
+                })
+            {
+                if let Some(notarization) = self
+                    .validated()
+                    .notarization()
+                    .get_by_height(proposal.content.height())
+                    .find(|notarization| proposal.content.get_hash() == &notarization.content.block)
+                {
+                    artifacts_for_backup.push(ConsensusMessage::Notarization(notarization))
+                }
+
+                artifacts_for_backup.push(ConsensusMessage::BlockProposal(proposal));
+            }
         }
 
         backup.store(time_source, artifacts_for_backup);
@@ -577,6 +588,12 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
+    fn remove(&mut self, id: &ConsensusMessageId) {
+        let mut ops = PoolSectionOps::new();
+        ops.remove(id.clone());
+        self.apply_changes_unvalidated(ops);
+    }
+
     fn apply_changes(
         &mut self,
         time_source: &dyn TimeSource,
@@ -605,16 +622,13 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
                     }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
-                        panic!("Timestmap is not found for MoveToValidated: {:?}", to_move)
+                        panic!("Timestamp is not found for MoveToValidated: {:?}", to_move)
                     });
                     unvalidated_ops.remove(msg_id);
                     validated_ops.insert(ValidatedConsensusArtifact {
                         msg: to_move,
                         timestamp,
                     });
-                }
-                ChangeAction::RemoveFromValidated(to_remove) => {
-                    validated_ops.remove(to_remove.get_id());
                 }
                 ChangeAction::RemoveFromUnvalidated(to_remove) => {
                     unvalidated_ops.remove(to_remove.get_id());
@@ -645,9 +659,9 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
             .filter_map(|op| match op {
                 PoolSectionOp::Insert(artifact)
                     // When we prepare a list of artifacts for a backup, we first remove all
-                    // block proposals. We need to do this to avoid "polluting" the backup partition with non-
-                    // finalized blocks, which are the largest artifacts. 
-                    if !matches!(&artifact.msg, &ConsensusMessage::BlockProposal(_)) =>
+                    // block proposals and notarizations. We need to do this to avoid "polluting" the backup
+                    // partition with non-finalized blocks, which are the largest artifacts.
+                    if !matches!(&artifact.msg, &ConsensusMessage::BlockProposal(_)) && !matches!(&artifact.msg, &ConsensusMessage::Notarization(_)) =>
                 {
                     Some(artifact.msg.clone())
                 }
@@ -870,83 +884,6 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
                 )
                 .chain(random_tape_iterator),
         )
-    }
-}
-
-/// An iterator for block ancestors.
-/// TODO: this is currently used only for ConsensusBlockChainImpl. Migrate
-/// other call sites from ChainIterator to BlockChainIterator.
-#[allow(dead_code)]
-pub struct BlockChainIterator<'a> {
-    consensus_pool: &'a dyn ConsensusPool,
-    summary_height: Height,
-    cursor: Option<Block>,
-}
-
-impl<'a> BlockChainIterator<'a> {
-    /// Return an iterator that iterates block ancestors, going backwards
-    /// from the `from_block` to the nearest summary block ancestor (both inclusive),
-    /// or until a parent is not found in the consensus pool.
-    pub fn new(consensus_pool: &'a dyn ConsensusPool, from_block: Block) -> Self {
-        Self {
-            consensus_pool,
-            summary_height: from_block.payload.as_ref().dkg_interval_start_height(),
-            cursor: Some(from_block),
-        }
-    }
-
-    fn get_parent_block(&self, block: &Block) -> Option<Block> {
-        if block.height() == Height::from(0) {
-            return None;
-        }
-
-        let parent_height = block.height().decrement();
-        let parent_hash = &block.parent;
-
-        // First look up the block proposals
-        self.consensus_pool
-            .validated()
-            .block_proposal()
-            .get_by_height(parent_height)
-            .find_map(|proposal| {
-                if proposal.content.get_hash() == parent_hash {
-                    Some(proposal.content.into_inner())
-                } else {
-                    None
-                }
-            })
-            .or_else(|| {
-                // Parent block proposal not found, look up the CUPs only if parent
-                // is the summary height
-                if parent_height.cmp(&self.summary_height) == Ordering::Equal {
-                    self.consensus_pool
-                        .validated()
-                        .catch_up_package()
-                        .get_by_height(parent_height)
-                        .find_map(|cup| {
-                            if cup.content.block.get_hash() == parent_hash {
-                                Some(cup.content.block.into_inner())
-                            } else {
-                                None
-                            }
-                        })
-                } else {
-                    None
-                }
-            })
-    }
-}
-
-impl<'a> Iterator for BlockChainIterator<'a> {
-    type Item = Block;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let cur_block = self.cursor.as_ref()?;
-        let parent_block = match cur_block.height().cmp(&self.summary_height) {
-            Ordering::Greater => self.get_parent_block(cur_block),
-            Ordering::Equal | Ordering::Less => None,
-        };
-        std::mem::replace(&mut self.cursor, parent_block)
     }
 }
 
@@ -1187,6 +1124,36 @@ mod tests {
     }
 
     #[test]
+    fn test_insert_remove() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+            );
+
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+            let id = random_beacon.get_id();
+
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::RandomBeacon(random_beacon),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            assert!(pool.contains(&id));
+
+            pool.remove(&id);
+            assert!(!pool.contains(&id));
+        });
+    }
+
+    #[test]
     fn test_metrics() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
@@ -1413,6 +1380,10 @@ mod tests {
                 },
             );
             let proposal3_final = BlockProposal::fake(block.clone(), node_test_id(333));
+            let notarization3 = Notarization::fake(NotarizationContent::new(
+                Height::from(3),
+                ic_types::crypto::crypto_hash(&block),
+            ));
 
             let block = Block::new(
                 ic_types::crypto::crypto_hash(&block),
@@ -1470,6 +1441,7 @@ mod tests {
                 proposal.clone().into_message(),
                 proposal_non_final.clone().into_message(),
                 proposal3.clone().into_message(),
+                notarization3.clone().into_message(),
                 proposal3_final.clone().into_message(),
                 cup.clone().into_message(),
             ]
@@ -1537,14 +1509,13 @@ mod tests {
                 path.join("2").join("random_tape.bin").exists(),
                 "random tape at height 2 was backed up"
             );
-            assert!(
-                notarization_path.exists(),
-                "notarization at height 2 was backed up"
-            );
+            // notarization at height 2 was not backed up becasue this is height is not
+            // finalized
+            assert!(!notarization_path.exists());
             assert_eq!(
                 fs::read_dir(path.join("2")).unwrap().count(),
-                2,
-                "only two artifacts for height 2 were backed up"
+                1,
+                "only one artifact for height 2 was backed up"
             );
             let mut file = fs::File::open(path.join("2").join("random_tape.bin")).unwrap();
             let mut buffer = Vec::new();
@@ -1555,17 +1526,6 @@ mod tests {
                 random_tape, restored,
                 "restored random tape is identical with the original one"
             );
-            let mut file = fs::File::open(notarization_path).unwrap();
-            let mut buffer = Vec::new();
-            file.read_to_end(&mut buffer).unwrap();
-            let restored =
-                Notarization::try_from(pb::Notarization::decode(buffer.as_slice()).unwrap())
-                    .unwrap();
-            assert_eq!(
-                notarization, restored,
-                "restored notarization is identical with the original one"
-            );
-
             // Check backup for height 3
             let finalization_path = path.join("3").join(format!(
                 "finalization_{}_{}.bin",
@@ -1578,8 +1538,8 @@ mod tests {
             );
             assert_eq!(
                 fs::read_dir(path.join("3")).unwrap().count(),
-                2,
-                "only two artifact for height 3 was backed up"
+                3,
+                "only three artifact for height 3 were backed up"
             );
             let mut file = fs::File::open(path.join("3").join(finalization_path)).unwrap();
             let mut buffer = Vec::new();
@@ -1607,6 +1567,26 @@ mod tests {
                 bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal3_final)),
             ));
             assert!(proposal_path.exists(), "final proposal was backed up");
+
+            let notarization_path = path.join("3").join(format!(
+                "notarization_{}_{}.bin",
+                bytes_to_hex_str(&notarization3.content.block),
+                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&notarization3)),
+            ));
+            assert!(
+                notarization_path.exists(),
+                "notarization at height 3 was backed up",
+            );
+            let mut file = fs::File::open(notarization_path).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                Notarization::try_from(pb::Notarization::decode(buffer.as_slice()).unwrap())
+                    .unwrap();
+            assert_eq!(
+                notarization3, restored,
+                "restored notarization is identical with the original one"
+            );
 
             // Check backup for height 4
             assert!(
@@ -1691,7 +1671,7 @@ mod tests {
 
         impl BackupAge for FakeAge {
             fn get_elapsed_time(&self, path: &Path) -> Result<Duration, PurgingError> {
-                // Fake age of an artifact is determined through map look up. Panics on non-existant keys.
+                // Fake age of an artifact is determined through map look up. Panics on non-existent keys.
                 let name = path
                     .file_name()
                     .map(|os| os.to_os_string().into_string().unwrap())
@@ -1753,6 +1733,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
             ));
             let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(2)));
+            let random_tape3 = RandomTape::fake(RandomTapeContent::new(Height::from(3)));
             let notarization = Notarization::fake(NotarizationContent::new(
                 Height::from(3),
                 CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
@@ -1803,6 +1784,7 @@ mod tests {
             // Now add new artifacts
             let changeset = vec![
                 notarization.into_message(),
+                random_tape3.into_message(),
                 proposal.into_message(),
                 finalization.into_message(),
             ]
@@ -1955,8 +1937,10 @@ mod tests {
 
     // Verifies the iterator output, starting from the given block
     fn check_iterator(pool: &dyn ConsensusPool, from: Block, expected_heights: Vec<u64>) {
-        let mut blocks = Vec::new();
-        BlockChainIterator::new(pool, from).for_each(|block| blocks.push(block));
+        let blocks = pool
+            .as_cache()
+            .chain_iterator(pool, from)
+            .collect::<Vec<_>>();
         assert_eq!(blocks.len(), expected_heights.len());
 
         for (block, expected_height) in blocks.iter().zip(expected_heights.iter()) {

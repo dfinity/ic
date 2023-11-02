@@ -10,6 +10,7 @@ use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_test_utilities::consensus::batch::MockBatchPayloadBuilder;
 use ic_test_utilities::{
     consensus::make_genesis,
     crypto::CryptoReturningOk,
@@ -52,6 +53,9 @@ fn consensus_produces_expected_batches() {
 
         let canister_http_payload_builder = FakeCanisterHttpPayloadBuilder::new();
         let canister_http_payload_builder = Arc::new(canister_http_payload_builder);
+
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let query_stats_payload_builder = Arc::new(query_stats_payload_builder);
 
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
@@ -137,6 +141,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&xnet_payload_builder) as Arc<_>,
             Arc::clone(&self_validating_payload_builder) as Arc<_>,
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
+            query_stats_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&ecdsa_pool) as Arc<_>,
             dkg_key_manager.clone(),

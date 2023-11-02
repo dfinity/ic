@@ -1,0 +1,68 @@
+dependencies-check:
+    # TODO(PSEC-970)
+    # we want to skip this job on the merge_train for now
+    # When we grant exceptions, the exception is based on the
+    # latest commit in the branch obtained from CI_COMMIT_SHA.
+    # On the merge_train, this will be different i.e the merge
+    # commit in the master branch. This would cause the job to
+    # fail even if it has successfully passed.
+  extends:
+    - .ubuntu-k8s
+  rules :
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+  needs: []  # don't wait on other jobs
+  variables:
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
+    CARGO_AUDIT_VERSION : "0.16.0"
+  script:
+    - |
+      set -euo pipefail
+      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
+      $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
+  allow_failure: false
+
+dependency-scan-nightly:
+  extends:
+    - .ubuntu-k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"'
+  needs: []  # don't wait on other jobs
+  variables:
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
+    CARGO_AUDIT_VERSION : "0.16.0"
+    NVM_VERSION : "19"
+  script:
+    - |
+      set -euo pipefail
+      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      # shellcheck disable=SC1090
+      source "${NVM_DIR}/nvm.sh"
+      nvm use ${NVM_VERSION}
+      node --version
+      npm --version
+      cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
+      $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
+      $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
+      $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
+  # TODO(PSEC-970)
+  # Remove allow_failure : true after testing on the CI
+  allow_failure: true
+
+dependency-scan-release-cut:
+  extends:
+    - .ubuntu-k8s
+  needs: []
+  rules :
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
+  variables:
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
+    CARGO_AUDIT_VERSION : "0.16.0"
+  script:
+    - |
+      set -euo pipefail
+      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
+      $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
+  allow_failure: false
+

@@ -72,7 +72,7 @@ impl PlaintextChunks {
 
     /// Return the chunk elements encoded as Scalars
     pub fn chunks_as_scalars(&self) -> [Scalar; NUM_CHUNKS] {
-        self.chunks.map(|c| Scalar::from_isize(c))
+        self.chunks.map(Scalar::from_isize)
     }
 
     pub fn recombine_to_scalar(&self) -> Scalar {

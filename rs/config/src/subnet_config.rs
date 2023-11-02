@@ -9,8 +9,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, ExecutionRound, NumInstructions};
 use serde::{Deserialize, Serialize};
 
-const B: u64 = 1_000_000_000;
 const M: u64 = 1_000_000;
+const B: u64 = 1_000_000_000;
+const T: u128 = 1_000_000_000_000;
 
 // The limit on the number of instructions a message is allowed to executed.
 // Going above the limit results in an `InstructionLimitExceeded` or
@@ -141,6 +142,10 @@ const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(
 /// Arbitrary chosen number to reset accumulated priority every ~24 hours on
 /// all subnet types.
 const ACCUMULATED_PRIORITY_RESET_INTERVAL: ExecutionRound = ExecutionRound::new(24 * 3600);
+
+/// The default value of the reserved balance limit for the case when the
+/// canister doesn't have it set in the settings.
+const DEFAULT_RESERVED_BALANCE_LIMIT: Cycles = Cycles::new(5 * T);
 
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
@@ -296,6 +301,9 @@ impl SchedulerConfig {
     }
 
     pub fn verified_application_subnet() -> Self {
+        // When the `install_code` instruction limit on application subnets is
+        // also increased to 300B, then this line can be removed.
+        let max_instructions_per_install_code = NumInstructions::from(300 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
@@ -308,7 +316,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
-            max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
+            max_instructions_per_install_code,
             max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
@@ -387,11 +395,21 @@ pub struct CyclesAccountManagerConfig {
 
     /// Fee per byte for networking and consensus work done for an HTTP response per node.
     pub http_response_per_byte_fee: Cycles,
+
+    /// The upper bound on the storage reservation period.
+    pub max_storage_reservation_period: Duration,
+
+    /// The default value of the reserved balance limit for the case when the
+    /// canister doesn't have it set in the settings.
+    pub default_reserved_balance_limit: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
-        Self::verified_application_subnet()
+        Self {
+            max_storage_reservation_period: Duration::from_secs(300_000_000),
+            ..Self::verified_application_subnet()
+        }
     }
 
     pub fn verified_application_subnet() -> Self {
@@ -417,6 +435,10 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
+            /// This effectively disables the storage reservation mechanism on
+            /// verified application subnets.
+            max_storage_reservation_period: Duration::from_secs(0),
+            default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
     }
 
@@ -447,6 +469,9 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
             http_response_per_byte_fee: Cycles::new(0),
+            /// This effectively disables the storage reservation mechanism on system subnets.
+            max_storage_reservation_period: Duration::from_secs(0),
+            default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
     }
 }

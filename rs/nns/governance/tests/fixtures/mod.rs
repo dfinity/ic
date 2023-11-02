@@ -3,18 +3,16 @@
 // likely need many of the imports that are currently unused below.
 #![allow(unused_imports)]
 #![allow(dead_code)]
-
-use assert_matches::assert_matches;
+use crate::fixtures::environment_fixture::{
+    CanisterCallReply, EnvironmentFixture, EnvironmentFixtureState,
+};
 use async_trait::async_trait;
 use candid::Encode;
 use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
-use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
-};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -22,63 +20,29 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        governance_minting_account, neuron_subaccount, subaccount_from_slice, Environment,
-        Governance, HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
-        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        governance_minting_account, neuron_subaccount, Environment, Governance, HeapGrowthPotential,
     },
-    init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
-        add_or_remove_node_provider::Change,
-        governance::GovernanceCachedMetrics,
-        governance_error::{
-            ErrorType,
-            ErrorType::{
-                InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
-            },
-        },
         manage_neuron,
-        manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
-            configure::Operation,
-            disburse::Amount,
-            ClaimOrRefresh, Command, Configure, Disburse, DisburseToNeuron, IncreaseDissolveDelay,
-            Merge, MergeMaturity, NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split,
-            StartDissolving,
-        },
+        manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
         manage_neuron_response,
-        manage_neuron_response::{Command as CommandResponse, MergeMaturityResponse},
+        manage_neuron_response::MergeMaturityResponse,
         neuron,
-        neuron::{DissolveState, Followees},
-        proposal,
-        proposal::Action,
-        reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
-        AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
-        Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron,
-        NeuronStakeTransfer, NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData,
-        ProposalRewardStatus,
-        ProposalRewardStatus::{AcceptVotes, ReadyToSettle},
-        ProposalStatus,
-        ProposalStatus::Rejected,
-        RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees, Tally, Topic,
-        Vote,
+        neuron::DissolveState,
+        proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
+        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NnsFunction, Proposal,
+        ProposalData, Topic, Vote,
     },
 };
-use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
-use maplit::hashmap;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
-use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use rand::{prelude::StdRng, RngCore, SeedableRng};
 use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
-    iter,
-    iter::once,
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
+
+pub mod environment_fixture;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
@@ -154,18 +118,8 @@ impl LedgerBuilder {
         self
     }
 
-    #[allow(dead_code)]
-    pub fn account_id(ident: PrincipalId) -> AccountIdentifier {
-        AccountIdentifier::new(ident, None)
-    }
-
     pub fn neuron_account_id(neuron: &Neuron) -> AccountIdentifier {
         neuron_subaccount(Subaccount::try_from(neuron.account.as_slice()).unwrap())
-    }
-
-    #[allow(dead_code)]
-    pub fn get_account_balance(&self, ident: AccountIdentifier) -> Option<u64> {
-        self.ledger_fixture.accounts.get(&ident).copied()
     }
 }
 
@@ -178,6 +132,40 @@ impl Default for LedgerBuilder {
         // Always insert the minting_account.
         ledger_builder.add_account(LedgerBuilder::minting_account(), 0);
         ledger_builder
+    }
+}
+
+pub struct EnvironmentBuilder {
+    environment_fixture_state: EnvironmentFixtureState,
+}
+impl EnvironmentBuilder {
+    pub fn create(self) -> EnvironmentFixture {
+        EnvironmentFixture::new(self.environment_fixture_state)
+    }
+
+    pub fn set_start_time(&mut self, start_time_seconds: u64) -> &mut Self {
+        self.environment_fixture_state.now = start_time_seconds;
+        self
+    }
+
+    pub fn push_mock_reply(&mut self, canister_call_reply: CanisterCallReply) -> &mut Self {
+        self.environment_fixture_state
+            .mocked_canister_replies
+            .push_back(canister_call_reply);
+        self
+    }
+}
+
+impl Default for EnvironmentBuilder {
+    fn default() -> Self {
+        EnvironmentBuilder {
+            environment_fixture_state: EnvironmentFixtureState {
+                now: 0,
+                rng: StdRng::seed_from_u64(9539),
+                observed_canister_calls: VecDeque::new(),
+                mocked_canister_replies: VecDeque::new(),
+            },
+        }
     }
 }
 
@@ -427,9 +415,8 @@ impl NeuronBuilder {
 }
 
 pub struct NNSFixtureState {
-    now: u64,
-    rng: ChaCha20Rng,
     ledger: LedgerFixture,
+    environment: EnvironmentFixture,
 }
 
 #[derive(Clone)]
@@ -507,42 +494,54 @@ impl IcpLedger for NNSFixture {
 #[async_trait]
 impl Environment for NNSFixture {
     fn now(&self) -> u64 {
-        self.nns_state.try_lock().unwrap().now
+        self.nns_state.try_lock().unwrap().environment.now()
     }
 
     fn random_u64(&mut self) -> u64 {
-        self.nns_state.try_lock().unwrap().rng.next_u64()
+        self.nns_state.try_lock().unwrap().environment.random_u64()
     }
 
     fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
         self.nns_state
             .try_lock()
             .unwrap()
-            .rng
-            .fill_bytes(&mut bytes);
-        bytes
+            .environment
+            .random_byte_array()
     }
 
     fn execute_nns_function(
         &self,
-        _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        proposal_id: u64,
+        update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        panic!("unexpected call")
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .execute_nns_function(proposal_id, update)
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
-        HeapGrowthPotential::NoIssue
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .heap_growth_potential()
     }
 
     async fn call_canister_method(
         &mut self,
-        _target: CanisterId,
-        _method_name: &str,
-        _request: Vec<u8>,
+        target: CanisterId,
+        method_name: &str,
+        request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        unimplemented!();
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .call_canister_method(target, method_name, request)
+            .now_or_never()
+            .expect("FUCK ME") // TODO
     }
 }
 
@@ -703,7 +702,12 @@ pub struct NNS {
 impl NNS {
     /// Increases the time by the given amount.
     pub fn advance_time_by(&mut self, delta_seconds: u64) -> &mut Self {
-        self.fixture.nns_state.lock().unwrap().now += delta_seconds;
+        self.fixture
+            .nns_state
+            .lock()
+            .unwrap()
+            .environment
+            .advance_time_by(delta_seconds);
         self
     }
 
@@ -723,7 +727,7 @@ impl NNS {
                 .ledger
                 .accounts
                 .clone(),
-            governance_proto: self.governance.proto.clone(),
+            governance_proto: self.governance.clone_proto(),
             latest_gc_num_proposals: self.governance.latest_gc_num_proposals,
         }
     }
@@ -880,8 +884,11 @@ impl NNS {
             .unwrap()
     }
 
-    pub fn get_neuron(&self, ident: &NeuronId) -> &Neuron {
-        self.governance.get_neuron(ident).unwrap()
+    pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {
+        self.governance
+            .neuron_store
+            .with_neuron(ident, |n| n.clone())
+            .unwrap()
     }
 
     pub fn get_account_balance(&self, account: AccountIdentifier) -> u64 {
@@ -893,11 +900,20 @@ impl NNS {
     }
 
     pub fn get_neuron_account_id(&self, id: u64) -> AccountIdentifier {
-        LedgerBuilder::neuron_account_id(self.get_neuron(&NeuronId { id }))
+        LedgerBuilder::neuron_account_id(&self.get_neuron(&NeuronId { id }))
     }
 
     pub fn get_neuron_stake(&self, neuron: &Neuron) -> u64 {
         self.get_account_balance(LedgerBuilder::neuron_account_id(neuron))
+    }
+
+    pub fn push_mocked_canister_reply(&mut self, call: impl Into<CanisterCallReply>) {
+        self.fixture
+            .nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .push_mocked_canister_reply(call)
     }
 }
 
@@ -969,6 +985,8 @@ impl Environment for NNS {
 }
 
 pub type LedgerTransform = Box<dyn FnOnce(Box<dyn IcpLedger>) -> Box<dyn IcpLedger>>;
+pub type EnvironmentTransform = Box<dyn FnOnce(Box<dyn Environment>) -> Box<dyn Environment>>;
+
 /// The NNSBuilder permits the declarative construction of an NNS fixture. All
 /// of the methods concern setting or querying what this initial state will
 /// be. Therefore, `get_account_balance` on a builder object will only tell
@@ -976,24 +994,28 @@ pub type LedgerTransform = Box<dyn FnOnce(Box<dyn IcpLedger>) -> Box<dyn IcpLedg
 /// different from calling `get_account_balance` on the resulting fixture,
 /// even though it will initially be the same amount.
 pub struct NNSBuilder {
-    start_time: u64,
     ledger_builder: LedgerBuilder,
+    environment_builder: EnvironmentBuilder,
     governance: GovernanceProto,
     ledger_transforms: Vec<LedgerTransform>,
+    environment_transforms: Vec<EnvironmentTransform>,
 }
 
 impl Default for NNSBuilder {
     fn default() -> Self {
         NNSBuilder {
-            start_time: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             ledger_builder: LedgerBuilder::default(),
+            environment_builder: Default::default(),
             governance: GovernanceProto {
                 wait_for_quiet_threshold_seconds: 1,
                 short_voting_period_seconds: 30,
+                neuron_management_voting_period_seconds: Some(30),
                 ..Default::default()
             },
             ledger_transforms: Vec::default(),
+            environment_transforms: Vec::default(),
         }
+        .set_start_time(DEFAULT_TEST_START_TIMESTAMP_SECONDS)
     }
 }
 
@@ -1004,18 +1026,21 @@ impl NNSBuilder {
 
     pub fn create(self) -> NNS {
         let fixture = NNSFixture::new(NNSFixtureState {
-            now: self.start_time,
-            rng: ChaCha20Rng::seed_from_u64(9539),
             ledger: self.ledger_builder.create(),
+            environment: self.environment_builder.create(),
         });
         let cmc: Box<dyn CMC> = Box::new(fixture.clone());
         let mut ledger: Box<dyn IcpLedger> = Box::new(fixture.clone());
         for t in self.ledger_transforms {
             ledger = t(ledger);
         }
+        let mut environment: Box<dyn Environment> = Box::new(fixture.clone());
+        for t in self.environment_transforms {
+            environment = t(environment);
+        }
         let mut nns = NNS {
             fixture: fixture.clone(),
-            governance: Governance::new(self.governance, Box::new(fixture), ledger, cmc),
+            governance: Governance::new(self.governance, environment, ledger, cmc),
             initial_state: None,
         };
         nns.capture_state();
@@ -1023,7 +1048,7 @@ impl NNSBuilder {
     }
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {
-        self.start_time = seconds;
+        self.environment_builder.set_start_time(seconds);
         self
     }
 
@@ -1055,11 +1080,6 @@ impl NNSBuilder {
         self
     }
 
-    #[allow(dead_code)]
-    pub fn get_account_balance(&self, ident: AccountIdentifier) -> Option<u64> {
-        self.ledger_builder.get_account_balance(ident)
-    }
-
     pub fn add_neuron(mut self, neuron: NeuronBuilder) -> Self {
         if let Some(owner) = neuron.owner {
             self.ledger_builder
@@ -1067,7 +1087,10 @@ impl NNSBuilder {
         }
         self.governance.neurons.insert(
             neuron.ident,
-            neuron.create(self.start_time, &mut self.ledger_builder),
+            neuron.create(
+                self.environment_builder.environment_fixture_state.now,
+                &mut self.ledger_builder,
+            ),
         );
         self
     }
@@ -1092,6 +1115,11 @@ impl NNSBuilder {
     /// chained; they are applied in the order in which they were added.
     pub fn add_ledger_transform(mut self, transform: LedgerTransform) -> Self {
         self.ledger_transforms.push(transform);
+        self
+    }
+
+    pub fn add_environment_transform(mut self, transform: EnvironmentTransform) -> Self {
+        self.environment_transforms.push(transform);
         self
     }
 

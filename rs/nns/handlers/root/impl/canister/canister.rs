@@ -48,7 +48,7 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}canister_post_upgrade", LOG_PREFIX);
     // Wipe out stable memory, because earlier version of this canister were
-    // stateful. This minimizes risk of future mis-interpretation of data.
+    // stateful. This minimizes risk of future misinterpretation of data.
     stable::set(&[]);
 }
 
@@ -63,7 +63,6 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 /// management canister is required.
 #[export_name = "canister_update canister_status"]
 fn canister_status() {
-    println!("{}canister_status", LOG_PREFIX);
     over_async(candid_one, canister_status_)
 }
 
@@ -184,7 +183,6 @@ fn call_canister() {
 /// by SNS-W.
 #[export_name = "canister_update change_canister_controllers"]
 fn change_canister_controllers() {
-    println!("{}change_canister_controllers", LOG_PREFIX);
     over_async(candid_one, change_canister_controllers_)
 }
 

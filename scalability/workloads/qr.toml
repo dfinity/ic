@@ -6,13 +6,14 @@ canister = "qr#1"
 raw_payload = "4449444C0000"
 method = "Update"
 call_method = "go"
+rps_ratio = 0.1
 
 [[workload]]
 canister = "qr#2"
 raw_payload = "4449444C0000"
 method = "Update"
 call_method = "go"
-rps = 1 # Constant 1 rps for the second qr code canister
+rps = 1                      # Constant 1 rps for the second qr code canister
 
 # https://fxa77-fiaaa-aaaae-aaana-cai.raw.ic0.app/explain shows
 #

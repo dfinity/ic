@@ -1,7 +1,5 @@
-use crate::types::*;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use prometheus::{HistogramVec, IntCounter, IntCounterVec};
-use tokio::time::Instant;
 
 pub const LABEL_DETAIL: &str = "detail";
 pub const LABEL_PROTOCOL: &str = "protocol";
@@ -12,11 +10,11 @@ pub const LABEL_STATUS: &str = "status";
 pub const LABEL_HEALTH_STATUS_BEFORE: &str = "before";
 pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 
-/// Placeholder used when we can't determine the approriate prometheus label.
+/// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
 
-const STATUS_SUCCESS: &str = "success";
-const STATUS_ERROR: &str = "error";
+pub const STATUS_SUCCESS: &str = "success";
+pub const STATUS_ERROR: &str = "error";
 
 pub const REQUESTS_NUM_LABELS: usize = 2;
 pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] = [LABEL_REQUEST_TYPE, LABEL_STATUS];
@@ -25,14 +23,13 @@ pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] = [LABEL_REQUEST_TYP
 // the data members are thread-safe.
 #[derive(Clone)]
 pub(crate) struct HttpHandlerMetrics {
-    pub(crate) requests: HistogramVec,
-    pub(crate) request_body_size_bytes: HistogramVec,
-    pub(crate) response_body_size_bytes: HistogramVec,
-    pub(crate) connections_total: IntCounter,
-    pub(crate) health_status_transitions_total: IntCounterVec,
-    pub(crate) read_state_canister_controller_total: IntCounter,
-    connection_setup_duration: HistogramVec,
-    connection_duration: HistogramVec,
+    pub requests: HistogramVec,
+    pub request_body_size_bytes: HistogramVec,
+    pub response_body_size_bytes: HistogramVec,
+    pub connections_total: IntCounter,
+    pub health_status_transitions_total: IntCounterVec,
+    pub connection_setup_duration: HistogramVec,
+    pub connection_duration: HistogramVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -42,7 +39,7 @@ pub(crate) struct HttpHandlerMetrics {
 //   1. If you include the `type` label, prefix your metric name with
 // `replica_http`.
 impl HttpHandlerMetrics {
-    pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             requests: metrics_registry.histogram_vec(
                 "replica_http_request_duration_seconds",
@@ -81,10 +78,6 @@ impl HttpHandlerMetrics {
                 "Number of health status state transitions",
                 &[LABEL_HEALTH_STATUS_BEFORE,LABEL_HEALTH_STATUS_AFTER]
             ),
-            read_state_canister_controller_total: metrics_registry.int_counter(
-                "replica_http_read_state_canister_controller_total",
-                "Number of /canister/<canister_id>/controller paths in read state requests"
-            ),
             connection_setup_duration: metrics_registry.histogram_vec(
                 "replica_http_connection_setup_duration_seconds",
                 "HTTP connection setup durations, by status and detail (protocol on status=\"success\", error type on status=\"error\").",
@@ -100,40 +93,5 @@ impl HttpHandlerMetrics {
                 &[LABEL_STATUS, LABEL_PROTOCOL],
             ),
         }
-    }
-
-    /// Records the duration of a failed connection setup, by error.
-    pub(crate) fn observe_connection_error(&self, error: ConnectionError, start_time: Instant) {
-        self.connection_setup_duration
-            .with_label_values(&[STATUS_ERROR, error.into()])
-            .observe(start_time.elapsed().as_secs_f64());
-    }
-
-    /// Records the duration of a successful connection setup, by app layer
-    /// (protocol).
-    pub(crate) fn observe_successful_connection_setup(
-        &self,
-        app_layer: AppLayer,
-        start_time: Instant,
-    ) {
-        self.connection_setup_duration
-            .with_label_values(&[STATUS_SUCCESS, app_layer.into()])
-            .observe(start_time.elapsed().as_secs_f64());
-    }
-
-    pub(crate) fn observe_graceful_conn_termination(
-        &self,
-        app_layer: AppLayer,
-        start_time: Instant,
-    ) {
-        self.connection_duration
-            .with_label_values(&[STATUS_SUCCESS, app_layer.into()])
-            .observe(start_time.elapsed().as_secs_f64());
-    }
-
-    pub(crate) fn observe_abrupt_conn_termination(&self, app_layer: AppLayer, start_time: Instant) {
-        self.connection_duration
-            .with_label_values(&[STATUS_ERROR, app_layer.into()])
-            .observe(start_time.elapsed().as_secs_f64());
     }
 }

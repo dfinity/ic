@@ -24,7 +24,7 @@ type InitArg = record {
 };
 
 type UpgradeArg = record {
-    minter_id : opt blob;
+    minter_id : opt principal;
     maintainers : opt vec principal;
     mode : opt Mode;
 };

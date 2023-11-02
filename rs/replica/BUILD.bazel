@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/consensus",
     "//rs/crypto",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/threshold_sig",
     "//rs/cycles_account_manager",
@@ -19,7 +19,6 @@ DEPENDENCIES = [
     "//rs/http_endpoints/metrics",
     "//rs/http_endpoints/public",
     "//rs/https_outcalls/client",
-    "//rs/ic_os/sev",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
     "//rs/interfaces/certified_stream_store",
@@ -27,7 +26,6 @@ DEPENDENCIES = [
     "//rs/messaging",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/monitoring/onchain_observability/server",
     "//rs/monitoring/pprof",
     "//rs/nns/constants",
     "//rs/p2p",
@@ -159,35 +157,3 @@ rust_bench(
         "@crate_index//:criterion",
     ],
 )
-
-# TODO(RPL-268)
-# [[bench]]
-# name = "execution_only_update"
-# harness = false
-# rust_bench(
-#     name = "execution_only_update",
-#     testonly = True,
-#     srcs = ["benches/execution_only_update.rs"],
-#     data = DATA,
-#     env = ENV,
-#     deps = [
-#         "@crate_index//:criterion",
-#         "@crate_index//:wat",
-#         "@crate_index//:tempfile",
-#         "//rs/config",
-#         "//rs/cycles_account_manager",
-#         "//rs/types/error_types",
-#         "//rs/execution_environment",
-#         "//rs/types/ic00_types",
-#         "//rs/types/types",
-#         "//rs/interfaces",
-#         "//rs/interfaces/registry",
-#         "//rs/interfaces/registry/mocks",
-#         "//rs/monitoring/logger",
-#         "//rs/messaging",
-#         "//rs/monitoring/metrics",
-#         "//rs/registry/subnet_type",
-#         "//rs/state_manager",
-#         "//rs/test_utilities",
-#     ],
-# )

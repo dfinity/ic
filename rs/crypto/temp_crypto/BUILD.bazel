@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/internal/logmon",
     "//rs/crypto/node_key_generation",
@@ -37,6 +38,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
+    "@crate_index//:rand_chacha_0_3_1",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

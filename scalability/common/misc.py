@@ -43,60 +43,6 @@ def parse_command_line_args():
     # End: Provide command line args support #
 
 
-def try_deploy_ic(testnet: str, revision: str, out_dir: str) -> None:
-    """
-    Try to deploy IC on the desired testnet.
-
-    Args:
-    ----
-        testnet (str): name of the testnet, e.g. large01.
-        revision (str): git revision hash to be used to deploy.
-        out_dir (str): directory for storing stdout and stderr into files.
-
-    """
-    # TODO: command paths should be managed better.
-    # Get the newest hash (containing disk image) from master.
-
-    if not os.path.exists(out_dir):
-        os.makedirs(out_dir)
-
-    result_stdout = f"{out_dir}/stdout_log.txt"
-    result_stderr = f"{out_dir}/stderr_log.txt"
-
-    if revision is None:
-        print("No Git revision for deployment. Exit.")
-        sys.exit(1)
-
-    # Start the IC deployment.
-    print(
-        colored(
-            f"Deploying IC revision {revision} on testnet={testnet}. See the intermediate output in {result_stdout}. This can take some minutes ...",
-            "red",
-        )
-    )
-
-    with open(result_stdout, "w") as outfile, open(result_stderr, "w") as errfile:
-        try:
-            deploy_cmd = ["../testnet/tools/icos_deploy.sh", "--git-revision", f"{revision}", f"{testnet}"]
-            print(f"Running deploy with command: {deploy_cmd}")
-            result_deploy_ic = subprocess.run(
-                deploy_cmd,
-                stdout=outfile,
-                stderr=errfile,
-            )
-        except Exception as e:
-            print(f"Deployment of the IC failed: See {result_stderr} file for details.")
-            errfile.write(str(e))
-            errfile.write(traceback.format_exc())
-            sys.exit(1)
-    if result_deploy_ic.returncode != 0:
-        print(f"Deployment of the IC failed. See {result_stderr} file for details.")
-        sys.exit(1)
-    print(colored(f"Deployment of the IC to testnet={testnet} finished successfully.", "green"))
-
-    return revision
-
-
 def get_latest_ic_version_on_branch(branch: str):
     """Get IC version."""
     try:

@@ -14,16 +14,18 @@ impl Default for ResponsePayloadBuilder {
 }
 
 impl ResponsePayloadBuilder {
+    /// Creates a new `ResponsePayloadBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Sets the response_payload field.
+    /// Sets the `response_payload` field.
     pub fn response_payload(mut self, response_payload: Payload) -> Self {
         self.response_payload = response_payload;
         self
     }
 
+    /// Returns the built response `Payload`.
     pub fn build(self) -> Payload {
         self.response_payload
     }

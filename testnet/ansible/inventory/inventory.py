@@ -547,9 +547,8 @@ class IcDeploymentInventory:
         }
 
         nodes_vars = self._inventory["nodes"].get("vars", {})
-        result["journalbeat_hosts"] = nodes_vars.get("journalbeat_hosts", [])
-        result["journalbeat_index"] = nodes_vars.get("journalbeat_index", "")
-        result["journalbeat_tags"] = nodes_vars.get("journalbeat_tags", [])
+        result["elasticsearch_hosts"] = nodes_vars.get("elasticsearch_hosts", [])
+        result["elasticsearch_tags"] = nodes_vars.get("elasticsearch_tags", [])
 
         bn_nodes_vars = self._inventory.get("boundary", {}).get("vars", None)
         if bn_nodes_vars is not None:

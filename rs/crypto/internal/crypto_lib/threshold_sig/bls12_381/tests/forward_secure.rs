@@ -5,7 +5,7 @@
 
 use ic_crypto_internal_bls12_381_type::{G2Affine, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{forward_secure::*, Epoch};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng, RngCore};
 
@@ -48,10 +48,10 @@ fn output_of_mk_sys_params_is_expected_values() {
 #[test]
 fn fs_keys_should_be_valid() {
     let sys = SysParam::global();
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let key_gen_assoc_data = rng.gen::<[u8; 32]>();
 
-    let (pk, _dk) = kgen(&key_gen_assoc_data, sys, &mut rng);
+    let (pk, _dk) = kgen(&key_gen_assoc_data, sys, rng);
     assert!(
         pk.verify(&key_gen_assoc_data),
         "Generated public key should be valid"
@@ -95,7 +95,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
 #[test]
 fn integrity_check_should_return_error_on_wrong_associated_data() {
     let sys = SysParam::global();
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let epoch = Epoch::from(0);
     let associated_data = rng.gen::<[u8; 32]>();
 
@@ -105,7 +105,7 @@ fn integrity_check_should_return_error_on_wrong_associated_data() {
         wrong
     };
 
-    let (_keys, _message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
+    let (_keys, _message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
 
     assert!(verify_ciphertext_integrity(&crsz, epoch, &wrong_associated_data, sys).is_err());
 }
@@ -114,9 +114,9 @@ fn integrity_check_should_return_error_on_wrong_associated_data() {
 fn should_encrypt_with_empty_associated_data() {
     let sys = SysParam::global();
     let epoch = Epoch::from(0);
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let associated_data = [];
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
 
     assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
@@ -129,7 +129,7 @@ fn should_encrypt_with_empty_associated_data() {
 #[test]
 fn should_decrypt_correctly_for_cheating_dealer() {
     let epoch = Epoch::from(0);
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let associated_data = rng.gen::<[u8; 10]>();
 
     let sys = SysParam::global();
@@ -139,7 +139,7 @@ fn should_decrypt_correctly_for_cheating_dealer() {
 
     let mut keys = Vec::new();
     for _ in 0..nodes {
-        let key_pair = kgen(&key_gen_assoc_data, sys, &mut rng);
+        let key_pair = kgen(&key_gen_assoc_data, sys, rng);
         keys.push(key_pair);
     }
     let pks: Vec<_> = keys.iter().map(|key| key.0.public_key().clone()).collect();
@@ -185,7 +185,7 @@ fn should_decrypt_correctly_for_cheating_dealer() {
         .zip(cheating_chunks.iter().cloned())
         .collect::<Vec<_>>();
 
-    let (crsz, _witness) = enc_chunks(&pks_and_chunks, epoch, &associated_data, sys, &mut rng);
+    let (crsz, _witness) = enc_chunks(&pks_and_chunks, epoch, &associated_data, sys, rng);
 
     // still a valid ciphertext
     assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
@@ -205,9 +205,9 @@ fn should_decrypt_correctly_for_cheating_dealer() {
 fn should_decrypt_correctly_for_epoch_0() {
     let sys = SysParam::global();
     let epoch = Epoch::from(0);
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let associated_data = rng.gen::<[u8; 10]>();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
 
     assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
@@ -222,9 +222,9 @@ fn should_decrypt_correctly_for_epoch_0() {
 fn should_decrypt_correctly_for_epoch_1() {
     let sys = SysParam::global();
     let epoch = Epoch::from(1);
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let associated_data = rng.gen::<[u8; 10]>();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
 
     assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
@@ -238,9 +238,9 @@ fn should_decrypt_correctly_for_epoch_1() {
 fn should_decrypt_correctly_for_epoch_5() {
     let sys = SysParam::global();
     let epoch = Epoch::from(5);
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let associated_data = rng.gen::<[u8; 10]>();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
 
     assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
@@ -254,9 +254,9 @@ fn should_decrypt_correctly_for_epoch_5() {
 fn should_decrypt_correctly_for_epoch_10() {
     let sys = SysParam::global();
     let epoch = Epoch::from(10);
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let associated_data = rng.gen::<[u8; 10]>();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
 
     assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 

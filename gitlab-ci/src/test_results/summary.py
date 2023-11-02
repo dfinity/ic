@@ -19,7 +19,7 @@ class Colors:
 
 
 NODE_LOGS = "/app/kibana#/discover?_g=(time:(from:now-1y,to:now))&_a=(columns:!(_source),index:c8cf8e20-593f-11ec-9f11-0fb8445c6897,interval:auto,query:(language:kuery,query:'tags:%22{}%22'),sort:!(!('@timestamp',desc)))"
-KIBANA_BASE_URL = "https://kibana.testnet.dfinity.systems"
+KIBANA_BASE_URL = "https://kibana.testnet.dfinity.network"
 TAB_SIZE = 2
 MAX_DISPLAY_ERROR_SIZE = 300
 

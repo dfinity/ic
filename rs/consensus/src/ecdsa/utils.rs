@@ -5,10 +5,13 @@ use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_protobuf::registry::subnet::v1 as pb;
-use ic_types::consensus::ecdsa::{EcdsaBlockReader, TranscriptRef};
-use ic_types::consensus::ecdsa::{
-    EcdsaMessage, EcdsaPayload, IDkgTranscriptParamsRef, RequestId, ThresholdEcdsaSigInputsRef,
-    TranscriptLookupError,
+use ic_types::consensus::ecdsa::QuadrupleId;
+use ic_types::consensus::{
+    ecdsa::{
+        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, RequestId,
+        ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
+    },
+    HasHeight,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
@@ -20,47 +23,60 @@ use std::sync::Arc;
 
 pub(crate) struct EcdsaBlockReaderImpl {
     chain: Arc<dyn ConsensusBlockChain>,
-    tip_height: Height,
-    tip_ecdsa_payload: Option<Arc<EcdsaPayload>>,
 }
 
 impl EcdsaBlockReaderImpl {
     pub(crate) fn new(chain: Arc<dyn ConsensusBlockChain>) -> Self {
-        let (tip_height, tip_ecdsa_payload) = chain.tip();
-        Self {
-            chain,
-            tip_height,
-            tip_ecdsa_payload,
-        }
+        Self { chain }
     }
 }
 
 impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     fn tip_height(&self) -> Height {
-        self.tip_height
+        self.chain.tip().height()
     }
 
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_transcript_configs_in_creation()
+            })
+    }
+
+    fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
+        self.chain
+            .tip()
+            .payload
+            .as_ref()
+            .as_ecdsa()
+            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
+                Box::new(ecdsa_payload.quadruples_in_creation.keys())
             })
     }
 
     fn requested_signatures(
         &self,
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |payload| {
                 Box::new(payload.ongoing_signatures.iter())
             })
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(BTreeSet::new(), |payload| payload.active_transcripts())
     }
 
@@ -68,8 +84,11 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         // TODO: chain iters for multiple key_id support
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_xnet_transcripts_source_subnet()
             })
@@ -79,8 +98,11 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         // TODO: chain iters for multiple key_id support
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_xnet_transcripts_target_subnet()
             })
@@ -90,8 +112,17 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         &self,
         transcript_ref: &TranscriptRef,
     ) -> Result<IDkgTranscript, TranscriptLookupError> {
-        let ecdsa_payload = match self.chain.ecdsa_payload(transcript_ref.height) {
-            Ok(ecdsa_payload) => ecdsa_payload,
+        let ecdsa_payload = match self.chain.get_block_by_height(transcript_ref.height) {
+            Ok(block) => {
+                if let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() {
+                    ecdsa_payload
+                } else {
+                    return Err(format!(
+                        "transcript(): chain look up failed {:?}: EcdsaPayload not found",
+                        transcript_ref
+                    ));
+                }
+            }
             Err(err) => {
                 return Err(format!(
                     "transcript(): chain look up failed {:?}: {:?}",
@@ -233,8 +264,8 @@ pub(crate) mod test_utils {
         EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
         EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
         IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef,
-        RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
-        TranscriptRef, UnmaskedTranscript,
+        QuadrupleId, RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef,
+        TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -476,6 +507,10 @@ pub(crate) mod test_utils {
 
         fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
             Box::new(self.requested_transcripts.iter())
+        }
+
+        fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
+            Box::new(std::iter::empty())
         }
 
         fn requested_signatures(
@@ -925,7 +960,7 @@ pub(crate) mod test_utils {
         let (node_id, params, mut transcript) = create_valid_transcript(env, rng);
         let to_corrupt = *transcript.verified_dealings.keys().next().unwrap();
         let complainer_index = params.receiver_index(node_id).unwrap();
-        let mut signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
+        let signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
         let mut rng = rand::thread_rng();
         let builder = signed_dealing.content.clone().into_builder();
         signed_dealing.content = builder
@@ -994,7 +1029,7 @@ pub(crate) mod test_utils {
             AlgorithmId::ThresholdEcdsaSecp256k1,
             rng,
         );
-        let dealer = env.nodes.dealers(&params).into_iter().next().unwrap();
+        let dealer = env.nodes.dealers(&params).next().unwrap();
         let dealing = dealer.create_dealing_or_panic(&params);
         let mut content = create_dealing_content(transcript_id);
         content.internal_dealing_raw = dealing.content.internal_dealing_raw;

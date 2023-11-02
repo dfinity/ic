@@ -13,7 +13,8 @@ use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
-use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp, tokens::Tokens};
+use ic_ledger_core::tokens::Zero;
+use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
@@ -33,25 +34,29 @@ use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
-use num_traits::ToPrimitive;
+use num_traits::{bounds::Bounded, ToPrimitive};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
-use std::time::Duration;
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
-const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_nanos() as u64;
+
+#[cfg(not(feature = "u256-tokens"))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
 
 thread_local! {
-    static LEDGER: RefCell<Option<Ledger>> = RefCell::new(None);
+    static LEDGER: RefCell<Option<Ledger<Tokens>>> = RefCell::new(None);
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
 
 struct Access;
 impl LedgerAccess for Access {
-    type Ledger = Ledger;
+    type Ledger = Ledger<Tokens>;
 
-    fn with_ledger<R>(f: impl FnOnce(&Ledger) -> R) -> R {
+    fn with_ledger<R>(f: impl FnOnce(&Self::Ledger) -> R) -> R {
         LEDGER.with(|cell| {
             f(cell
                 .borrow()
@@ -60,7 +65,7 @@ impl LedgerAccess for Access {
         })
     }
 
-    fn with_ledger_mut<R>(f: impl FnOnce(&mut Ledger) -> R) -> R {
+    fn with_ledger_mut<R>(f: impl FnOnce(&mut Self::Ledger) -> R) -> R {
         LEDGER.with(|cell| {
             f(cell
                 .borrow_mut()
@@ -70,12 +75,15 @@ impl LedgerAccess for Access {
     }
 }
 
+#[candid_method(init)]
 #[init]
 fn init(args: LedgerArgument) {
     match args {
         LedgerArgument::Init(init_args) => {
             let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-            LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(init_args, now)))
+            LEDGER.with(|cell| {
+                *cell.borrow_mut() = Some(Ledger::<Tokens>::from_init_args(init_args, now))
+            })
         }
         LedgerArgument::Upgrade(_) => {
             panic!("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
@@ -152,14 +160,18 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.blockchain().num_archived_blocks as f64,
             "Total number of transactions sent to the archive.",
         )?;
+        let token_pool: Nat = ledger.balances().token_pool.into();
         w.encode_gauge(
             "ledger_balances_token_pool",
-            ledger.balances().token_pool.get_tokens() as f64,
+            // TODO: support larger integers in metrics
+            token_pool.0.to_u128().unwrap() as f64,
             "Total number of Tokens in the pool.",
         )?;
+        let total_supply: Nat = ledger.balances().total_supply().into();
         w.encode_gauge(
             "ledger_total_supply",
-            ledger.balances().total_supply().get_e8s() as f64,
+            // TODO: support larger integers in metrics
+            total_supply.0.to_u128().unwrap() as f64,
             "Total number of tokens in circulation.",
         )?;
         w.encode_gauge(
@@ -180,7 +192,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
@@ -232,14 +243,13 @@ fn icrc1_symbol() -> String {
 #[query]
 #[candid_method(query)]
 fn icrc1_decimals() -> u8 {
-    debug_assert!(ic_ledger_core::tokens::DECIMAL_PLACES <= u8::MAX as u32);
-    ic_ledger_core::tokens::DECIMAL_PLACES as u8
+    Access::with_ledger(|ledger| ledger.decimals())
 }
 
 #[query]
 #[candid_method(query)]
 fn icrc1_fee() -> Nat {
-    Nat::from(Access::with_ledger(|ledger| ledger.transfer_fee()).get_e8s())
+    Access::with_ledger(|ledger| ledger.transfer_fee().into())
 }
 
 #[query]
@@ -257,13 +267,13 @@ fn icrc1_minting_account() -> Option<Account> {
 #[query(name = "icrc1_balance_of")]
 #[candid_method(query, rename = "icrc1_balance_of")]
 fn icrc1_balance_of(account: Account) -> Nat {
-    Access::with_ledger(|ledger| Nat::from(ledger.balances().account_balance(&account).get_e8s()))
+    Access::with_ledger(|ledger| ledger.balances().account_balance(&account).into())
 }
 
 #[query(name = "icrc1_total_supply")]
 #[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
-    Access::with_ledger(|ledger| Nat::from(ledger.balances().total_supply().get_e8s()))
+    Access::with_ledger(|ledger| ledger.balances().total_supply().into())
 }
 
 async fn execute_transfer(
@@ -292,12 +302,12 @@ async fn execute_transfer(
             }
             _ => {}
         };
-        let amount = match amount.0.to_u64() {
-            Some(n) => Tokens::from_e8s(n),
-            None => {
+        let amount = match Tokens::try_from(amount.clone()) {
+            Ok(n) => n,
+            Err(_) => {
                 // No one can have so many tokens
                 let balance_tokens = ledger.balances().account_balance(&from_account);
-                let balance = Nat::from(balance_tokens.get_e8s());
+                let balance = Nat::from(balance_tokens);
                 assert!(balance < amount);
                 return Err(CoreTransferError::InsufficientFunds {
                     balance: balance_tokens,
@@ -306,8 +316,8 @@ async fn execute_transfer(
         };
 
         let (tx, effective_fee) = if &to == ledger.minting_account() {
-            let expected_fee = Tokens::ZERO;
-            if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
+            let expected_fee = Tokens::zero();
+            if fee.is_some() && fee.as_ref() != Some(&expected_fee.into()) {
                 return Err(CoreTransferError::BadFee { expected_fee });
             }
 
@@ -316,7 +326,7 @@ async fn execute_transfer(
             if amount < min_burn_amount {
                 return Err(CoreTransferError::BadBurn { min_burn_amount });
             }
-            if amount == Tokens::ZERO {
+            if Tokens::is_zero(&amount) {
                 return Err(CoreTransferError::BadBurn {
                     min_burn_amount: ledger.transfer_fee(),
                 });
@@ -327,28 +337,28 @@ async fn execute_transfer(
                     operation: Operation::Burn {
                         from: from_account,
                         spender,
-                        amount: amount.get_e8s(),
+                        amount,
                     },
                     created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
                     memo,
                 },
-                Tokens::ZERO,
+                Tokens::zero(),
             )
         } else if &from_account == ledger.minting_account() {
             if spender.is_some() {
                 ic_cdk::trap("the minter account cannot delegate mints")
             }
-            let expected_fee = Tokens::ZERO;
-            if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
+            let expected_fee = Tokens::zero();
+            if fee.is_some() && fee.as_ref() != Some(&expected_fee.into()) {
                 return Err(CoreTransferError::BadFee { expected_fee });
             }
             (
                 Transaction::mint(to, amount, created_at_time, memo),
-                Tokens::ZERO,
+                Tokens::zero(),
             )
         } else {
             let expected_fee_tokens = ledger.transfer_fee();
-            if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee_tokens.get_e8s())) {
+            if fee.is_some() && fee.as_ref() != Some(&expected_fee_tokens.into()) {
                 return Err(CoreTransferError::BadFee {
                     expected_fee: expected_fee_tokens,
                 });
@@ -460,10 +470,18 @@ fn archives() -> Vec<ArchiveInfo> {
 #[query(name = "icrc1_supported_standards")]
 #[candid_method(query, rename = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
-    vec![StandardRecord {
+    let mut standards = vec![StandardRecord {
         name: "ICRC-1".to_string(),
-        url: "https://github.com/dfinity/ICRC-1".to_string(),
-    }]
+        url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
+    }];
+    let icrc2 = Access::with_ledger(|ledger| ledger.feature_flags().icrc2);
+    if icrc2 {
+        standards.push(StandardRecord {
+            name: "ICRC-2".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
+        });
+    }
+    standards
 }
 
 #[query]
@@ -512,35 +530,34 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
         if from_account.owner == arg.spender.owner {
             ic_cdk::trap("self approval is not allowed")
         }
+        if &from_account == ledger.minting_account() {
+            ic_cdk::trap("the minting account cannot delegate mints")
+        }
         match arg.memo.as_ref() {
             Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
                 ic_cdk::trap("the memo field is too large")
             }
             _ => {}
         };
-        let amount = arg.amount.0.to_u64().unwrap_or(u64::MAX);
+        let amount = Tokens::try_from(arg.amount).unwrap_or_else(|_| Tokens::max_value());
         let expected_allowance = match arg.expected_allowance {
-            Some(n) => match n.0.to_u64() {
-                Some(n) => Some(Tokens::from_e8s(n)),
-                None => {
+            Some(n) => match Tokens::try_from(n) {
+                Ok(n) => Some(n),
+                Err(_) => {
                     let current_allowance = ledger
                         .approvals()
                         .allowance(&from_account, &arg.spender, now)
                         .amount;
                     return Err(ApproveError::AllowanceChanged {
-                        current_allowance: Nat::from(current_allowance.get_e8s()),
+                        current_allowance: current_allowance.into(),
                     });
                 }
             },
             None => None,
         };
 
-        let default_expiration = TimeStamp::from_nanos_since_unix_epoch(
-            ic_cdk::api::time() + DEFAULT_APPROVAL_EXPIRATION,
-        );
-
         let expected_fee_tokens = ledger.transfer_fee();
-        let expected_fee = Nat::from(expected_fee_tokens.get_e8s());
+        let expected_fee: Nat = expected_fee_tokens.into();
         if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
             return Err(ApproveError::BadFee { expected_fee });
         }
@@ -551,13 +568,8 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 spender: arg.spender,
                 amount,
                 expected_allowance,
-                expires_at: Some(
-                    arg.expires_at
-                        .map(TimeStamp::from_nanos_since_unix_epoch)
-                        .map(|expires_at| expires_at.min(default_expiration))
-                        .unwrap_or(default_expiration),
-                ),
-                fee: arg.fee.map(|_| expected_fee_tokens.get_e8s()),
+                expires_at: arg.expires_at,
+                fee: arg.fee.map(|_| expected_fee_tokens),
             },
             created_at_time: arg.created_at_time,
             memo: arg.memo,
@@ -595,7 +607,7 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
             .approvals()
             .allowance(&arg.account, &arg.spender, now);
         Allowance {
-            allowance: Nat::from(allowance.amount.get_e8s()),
+            allowance: allowance.amount.into(),
             expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
         }
     })
@@ -612,13 +624,12 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_compatible, CandidSource};
-    use std::path::PathBuf;
+    use candid::utils::{service_equal, CandidSource};
 
     let new_interface = __export_service();
-    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let old_interface = manifest_dir.join("ledger.did");
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

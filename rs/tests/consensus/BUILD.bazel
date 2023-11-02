@@ -1,5 +1,5 @@
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_MALICIOUS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -10,6 +10,9 @@ BACKUP_RUNTIME_DEPS = ["//rs/tests:backup/binaries"]
 system_test(
     name = "backup_manager_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "experimental_system_test_colocation",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -22,27 +25,29 @@ system_test(
 
 system_test(
     name = "catch_up_loop_prevention_test",
-    ic_os_fixed_version = False,
+    malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    uses_guestos_dev = True,
+    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "catch_up_possible_test",
-    ic_os_fixed_version = False,
+    malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    uses_guestos_dev = True,
+    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -67,10 +72,12 @@ system_test(
 
 system_test(
     name = "liveness_with_equivocation_test",
-    ic_os_fixed_version = False,
+    malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
+    uses_guestos_dev = True,
+    uses_guestos_dev_test = True,
+    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -101,42 +108,52 @@ system_test(
 system_test(
     name = "subnet_splitting_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["subnet_splitting"],
+    tags = [
+        "experimental_system_test_colocation",
+        "subnet_splitting",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS + [
+            "//ic-os/guestos/envs/prod:update-img.tar.zst.sha256",
+            "//ic-os/guestos/envs/prod:upload_update-img",
             "//rs/tests:recovery/binaries",
-            "//ic-os/guestos/envs/prod:hash_and_upload_update-img",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "replica_determinism_test",
-    ic_os_fixed_version = False,
+    malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
+    uses_guestos_dev = True,
+    uses_guestos_dev_test = True,
+    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "request_auth_malicious_replica_test",
-    ic_os_fixed_version = False,
+    malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
+    uses_guestos_dev = True,
+    uses_guestos_dev_test = True,
+    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "safety_test",
-    ic_os_fixed_version = False,
+    malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
+    uses_guestos_dev = True,
+    uses_guestos_dev_test = True,
+    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -155,7 +172,7 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -174,7 +191,7 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -193,6 +210,6 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )

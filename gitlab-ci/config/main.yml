@@ -17,15 +17,14 @@ cargo-audit:
 
 boundary-node-service-worker:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   needs: []
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
     - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
-  stage: test
   script:
     - |
       set -eExuo pipefail
@@ -38,11 +37,22 @@ boundary-node-service-worker:
       (
         cd typescript/service-worker
         npm ci
+
+        # perform linting
         npm run lint
         npm run format:check
+
+        # run unit tests
         npm test
+
+        # run e2e tests
+        ./e2e/e2e --add-dependencies --start --run-tests --stop
+
+        # build service worker
         npm run build
         npm run build-dev
+
+        # prepase release artifact
         npm pack
         mkdir artifacts
         mv dfinity-service-worker-*.tgz artifacts
@@ -62,7 +72,7 @@ boundary-node-service-worker:
 
 .after-script-test:
   extends:
-    - .bazel-build-k8s
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
@@ -71,10 +81,8 @@ boundary-node-service-worker:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   needs: []  # don't wait on other jobs
-  tags:
-    - dfinity-ic # we do not want the zh tag
   script:
     - |
       set -eExuo pipefail
@@ -94,18 +102,30 @@ after-script-test-ic-build-image:
   extends:
     - .after-script-test
 
-bazel-build-fuzzers:
+.bazel-build-legacy-image:
   extends:
     - .bazel-test-all
+  image: !reference [.ic-build-legacy-image, image]
+
+bazel-build-fuzzers:
+  extends:
+    - .bazel-build-legacy-image
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing --build_tag_filters=libfuzzer"
+    BAZEL_COMMAND: "build"
+    BAZEL_TARGETS: "//rs/..."
+
+bazel-build-fuzzers-afl:
+  extends:
+    - .bazel-build-legacy-image
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=afl"
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/..."
 
 bazel-build-fuzzers-weekly:
   extends:
-    - .bazel-test-all
-    - .ic-build-legacy-image
+    - .bazel-build-legacy-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-fuzzers-to-clusterfuzz"'
   needs: []  # don't wait on other jobs
@@ -116,12 +136,12 @@ bazel-build-fuzzers-weekly:
       gcloud auth activate-service-account --key-file "${FUZZING_GCP_SERVICE_KEY}"
       ./build-all-fuzzers.sh --zip
       cd fuzzer_build
-      gsutil -m cp libfuzzer_linux_*.zip gs://ic_fuzzer_builds
+      gsutil -m cp libfuzzer_asan_linux_*.zip gs://ic_fuzzer_builds
+      gsutil -m cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
 
 bazel-build-fuzzers-archives:
   extends:
-    - .bazel-test-all
-    - .ic-build-legacy-image
+    - .bazel-build-legacy-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
@@ -135,18 +155,6 @@ bazel-build-fuzzers-archives:
       cd "${CI_PROJECT_DIR}"/bin
       ./build-all-fuzzers.sh --zip
 
-.bazel-rules-pipeline:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-
 .bazel-rules-pipeline-no-merge-train:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
@@ -154,31 +162,27 @@ bazel-build-fuzzers-archives:
         BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-
-.bazel-rules-pipeline-no-merge-train-allow-to-fail:
-  rules:
-    # Set to manual due to capacity crunch 2022-12-13.
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-      allow_failure: true
-
-.bazel-rules-post-master:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      when: manual
-      allow_failure: true
-    - if: '$SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
 
 .bazel-test-all:
   extends:
-    - .bazel-rules-pipeline
-    - .bazel-build-k8s
+    - .build-k8s
   needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate --flaky_test_attempts=3"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--jobs 8"
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
+  tags:
+    - dfinity-ic
+    - bazel
   artifacts:
     when: always
     paths:
@@ -187,6 +191,10 @@ bazel-build-fuzzers-archives:
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
   variables:
+    BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
+    BAZEL_CI_CONFIG: "--config=ci"
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     BAZEL_COMMAND: "test"
     BAZEL_TARGETS: "//..."
   script:
@@ -196,7 +204,8 @@ bazel-build-fuzzers-archives:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -206,14 +215,46 @@ bazel-build-fuzzers-archives:
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
       echo -e "\e[0Ksection_end:$(date +%s):bazel_exporter_logs\r\e[0K"
+    - |
+      if [ "$(uname)" == "Linux" ]; then
+          bazel clean --expunge
+      fi
     - !reference [after_script]
+
+
+bazel-test-coverage:
+  extends:
+    - .bazel-test-all
+    - .rules-post-master
+  timeout: 80 minutes
+  artifacts:
+    expire_in: 14 days
+    when: always
+    paths:
+      - cov_targets.txt
+      - cov_report.dat
+      - cov_html
+  variables:
+    BAZEL_COMMAND: "coverage"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --combined_report=lcov"
+  script:
+    - |
+      bazel query --universe_scope=//... \
+          "kind(test, //rs/...) except kind(test, allrdeps(attr('tags', 'canister', //rs/...)))" > cov_targets.txt
+      # shellcheck disable=SC2046,SC2086
+      bazel ${BAZEL_STARTUP_ARGS} coverage ${BAZEL_CI_CONFIG} ${BAZEL_EXTRA_ARGS} \
+          --combined_report=lcov $(<cov_targets.txt) || true
+      cp bazel-out/_coverage/_coverage_report.dat cov_report.dat
+      genhtml --output cov_html cov_report.dat
+  after_script:
+    - bazel clean --expunge
+
 
 bazel-test-all:
   extends:
     - .bazel-test-all
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going $BAZEL_EXTRA_ARGS_RULES"
-    BAZEL_TARGETS: "//..."
   timeout: 80 minutes
 
 linux-openssl-static-binaries:
@@ -229,18 +270,21 @@ linux-openssl-static-binaries:
 bazel-test-all-allow-to-fail:
   extends:
     - .bazel-test-all
-    - .bazel-rules-pipeline-no-merge-train-allow-to-fail
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      when: manual
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
-    BAZEL_TARGETS: "//..."
+  allow_failure: true
 
 bazel-system-test-hourly:
   extends:
     - .bazel-test-all
-    - .bazel-rules-post-master
+    - .rules-post-master
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly"
-    BAZEL_TARGETS: "//..."
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly --jobs 8"
   timeout: 120 minutes
 
 bazel-system-test-hotfix:
@@ -249,15 +293,13 @@ bazel-system-test-hotfix:
     - .rules-prod-hotfix-pipeline
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hotfix"
-    BAZEL_TARGETS: "//..."
 
 bazel-system-test-staging:
   extends:
     - .bazel-test-all
     - .rules-rollout-pipeline-auto
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_staging"
-    BAZEL_TARGETS: "//..."
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_staging --jobs 8"
   allow_failure: true
 
 bazel-system-test-nightly:
@@ -266,7 +308,6 @@ bazel-system-test-nightly:
     - .rules-rollout-pipeline-auto
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_nightly"
-    BAZEL_TARGETS: "//..."
   timeout: 7h 30m
 
 bazel-config-check-all-rebuild:
@@ -280,7 +321,7 @@ bazel-config-check-all-rebuild:
 bazel-test-all-rebuild:
   extends:
     - .bazel-test-all
-    - .bazel-rules-post-master
+    - .rules-post-master
   variables:
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
@@ -385,6 +426,9 @@ macos-openssl-static-binaries:
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
 
+      # clean up
+      bazel clean --expunge
+
       # collect dotenv
       if [ -f /tmp/nns.release.env ]; then
           mv /tmp/nns.release.env .
@@ -394,13 +438,14 @@ macos-openssl-static-binaries:
 build-ic:
   extends:
     - .build-ic
-    - .bazel-rules-pipeline-no-merge-train
+    - .rules-master-pipeline-no-merge-train
 
 # Scheduled Pipeline
 build-ic-release:
   extends:
     - .build-ic
-    - .rules-scheduled-reproducibility
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
 
 cargo-lock-generate:
   extends:
@@ -441,11 +486,9 @@ pre-commit:
     # more easily.
     PRE_COMMIT_HOME: /cache/pre-commit/$CI_CONCURRENT_ID
   extends:
-    - .bazel-build-k8s
-    - .bazel-rules-pipeline
+    - .build-k8s
+    - .rules-master-pipeline-and-merge-request
   needs: []  # don't wait on other jobs
-  tags:
-    - dfinity-ic # overwritting so we do not inherit the zh tag
   script:
     - |
       set -eEuo pipefail
@@ -468,4 +511,454 @@ pre-commit:
         echo
         echo "And then commit the changes."
         exit 1
+      fi
+
+python-gitlab-ci-tests:
+  extends:
+    - .ubuntu-k8s
+  rules:
+    # this job breaks when not run against the default branch
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
+  needs: []
+  variables:
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
+  artifacts:
+    reports:
+      junit: test_report.xml
+    paths:
+      - gitlab-ci/src/htmlcov
+  script:
+    - |
+      set -xeuo pipefail
+      cd gitlab-ci/src
+      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+
+check-bins-linux:
+  extends:
+    - .ubuntu-k8s
+    - .rules-master-pipeline-no-merge-train
+  needs:
+    - job: linux-openssl-static-binaries
+      artifacts: false
+  image:
+    # 21.04
+    name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
+  before_script: /bin/true
+  after_script: /bin/true
+  variables:
+    ARTIFACT_PREFIX: openssl-static-binaries/x86_64-linux
+  script:
+    - |
+      set -exuo pipefail
+
+      apt-get update && apt-get install --yes --no-install-recommends curl ca-certificates
+
+      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/replica.gz" | gunzip > /tmp/replica
+      chmod +x /tmp/replica
+      ldd /tmp/replica
+      /tmp/replica --print-sample-config --replica-version 1 >/dev/null
+
+      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/ic-starter.gz" | gunzip > /tmp/ic-starter
+      chmod +x /tmp/ic-starter
+      ldd /tmp/ic-starter
+      /tmp/ic-starter --version
+
+cargo-clippy-linux:
+  needs: []  # don't wait on other jobs
+  extends:
+    - .build-k8s
+    - .rules-master-pipeline-and-merge-request
+  variables:
+    CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
+  script:
+    - |
+      set -eExuo pipefail
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+          "$CI_PROJECT_DIR"/gitlab-ci/src/rust_lint/lint.sh
+
+# Cargo is deprecated and will be replaced with Bazel.
+# Until the migration is complete, run a simple check for build failures.
+legacy-cargo-check:
+  needs: []  # don't wait on other jobs
+  extends:
+    - .build-k8s
+    - .rules-master-pipeline-and-merge-request
+  script:
+    - |
+      set -eExuo pipefail
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo check --tests --benches
+
+cargo-build-release-linux:
+  needs: []  # don't wait on other jobs
+  extends:
+    - .build-k8s
+    - .rules-master-pipeline-and-merge-request
+  script:
+    - |
+      set -eExuo pipefail
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo build --release
+
+benchmarks:
+  extends:
+    - .bazel-test-all
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rust-benchmarks"'
+  needs: []
+  artifacts:
+    paths:
+      - report
+  timeout: 12h
+  variables:
+    BAZEL_COMMAND: "run"
+    RUST_BACKTRACE: "full"
+  tags:
+    - rust-benchmarks
+  script:
+    - |
+      set -eEuo pipefail
+
+      TARGET_LIST=$(bazel query "attr(tags, 'rust_bench', ${TARGETS:-'//rs/...'})")
+      for TARGET in $TARGET_LIST; do
+          BAZEL_TARGETS="$TARGET"
+          time ./gitlab-ci/src/bazel-ci/main.sh
+      done
+      find -L ./bazel-out -name 'benchmark.json'
+
+      set -x
+      while IFS= read -r bench_dir; do
+        echo '{}' | jq -cMr \
+          --slurpfile benchmark "$bench_dir/benchmark.json" \
+          --slurpfile estimates "$bench_dir/estimates.json" \
+          --arg system x86_64-linux \
+          --arg timestamp "$(date --utc --iso-8601=seconds)" \
+          --arg rev "$CI_COMMIT_SHA" \
+          '.benchmark = $benchmark[] |
+          .estimates = $estimates[] |
+          .package = "replica-benchmarks" |
+          .system = $system |
+          .timestamp = $timestamp |
+          .rev = $rev |
+          .revCount = 1' \
+          > report.json
+        curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
+          "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc"
+      done < <(find -L ./bazel-out -type d -path '*/new')
+  parallel:
+    matrix:
+      - TARGETS: "//rs/crypto/..."
+      - TARGETS: "//rs/state_manager/..."
+      # IDX-2849
+      #- TARGETS: "//rs/execution_environment/..."
+      # IDX-2850
+      #- TARGETS: "//... - //rs/crypto/... - //rs/execution_environment/..."
+
+host-os-upgrade-test:
+  # This test runs VMs on the CI runner, which can be unreliable and slow. This
+  # test is soon to be replaced with Farm tests: NODE-565
+  extends:
+    - .build-k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - 'ic-os/**/*'
+        - 'toolchains/sysimage/**/*'
+        - 'testnet/**/*'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
+  needs:
+    - job: bazel-test-all
+      artifacts: false
+  variables:
+    HOST_OS_TEST_TIMEOUT: 2400
+    # This var is needed as some shell scripts depend on it.
+    E2E_TEST_TIMEOUT: 480
+  artifacts:
+    paths:
+    - ic-os/hostos/test-out
+  script:
+    - |
+      VERSION=$(git rev-parse HEAD)
+      export VERSION
+
+      mkdir -p ic-os/hostos/build-out/disk-img
+      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/disk-img.tar.gz" -o "ic-os/hostos/build-out/disk-img/disk-img.tar.gz"
+      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/disk-img.tar.zst" -o "ic-os/hostos/build-out/disk-img/disk-img.tar.zst"
+      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/SHA256SUMS" -o "ic-os/hostos/build-out/disk-img/SHA256SUMS"
+
+      mkdir -p ic-os/hostos/build-out/update-img
+      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img.tar.zst" -o "ic-os/hostos/build-out/update-img/update-img.tar.zst"
+      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img.tar.gz" -o "ic-os/hostos/build-out/update-img/update-img.tar.gz"
+      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img-test.tar.zst" -o "ic-os/hostos/build-out/update-img/update-img-test.tar.zst"
+      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img-test.tar.gz" -o "ic-os/hostos/build-out/update-img/update-img-test.tar.gz"
+      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/SHA256SUMS" -o "ic-os/hostos/build-out/update-img/SHA256SUMS"
+
+      # shellcheck disable=SC2154
+      $SHELL_WRAPPER timeout -k 10 "${HOST_OS_TEST_TIMEOUT}" \
+          "$CI_PROJECT_DIR"/ic-os/hostos/tests/hostos-upgrade.sh "$CI_PROJECT_DIR"
+
+build-determinism:
+  extends:
+    - .build-k8s
+    - .rules-master-pipeline-no-merge-train
+  needs:
+    - job: bazel-test-all
+      artifacts: false
+    - job: build-ic
+      artifacts: false
+  parallel:
+    matrix:
+      - PATH0: "release"
+        PATH1: "build-ic/release"
+      - PATH0: "canisters"
+        PATH1: "build-ic/canisters"
+      - PATH0: "guest-os/update-img"
+        PATH1: "build-ic/guest-os"
+      - PATH0: "host-os/update-img"
+        PATH1: "build-ic/host-os"
+      - PATH0: "setup-os/disk-img"
+        PATH1: "build-ic/setup-os"
+        SETUPOS_FLAG: "true"
+  script:
+    - |
+      set -eExuo pipefail
+      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
+
+build-determinism-release:
+  extends:
+    - .ubuntu-k8s
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
+  needs:
+    - job: build-ic-release
+  script:
+    - |
+      set -eExuo pipefail
+
+      # TODO IDX-2757
+      if [ "$CI_JOB_NAME" == "build-determinism-guest-update-img-release" ]; then
+          OLD_PATH="$(git rev-parse HEAD)/build-ic-release/guest-os/update-img"
+          if curl -sfSI --retry 2 "https://download.dfinity.systems/ic/$OLD_PATH/SHA256SUMS"; then
+              PATH0="build-ic-release/guest-os/update-img"
+          fi
+      fi
+
+      # what we've build in build-ic-release
+      P0=$PATH0
+      # what is live and available under $NNS_RELEASE_VERSION
+      # NNS_RELEASE_VERSION is set in build-ic-release
+      # shellcheck disable=SC2153
+      P1="/${NNS_RELEASE_VERSION}/${PATH1}"
+
+      ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
+  parallel:
+    matrix:
+      - PATH0: "build-ic-release/release"
+        PATH1: "release"
+      - PATH0: "build-ic-release/canisters"
+        PATH1: "canisters"
+      - PATH0: "build-ic-release/guest-os"
+        PATH1: "guest-os/update-img"
+
+test-push-branch:
+  extends:
+    - .ubuntu-cargo-k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+      when: on_success
+  dependencies: []  # don't copy artifacts from other jobs
+  script:
+    - |
+      # The remote might already exist from a previous CI job run because GitLab re-uses the git repo.
+      git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+      git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+
+      git config --global user.email "infra+gitlab-automation@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+
+      git switch --force-create post-merge-tests-passed HEAD
+      git push --force --set-upstream origin post-merge-tests-passed
+
+cut-release-candidate:
+  extends:
+    - .ubuntu-cargo-k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"'
+  dependencies: []  # don't copy artifacts from other jobs
+  script:
+    - |
+      # The remote might already exist from a previous CI job run because GitLab re-uses the git repo.
+      git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+      git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+
+      git config --global user.email "infra+gitlab-automation@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+
+      RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')"
+      git switch --force-create "$RC_BRANCH_NAME" HEAD
+      git push --force --set-upstream origin  "$RC_BRANCH_NAME"
+
+release-boundary-node-service-worker:
+  extends:
+    - .build-k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
+  needs: [boundary-node-service-worker]
+  script:
+    - |
+      set -eExuo pipefail
+      # shellcheck disable=SC1090
+      source "$NVM_DIR/nvm.sh"
+      nvm use 18
+      node --version
+      npm --version
+
+      # download previously built artifact (during merge commit pipeline)
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/find-build-id.sh)
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+        --git-rev="${GIT_REVISION}" --remote-path="service-worker" \
+        --out="typescript/service-worker/artifacts"
+
+      (
+        cd typescript/service-worker
+        if [[ $CI_COMMIT_TAG =~ ^service-worker_v([0-9\.]+)$ ]]; then
+          TAG_VERSION="${BASH_REMATCH[1]}"
+        else
+          echo "could not parse version from commit tag $CI_COMMIT_TAG"
+          echo "check CI configuration, this job should not be run for malformed tags!"
+          exit 1
+        fi
+
+        # verify the source version matches the tag
+        PACKAGE_JSON_VERSION=$(< package.json jq '.version' -r)
+        if [  "$PACKAGE_JSON_VERSION" != "$TAG_VERSION" ]; then
+          echo "package.json version $PACKAGE_JSON_VERSION does not match tag version $TAG_VERSION"
+          exit 1
+        fi
+
+        # extracts to folder package
+        tar -xf "artifacts/dfinity-service-worker-$TAG_VERSION.tgz"
+
+        # verify the prebuilt package version matches the tag
+        PREBUILT_VERSION=$(< package/package.json jq '.version' -r)
+        if [  "$PREBUILT_VERSION" != "$TAG_VERSION" ]; then
+          echo "version $PREBUILT_VERSION contained in the prebuilt artifact does not match tag version $TAG_VERSION!"
+          exit 1
+        fi
+
+        printf '%s\n' "//registry.npmjs.org/:_authToken=\${SW_NODE_AUTH_TOKEN}" "registry=https://registry.npmjs.org/" "always-auth=true" >> .npmrc
+        npm publish "file:artifacts/dfinity-service-worker-$PACKAGE_JSON_VERSION.tgz" --access public
+      )
+
+# The actual logic for Honeycomb metrics export happens in the after script of these jobs.
+# We export the Honeycomb API metrics in the after script, not in the job script. Because `buildevents build`
+# must be run after `buildevents step` of the common after script.
+
+notify-gitlab-success:
+  extends:
+    - .ubuntu-cargo-k8s
+  rules:
+    # Run on schedule pipelines as several Honeycomb alert rules rely on this.
+    # TODO(IDX-2856): Disable when alerts will be send from superset.
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: on_success
+    # Send a slack notification on rc--* pipeline succeeds.
+    # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
+    # scheduled pipelines that developers may create off the rc branch.
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+      when: on_success
+  stage: finalize
+  dependencies: []  # don't copy artifacts from other jobs
+  script:
+    - |
+      # TODO(IDX-2856): remove this top level "if" when we will not need to run the job for schedule pipelines.
+      if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
+        if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
+            MESSAGE="✔ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🫑🫑🫑"
+        else
+            MESSAGE="✅ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🎉🎉🎉"
+        fi
+        cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+        buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
+          "${MESSAGE}" --channel "release-management-alerts"
+      fi
+
+notify-gitlab-failure:
+  extends:
+    - .ubuntu-cargo-k8s
+  rules:
+    # Send a slack alert on rc--* pipeline failures.
+    # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
+    # scheduled pipelines that developers may create off the rc branch.
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+      when: on_failure
+  stage: finalize
+  dependencies: []  # don't copy artifacts from other jobs
+  script:
+    - |
+      echo "notify gitlab failure"
+      if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
+          MESSAGE="✘ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 🌶🌶🌶"
+      else
+          MESSAGE="❌ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 😭😭😭"
+      fi
+      cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
+          "${MESSAGE}" --channel "release-management-alerts"
+
+commit-lint:
+  needs: []
+  extends:
+    - .build-k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      allow_failure: true
+  script:
+    - |
+      set -eEuo pipefail
+
+      git config --global user.email "idx@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+
+      if ! cog verify  "${CI_MERGE_REQUEST_TITLE}"; then
+        echo "Your commit message - '${CI_MERGE_REQUEST_TITLE}' does not respect conventional commit conventions" >&2
+        echo "Please visit https://www.conventionalcommits.org/en/v1.0.0/ to learn more about conventional commit" >&2
+        exit 1
+      fi
+
+zz-generated-gitlab:
+  needs: []
+  extends:
+    - .ic-build-image
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - gitlab-ci/config/**/*
+        - .gitlab-ci.yml
+  script:
+    - |
+      set -eEuo pipefail
+
+      output_file="gitlab-ci/config/zz-generated-gitlab-ci.yaml"
+
+      curl -G "https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/ci/lint" \
+          -d "dry_run=true" \
+          -d "include_jobs=true" \
+          -d "ref=$CI_COMMIT_REF_NAME" \
+          -H "Authorization: Bearer $GITLAB_API_TOKEN" | jq -r '.merged_yaml' >"$output_file"
+
+      yq  'sort_keys(...)' -i "$output_file"
+
+      if [ -n "$(git status --porcelain)" ]; then
+          git config --global user.email "idx@dfinity.org"
+          git config --global user.name "IDX GitLab Automation"
+          git commit -am "Updating $output_file"
+          git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+          git push --set-upstream origin HEAD:"$CI_COMMIT_REF_NAME"
+      else
+          echo "git working tree clean - no changes to be committed"
       fi

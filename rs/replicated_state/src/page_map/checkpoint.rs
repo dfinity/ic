@@ -1,16 +1,15 @@
-use crate::page_map::{FileDescriptor, MemoryRegion, PageIndex, PersistenceError};
+use crate::page_map::{FileDescriptor, PageIndex, PersistenceError};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_sys::{page_bytes_from_ptr, PageBytes};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
-use std::ops::Range;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::prelude::FromRawFd;
 use std::path::Path;
 use std::sync::Arc;
 
-use super::FileOffset;
+use super::{FileOffset, MemoryInstructions, MemoryMapOrData};
 
 lazy_static! {
     static ref ZEROED_PAGE: Box<PageBytes> = Box::new([0; PAGE_SIZE]);
@@ -121,26 +120,16 @@ impl Mapping {
         }
     }
 
-    /// See the comments of `PageMap::get_memory_region()`.
-    pub fn get_memory_region(
-        &self,
-        page_index: PageIndex,
-        page_range: Range<PageIndex>,
-    ) -> MemoryRegion {
+    /// See the comments of `PageMap::get_checkpoint_memory_instructions()`.
+    pub fn get_memory_instructions(&self) -> MemoryInstructions {
         let num_pages = (self.mmap.len() / PAGE_SIZE) as u64;
-        if page_index.get() >= num_pages {
-            MemoryRegion::Zeros(Range {
-                start: PageIndex::new(std::cmp::max(num_pages, page_range.start.get())),
-                end: page_range.end,
-            })
-        } else {
-            MemoryRegion::BackedByFile(
-                Range {
-                    start: page_range.start,
-                    end: PageIndex::new(std::cmp::min(num_pages, page_range.end.get())),
-                },
-                self.file_descriptor.clone(),
-            )
+
+        MemoryInstructions {
+            range: PageIndex::new(0)..PageIndex::new(u64::MAX),
+            instructions: vec![(
+                PageIndex::new(0)..PageIndex::new(num_pages),
+                MemoryMapOrData::MemoryMap(self.file_descriptor.clone(), 0),
+            )],
         }
     }
 
@@ -192,17 +181,15 @@ impl Checkpoint {
         }
     }
 
-    /// See the comments of `PageMap::get_memory_region()`.
-    pub fn get_memory_region(
-        &self,
-        page_index: PageIndex,
-        page_range: Range<PageIndex>,
-    ) -> MemoryRegion {
-        assert!(page_range.contains(&page_index));
-        match self.mapping {
-            Some(ref mapping) => mapping.get_memory_region(page_index, page_range),
-            None => MemoryRegion::Zeros(page_range),
-        }
+    /// See the comments of `PageMap::get_checkpoint_memory_instructions()`.
+    pub fn get_memory_instructions(&self) -> MemoryInstructions {
+        self.mapping.as_ref().map_or(
+            MemoryInstructions {
+                range: PageIndex::new(0)..PageIndex::new(u64::MAX),
+                instructions: vec![],
+            },
+            |mapping| mapping.get_memory_instructions(),
+        )
     }
 
     /// Returns the max number of (possibly) non-zero pages in this

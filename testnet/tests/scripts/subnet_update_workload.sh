@@ -113,7 +113,7 @@ echo "$loadhosts" >"$experiment_dir/loadhosts"
 
 # Results will be stored in $results_dir/$experiment_id -- this will allow us to collect all runs
 # if ever needed.
-# To make it discernable, use all the inputs, plus the current starttime
+# To make it discernible, use all the inputs, plus the current starttime
 echo "Creating '$experiment_dir' to store all the data for this run."
 mkdir -p "$experiment_dir"
 echo "Populating '$experiment_dir' with git info and experiment params."
@@ -284,7 +284,7 @@ fi
 
 # check if we had unexpected http errors.
 # but we should not fail if there are unknown failures.
-# we only care about the precentage of bad status compared to good ones.
+# we only care about the percentage of bad status compared to good ones.
 has_http_failure="$(jq -r '.[0].status_counts | keys | inside(["0", "11", "33", "44", "202", "503"]) | not' <"$experiment_dir/workload-summary.json")"
 
 sed -i "s/failed_requests_percentage/$bad_percentage/g" "$experiment_dir/data_to_upload/FailedRequestsPercentage.json"

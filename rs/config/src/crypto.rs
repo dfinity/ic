@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[cfg(test)]
-use proptest::prelude::{any, Strategy};
+use proptest::prelude::{any, prop_oneof, Strategy};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use std::fs::Permissions;
@@ -20,24 +20,25 @@ use std::fs::Permissions;
 // This path is not used in practice. The code should panic if it is.
 pub const CRYPTO_ROOT_DEFAULT_PATH: &str = "/This/must/not/be/a/real/path";
 
+// (pvec(any::<u8>(), 32), any::<u32>())
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(Arbitrary))]
+#[derive(Default)]
 pub enum CspVaultType {
+    #[default]
     InReplica,
     #[cfg_attr(
         test,
-        proptest(
-            strategy = "any::<String>().prop_map(|x| CspVaultType::UnixSocket(PathBuf::from(x)))"
-        )
+        proptest(strategy = "prop_oneof![\
+              (any::<String>(), any::<String>()).prop_map(|(l, m)| CspVaultType::UnixSocket{logic: PathBuf::from(l), metrics: Some(PathBuf::from(m))}),\
+              (any::<String>()).prop_map(|(l)| CspVaultType::UnixSocket{logic: PathBuf::from(l), metrics: None})\
+            ]")
     )]
-    UnixSocket(PathBuf),
-}
-
-impl Default for CspVaultType {
-    fn default() -> Self {
-        CspVaultType::InReplica
-    }
+    UnixSocket {
+        logic: PathBuf,
+        metrics: Option<PathBuf>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -79,12 +80,20 @@ impl CryptoConfig {
         }
     }
 
-    /// Returns a new CryptoConfig with the given `crypto_root` path, with
-    /// CspVault at the specified `socket_path`.
-    pub fn new_with_unix_socket_vault(crypto_root: PathBuf, socket_path: PathBuf) -> Self {
+    /// Returns a new CryptoConfig with the given `crypto_root` path, with CspVault at the
+    /// specified `logic_socket_path`, and the CspVault metrics at the specified
+    /// `metrics_socket_path`.
+    pub fn new_with_unix_socket_vault(
+        crypto_root: PathBuf,
+        logic_socket_path: PathBuf,
+        metrics_socket_path: Option<PathBuf>,
+    ) -> Self {
         Self {
             crypto_root,
-            csp_vault_type: CspVaultType::UnixSocket(socket_path),
+            csp_vault_type: CspVaultType::UnixSocket {
+                logic: logic_socket_path,
+                metrics: metrics_socket_path,
+            },
         }
     }
 
@@ -218,7 +227,7 @@ mod tests {
     fn should_set_correct_path_permissions() {
         CryptoConfig::run_with_temp_config(|config| {
             CryptoConfig::check_dir_has_required_permissions(&config.crypto_root)
-                .expect("Wrong direcotry permissions");
+                .expect("Wrong directory permissions");
         })
     }
 

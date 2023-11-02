@@ -5,6 +5,8 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2021"
 
 [dependencies]
+ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto_lib/basic_sig/ed25519" }
+ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_381" }
 ic-crypto-internal-csp = { path = "../crypto_service_provider" }
 ic-crypto-internal-logmon = { path = "../logmon" }
 ic-crypto-internal-test-vectors = { path = "../test_vectors" }
@@ -21,5 +23,6 @@ mockall = "0.7.2"
 proptest = "1.0"
 rand = "0.8"
 rand_chacha = "0.3"
+serde_cbor = "0.11"
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }

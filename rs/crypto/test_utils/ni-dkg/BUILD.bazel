@@ -3,9 +3,11 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/bls12_381/type",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/protobuf",
@@ -15,6 +17,7 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/types/types",
     "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
     "@crate_index//:serde",
 ]
 

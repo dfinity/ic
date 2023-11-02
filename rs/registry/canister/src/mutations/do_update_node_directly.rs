@@ -505,12 +505,16 @@ mod test {
 
         // successfully update the key of node 1 with the same time as before, but it will work,
         // because it's the first update for node 1
+
+        // use yet another new key (to ensure key uniqueness)
+        let keys = valid_node_public_keys();
+        let pk3 = keys.idkg_dealing_encryption_key();
         assert_eq!(
             registry.do_update_node(
                 now,
                 node_ids[1],
                 UpdateNodeDirectlyPayload {
-                    idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk2.clone())),
+                    idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk3.clone())),
                 }
             ),
             Ok(())

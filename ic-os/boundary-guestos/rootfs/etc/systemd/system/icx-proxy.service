@@ -17,7 +17,6 @@ ExecStart=/opt/ic/bin/icx-proxy                                  \
     --canister-alias "identity:rdmx6-jaaaa-aaaaa-aaadq-cai"      \
     --canister-alias "nns:qoctq-giaaa-aaaaa-aaaea-cai"           \
     --canister-alias "dscvr:h5aet-waaaa-aaaab-qaamq-cai"         \
-    --ignore-url-canister-param                                  \
     --metrics-addr "[::]:9314"                                   \
     --root-key "/run/ic-node/etc/icx-proxy/root_key.der"         \
     --ssl-root-certificate "/var/opt/nginx/ic/trusted_certs.pem" \

@@ -3,7 +3,7 @@
 use super::{MessageId, EXPECTED_MESSAGE_ID_LENGTH};
 use crate::{
     messages::{
-        http::{representation_indepent_hash_call_or_query, CallOrQuery},
+        http::{representation_independent_hash_call_or_query, CallOrQuery},
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
     },
@@ -11,8 +11,8 @@ use crate::{
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgs, Method, Payload, SetControllerArgs,
-    UpdateSettingsArgs, IC_00,
+    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgsV2, Method, Payload, UpdateSettingsArgs,
+    IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -97,7 +97,7 @@ impl HasCanisterId for SignedIngressContent {
 
 impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
-        MessageId::from(representation_indepent_hash_call_or_query(
+        MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
             self.canister_id.get().into_vec(),
             &self.method_name,
@@ -474,14 +474,14 @@ pub fn extract_effective_canister_id(
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
-        Ok(Method::SetController) => match SetControllerArgs::decode(ingress.arg()) {
+        Ok(Method::InstallCode) => match InstallCodeArgsV2::decode(ingress.arg()) {
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
-        Ok(Method::InstallCode) => match InstallCodeArgs::decode(ingress.arg()) {
-            Ok(record) => Ok(Some(record.get_canister_id())),
-            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
-        },
+        Ok(Method::UploadChunk)
+        | Ok(Method::StoredChunks)
+        | Ok(Method::DeleteChunks)
+        | Ok(Method::ClearChunkStore) => Err(ParseIngressError::UnknownSubnetMethod),
         Ok(Method::CreateCanister)
         | Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)

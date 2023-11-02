@@ -195,6 +195,134 @@ fn node_is_not_created_when_above_capacity() {
     });
 }
 
+#[test]
+fn duplicated_nodes_are_removed_on_join() {
+    local_test_on_nns_subnet(|runtime| async move {
+        // First prepare the registry with a DC record.
+        let registry = set_up_registry_canister(
+            &runtime,
+            RegistryCanisterInitPayloadBuilder::new()
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
+                .push_init_mutate_request(init_mutation_with_node_allowance(10))
+                .build(),
+        )
+        .await;
+
+        // Create a new node to join.
+        let (payload, node_pks) = prepare_add_node_payload(1);
+        let first_node_id = node_pks.node_id();
+
+        // Ensure this node does not already exist.
+        let node_record = get_node_record(&registry, first_node_id).await;
+        assert!(node_record.is_none());
+
+        // This node should join successfully.
+        let response: Result<NodeId, String> = registry
+            .update_from_sender(
+                "add_node",
+                candid,
+                (payload,),
+                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            )
+            .await;
+        assert!(response.is_ok());
+
+        // Then, try to add another node.
+        // Use the same ID so we can "duplicate" this node.
+        let (payload, node_pks) = prepare_add_node_payload(1);
+        let second_node_id = node_pks.node_id();
+
+        // Ensure this node does not already exist.
+        let node_record = get_node_record(&registry, second_node_id).await;
+        assert!(node_record.is_none());
+
+        // This node should join successfully.
+        let response: Result<NodeId, String> = registry
+            .update_from_sender(
+                "add_node",
+                candid,
+                (payload,),
+                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            )
+            .await;
+        assert!(response.is_ok());
+
+        // The previous record should not be there.
+        let node_record = get_node_record(&registry, first_node_id).await;
+        assert!(node_record.is_none());
+
+        // But the new record is.
+        let node_record = get_node_record(&registry, second_node_id).await;
+        assert!(node_record.is_some());
+
+        Ok(())
+    });
+}
+
+#[test]
+fn join_with_duplicate_is_allowed_when_at_capacity() {
+    local_test_on_nns_subnet(|runtime| async move {
+        // First prepare the registry with a DC record.
+        let registry = set_up_registry_canister(
+            &runtime,
+            RegistryCanisterInitPayloadBuilder::new()
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
+                .push_init_mutate_request(init_mutation_with_node_allowance(1))
+                .build(),
+        )
+        .await;
+
+        // Create a new node to join.
+        let (payload, node_pks) = prepare_add_node_payload(1);
+        let first_node_id = node_pks.node_id();
+
+        // Ensure this node does not already exist.
+        let node_record = get_node_record(&registry, first_node_id).await;
+        assert!(node_record.is_none());
+
+        // This node should join successfully.
+        let response: Result<NodeId, String> = registry
+            .update_from_sender(
+                "add_node",
+                candid,
+                (payload,),
+                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            )
+            .await;
+        assert!(response.is_ok());
+
+        // Then, try to add another node.
+        // Use the same ID so we can "duplicate" this node.
+        let (payload, node_pks) = prepare_add_node_payload(1);
+        let second_node_id = node_pks.node_id();
+
+        // Ensure this node does not already exist.
+        let node_record = get_node_record(&registry, second_node_id).await;
+        assert!(node_record.is_none());
+
+        // This node should join successfully.
+        let response: Result<NodeId, String> = registry
+            .update_from_sender(
+                "add_node",
+                candid,
+                (payload,),
+                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            )
+            .await;
+        assert!(response.is_ok());
+
+        // The previous record should not be there.
+        let node_record = get_node_record(&registry, first_node_id).await;
+        assert!(node_record.is_none());
+
+        // But the new record is.
+        let node_record = get_node_record(&registry, second_node_id).await;
+        assert!(node_record.is_some());
+
+        Ok(())
+    });
+}
+
 fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutateRequest {
     let node_operator_record = NodeOperatorRecord {
         node_operator_principal_id: TEST_NEURON_1_OWNER_PRINCIPAL.to_vec(),

@@ -115,7 +115,7 @@ def install_extra_files(fs_basedir, fakeroot_statefile, extra_files):
         )
 
 
-def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix):
+def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
     if in_file:
         subprocess.run(
             [
@@ -128,7 +128,7 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
                 "--numeric-owner",
                 "-C",
                 fs_basedir,
-                limit_prefix,
+                dir_to_extract,
             ],
             check=True,
         )

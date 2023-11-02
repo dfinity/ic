@@ -10,7 +10,7 @@ use ic_registry_client_helpers::{
 use ic_registry_nns_data_provider_wrappers::create_nns_data_provider;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_routing_table::RoutingTable;
-use ic_types::{registry::connection_endpoint::ConnectionEndpoint, NodeId, PrincipalId, SubnetId};
+use ic_types::{NodeId, PrincipalId, SubnetId};
 use std::{
     collections::BTreeMap, convert::TryFrom, net::SocketAddr, path::PathBuf, result::Result,
     sync::Arc,
@@ -125,30 +125,21 @@ pub fn load_testnet_topology(
         subnet.node_ids = node_ids.clone();
         for node_id in node_ids {
             let node_record = registry_client
-                .get_transport_info(node_id, registry_version)
+                .get_node_record(node_id, registry_version)
                 .map_err(|e| e.to_string())?
                 .ok_or(format!("node {} has no transport info", node_id))?;
 
-            let connection_endpoint = ConnectionEndpoint::try_from(
-                node_record
-                    .http
-                    .clone()
-                    .ok_or(format!("node {} has no HTTP connection endpoint", node_id))?,
-            )
-            .map_err(|e| {
-                format!(
-                    "failed to parse HTTP connection endpoint for node {}: {}",
-                    node_id, e
-                )
-            })?;
-
-            let addr = SocketAddr::from(&connection_endpoint);
+            let http_conn_endpoint = node_record.http.unwrap();
+            let addr = SocketAddr::new(
+                http_conn_endpoint.ip_addr.parse().unwrap(),
+                u16::try_from(http_conn_endpoint.port).unwrap(),
+            );
 
             // Seen bogus registry entries where the connection endpoint exists
             // but is 0.0.0.0.
             if addr.ip().is_unspecified() {
                 return Err(format!(
-                    "unspecified HTTP connecton endpoint for node {}",
+                    "unspecified HTTP connection endpoint for node {}",
                     node_id
                 ));
             }

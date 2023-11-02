@@ -3,7 +3,7 @@ syntax = "proto3";
 package ic_registry_canister.pb.v1;
 
 import "ic_registry_transport/pb/v1/transport.proto";
-import "ic_nns_common/pb/v1/types.proto";
+import "ic_base_types/pb/v1/types.proto";
 
 message ChangelogEntry {
     // The version that this mutation produced.
@@ -91,4 +91,15 @@ message RegistryCanisterStableStorage {
 // rewarded for providing nodes to the Internet Computer for the month.
 message NodeProvidersMonthlyXdrRewards {
     map<string, uint64> rewards = 1;
+}
+
+// Maps the supplied PrincipalId (of a canister) to the subnet to which the canister is assigned to.
+// There is no guarantee that the canister exists, even if a subnet ID is returned.
+message GetSubnetForCanisterRequest {
+    ic_base_types.pb.v1.PrincipalId principal = 1;
+}
+
+// Response if the supplied PrincipalId is assigned to a subnet.
+message GetSubnetForCanisterResponse {
+    ic_base_types.pb.v1.PrincipalId subnet_id = 1;
 }

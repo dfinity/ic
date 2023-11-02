@@ -1,4 +1,6 @@
 use std::{
+    fs::File,
+    io::{self, BufRead},
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -20,18 +22,10 @@ use hyper::Uri;
 use hyper_rustls::HttpsConnectorBuilder;
 use import::Import;
 use nix::sys::signal::Signal;
-use opentelemetry::{
-    global,
-    sdk::{
-        export::metrics::aggregation,
-        metrics::{controllers, processors, selectors},
-        Resource,
-    },
-    Context, KeyValue,
-};
-use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
+use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
+use opentelemetry_prometheus::exporter;
 use persist::Persist;
-use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
+use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use tokio::task;
 use tracing::info;
 
@@ -73,7 +67,13 @@ struct Cli {
     local_configuration_path: PathBuf,
 
     #[clap(long, default_value = "servers.conf.tmpl")]
-    configuration_template_path: PathBuf,
+    configuration_template_sw_path: PathBuf,
+
+    #[clap(long, default_value = "servers.conf.tmpl")]
+    configuration_template_no_sw_path: PathBuf,
+
+    #[clap(long)]
+    no_sw_domains_path: Option<PathBuf>,
 
     #[clap(long, default_value = "mappings.js")]
     domain_mappings_path: PathBuf,
@@ -96,22 +96,16 @@ async fn main() -> Result<(), Error> {
         .context("failed to set global subscriber")?;
 
     // Metrics
-    let exporter = ExporterBuilder::new(
-        controllers::basic(
-            processors::factory(
-                selectors::simple::histogram([]),
-                aggregation::cumulative_temporality_selector(),
-            )
-            .with_memory(true),
-        )
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .build(),
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => SERVICE_NAME.into()}),
     )
-    .init();
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let meter = provider.meter(SERVICE_NAME);
 
-    let meter = global::meter(SERVICE_NAME);
-
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     // HTTP
@@ -140,10 +134,27 @@ async fn main() -> Result<(), Error> {
     let reloader = WithMetrics(reloader, MetricParams::new(&meter, SERVICE_NAME, "reload"));
 
     // Persistence
-    let configuration_template = std::fs::read_to_string(&cli.configuration_template_path)
-        .context("failed to read configuration template")?;
+    let configuration_template_sw = std::fs::read_to_string(&cli.configuration_template_sw_path)
+        .context("failed to read configuration template for using the service worker")?;
 
-    let renderer = Renderer::new(&configuration_template);
+    let configuration_template_no_sw =
+        std::fs::read_to_string(&cli.configuration_template_no_sw_path)
+            .context("failed to read configuration template for using icx-proxy")?;
+
+    let no_sw_domains: Vec<String> = match &cli.no_sw_domains_path {
+        Some(no_sw_domains_path) => {
+            let file = File::open(no_sw_domains_path)?;
+            let reader = io::BufReader::new(file);
+            reader.lines().map(|line| line.unwrap()).collect()
+        }
+        None => Vec::new(),
+    };
+
+    let renderer = Renderer::new(
+        &configuration_template_sw,
+        &configuration_template_no_sw,
+        no_sw_domains,
+    );
     let renderer = WithMetrics(renderer, MetricParams::new(&meter, SERVICE_NAME, "render"));
     let renderer = Arc::new(renderer);
 
@@ -193,13 +204,13 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -303,10 +314,8 @@ impl<T: Run> Run for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 

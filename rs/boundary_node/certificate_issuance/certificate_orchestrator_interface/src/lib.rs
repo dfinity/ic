@@ -1,9 +1,6 @@
 use std::{borrow::Cow, fmt::Display};
 
-use candid::{
-    types::{Serializer, Type},
-    CandidType, Decode, Deserialize, Encode, Principal,
-};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_stable_structures::{BoundedStorable, Storable};
 
 const BYTE: u32 = 1;
@@ -40,22 +37,12 @@ impl BoundedStorable for EncryptedPair {
     const IS_FIXED_SIZE: bool = false;
 }
 
-#[derive(Debug, Default, Clone, PartialOrd, Ord, PartialEq, Eq, Deserialize)]
+#[derive(CandidType, Debug, Default, Clone, PartialOrd, Ord, PartialEq, Eq, Deserialize)]
 pub struct BoundedString<const N: usize>(String);
 
 impl<const N: usize> Display for BoundedString<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl<const N: usize> CandidType for BoundedString<N> {
-    fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
-        String::idl_serialize(&self.0, serializer)
-    }
-
-    fn _ty() -> Type {
-        Type::Text
     }
 }
 
@@ -115,7 +102,7 @@ impl<const N: usize> BoundedStorable for BoundedString<N> {
     const IS_FIXED_SIZE: bool = false;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(CandidType, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct Name(String);
 
 // NAME_MAX_LEN is the maximum length a name is allowed to have.
@@ -163,16 +150,6 @@ impl TryFrom<&str> for Name {
         }
 
         Ok(Self(name.as_str().into()))
-    }
-}
-
-impl CandidType for Name {
-    fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
-        String::idl_serialize(&self.0, serializer)
-    }
-
-    fn _ty() -> Type {
-        Type::Text
     }
 }
 
@@ -304,6 +281,19 @@ pub enum RemoveRegistrationResponse {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum GetCertificateError {
+    NotFound,
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum GetCertificateResponse {
+    Ok(EncryptedPair),
+    Err(GetCertificateError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum UploadCertificateError {
     NotFound,
     Unauthorized,
@@ -411,6 +401,12 @@ pub struct InitArg {
     pub root_principals: Vec<Principal>,
     #[serde(rename = "idSeed")]
     pub id_seed: u128,
+    #[serde(rename = "registrationExpirationTtl")]
+    pub registration_expiration_ttl: Option<u64>,
+    #[serde(rename = "inProgressTtl")]
+    pub in_progress_ttl: Option<u64>,
+    #[serde(rename = "managementTaskInterval")]
+    pub management_task_interval: Option<u64>,
 }
 
 // Http Interface (for metrics)

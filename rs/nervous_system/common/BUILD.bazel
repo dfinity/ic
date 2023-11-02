@@ -1,11 +1,11 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nns/constants",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:json5",
     "@crate_index//:maplit",
+    "@crate_index//:mockall",
     "@crate_index//:priority-queue",
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",

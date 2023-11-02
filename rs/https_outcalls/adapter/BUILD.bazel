@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "@crate_index//:byte-unit",
     "@crate_index//:clap",
     "@crate_index//:futures",
-    "@crate_index//:futures-core",
     "@crate_index//:http",
     "@crate_index//:hyper",
     "@crate_index//:hyper-socks2",

@@ -141,7 +141,7 @@ pub fn criterion_benchmark(c: &mut Criterion, ingress_payload_size: usize) {
     // OS X, you can `brew install capnp`.
     //
     // As the build path is different for the benchmark than for running the main binary, the
-    // genereated rust-file was manually copied into the src/ directory.
+    // generated rust-file was manually copied into the src/ directory.
     //
     // e.g., cp ./target/release/build/encoding_bench/out/capnproto/ingress_capnp.rs src/capnproto.rs
     group.bench_function("capnproto", |b| {

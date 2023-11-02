@@ -14,10 +14,10 @@ message CanisterId {
 // a Neuron.
 message NeuronId {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-//  bytes serialized_id = 1;
+  //  bytes serialized_id = 1;
   reserved 1;
   reserved 'serialized_id';
-  uint64 id = 2    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  uint64 id = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
 
 // The id of a specific proposal.

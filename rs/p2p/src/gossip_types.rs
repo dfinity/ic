@@ -1,10 +1,10 @@
 use crate::{P2PError, P2PErrorCode, P2PResult};
 use bincode::{deserialize, serialize};
 use ic_interfaces_transport::TransportChannelId;
-use ic_protobuf::p2p::v1 as pb;
-use ic_protobuf::p2p::v1::gossip_chunk::Response;
-use ic_protobuf::p2p::v1::gossip_message::Body;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
+use ic_protobuf::types::v1 as pb;
+use ic_protobuf::types::v1::gossip_chunk::Response;
+use ic_protobuf::types::v1::gossip_message::Body;
 use ic_types::{
     artifact::{ArtifactFilter, ArtifactId},
     chunkable::{ArtifactChunk, ChunkId},
@@ -169,7 +169,6 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
                     let artifact_chunk: ArtifactChunk = c.try_into()?;
                     Ok(ArtifactChunk {
                         chunk_id,
-                        witness: artifact_chunk.witness,
                         artifact_chunk_data: artifact_chunk.artifact_chunk_data,
                     })
                 }

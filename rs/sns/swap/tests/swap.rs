@@ -51,7 +51,7 @@ use ic_sns_swap::{
     },
     swap::{
         apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
-        FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START,
+        FIRST_PRINCIPAL_BYTES, NEURON_BASKET_MEMO_RANGE_START,
     },
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
@@ -113,6 +113,7 @@ fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
         nns_proposal_id: None,                       // TODO[NNS1-2339]
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
+        neurons_fund_participation_constraints: None,
     };
     assert_is_ok!(result.validate());
     result
@@ -172,6 +173,9 @@ fn create_generic_committed_swap() -> Swap {
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
         already_tried_to_auto_finalize: Some(false),
+        auto_finalize_swap_response: None,
+        direct_participation_icp_e8s: None,
+        neurons_fund_participation_icp_e8s: None,
     }
 }
 
@@ -326,6 +330,34 @@ fn test_open_with_delay() {
     // Check that state is updated.
     assert_eq!(swap.sns_token_e8s().unwrap(), params.sns_token_e8s);
     assert_eq!(swap.lifecycle(), Adopted);
+
+    // This is a regression test. Previously, SaleClosed was returned, but that
+    // indicates that the swap has already completed. Whereas, SaleNotOpen is
+    // the correct response, because that indicates that it hasn't even started
+    // yet (despite the incredibly similar name).
+    {
+        let request = NewSaleTicketRequest::default();
+        let caller = PrincipalId::new_user_test_id(440_934);
+        let response = swap.new_sale_ticket(&request, caller, START_TIMESTAMP_SECONDS - 1);
+        use new_sale_ticket_response::Result::Err;
+        match response {
+            NewSaleTicketResponse {
+                result: Some(Err(err)),
+            } => {
+                use new_sale_ticket_response::{err::Type, Err};
+                assert_eq!(
+                    err,
+                    Err {
+                        error_type: Type::SaleNotOpen as i32,
+                        invalid_user_amount: None,
+                        existing_ticket: None,
+                    },
+                );
+            }
+
+            _ => panic!("{:#?}", response),
+        }
+    }
 
     // Try opening before delay elapses, it should NOT succeed.
     let timestamp_before_delay = START_TIMESTAMP_SECONDS + delay_seconds - 1;
@@ -1013,11 +1045,12 @@ fn test_scenario_happy() {
             .expect("Transaction fee not known.");
         let neuron_basket_transfer_fund_calls =
             |amount_sns_tokens_e8s: u64, count: u64, investor: TestInvestor| -> Vec<LedgerExpect> {
-                let split_amount = apportion_approximately_equally(amount_sns_tokens_e8s, count);
+                let split_amount =
+                    apportion_approximately_equally(amount_sns_tokens_e8s, count).unwrap();
 
                 let starting_memo = match investor {
                     TestInvestor::CommunityFund(starting_memo) => starting_memo,
-                    TestInvestor::Direct(_) => SALE_NEURON_MEMO_RANGE_START,
+                    TestInvestor::Direct(_) => NEURON_BASKET_MEMO_RANGE_START,
                 };
 
                 split_amount
@@ -1067,17 +1100,17 @@ fn test_scenario_happy() {
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             5_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START),
+            TestInvestor::CommunityFund(/* memo */ NEURON_BASKET_MEMO_RANGE_START),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             3_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START + 3),
+            TestInvestor::CommunityFund(/* memo */ NEURON_BASKET_MEMO_RANGE_START + 3),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             2_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START + 6),
+            TestInvestor::CommunityFund(/* memo */ NEURON_BASKET_MEMO_RANGE_START + 6),
         ));
 
         let SweepResult {
@@ -1148,7 +1181,11 @@ async fn test_finalize_swap_ok() {
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
         already_tried_to_auto_finalize: Some(false),
+        auto_finalize_swap_response: None,
+        direct_participation_icp_e8s: None,
+        neurons_fund_participation_icp_e8s: None,
     };
+    swap.update_cached_fields();
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
     // the swap is open. Not only should it not work, it should do nothing.
@@ -1161,6 +1198,7 @@ async fn test_finalize_swap_ok() {
     let allowed_to_finalize_error = swap.can_finalize().unwrap_err();
     assert_eq!(auto_finalization_error, allowed_to_finalize_error);
     assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+    assert_eq!(swap.auto_finalize_swap_response, None);
 
     // Step 2: Commit the swap
     assert!(swap.try_commit(END_TIMESTAMP_SECONDS));
@@ -1227,6 +1265,7 @@ async fn test_finalize_swap_ok() {
             try_auto_finalize_swap.already_tried_to_auto_finalize,
             Some(true)
         );
+        assert_eq!(swap.auto_finalize_swap_response, None);
 
         // Try auto-finalizing again. It won't work since an attempt has already
         // been made to auto-finalize the swap
@@ -1380,7 +1419,8 @@ async fn test_finalize_swap_ok() {
     let neuron_basket_transfer_fund_calls =
         |amount_sns_tokens_e8s: u64, count: u64, buyer: u64| -> Vec<LedgerCall> {
             let buyer_principal_id = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
-            let split_amount = apportion_approximately_equally(amount_sns_tokens_e8s, count);
+            let split_amount =
+                apportion_approximately_equally(amount_sns_tokens_e8s, count).unwrap();
             split_amount
                 .iter()
                 .enumerate()
@@ -1389,7 +1429,7 @@ async fn test_finalize_swap_ok() {
                         owner: SNS_GOVERNANCE_CANISTER_ID.into(),
                         subaccount: Some(compute_neuron_staking_subaccount_bytes(
                             buyer_principal_id,
-                            ledger_account_memo as u64 + SALE_NEURON_MEMO_RANGE_START,
+                            ledger_account_memo as u64 + NEURON_BASKET_MEMO_RANGE_START,
                         )),
                     };
                     LedgerCall::TransferFundsICRC1 {
@@ -1426,6 +1466,8 @@ async fn test_finalize_swap_ok() {
                     open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                     result: Some(Result::Committed(Committed {
                         sns_governance_canister_id: Some(SNS_GOVERNANCE_CANISTER_ID.into()),
+                        total_direct_contribution_icp_e8s: Some(100 * E8),
+                        total_neurons_fund_contribution_icp_e8s: Some(0),
                     })),
                 }
             )]
@@ -1503,12 +1545,16 @@ async fn test_finalize_swap_abort() {
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
         already_tried_to_auto_finalize: Some(false),
+        auto_finalize_swap_response: None,
+        direct_participation_icp_e8s: None,
+        neurons_fund_participation_icp_e8s: None,
     };
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
     // the swap is open. Not only should it not work, it should do nothing.
     assert_eq!(swap.lifecycle(), Open);
     assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+    assert_eq!(swap.auto_finalize_swap_response, None);
     let auto_finalization_error = swap
         .try_auto_finalize(now_fn, &mut spy_clients_exploding_root())
         .await
@@ -1519,6 +1565,7 @@ async fn test_finalize_swap_abort() {
     // already_tried_to_auto_finalize should still be set to false, since it
     // couldn't try to auto-finalize due to the swap not being committed.
     assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+    assert_eq!(swap.auto_finalize_swap_response, None);
 
     // Step 2: Abort the swap
     assert!(swap.try_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
@@ -1576,6 +1623,10 @@ async fn test_finalize_swap_abort() {
         assert_eq!(
             try_auto_finalize_swap.already_tried_to_auto_finalize,
             Some(true)
+        );
+        assert_eq!(
+            try_auto_finalize_swap.auto_finalize_swap_response,
+            Some(finalize_result.clone())
         );
 
         // Try auto-finalizing again. It won't work since an attempt has already
@@ -1699,7 +1750,7 @@ fn test_error_refund_single_user() {
             ..params()
         };
         let mut swap = Swap::new(init());
-        // Swap is not open and therefore cannot be commited
+        // Swap is not open and therefore cannot be committed
         assert_eq!(swap.lifecycle(), Pending);
         assert!(!swap.can_commit(params.swap_due_timestamp_seconds));
 
@@ -1725,7 +1776,7 @@ fn test_error_refund_single_user() {
         // Verify that SNS Swap canister registered the tokens
         assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
-        // User has not commited yet --> No neuron has been created
+        // User has not committed yet --> No neuron has been created
         assert!(std::panic::catch_unwind(|| verify_participant_balances(
             &swap,
             &user1,
@@ -1734,7 +1785,7 @@ fn test_error_refund_single_user() {
         ))
         .is_err());
 
-        // User has not commited yet --> Cannot get a refund
+        // User has not committed yet --> Cannot get a refund
         let refund_err = try_error_refund_err(
             &mut swap,
             &user1,
@@ -1758,7 +1809,7 @@ fn test_error_refund_single_user() {
         // The life cycle should have changed to COMMITTED
         assert_eq!(swap.lifecycle(), Committed);
 
-        // Now that the lifecycle has changed to commited, the neurons for the buyers should have been generated
+        // Now that the lifecycle has changed to committed, the neurons for the buyers should have been generated
         verify_participant_balances(
             &swap,
             &user1,
@@ -2023,7 +2074,7 @@ fn test_error_refund_after_close() {
         //The life cycle should have changed to COMMITTED
         assert_eq!(swap.lifecycle(), Committed);
 
-        //Now that the lifecycle has changed to commited, the neurons for the buyers should have been generated
+        //Now that the lifecycle has changed to committed, the neurons for the buyers should have been generated
         verify_participant_balances(
             &swap,
             &user1,
@@ -3178,11 +3229,8 @@ async fn test_restore_dapp_controllers_rejects_unauthorized() {
     };
 
     // Step 2: Call restore_dapp_controllers with an unauthorized caller
-    swap.restore_dapp_controllers(
-        &mut ExplodingSnsRootClient::default(),
-        PrincipalId::new_anonymous(),
-    )
-    .await;
+    swap.restore_dapp_controllers(&mut ExplodingSnsRootClient, PrincipalId::new_anonymous())
+        .await;
 }
 
 /// Test that the restore_dapp_controllers API will gracefully handle invalid
@@ -3209,7 +3257,7 @@ async fn test_restore_dapp_controllers_cannot_parse_fallback_controllers() {
     // Step 2: Call restore_dapp_controllers
     let restore_dapp_controllers_response = swap
         .restore_dapp_controllers(
-            &mut ExplodingSnsRootClient::default(), // Should fail before using RootClient
+            &mut ExplodingSnsRootClient, // Should fail before using RootClient
             NNS_GOVERNANCE_CANISTER_ID.get(),
         )
         .await;
@@ -3334,6 +3382,8 @@ fn test_derived_state() {
         direct_participant_count: Some(0),
         cf_participant_count: Some(0),
         cf_neuron_count: Some(0),
+        direct_participation_icp_e8s: Some(0),
+        neurons_fund_participation_icp_e8s: Some(0),
     };
     let actual_derived_state1 = swap.derived_state();
     assert_eq!(expected_derived_state1, actual_derived_state1);
@@ -3350,6 +3400,8 @@ fn test_derived_state() {
         direct_participant_count: Some(0),
         cf_participant_count: Some(0),
         cf_neuron_count: Some(0),
+        direct_participation_icp_e8s: Some(0),
+        neurons_fund_participation_icp_e8s: Some(0),
     };
     let actual_derived_state2 = swap.derived_state();
     assert_eq!(expected_derived_state2, actual_derived_state2);
@@ -3367,6 +3419,7 @@ fn test_derived_state() {
     };
 
     swap.buyers = buyers;
+    swap.update_cached_fields();
 
     let expected_derived_state3 = DerivedState {
         buyer_total_icp_e8s: 100_000_000,
@@ -3374,6 +3427,8 @@ fn test_derived_state() {
         direct_participant_count: Some(1),
         cf_participant_count: Some(0),
         cf_neuron_count: Some(0),
+        direct_participation_icp_e8s: Some(100_000_000),
+        neurons_fund_participation_icp_e8s: Some(0),
     };
     let actual_derived_state3 = swap.derived_state();
     assert_eq!(expected_derived_state3, actual_derived_state3);
@@ -3391,6 +3446,7 @@ fn test_derived_state() {
             },
         ],
     }];
+    swap.update_cached_fields();
 
     let expected_derived_state4 = DerivedState {
         buyer_total_icp_e8s: 800_000_000,
@@ -3398,9 +3454,27 @@ fn test_derived_state() {
         direct_participant_count: Some(1),
         cf_participant_count: Some(1),
         cf_neuron_count: Some(2),
+        direct_participation_icp_e8s: Some(100_000_000),
+        neurons_fund_participation_icp_e8s: Some(700_000_000),
     };
     let actual_derived_state4 = swap.derived_state();
     assert_eq!(expected_derived_state4, actual_derived_state4);
+
+    swap.direct_participation_icp_e8s = Some(500_000_000);
+    swap.neurons_fund_participation_icp_e8s = Some(400_000_000);
+    let expected_derived_state5 = DerivedState {
+        buyer_total_icp_e8s: 800_000_000,
+        sns_tokens_per_icp: 1.25f32,
+        direct_participant_count: Some(1),
+        cf_participant_count: Some(1),
+        cf_neuron_count: Some(2),
+        direct_participation_icp_e8s: Some(100_000_000),
+        neurons_fund_participation_icp_e8s: Some(700_000_000),
+    };
+    swap.update_cached_fields();
+
+    let actual_derived_state5 = swap.derived_state();
+    assert_eq!(expected_derived_state5, actual_derived_state5);
 }
 
 /// Test that claim_swap_neurons is called with the correct preconditions
@@ -4215,7 +4289,7 @@ fn test_refresh_buyer_tokens() {
         let amount_user2_0 = 35 * E8;
         let mut swap = Swap::new(init());
 
-        // Make sure tokens can only be commited once the swap is open
+        // Make sure tokens can only be committed once the swap is open
         assert!(swap
             .refresh_buyer_token_e8s(user1, None, SWAP_CANISTER_ID, &mock_stub(vec![]))
             .now_or_never()
@@ -4225,13 +4299,13 @@ fn test_refresh_buyer_tokens() {
         //Open the swap
         open_swap(&mut swap, &params);
 
-        // Makse sure user1 has not committed any users yet
+        // Make sure user1 has not committed any users yet
         assert!(!swap.buyers.contains_key(&user1.to_string()));
 
         buy_token_ok(&mut swap, &user1, &amount_user1_0, &amount_user1_0);
 
-        // Make sure user1's committment is reflected in the buyers state
-        // Total commited balance should be that of user1
+        // Make sure user1's commitment is reflected in the buyers state
+        // Total committed balance should be that of user1
         check_final_conditions(&mut swap, &user1, &(amount_user1_0), &(amount_user1_0));
 
         // Commit another 35 ICP
@@ -4253,8 +4327,8 @@ fn test_refresh_buyer_tokens() {
             &(amount_user1_0 + amount_user1_1),
         );
 
-        // Makse sure user1's committmend is reflected in the buyers state
-        // Total commited balance should be that of user1 + user2
+        // Make sure user1's committmend is reflected in the buyers state
+        // Total committed balance should be that of user1 + user2
         check_final_conditions(
             &mut swap,
             &user1,
@@ -4448,7 +4522,7 @@ fn test_refresh_buyer_tokens() {
         );
     }
 
-    // Test commited tokens below minimum
+    // Test committed tokens below minimum
     {
         let params = Params {
             max_icp_e8s: 100 * E8,
@@ -4669,7 +4743,7 @@ fn test_swap_participation_confirmation() {
 #[test]
 fn test_get_state_bounds_data_sources() {
     // Prepare the canister with multiple buyers
-    let swap = Swap {
+    let mut swap = Swap {
         lifecycle: Committed as i32,
         params: Some(params()),
         init: Some(init()),
@@ -4680,6 +4754,7 @@ fn test_get_state_bounds_data_sources() {
         cf_participants: create_generic_cf_participants(1),
         ..Default::default()
     };
+    swap.update_cached_fields();
 
     let get_state_response = swap.get_state();
     let derived_state = get_state_response.derived.unwrap();

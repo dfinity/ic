@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use url::Url;
 
-pub(crate) fn set_sandbox_env_vars(dir: PathBuf) {
+pub fn set_sandbox_env_vars(dir: PathBuf) {
     set_var_to_path("SANDBOX_BINARY", dir.join("canister_sandbox"));
     set_var_to_path("LAUNCHER_BINARY", dir.join("sandbox_launcher"));
 }
@@ -144,7 +144,10 @@ pub(crate) fn assert_subnet_is_healthy(
     msg: &str,
     logger: &Logger,
 ) {
-    // Confirm that ALL nodes are now healthy and running on the new version
+    info!(
+        logger,
+        "Confirm that ALL nodes are now healthy and running on the new version {target_version}"
+    );
     for node in subnet {
         assert_assigned_replica_version(node, &target_version, logger.clone());
         info!(
@@ -256,11 +259,11 @@ pub(crate) fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
     });
 }
 
-/// Enable ECDSA key and signing on the root subnet using the given NNS node.
-pub(crate) fn enable_ecdsa_on_nns(
+/// Enable ECDSA key and signing on the subnet using the given NNS node.
+pub(crate) fn enable_ecdsa_on_subnet(
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
-    root_subnet_id: SubnetId,
+    subnet_id: SubnetId,
     rotation_period: Option<Duration>,
     enable_signing: bool,
     logger: &Logger,
@@ -271,14 +274,14 @@ pub(crate) fn enable_ecdsa_on_nns(
 
     block_on(add_ecdsa_key_with_timeout_and_rotation_period(
         &governance,
-        root_subnet_id,
+        subnet_id,
         make_key(KEY_ID1),
         None,
         rotation_period,
     ));
 
     if enable_signing {
-        enable_ecdsa_signing_on_subnet(nns_node, canister, root_subnet_id, logger)
+        enable_ecdsa_signing_on_subnet(nns_node, canister, subnet_id, logger)
     } else {
         get_ecdsa_pub_key(canister, logger)
     }

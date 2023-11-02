@@ -1,8 +1,12 @@
-use crate::{common::LOG_PREFIX, mutations::common::decode_registry_value, registry::Registry};
+use crate::{
+    common::LOG_PREFIX, mutations::common::decode_registry_value,
+    pb::v1::GetSubnetForCanisterResponse, registry::Registry,
+};
 
 use std::convert::TryFrom;
 
-use ic_base_types::SubnetId;
+use dfn_core::CanisterId;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
 use ic_registry_routing_table::{
@@ -10,6 +14,23 @@ use ic_registry_routing_table::{
 };
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use prost::Message;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum GetSubnetForCanisterError {
+    InvalidCanisterId,
+    NoSubnetAssigned,
+}
+
+impl ToString for GetSubnetForCanisterError {
+    fn to_string(&self) -> String {
+        match self {
+            GetSubnetForCanisterError::InvalidCanisterId => "Invalid canister ID.".to_string(),
+            GetSubnetForCanisterError::NoSubnetAssigned => {
+                "Canister is not assigned to any subnet.".to_string()
+            }
+        }
+    }
+}
 
 fn routing_table_into_registry_mutation(
     routing_table: RoutingTable,
@@ -170,5 +191,81 @@ impl Registry {
             },
             registry_mutation::Type::Update as i32,
         )
+    }
+
+    pub fn get_subnet_for_canister(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<GetSubnetForCanisterResponse, GetSubnetForCanisterError> {
+        let latest_version = self.latest_version();
+        let routing_table = self.get_routing_table_or_panic(latest_version);
+        let canister_id = CanisterId::try_from(*principal_id)
+            .map_err(|_| GetSubnetForCanisterError::InvalidCanisterId)?;
+
+        match routing_table
+            .lookup_entry(canister_id)
+            .map(|(_, subnet_id)| subnet_id.get())
+        {
+            Some(subnet_id) => Ok(GetSubnetForCanisterResponse {
+                subnet_id: Some(subnet_id),
+            }),
+            None => Err(GetSubnetForCanisterError::NoSubnetAssigned),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::common::test_helpers::invariant_compliant_registry;
+
+    use super::*;
+    use assert_matches::assert_matches;
+    use ic_base_types::CanisterId;
+    use ic_registry_routing_table::CanisterIdRange;
+
+    #[test]
+    fn test_get_subnet_for_canister() {
+        let mut registry = invariant_compliant_registry(0);
+        let system_subnet =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.get(0).unwrap())
+                .unwrap();
+
+        let mut rt = RoutingTable::new();
+        rt.insert(
+            CanisterIdRange {
+                start: CanisterId::from(0),
+                end: CanisterId::from(255),
+            },
+            system_subnet.into(),
+        )
+        .unwrap();
+        let mutation =
+            routing_table_into_registry_mutation(rt, registry_mutation::Type::Update as i32);
+        registry.maybe_apply_mutation_internal(vec![mutation]);
+
+        assert_eq!(
+            registry
+                .get_subnet_for_canister(&CanisterId::from(5).get())
+                .unwrap()
+                .subnet_id
+                .unwrap(),
+            system_subnet
+        );
+
+        assert_matches!(
+            registry
+                .get_subnet_for_canister(&CanisterId::from(256).get())
+                .unwrap_err(),
+            GetSubnetForCanisterError::NoSubnetAssigned
+        );
+
+        assert_matches!(
+            registry
+                .get_subnet_for_canister(&CanisterId::from(999).get())
+                .unwrap_err(),
+            GetSubnetForCanisterError::NoSubnetAssigned
+        );
+
+        // GetSubnetForCanisterError::CanisterIdConversion currently not reachable - CanisterId::try_from() always succeeds
     }
 }

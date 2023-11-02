@@ -17,11 +17,11 @@ use ic_agent::{
     Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
 use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
+use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     create_service_nervous_system::SwapParameters, CreateServiceNervousSystem,
@@ -30,7 +30,6 @@ use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
-use ic_types::crypto::{AlgorithmId, UserPublicKey};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
@@ -43,8 +42,6 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use on_wire::FromWire;
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 use slog::{debug, info};
 use std::collections::BTreeMap;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
@@ -606,9 +603,10 @@ impl<'a> MessageCanister<'a> {
             cycles: cycles.get(),
             payload,
         };
+        let arg = Encode!(&params).unwrap();
         self.agent
             .update(&self.canister_id, "forward")
-            .with_arg(&Encode!(&params).unwrap())
+            .with_arg(arg)
             .call_and_wait()
             .await
             .map(|bytes| Decode!(&bytes, Vec<u8>).unwrap())
@@ -634,7 +632,7 @@ impl<'a> MessageCanister<'a> {
     pub async fn try_store_msg<P: Into<String>>(&self, msg: P) -> Result<(), AgentError> {
         self.agent
             .update(&self.canister_id, "store")
-            .with_arg(&Encode!(&msg.into()).unwrap())
+            .with_arg(Encode!(&msg.into()).unwrap())
             .call_and_wait()
             .await
             .map(|_| ())
@@ -649,7 +647,7 @@ impl<'a> MessageCanister<'a> {
     pub async fn try_read_msg(&self) -> Result<Option<String>, String> {
         self.agent
             .query(&self.canister_id, "read")
-            .with_arg(&Encode!(&()).unwrap())
+            .with_arg(Encode!(&()).unwrap())
             .call()
             .await
             .map_err(|e| e.to_string())
@@ -1190,7 +1188,7 @@ pub(crate) async fn assert_canister_counter_with_retries(
         );
         let res = agent
             .query(canister_id, "read")
-            .with_arg(&payload)
+            .with_arg(payload.clone())
             .call()
             .await
             .unwrap();
@@ -1340,16 +1338,19 @@ impl MetricsFetcher {
     }
 
     /// Fetch the metrics
-    pub async fn fetch(&self) -> reqwest::Result<BTreeMap<String, Vec<u64>>> {
+    pub async fn fetch<T>(&self) -> reqwest::Result<BTreeMap<String, Vec<T>>>
+    where
+        T: Copy + Debug + std::str::FromStr,
+    {
         // Fetch the metrics from the nodes in parallel and collect into a result
         let metrics = join_all(
             self.nodes
                 .iter()
-                .map(|node| Box::pin(self.fetch_from_node(node.get_ip_addr()))),
+                .map(|node| Box::pin(self.fetch_from_node::<T>(node.get_ip_addr()))),
         )
         .await
         .into_iter()
-        .collect::<Result<Vec<BTreeMap<String, u64>>, reqwest::Error>>()?;
+        .collect::<Result<Vec<BTreeMap<String, T>>, reqwest::Error>>()?;
 
         // Accumulate results into a single BTreeMap
         let mut results = BTreeMap::new();
@@ -1357,7 +1358,7 @@ impl MetricsFetcher {
             for (metric_name, val) in metric.into_iter() {
                 results
                     .entry(metric_name)
-                    .and_modify(|entry: &mut Vec<u64>| entry.push(val))
+                    .and_modify(|entry: &mut Vec<T>| entry.push(val))
                     .or_insert_with(|| vec![val]);
             }
         }
@@ -1366,7 +1367,10 @@ impl MetricsFetcher {
     }
 
     /// Fetch metrics from a single node
-    async fn fetch_from_node(&self, ip_addr: IpAddr) -> reqwest::Result<BTreeMap<String, u64>> {
+    async fn fetch_from_node<T>(&self, ip_addr: IpAddr) -> reqwest::Result<BTreeMap<String, T>>
+    where
+        T: Copy + Debug + std::str::FromStr,
+    {
         let ip_addr = match ip_addr {
             IpAddr::V4(_) => panic!("Ipv4 addresses not supported"),
             IpAddr::V6(ipv6_addr) => ipv6_addr,
@@ -1392,7 +1396,10 @@ impl MetricsFetcher {
                 let metric = line.split(' ').collect::<Vec<_>>();
                 assert_eq!(metric.len(), 2);
 
-                let val: u64 = metric[1].parse().expect("Failed to parse metric");
+                let val = match metric[1].parse::<T>() {
+                    Ok(val) => val,
+                    Err(_) => panic!("Failed to parse metric"),
+                };
                 result.insert(metric[0].to_string(), val);
             }
         }
@@ -1427,11 +1434,11 @@ pub fn assert_malicious(
         )
         .await
         .expect("Timed out while waiting for malicious logs")
-        .expect("Not all malicious nodes produced logs containting the malicious signal.");
+        .expect("Not all malicious nodes produced logs containing the malicious signal.");
     })
 }
 
-/// Malicous node logs have to be checked individually, because all nodes have to signal malice.
+/// Malicious node logs have to be checked individually, because all nodes have to signal malice.
 async fn assert_nodes_malicious_parallel(
     nodes: impl Iterator<Item = IcNodeSnapshot>,
     signals: Vec<&str>,
@@ -1450,7 +1457,7 @@ async fn assert_nodes_malicious_parallel(
     let result = join_all(futures).await.iter().all(|x| x.is_ok());
     match result {
         true => Ok(()),
-        false => Err("Not all malicious nodes produced logs containting the malicious signal."),
+        false => Err("Not all malicious nodes produced logs containing the malicious signal."),
     }
 }
 
@@ -1491,7 +1498,7 @@ pub fn spawn_round_robin_workload_engine(
         let log_null = slog::Logger::root(slog::Discard, slog::o!());
         let aggregator = LoadTestMetrics::new(log_null)
             .with_requests_duration_categorizations(requests_duration_categorizations);
-        let engine = Engine::new(log, generator, rps, duration)
+        let engine = Engine::new(log, generator, rps as f64, duration)
             .increase_dispatch_timeout(requests_dispatch_extra_timeout);
         block_on(engine.execute(aggregator, LoadTestMetrics::aggregator_fn))
             .expect("Execution of the workload failed.")
@@ -1559,18 +1566,6 @@ pub fn pad_all_lines_but_first(s: String, padding: usize) -> String {
     result
 }
 
-pub fn generate_identity(seed: u64) -> (Ed25519KeyPair, UserPublicKey, PrincipalId) {
-    let mut rng = ChaChaRng::seed_from_u64(seed);
-    let keypair = Ed25519KeyPair::generate(&mut rng);
-    let pubkey = UserPublicKey {
-        key: keypair.public_key.to_vec(),
-        algorithm_id: AlgorithmId::Ed25519,
-    };
-    let principal =
-        PrincipalId::new_self_authenticating(&ed25519_public_key_to_der(pubkey.key.clone()));
-    (keypair, pubkey, principal)
-}
-
 pub(crate) fn create_service_nervous_system_into_params(
     create_service_nervous_system: CreateServiceNervousSystem,
     swap_approved_timestamp_seconds: u64,
@@ -1586,6 +1581,7 @@ pub(crate) fn create_service_nervous_system_into_params(
         restricted_countries: _,
         start_time,
         duration,
+        neurons_fund_investment_icp: _,
     } = create_service_nervous_system
         .swap_parameters
         .clone()
@@ -1596,7 +1592,7 @@ pub(crate) fn create_service_nervous_system_into_params(
             .ok_or("`neuron_basket_construction_parameters` should not be None")?
             .try_into()?;
 
-    let start_time = start_time;
+    let start_time = start_time.unwrap_or_else(|| GlobalTimeOfDay::from_hh_mm(12, 0).unwrap()); // Just use a random start time if it's not
     let duration = duration.ok_or("`duration` should not be None")?;
     let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
         CreateServiceNervousSystem::swap_start_and_due_timestamps(

@@ -1,4 +1,6 @@
 use ic_base_types::SubnetId;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{messaging::xnet::v1 as messaging_pb, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
@@ -7,6 +9,7 @@ use crate::{xnet::CertifiedStreamSlice, CountBytes};
 
 /// Payload that contains XNet messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct XNetPayload {
     pub stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
 }

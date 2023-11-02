@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use hyper::{Body, Request, StatusCode, Uri};
 use mockall::automock;
-use opentelemetry::{Context, KeyValue};
+use opentelemetry::KeyValue;
 use serde::Deserialize;
 use tracing::info;
 
@@ -109,10 +109,8 @@ impl<T: Import> Import for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 

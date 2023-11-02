@@ -1,11 +1,12 @@
 #![allow(clippy::unwrap_used)]
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::{
-    ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, user_public_key_from_bytes,
-    CryptoComponent, KeyBytesContentType,
-};
+use ic_crypto::CryptoComponent;
+use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_crypto_internal_test_vectors::test_data;
-use ic_interfaces::crypto::BasicSigVerifierByPublicKey;
+use ic_crypto_standalone_sig_verifier::{
+    ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, user_public_key_from_bytes,
+    KeyBytesContentType,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -16,6 +17,7 @@ use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
 
 use ic_crypto_test_utils::ed25519_utils::ed25519_signature_and_public_key;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::time_source::SysTimeSource;
 use openssl::ec::{EcGroup, EcKey};
 use openssl::ecdsa::EcdsaSig;
@@ -25,8 +27,9 @@ use openssl::sha::sha256;
 
 #[test]
 fn should_verify_request_id_ed25519_signature() {
+    let rng = &mut reproducible_rng();
     let request_id = MessageId::from([42; 32]);
-    let (signature, public_key) = ed25519_signature_and_public_key(&request_id);
+    let (signature, public_key) = ed25519_signature_and_public_key(&request_id, rng);
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
         assert!(crypto

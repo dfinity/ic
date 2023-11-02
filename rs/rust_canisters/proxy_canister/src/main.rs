@@ -132,6 +132,8 @@ fn bloat_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     transformed
 }
 
+fn main() {}
+
 #[cfg(test)]
 mod proxy_canister_test {
     use super::*;
@@ -176,5 +178,3 @@ mod proxy_canister_test {
         );
     }
 }
-
-fn main() {}

@@ -95,8 +95,8 @@ fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin
     }
 }
 
-fn as_txid(hash: &Txid) -> bitcoin::Txid {
-    bitcoin::Txid::from_hash(bitcoin::hashes::Hash::from_slice(hash.as_ref()).unwrap())
+fn as_txid(hash: &[u8; 32]) -> bitcoin::Txid {
+    bitcoin::Txid::from_hash(bitcoin::hashes::Hash::from_slice(hash).unwrap())
 }
 
 fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::Script {
@@ -120,7 +120,7 @@ fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transacti
             .iter()
             .map(|txin| bitcoin::TxIn {
                 previous_output: bitcoin::OutPoint {
-                    txid: as_txid(&txin.previous_output.txid),
+                    txid: as_txid(&txin.previous_output.txid.into()),
                     vout: txin.previous_output.vout,
                 },
                 sequence: txin.sequence,
@@ -148,7 +148,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
             .iter()
             .map(|txin| bitcoin::TxIn {
                 previous_output: bitcoin::OutPoint {
-                    txid: as_txid(&txin.previous_output.txid),
+                    txid: as_txid(&txin.previous_output.txid.into()),
                     vout: txin.previous_output.vout,
                 },
                 sequence: txin.sequence,
@@ -228,7 +228,7 @@ fn test_min_change_amount() {
         &[
             tx::TxOut {
                 address: out1_addr,
-                value: 100_000 - fee_share - 1, // Substract the remainder
+                value: 100_000 - fee_share - 1, // Subtract the remainder
             },
             tx::TxOut {
                 address: out2_addr,

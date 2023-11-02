@@ -174,23 +174,11 @@ impl ApiBoundaryNodeWithVm {
                 .aaaa_records
                 .push(self.allocated_vm.ipv6.to_string());
             let bn_fqdn = existing_playnet.playnet_cert.playnet.clone();
-            env.create_playnet_dns_records(vec![
-                DnsRecord {
-                    name: "".to_string(),
-                    record_type: DnsRecordType::AAAA,
-                    records: existing_playnet.aaaa_records.clone(),
-                },
-                DnsRecord {
-                    name: "*".to_string(),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![bn_fqdn.clone()],
-                },
-                DnsRecord {
-                    name: "*.raw".to_string(),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![bn_fqdn.clone()],
-                },
-            ]);
+            env.create_playnet_dns_records(vec![DnsRecord {
+                name: "".to_string(),
+                record_type: DnsRecordType::AAAA,
+                records: existing_playnet.aaaa_records.clone(),
+            }]);
 
             info!(
                 &logger,
@@ -413,7 +401,7 @@ fn create_and_upload_config_disk_image(
         .arg("--ipv6_monitoring_ips")
         .arg("::/0")
         .arg("--elasticsearch_url")
-        .arg("https://elasticsearch.testnet.dfinity.systems")
+        .arg("https://elasticsearch.testnet.dfinity.network")
         .arg("--name_servers")
         .arg("2606:4700:4700::1111 2606:4700:4700::1001");
 
@@ -443,9 +431,7 @@ fn create_and_upload_config_disk_image(
             cert.cert_pem + &cert.chain_pem,
         )?;
         let bn_fqdn = playnet_cert.playnet;
-        cmd.arg("--system-domains")
-            .arg(bn_fqdn.clone())
-            .arg("--application-domains")
+        cmd.arg("--api-domains")
             .arg(bn_fqdn)
             .arg("--certdir")
             .arg(cert_dir);
@@ -496,6 +482,8 @@ fn create_and_upload_config_disk_image(
 }
 
 pub trait ApiBoundaryNodeVm {
+    fn get_deployed_api_boundary_nodes(&self) -> Vec<DeployedApiBoundaryNode>;
+
     fn get_deployed_api_boundary_node(&self, name: &str) -> Result<DeployedApiBoundaryNode>;
 
     fn write_api_boundary_node_vm(
@@ -507,6 +495,22 @@ pub trait ApiBoundaryNodeVm {
 }
 
 impl ApiBoundaryNodeVm for TestEnv {
+    fn get_deployed_api_boundary_nodes(&self) -> Vec<DeployedApiBoundaryNode> {
+        let path = self.get_path(API_BOUNDARY_NODE_VMS_DIR);
+        if !path.exists() {
+            return vec![];
+        }
+        fs::read_dir(path)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.path().is_dir())
+            .map(|e| {
+                let dir = String::from(e.file_name().to_string_lossy());
+                self.get_deployed_api_boundary_node(&dir).unwrap()
+            })
+            .collect()
+    }
+
     fn get_deployed_api_boundary_node(&self, name: &str) -> Result<DeployedApiBoundaryNode> {
         let rel_api_boundary_node_dir: PathBuf = [API_BOUNDARY_NODE_VMS_DIR, name].iter().collect();
         let abs_api_boundary_node_dir = self.get_path(rel_api_boundary_node_dir.clone());
@@ -560,7 +564,7 @@ impl HasVmName for DeployedApiBoundaryNode {
 }
 
 impl DeployedApiBoundaryNode {
-    fn get_vm(&self) -> Result<VMCreateResponse> {
+    pub fn get_vm(&self) -> Result<VMCreateResponse> {
         let vm_path: PathBuf = [API_BOUNDARY_NODE_VMS_DIR, &self.name].iter().collect();
         self.env
             .read_json_object(vm_path.join(API_BOUNDARY_NODE_VM_PATH))

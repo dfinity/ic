@@ -53,7 +53,6 @@ macro_rules! chunkable_artifact_impl {
                 } else {
                     Some(ArtifactChunk {
                         chunk_id,
-                        witness: Vec::new(),
                         artifact_chunk_data: $v,
                     })
                 }

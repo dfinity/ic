@@ -15,27 +15,34 @@ use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{
         apply_transaction, archive_blocks, block_locations, find_block_in_archive, LedgerAccess,
+        TransferError as CoreTransferError,
     },
     range_utils,
 };
 use ic_ledger_core::{
+    approvals::Approvals,
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use icp_ledger::{
-    protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
+    protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob, AccountIdentifier, ArchiveInfo,
     ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, BlockRes, CandidBlock, Decimals, GetBlocksArgs, InitArgs, IterBlocksArgs,
-    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
-    MEMO_SIZE_BYTES,
+    BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs,
+    IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
+    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
 };
-use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::archive::QueryArchiveFn,
+};
+use icrc_ledger_types::{
+    icrc1::account::Account, icrc2::transfer_from::TransferFromArgs,
+    icrc2::transfer_from::TransferFromError,
 };
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
@@ -75,6 +82,7 @@ impl Sink for DebugOutSink {
 /// * `transfer_fee` - The fee to pay to perform a transaction.
 /// * `token_symbol` - Token symbol.
 /// * `token_name` - Token name.
+/// * `feature_flags` - Features that are enabled on the ledger.
 #[allow(clippy::too_many_arguments)]
 fn init(
     minting_account: AccountIdentifier,
@@ -87,6 +95,9 @@ fn init(
     transfer_fee: Option<Tokens>,
     token_symbol: Option<String>,
     token_name: Option<String>,
+    feature_flags: Option<FeatureFlags>,
+    maximum_number_of_accounts: Option<usize>,
+    accounts_overflow_trim_quantity: Option<usize>,
 ) {
     print(format!(
         "[ledger] init(): minting account is {}",
@@ -102,6 +113,9 @@ fn init(
         transfer_fee,
         token_symbol,
         token_name,
+        feature_flags,
+        maximum_number_of_accounts,
+        accounts_overflow_trim_quantity,
     );
     match max_message_size_bytes {
         None => {
@@ -196,7 +210,11 @@ async fn send(
         if amount < min_burn_amount {
             panic!("Burns lower than {} are not allowed", min_burn_amount);
         }
-        Operation::Burn { from, amount }
+        Operation::Burn {
+            from,
+            amount,
+            spender: None,
+        }
     } else {
         let transfer_fee = LEDGER.read().unwrap().transfer_fee;
         if fee != transfer_fee {
@@ -207,6 +225,7 @@ async fn send(
         Operation::Transfer {
             from,
             to,
+            spender: None,
             amount,
             fee,
         }
@@ -232,13 +251,29 @@ async fn send(
 
 async fn icrc1_send(
     memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
-    amount: Tokens,
+    amount: Nat,
     fee: Option<Nat>,
     from_account: Account,
-    to: AccountIdentifier,
-    created_at_time: Option<TimeStamp>,
-) -> Result<BlockIndex, icrc_ledger_types::icrc1::transfer::TransferError> {
+    to_account: Account,
+    spender_account: Option<Account>,
+    created_at_time: Option<u64>,
+) -> Result<BlockIndex, CoreTransferError<Tokens>> {
     let from = AccountIdentifier::from(from_account);
+    let to = AccountIdentifier::from(to_account);
+    match memo.as_ref() {
+        Some(memo) if memo.0.len() > MEMO_SIZE_BYTES => trap_with("the memo field is too large"),
+        _ => {}
+    };
+    let amount = match amount.0.to_u64() {
+        Some(n) => Tokens::from_e8s(n),
+        None => {
+            // No one can have so many tokens
+            let balance = account_balance(from);
+            assert!(balance.get_e8s() < amount);
+            return Err(CoreTransferError::InsufficientFunds { balance });
+        }
+    };
+    let created_at_time = created_at_time.map(TimeStamp::from_nanos_since_unix_epoch);
     let minting_acc = LEDGER
         .read()
         .unwrap()
@@ -247,42 +282,49 @@ async fn icrc1_send(
     let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
     let (operation, effective_fee) = if to == minting_acc {
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
-            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadFee {
-                expected_fee: Nat::from(0u64),
+            return Err(CoreTransferError::BadFee {
+                expected_fee: Tokens::ZERO,
             });
         }
         let ledger = LEDGER.read().unwrap();
         let balance = ledger.balances.account_balance(&from);
         let min_burn_amount = ledger.transfer_fee.min(balance);
         if amount < min_burn_amount {
-            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadBurn {
-                min_burn_amount: Nat::from(min_burn_amount.get_e8s()),
-            });
+            return Err(CoreTransferError::BadBurn { min_burn_amount });
         }
         if amount == Tokens::ZERO {
-            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadBurn {
-                min_burn_amount: Nat::from(ledger.transfer_fee.get_e8s()),
+            return Err(CoreTransferError::BadBurn {
+                min_burn_amount: ledger.transfer_fee,
             });
         }
-        (Operation::Burn { from, amount }, Tokens::ZERO)
+        (
+            Operation::Burn {
+                from,
+                amount,
+                spender: spender_account.map(AccountIdentifier::from),
+            },
+            Tokens::ZERO,
+        )
     } else if from == minting_acc {
+        if spender_account.is_some() {
+            trap_with("the minter account cannot delegate mints");
+        }
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
-            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadFee {
-                expected_fee: Nat::from(0u64),
+            return Err(CoreTransferError::BadFee {
+                expected_fee: Tokens::ZERO,
             });
         }
         (Operation::Mint { to, amount }, Tokens::ZERO)
     } else {
         let expected_fee = LEDGER.read().unwrap().transfer_fee;
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
-            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadFee {
-                expected_fee: Nat::from(expected_fee.get_e8s()),
-            });
+            return Err(CoreTransferError::BadFee { expected_fee });
         }
         (
             Operation::Transfer {
                 from,
                 to,
+                spender: spender_account.map(AccountIdentifier::from),
                 amount,
                 fee: expected_fee,
             },
@@ -298,15 +340,7 @@ async fn icrc1_send(
             icrc1_memo: memo.map(|x| x.0),
             created_at_time,
         };
-        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)
-            .map_err(convert_transfer_error)
-            .map_err(|err| {
-                let err: icrc_ledger_types::icrc1::transfer::TransferError = match err.try_into() {
-                    Ok(err) => err,
-                    Err(err) => trap_with(&err),
-                };
-                err
-            })?;
+        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
 
         set_certified_data(&hash.into_bytes());
 
@@ -427,6 +461,7 @@ pub async fn notify(
     let transfer = Operation::Transfer {
         from: expected_from,
         to: expected_to,
+        spender: None,
         amount: Tokens::ZERO,
         fee: max_fee,
     };
@@ -547,10 +582,17 @@ fn icrc1_balance_of(acc: Account) -> Nat {
 
 #[candid_method(query, rename = "icrc1_supported_standards")]
 fn icrc1_supported_standards() -> Vec<StandardRecord> {
-    vec![StandardRecord {
+    let mut standards = vec![StandardRecord {
         name: "ICRC-1".to_string(),
-        url: "https://github.com/dfinity/ICRC-1".to_string(),
-    }]
+        url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
+    }];
+    if LEDGER.read().unwrap().feature_flags.icrc2 {
+        standards.push(StandardRecord {
+            name: "ICRC-2".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
+        });
+    }
+    standards
 }
 
 #[candid_method(query, rename = "icrc1_minting_account")]
@@ -642,6 +684,9 @@ fn canister_init(arg: LedgerCanisterPayload) {
             arg.transfer_fee,
             arg.token_symbol,
             arg.token_name,
+            arg.feature_flags,
+            arg.maximum_number_of_accounts,
+            arg.accounts_overflow_trim_quantity,
         ),
         LedgerCanisterPayload::Upgrade(_) => {
             trap_with("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
@@ -672,6 +717,9 @@ fn main() {
                         arg.transfer_fee,
                         arg.token_symbol,
                         arg.token_name,
+                        arg.feature_flags,
+                        arg.maximum_number_of_accounts,
+                        arg.accounts_overflow_trim_quantity,
                     ),
                     Err(old_err) =>
                     trap_with(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
@@ -826,32 +874,29 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
-    let to = AccountIdentifier::from(arg.to);
     let from_account = Account {
         owner: caller().into(),
         subaccount: arg.from_subaccount,
     };
-    match arg.memo.as_ref() {
-        Some(memo) if memo.0.len() > MEMO_SIZE_BYTES => trap_with("the memo field is too large"),
-        _ => {}
-    };
-    let amount = match arg.amount.0.to_u64() {
-        Some(n) => Tokens::from_e8s(n),
-        None => {
-            // No one can have so many tokens
-            let balance =
-                Nat::from(account_balance(AccountIdentifier::from(from_account)).get_e8s());
-            assert!(balance < arg.amount);
-            return Err(
-                icrc_ledger_types::icrc1::transfer::TransferError::InsufficientFunds { balance },
-            );
-        }
-    };
-    let created_at_time = arg
-        .created_at_time
-        .map(TimeStamp::from_nanos_since_unix_epoch);
     Ok(Nat::from(
-        icrc1_send(arg.memo, amount, arg.fee, from_account, to, created_at_time).await?,
+        icrc1_send(
+            arg.memo,
+            arg.amount,
+            arg.fee,
+            from_account,
+            arg.to,
+            None,
+            arg.created_at_time,
+        )
+        .await
+        .map_err(convert_transfer_error)
+        .map_err(|err| {
+            let err: icrc_ledger_types::icrc1::transfer::TransferError = match err.try_into() {
+                Ok(err) => err,
+                Err(err) => trap_with(&err),
+            };
+            err
+        })?,
     ))
 }
 
@@ -868,6 +913,48 @@ fn icrc1_transfer_candid() {
         }
 
         Ok(icrc1_transfer(arg).await)
+    })
+}
+
+#[candid_method(update, rename = "icrc2_transfer_from")]
+async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let spender_account = Account {
+        owner: caller().into(),
+        subaccount: arg.spender_subaccount,
+    };
+    Ok(Nat::from(
+        icrc1_send(
+            arg.memo,
+            arg.amount,
+            arg.fee,
+            arg.from,
+            arg.to,
+            Some(spender_account),
+            arg.created_at_time,
+        )
+        .await
+        .map_err(convert_transfer_error)
+        .map_err(|err| {
+            let err: TransferFromError = match err.try_into() {
+                Ok(err) => err,
+                Err(err) => trap_with(&err),
+            };
+            err
+        })?,
+    ))
+}
+
+#[export_name = "canister_update icrc2_transfer_from"]
+fn icrc2_transfer_from_candid() {
+    over_async_may_reject(candid_one, |arg: TransferFromArgs| async {
+        if !LEDGER.read().unwrap().can_send(&caller()) {
+            return Err("Anonymous principal cannot transfer tokens on the ledger.".to_string());
+        }
+
+        Ok(icrc2_transfer_from(arg).await)
     })
 }
 
@@ -966,6 +1053,16 @@ fn account_balance_dfx_(args: AccountBalanceArgs) -> Tokens {
 #[export_name = "canister_query account_balance_dfx"]
 fn account_balance_dfx() {
     over(candid_one, account_balance_dfx_);
+}
+
+#[candid_method(query, rename = "account_identifier")]
+fn compute_account_identifier(arg: Account) -> AccountIdBlob {
+    AccountIdentifier::from(arg).to_address()
+}
+
+#[export_name = "canister_query account_identifier"]
+fn compute_account_identifier_candid() {
+    over(candid_one, compute_account_identifier)
 }
 
 #[export_name = "canister_query icrc1_balance_of"]
@@ -1257,6 +1354,133 @@ fn query_encoded_blocks(
 #[export_name = "canister_query query_encoded_blocks"]
 fn query_encoded_blocks_() {
     over(candid_one, query_encoded_blocks)
+}
+
+#[candid_method(update, rename = "icrc2_approve")]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
+
+    let from_account = Account {
+        owner: caller().into(),
+        subaccount: arg.from_subaccount,
+    };
+    let from = AccountIdentifier::from(from_account);
+    if from_account.owner == arg.spender.owner {
+        trap_with("self approval is not allowed");
+    }
+    let spender = AccountIdentifier::from(arg.spender);
+    let minting_acc = LEDGER
+        .read()
+        .unwrap()
+        .minting_account_id
+        .expect("Minting canister id not initialized");
+
+    if from == minting_acc {
+        trap_with("the minting account cannot delegate mints")
+    }
+    match arg.memo.as_ref() {
+        Some(memo) if memo.0.len() > MEMO_SIZE_BYTES => trap_with("the memo field is too large"),
+        _ => {}
+    };
+
+    let allowance = Tokens::from_e8s(arg.amount.0.to_u64().unwrap_or(u64::MAX));
+    let expected_allowance = match arg.expected_allowance {
+        Some(n) => match n.0.to_u64() {
+            Some(n) => Some(Tokens::from_e8s(n)),
+            None => {
+                let current_allowance = LEDGER
+                    .read()
+                    .unwrap()
+                    .approvals
+                    .allowance(&from, &spender, now)
+                    .amount;
+                return Err(ApproveError::AllowanceChanged {
+                    current_allowance: Nat::from(current_allowance.get_e8s()),
+                });
+            }
+        },
+        None => None,
+    };
+
+    let expected_fee = LEDGER.read().unwrap().transfer_fee;
+    if arg.fee.is_some() && arg.fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
+        return Err(ApproveError::BadFee {
+            expected_fee: Nat::from(expected_fee.get_e8s()),
+        });
+    }
+
+    let block_index = {
+        let mut ledger = LEDGER.write().unwrap();
+        let tx = Transaction {
+            operation: Operation::Approve {
+                from,
+                spender,
+                allowance,
+                expected_allowance,
+                expires_at: arg.expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                fee: expected_fee,
+            },
+            created_at_time: arg
+                .created_at_time
+                .map(TimeStamp::from_nanos_since_unix_epoch),
+            memo: Memo(0),
+            icrc1_memo: arg.memo.map(|x| x.0),
+        };
+        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, expected_fee)
+            .map_err(convert_transfer_error)
+            .map_err(|err| {
+                let err: ApproveError = match err.try_into() {
+                    Ok(err) => err,
+                    Err(err) => trap_with(&err),
+                };
+                err
+            })?;
+
+        set_certified_data(&hash.into_bytes());
+
+        block_index
+    };
+
+    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
+    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    Ok(Nat::from(block_index))
+}
+
+#[export_name = "canister_update icrc2_approve"]
+fn icrc2_approve_candid() {
+    over_async_may_reject(candid_one, |arg: ApproveArgs| async {
+        if !LEDGER.read().unwrap().can_send(&caller()) {
+            return Err(
+                "Anonymous principal cannot approve token transfers on the ledger.".to_string(),
+            );
+        }
+
+        Ok(icrc2_approve(arg).await)
+    })
+}
+
+#[candid_method(query, rename = "icrc2_allowance")]
+fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
+    let ledger = LEDGER.read().unwrap();
+    let account = AccountIdentifier::from(arg.account);
+    let spender = AccountIdentifier::from(arg.spender);
+    let allowance = ledger.approvals.allowance(&account, &spender, now);
+    Allowance {
+        allowance: Nat::from(allowance.amount.get_e8s()),
+        expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
+    }
+}
+
+#[export_name = "canister_query icrc2_allowance"]
+fn icrc2_allowance_candid() {
+    over(candid_one, icrc2_allowance)
 }
 
 candid::export_service!();

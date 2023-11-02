@@ -11,7 +11,7 @@
 //! If the data behind the `Arc` exhibits interior mutability (e.g. a `Mutex`),
 //! then serializing the `Arc` will create a new value which is not kept in sync
 //! with the original value. And serializing any value which contains multiple
-//! references to that `Arc` will result in multple copies of the `Mutex` which
+//! references to that `Arc` will result in multiple copies of the `Mutex` which
 //! are not kept in sync with each other.
 //!
 //! Even if the data in the `Arc` is read-only, there may be performance issues

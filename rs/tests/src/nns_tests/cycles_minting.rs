@@ -345,9 +345,14 @@ pub fn test(env: TestEnv) {
         let txn = block.transaction();
 
         match txn.operation {
-            Operation::Burn { from, amount } => {
+            Operation::Burn {
+                from,
+                amount,
+                spender,
+            } => {
                 assert_eq!(tiny_amount, amount);
                 assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
+                assert_eq!(spender, None);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -369,9 +374,14 @@ pub fn test(env: TestEnv) {
             let txn = block.transaction();
 
             match txn.operation {
-                Operation::Burn { from, amount } => {
+                Operation::Burn {
+                    from,
+                    amount,
+                    spender,
+                } => {
                     assert_eq!(tiny_amount, amount);
                     assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
+                    assert_eq!(spender, None);
                 }
                 _ => panic!("unexpected block {:?}", txn),
             }
@@ -405,9 +415,14 @@ pub fn test(env: TestEnv) {
         let txn = block.transaction();
 
         match txn.operation {
-            Operation::Burn { from, amount } => {
+            Operation::Burn {
+                from,
+                amount,
+                spender,
+            } => {
                 assert_eq!(amount, initial_amount);
                 assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
+                assert_eq!(spender, None);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -531,9 +546,14 @@ pub fn test(env: TestEnv) {
         let txn = block.transaction();
 
         match txn.operation {
-            Operation::Burn { from, amount } => {
+            Operation::Burn {
+                from,
+                amount,
+                spender,
+            } => {
                 assert_eq!(amount, topup3);
                 assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
+                assert_eq!(spender, None);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -550,9 +570,14 @@ pub fn test(env: TestEnv) {
             let txn = block.transaction();
 
             match txn.operation {
-                Operation::Burn { from, amount } => {
+                Operation::Burn {
+                    from,
+                    amount,
+                    spender,
+                } => {
                     assert_eq!(amount, initial_amount);
                     assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
+                    assert_eq!(spender, None);
                 }
                 _ => panic!("unexpected block {:?}", txn),
             }
@@ -605,9 +630,14 @@ pub fn test(env: TestEnv) {
             let txn = block.transaction();
 
             match txn.operation {
-                Operation::Burn { from, amount } => {
+                Operation::Burn {
+                    from,
+                    amount,
+                    spender,
+                } => {
                     assert_eq!(amount, top_up_amount);
                     assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
+                    assert_eq!(spender, None);
                 }
                 _ => panic!("unexpected block {:?}", txn),
             }
@@ -1065,10 +1095,15 @@ impl TestAgent {
         let txn = block.transaction();
 
         match txn.operation {
-            Operation::Burn { from, amount } => {
+            Operation::Burn {
+                from,
+                amount,
+                spender,
+            } => {
                 assert_eq!(refund_fee, amount);
                 let balance = self.get_balance(from).await;
                 assert_eq!(balance, Tokens::ZERO, "All funds should have been burned");
+                assert_eq!(spender, None);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -1239,6 +1274,7 @@ impl UserHandle {
             block_index: block,
             controller: *controller_id,
             subnet_type,
+            settings: None,
         };
 
         let result: Result<CanisterId, NotifyError> = self

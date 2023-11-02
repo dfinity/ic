@@ -14,7 +14,7 @@ use ic_types::Cycles;
 pub mod common;
 
 #[test]
-fn list_deployed_snses_lists_created_sns_instances() {
+fn list_deployed_snses_lists_created_sns_instances_legacy() {
     let wasm = Project::cargo_bin_maybe_from_env("sns-wasm-canister", &[]);
 
     // The canister id the wallet canister will have.
@@ -34,7 +34,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
         &machine,
         wallet_canister,
         SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_values_for_testing(),
+        SnsInitPayload::with_valid_legacy_values_for_testing(),
         EXPECTED_SNS_CREATION_FEE,
     )
     .canisters
@@ -44,7 +44,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
         &machine,
         wallet_canister,
         SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_values_for_testing(),
+        SnsInitPayload::with_valid_legacy_values_for_testing(),
         EXPECTED_SNS_CREATION_FEE,
     )
     .canisters

@@ -1,13 +1,6 @@
 syntax = "proto3";
 package registry.node.v1;
 
-enum Protocol {
-  PROTOCOL_UNSPECIFIED = 0;
-  PROTOCOL_HTTP1 = 1;
-  PROTOCOL_HTTP1_TLS_1_3 = 2;
-  PROTOCOL_P2P1_TLS_1_3 = 3;
-}
-
 // A connection endpoint.
 message ConnectionEndpoint {
   // The IP address. Senders SHOULD use dotted-quad notation for IPv4 addresses
@@ -20,15 +13,13 @@ message ConnectionEndpoint {
   string ip_addr = 1;
   uint32 port = 2;
 
-  // Protocol that is used on this endpoint. If PROTOCOL_UNSPECIFIED then
-  // code should default to PROTOCOL_HTTP1 for backwards compatability.
-  Protocol protocol = 4;
+  reserved 4;
 }
 
 message FlowEndpoint {
   reserved 1;
   reserved "flow_tag";
-  
+
   // The IP/port for this flow.
   ConnectionEndpoint endpoint = 2;
 }
@@ -61,7 +52,7 @@ message NodeRecord {
   reserved "public_api";
   reserved "private_api";
   reserved "prometheus_metrics";
-  reserved "xnet_api";  
+  reserved "xnet_api";
 
   // The id of the node operator that added this node.
   bytes node_operator_id = 15;

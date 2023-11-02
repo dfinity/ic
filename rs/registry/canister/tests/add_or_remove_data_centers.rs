@@ -222,7 +222,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         )
         .await;
 
-        assert_eq!(&dc.id, "AN1");
+        assert_eq!(&dc.id, "an1"); // id converted to lowercase
         assert_eq!(&dc.region, "BEL");
         assert_eq!(&dc.owner, "Alice");
         assert_eq!(
@@ -277,7 +277,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         .await;
 
         // original values are still there
-        assert_eq!(&dc.id, "AN1");
+        assert_eq!(&dc.id, "an1"); // id converted to lowercase
         assert_eq!(&dc.region, "BEL");
         assert_eq!(&dc.owner, "Alice");
         assert_eq!(
@@ -340,7 +340,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         )
         .await;
         // new values are there
-        assert_eq!(&dc.id, "AN1");
+        assert_eq!(&dc.id, "an1"); // id converted to lowercase
         assert_eq!(&dc.region, "Not BEL");
         assert_eq!(&dc.owner, "Bob");
         assert_eq!(

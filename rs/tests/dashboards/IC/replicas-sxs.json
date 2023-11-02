@@ -155,7 +155,7 @@
         {
           "targetBlank": true,
           "title": "IC Progress Clock",
-          "url": "https://grafana.dfinity.systems/d/q9w4oZWGz/ic-progress-clock?${__all_variables}&${__url_time_range}"
+          "url": "https://grafana.testnet.dfinity.network/d/q9w4oZWGz/ic-progress-clock?${__all_variables}&${__url_time_range}"
         }
       ],
       "nullPointMode": "null",
@@ -320,7 +320,7 @@
         {
           "targetBlank": true,
           "title": "XNet",
-          "url": "https://grafana.dfinity.systems/d/oHBzMeMMk/xnet?${__all_variables}&${__url_time_range}"
+          "url": "https://grafana.testnet.dfinity.network/d/oHBzMeMMk/xnet?${__all_variables}&${__url_time_range}"
         }
       ],
       "nullPointMode": "null as zero",
@@ -436,7 +436,7 @@
         {
           "targetBlank": true,
           "title": "XNet",
-          "url": "https://grafana.dfinity.systems/d/oHBzMeMMk/xnet?${__all_variables}&${__url_time_range}"
+          "url": "https://grafana.testnet.dfinity.network/d/oHBzMeMMk/xnet?${__all_variables}&${__url_time_range}"
         }
       ],
       "nullPointMode": "null as zero",
@@ -658,7 +658,7 @@
         {
           "targetBlank": true,
           "title": "HTTP (Replica)",
-          "url": "https://grafana.dfinity.systems/d/6ItIcdfWk/http-replica?${__all_variables}&${__url_time_range}"
+          "url": "https://grafana.testnet.dfinity.network/d/6ItIcdfWk/http-replica?${__all_variables}&${__url_time_range}"
         }
       ],
       "nullPointMode": "null as zero",
@@ -766,7 +766,7 @@
         {
           "targetBlank": true,
           "title": "IC Progress Clock",
-          "url": "https://grafana.dfinity.systems/d/q9w4oZWGz/ic-progress-clock?${__all_variables}&${__url_time_range}"
+          "url": "https://grafana.testnet.dfinity.network/d/q9w4oZWGz/ic-progress-clock?${__all_variables}&${__url_time_range}"
         }
       ],
       "nullPointMode": "null as zero",
@@ -1316,7 +1316,7 @@
         {
           "targetBlank": true,
           "title": "Resources",
-          "url": "https://grafana.dfinity.systems/d/yHCK_IFMz/resources?${__all_variables}&${__url_time_range}"
+          "url": "https://grafana.testnet.dfinity.network/d/yHCK_IFMz/resources?${__all_variables}&${__url_time_range}"
         }
       ],
       "nullPointMode": "null",
@@ -1474,7 +1474,7 @@
         {
           "targetBlank": true,
           "title": "Resources",
-          "url": "https://grafana.dfinity.systems/d/yHCK_IFMz/resources?${__all_variables}&${__url_time_range}"
+          "url": "https://grafana.testnet.dfinity.network/d/yHCK_IFMz/resources?${__all_variables}&${__url_time_range}"
         }
       ],
       "nullPointMode": "null as zero",
@@ -1687,7 +1687,7 @@
         {
           "targetBlank": true,
           "title": "Resources",
-          "url": "https://grafana.dfinity.systems/d/yHCK_IFMz/resources?${__all_variables}&${__url_time_range}"
+          "url": "https://grafana.testnet.dfinity.network/d/yHCK_IFMz/resources?${__all_variables}&${__url_time_range}"
         }
       ],
       "nullPointMode": "null",

@@ -9,12 +9,12 @@ use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemS
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::messages::CanisterMessage;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::TotalCanisterQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    messages::{Ingress, Request, RequestOrResponse, Response},
+    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
     AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
     PrincipalId, Time,
@@ -72,6 +72,16 @@ pub struct SchedulerState {
     /// needed to calculate how much time should be considered when charging
     /// occurs.
     pub time_of_last_allocation_charge: Time,
+
+    /// Query statistics.
+    ///
+    /// As queries are executed in non-deterministic fashion state modifications are
+    /// disallowed during the query call.
+    /// Instead, each node collects statistics about query execution locally and periodically,
+    /// once per "epoch", sends those to other machines as part of consensus blocks.
+    /// At the end of an "epoch", each node deterministically aggregates all those partial
+    /// query statistics received from consensus blocks and mutates these values.
+    pub total_query_stats: TotalCanisterQueryStats,
 }
 
 impl Default for SchedulerState {
@@ -85,6 +95,7 @@ impl Default for SchedulerState {
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
             time_of_last_allocation_charge: UNIX_EPOCH,
+            total_query_stats: TotalCanisterQueryStats::default(),
         }
     }
 }
@@ -386,13 +397,12 @@ impl CanisterState {
     /// This only includes execution memory (heap, stable, globals, Wasm)
     /// and canister history memory.
     pub fn memory_usage(&self) -> NumBytes {
-        self.raw_memory_usage() + self.canister_history_memory_usage()
+        self.execution_memory_usage() + self.canister_history_memory_usage()
     }
 
-    /// Returns the amount of raw memory currently used by the canister in bytes.
-    ///
-    /// This only includes execution memory (heap, stable, globals, Wasm).
-    pub(crate) fn raw_memory_usage(&self) -> NumBytes {
+    /// Returns the amount of execution memory (heap, stable, globals, Wasm)
+    /// currently used by the canister in bytes.
+    pub fn execution_memory_usage(&self) -> NumBytes {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.memory_usage())
@@ -490,6 +500,54 @@ impl CanisterState {
     pub fn inc_next_scheduled_method(&mut self) {
         if let Some(execution_state) = self.execution_state.as_mut() {
             execution_state.next_scheduled_method.inc();
+        }
+    }
+
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    pub fn drop_in_progress_management_calls_after_split(&mut self) {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        let CanisterState {
+            ref mut system_state,
+            execution_state: _,
+            scheduler_state: _,
+        } = self;
+
+        // Remove aborted install code task.
+        system_state.task_queue.retain(|task| match task {
+            ExecutionTask::AbortedInstallCode { .. } => false,
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => true,
+        });
+
+        // Roll back `Stopping` canister states to `Running` and drop all their stop
+        // contexts (the calls corresponding to the dropped stop contexts will be
+        // rejected by subnet A').
+        match &system_state.status {
+            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
+            CanisterStatus::Stopping {
+                call_context_manager,
+                ..
+            } => {
+                system_state.status = CanisterStatus::Running {
+                    call_context_manager: call_context_manager.clone(),
+                }
+            }
         }
     }
 }

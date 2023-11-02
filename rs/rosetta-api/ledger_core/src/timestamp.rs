@@ -47,7 +47,11 @@ impl Add<Duration> for TimeStamp {
     type Output = Self;
 
     fn add(self, d: Duration) -> Self {
-        (SystemTime::from(self) + d).into()
+        Self {
+            timestamp_nanos: self
+                .timestamp_nanos
+                .saturating_add(d.as_nanos().try_into().unwrap()),
+        }
     }
 }
 
@@ -55,6 +59,10 @@ impl Sub<Duration> for TimeStamp {
     type Output = Self;
 
     fn sub(self, d: Duration) -> Self {
-        (SystemTime::from(self) - d).into()
+        Self {
+            timestamp_nanos: self
+                .timestamp_nanos
+                .saturating_sub(d.as_nanos().try_into().unwrap()),
+        }
     }
 }

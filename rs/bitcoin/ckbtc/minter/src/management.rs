@@ -6,7 +6,7 @@ use crate::ECDSAPublicKey;
 use candid::{CandidType, Principal};
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, SendTransactionRequest, Utxo, UtxosFilterInRequest,
+    MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
@@ -140,8 +140,9 @@ pub async fn get_utxos(
     min_confirmations: u32,
     source: CallSource,
 ) -> Result<GetUtxosResponse, CallError> {
-    // NB. The prices are 10B on the mainnet and 4B on the testnet:
-    // https://internetcomputer.org/docs/current/developer-docs/deploy/computation-and-storage-costs
+    // NB. The minimum number of cycles that need to be sent with the call is 10B (4B) for
+    // Bitcoin mainnet (Bitcoin testnet):
+    // https://internetcomputer.org/docs/current/developer-docs/integrations/bitcoin/bitcoin-how-it-works#api-fees--pricing
     let get_utxos_cost_cycles = match network {
         Network::Mainnet => 10_000_000_000,
         Network::Testnet | Network::Regtest => 4_000_000_000,
@@ -200,7 +201,8 @@ pub async fn get_utxos(
 pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
     let cost_cycles = match network {
         Network::Mainnet => 100_000_000,
-        Network::Testnet | Network::Regtest => 100_000_000,
+        Network::Testnet => 40_000_000,
+        Network::Regtest => 0,
     };
 
     call(
@@ -218,29 +220,27 @@ pub async fn send_transaction(
     transaction: &tx::SignedTransaction,
     network: Network,
 ) -> Result<(), CallError> {
-    let send_tx_base_cost_cycles = match network {
-        Network::Mainnet => 5_000_000_000,
-        Network::Testnet | Network::Regtest => 2_000_000_000,
-    };
-    let send_tx_cost_per_byte_cycles = match network {
-        Network::Mainnet => 20_000_000,
-        Network::Testnet | Network::Regtest => 8_000_000,
+    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
+
+    let cdk_network = match network {
+        Network::Mainnet => BitcoinNetwork::Mainnet,
+        Network::Testnet => BitcoinNetwork::Testnet,
+        Network::Regtest => BitcoinNetwork::Regtest,
     };
 
     let tx_bytes = transaction.serialize();
 
-    let transaction_cost_cycles =
-        send_tx_base_cost_cycles + (tx_bytes.len() as u64) * send_tx_cost_per_byte_cycles;
-
-    call(
-        "bitcoin_send_transaction",
-        transaction_cost_cycles,
-        &SendTransactionRequest {
+    ic_cdk::api::management_canister::bitcoin::bitcoin_send_transaction(
+        ic_cdk::api::management_canister::bitcoin::SendTransactionRequest {
             transaction: tx_bytes,
-            network: network.into(),
+            network: cdk_network,
         },
     )
     .await
+    .map_err(|(code, msg)| CallError {
+        method: "bitcoin_send_transaction".to_string(),
+        reason: Reason::from_reject(code, msg),
+    })
 }
 
 /// Fetches the ECDSA public key of the canister.
@@ -304,7 +304,7 @@ pub async fn fetch_utxo_alerts(
         "fetch_utxo_alerts",
         (DepositRequest {
             caller,
-            txid: utxo.outpoint.txid,
+            txid: utxo.outpoint.txid.into(),
             vout: utxo.outpoint.vout,
         },),
     )

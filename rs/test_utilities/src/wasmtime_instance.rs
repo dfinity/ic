@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use ic_base_types::NumBytes;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
@@ -106,9 +107,7 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn try_build(
-        self,
-    ) -> Result<WasmtimeInstance<SystemApiImpl>, (HypervisorError, SystemApiImpl)> {
+    pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
         let wasm = if !self.wat.is_empty() {
@@ -154,8 +153,7 @@ impl WasmtimeInstanceBuilder {
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,
-                subnet_memory_capacity: NumBytes::new(subnet_memory_capacity as u64),
-                subnet_memory_threshold: NumBytes::new(subnet_memory_capacity as u64),
+                subnet_memory_saturation: ResourceSaturation::default(),
             },
             SubnetAvailableMemory::new(
                 subnet_memory_capacity,
@@ -163,6 +161,7 @@ impl WasmtimeInstanceBuilder {
                 subnet_memory_capacity,
             ),
             embedder.config().feature_flags.wasm_native_stable_memory,
+            embedder.config().max_sum_exported_function_name_lengths,
             Memory::new_for_testing(),
             Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,
@@ -182,16 +181,16 @@ impl WasmtimeInstanceBuilder {
                     ic_replicated_state::NumWasmPages::from(0),
                 ),
                 ModificationTracking::Track,
-                api,
+                Some(api),
             )
             .map(|mut result| {
                 result.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
                 result
             });
-        instance
+        instance.map_err(|(h, s)| (h, s.unwrap()))
     }
 
-    pub fn build(self) -> WasmtimeInstance<SystemApiImpl> {
+    pub fn build(self) -> WasmtimeInstance {
         let instance = self.try_build();
         instance
             .map_err(|r| r.0)

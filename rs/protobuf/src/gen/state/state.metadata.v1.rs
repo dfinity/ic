@@ -213,21 +213,83 @@ pub struct BitcoinSendTransactionInternalContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<BitcoinSendTransactionInternalContext>,
 }
+/// TODO(EXC-1454): Deprecated.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InstallCodeContext {
+pub struct InstallCodeRequest {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
     #[prost(message, optional, tag = "2")]
     pub time: ::core::option::Option<Time>,
+    #[prost(message, optional, tag = "3")]
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InstallCodeContextTree {
+pub struct InstallCodeCall {
+    #[prost(message, optional, tag = "3")]
+    pub time: ::core::option::Option<Time>,
+    #[prost(message, optional, tag = "4")]
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(oneof = "install_code_call::CanisterCall", tags = "1, 2")]
+    pub canister_call: ::core::option::Option<install_code_call::CanisterCall>,
+}
+/// Nested message and enum types in `InstallCodeCall`.
+pub mod install_code_call {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum CanisterCall {
+        #[prost(message, tag = "1")]
+        Request(super::super::super::queues::v1::Request),
+        #[prost(message, tag = "2")]
+        Ingress(super::super::super::ingress::v1::Ingress),
+    }
+}
+/// TODO(EXC-1454): Deprecated.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCodeRequestTree {
     #[prost(uint64, tag = "1")]
-    pub callback_id: u64,
+    pub request_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<InstallCodeContext>,
+    pub request: ::core::option::Option<InstallCodeRequest>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCodeCallTree {
+    #[prost(uint64, tag = "1")]
+    pub call_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub call: ::core::option::Option<InstallCodeCall>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StopCanisterCall {
+    #[prost(message, optional, tag = "3")]
+    pub time: ::core::option::Option<Time>,
+    #[prost(message, optional, tag = "4")]
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(oneof = "stop_canister_call::CanisterCall", tags = "1, 2")]
+    pub canister_call: ::core::option::Option<stop_canister_call::CanisterCall>,
+}
+/// Nested message and enum types in `StopCanisterCall`.
+pub mod stop_canister_call {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum CanisterCall {
+        #[prost(message, tag = "1")]
+        Request(super::super::super::queues::v1::Request),
+        #[prost(message, tag = "2")]
+        Ingress(super::super::super::ingress::v1::Ingress),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StopCanisterCallTree {
+    #[prost(uint64, tag = "1")]
+    pub call_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub call: ::core::option::Option<StopCanisterCall>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -247,8 +309,17 @@ pub struct SubnetCallContextManager {
     #[prost(message, repeated, tag = "9")]
     pub bitcoin_send_transaction_internal_contexts:
         ::prost::alloc::vec::Vec<BitcoinSendTransactionInternalContextTree>,
-    #[prost(message, repeated, tag = "10")]
-    pub install_code_contexts: ::prost::alloc::vec::Vec<InstallCodeContextTree>,
+    /// TODO(EXC-1454): Deprecated.
+    #[prost(message, repeated, tag = "11")]
+    pub install_code_requests: ::prost::alloc::vec::Vec<InstallCodeRequestTree>,
+    #[prost(uint64, tag = "12")]
+    pub next_install_code_call_id: u64,
+    #[prost(message, repeated, tag = "13")]
+    pub install_code_calls: ::prost::alloc::vec::Vec<InstallCodeCallTree>,
+    #[prost(uint64, tag = "14")]
+    pub next_stop_canister_call_id: u64,
+    #[prost(message, repeated, tag = "15")]
+    pub stop_canister_calls: ::prost::alloc::vec::Vec<StopCanisterCallTree>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -267,6 +338,12 @@ pub struct SubnetMetrics {
     #[prost(message, repeated, tag = "5")]
     pub consumed_cycles_by_use_case:
         ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
+    #[prost(uint64, optional, tag = "6")]
+    pub num_canisters: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "9")]
+    pub canister_state_bytes: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "10")]
+    pub update_transactions_total: ::core::option::Option<u64>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -275,6 +352,14 @@ pub struct BitcoinGetSuccessorsFollowUpResponses {
     pub sender: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub payloads: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodePublicKeyEntry {
+    #[prost(message, optional, tag = "1")]
+    pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub public_key: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -322,6 +407,8 @@ pub struct SystemMetadata {
     #[prost(message, repeated, tag = "18")]
     pub bitcoin_get_successors_follow_up_responses:
         ::prost::alloc::vec::Vec<BitcoinGetSuccessorsFollowUpResponses>,
+    #[prost(message, repeated, tag = "19")]
+    pub node_public_keys: ::prost::alloc::vec::Vec<NodePublicKeyEntry>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -337,7 +424,6 @@ pub struct SplitFrom {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum HttpMethod {
@@ -357,6 +443,16 @@ impl HttpMethod {
             HttpMethod::Get => "HTTP_METHOD_GET",
             HttpMethod::Post => "HTTP_METHOD_POST",
             HttpMethod::Head => "HTTP_METHOD_HEAD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HTTP_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "HTTP_METHOD_GET" => Some(Self::Get),
+            "HTTP_METHOD_POST" => Some(Self::Post),
+            "HTTP_METHOD_HEAD" => Some(Self::Head),
+            _ => None,
         }
     }
 }

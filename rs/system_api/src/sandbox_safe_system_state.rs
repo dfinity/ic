@@ -3,12 +3,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{routing::ResolveDestinationError, ApiType};
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CreateCanisterArgs, InstallCodeArgs, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, IC_00,
+    CreateCanisterArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
@@ -59,6 +60,10 @@ pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     pub(super) callback_updates: Vec<CallbackUpdate>,
     cycles_balance_change: CyclesBalanceChange,
+    // The cycles that move from the main balance to the reserved balance.
+    // Invariant: `cycles_balance_change` contains
+    // `CyclesBalanceChange::Removed(reserved_cycles)`.
+    reserved_cycles: Cycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
     call_context_balance_taken: BTreeMap<CallContextId, Cycles>,
     request_slots_used: BTreeMap<CanisterId, usize>,
@@ -72,6 +77,7 @@ impl Default for SystemStateChanges {
             new_certified_data: None,
             callback_updates: vec![],
             cycles_balance_change: CyclesBalanceChange::zero(),
+            reserved_cycles: Cycles::zero(),
             consumed_cycles_by_use_case: BTreeMap::new(),
             call_context_balance_taken: BTreeMap::new(),
             request_slots_used: BTreeMap::new(),
@@ -85,22 +91,32 @@ impl SystemStateChanges {
     /// Checks that no cycles were created during the execution of this message
     /// (unless the canister is the cycles minting canister).
     fn validate_cycle_change(&self, is_cmc_canister: bool) -> HypervisorResult<()> {
-        let mut universal_cycle_change = self.cycles_balance_change;
-        for call_context_balance_taken in self.call_context_balance_taken.values() {
-            universal_cycle_change =
-                universal_cycle_change + CyclesBalanceChange::removed(*call_context_balance_taken);
+        let mut expected_change = CyclesBalanceChange::zero();
+
+        for accepted in self.call_context_balance_taken.values() {
+            expected_change = expected_change + CyclesBalanceChange::added(*accepted);
         }
+
         for req in self.requests.iter() {
-            universal_cycle_change =
-                universal_cycle_change + CyclesBalanceChange::added(req.payment);
+            expected_change = expected_change + CyclesBalanceChange::removed(req.payment);
         }
-        if is_cmc_canister || universal_cycle_change <= CyclesBalanceChange::zero() {
+
+        for (_use_case, amount) in self.consumed_cycles_by_use_case.iter() {
+            expected_change = expected_change + CyclesBalanceChange::removed(*amount);
+        }
+
+        expected_change = expected_change + CyclesBalanceChange::removed(self.reserved_cycles);
+
+        // If the canister is not the cycles minting canister, then the balance
+        // change coming from the Wasm execution must match the expected balance
+        // change that we just computed.
+        if is_cmc_canister || self.cycles_balance_change == expected_change {
             Ok(())
         } else {
             Err(HypervisorError::WasmEngineError(
                 WasmEngineError::FailedToApplySystemChanges(format!(
-                    "Invalid cycle change: {:?}",
-                    universal_cycle_change
+                    "Invalid cycle change: expected {:?}, got {:?}",
+                    expected_change, self.cycles_balance_change
                 )),
             ))
         }
@@ -131,13 +147,13 @@ impl SystemStateChanges {
             msg.method_name,
             err
         );
-        let reject_context = RejectContext {
-            code: RejectCode::DestinationInvalid,
-            message: format!(
+        let reject_context = RejectContext::new(
+            RejectCode::DestinationInvalid,
+            format!(
                 "Unable to route management canister request {}: {:?}",
                 msg.method_name, err
             ),
-        };
+        );
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -159,10 +175,7 @@ impl SystemStateChanges {
             err
         );
 
-        let reject_context = RejectContext {
-            code: RejectCode::CanisterError,
-            message: err.to_string(),
-        };
+        let reject_context = RejectContext::new(RejectCode::CanisterError, err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -196,14 +209,11 @@ impl SystemStateChanges {
         let method = Ic00Method::from_str(&msg.method_name);
         let payload = msg.method_payload();
         match method {
-            Ok(Ic00Method::InstallCode) => {
-                InstallCodeArgs::decode(payload).map(|record| record.get_sender_canister_version())
-            }
+            Ok(Ic00Method::InstallCode) => InstallCodeArgsV2::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::CreateCanister) => CreateCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::UpdateSettings) => UpdateSettingsArgs::decode(payload)
-                .map(|record| record.get_sender_canister_version()),
-            Ok(Ic00Method::SetController) => SetControllerArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::UninstallCode) => UninstallCodeArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
@@ -229,7 +239,11 @@ impl SystemStateChanges {
             | Ok(Ic00Method::BitcoinGetBalance)
             | Ok(Ic00Method::BitcoinGetUtxos)
             | Ok(Ic00Method::BitcoinSendTransaction)
-            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => Ok(None),
+            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
+            | Ok(Ic00Method::UploadChunk)
+            | Ok(Ic00Method::StoredChunks)
+            | Ok(Ic00Method::DeleteChunks)
+            | Ok(Ic00Method::ClearChunkStore) => Ok(None),
             Err(_) => Err(UserError::new(
                 ErrorCode::CanisterMethodNotFound,
                 format!("Management canister has no method '{}'", msg.method_name),
@@ -268,10 +282,7 @@ impl SystemStateChanges {
     ) -> HypervisorResult<()> {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
-        let consumed_cycles = self.apply_balance_changes(system_state);
-
-        // Observe consumed cycles.
-        system_state.observe_consumed_cycles(consumed_cycles);
+        self.apply_balance_changes(system_state);
 
         // Verify we don't accept more cycles than are available from each call
         // context and update each call context balance
@@ -279,7 +290,7 @@ impl SystemStateChanges {
             let own_canister_id = system_state.canister_id;
             let call_context_manager = system_state
                 .call_context_manager_mut()
-                .ok_or_else(|| Self::error("Call context manager does not exists"))?;
+                .ok_or_else(|| Self::error("Call context manager does not exist"))?;
             for (context_id, amount_taken) in &self.call_context_balance_taken {
                 let call_context = call_context_manager
                     .call_context_mut(*context_id)
@@ -388,7 +399,7 @@ impl SystemStateChanges {
         for update in self.callback_updates {
             let call_context_manager = system_state
                 .call_context_manager_mut()
-                .ok_or_else(|| Self::error("Call context manager does not exists"))?;
+                .ok_or_else(|| Self::error("Call context manager does not exist"))?;
             match update {
                 CallbackUpdate::Register(expected_id, mut callback) => {
                     if let Some(receiver) = callback_changes.get(&expected_id) {
@@ -426,42 +437,53 @@ impl SystemStateChanges {
     }
 
     /// Applies the balance change to the given state.
-    pub fn apply_balance_changes(&self, state: &mut SystemState) -> Cycles {
-        let balance_before = state.balance();
-        let mut removed_consumed_cycles = Cycles::new(0);
-        for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
-            state.remove_cycles(*amount, *use_case);
-            removed_consumed_cycles += *amount;
+    pub fn apply_balance_changes(&self, state: &mut SystemState) {
+        let initial_balance = state.balance();
+
+        // `self.cycles_balance_change` consists of:
+        // - CyclesBalanceChange::added(cycles_accepted_from_the_call_context)
+        // - CyclesBalanceChange::remove(cycles_sent_via_outgoing_calls)
+        // - CyclesBalanceChange::remove(cycles_consumed_by_various_fees)
+        // - CyclesBalanceChange::remove(reserved_cycles)
+        //
+        // The latter two cases are applied with higher-level helpers, so we
+        // need to compute the balance change with those cases excluded.
+        let mut adjusted_balance_change = self.cycles_balance_change;
+        for (_use_case, amount) in self.consumed_cycles_by_use_case.iter() {
+            adjusted_balance_change = adjusted_balance_change + CyclesBalanceChange::added(*amount)
         }
 
-        // The final balance of the canister should reflect `cycles_balance_change`.
-        // Since we removed `removed_consumed_cycles` above, we need to add it back
-        // to the `cycles_balance_change` to make sure the final balance of the canister is correct.
-        match self.cycles_balance_change {
+        // Exclude the reserved cycles.
+        adjusted_balance_change =
+            adjusted_balance_change + CyclesBalanceChange::added(self.reserved_cycles);
+
+        // Apply the main cycles balance change without the consumed and reserved cycles.
+        match adjusted_balance_change {
             CyclesBalanceChange::Added(added) => {
-                // When 'cycles_balance_change' is positive we should add 'removed_consumed_cycles'.
-                state.add_cycles(added + removed_consumed_cycles, CyclesUseCase::NonConsumed);
-                debug_assert_eq!(balance_before + added, state.balance());
+                state.add_cycles(added, CyclesUseCase::NonConsumed)
             }
             CyclesBalanceChange::Removed(removed) => {
-                // When 'cycles_balance_change' is negative we are adding 'removed_consumed_cycles'
-                // but additionaly we should take care about the sign of the sum, which will
-                // determine whether we are adding or removing cycles from the balance.
-                if removed_consumed_cycles > removed {
-                    state.add_cycles(
-                        removed_consumed_cycles - removed,
-                        CyclesUseCase::NonConsumed,
-                    );
-                } else {
-                    state.remove_cycles(
-                        removed - removed_consumed_cycles,
-                        CyclesUseCase::NonConsumed,
-                    );
-                }
-                debug_assert_eq!(balance_before - removed, state.balance());
+                state.remove_cycles(removed, CyclesUseCase::NonConsumed)
             }
         }
-        removed_consumed_cycles
+
+        // Apply the consumed cycles with the use case metrics recording.
+        for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
+            state.remove_cycles(*amount, *use_case);
+        }
+
+        // Apply the reserved cycles. This must succeed because the cycle
+        // changes were validated. If it doesn't succeed then, it is better to
+        // crash here to avoid making the cycle balance incorrect.
+        state.reserve_cycles(self.reserved_cycles).unwrap();
+
+        // All changes applied above should be equivalent to simply applying
+        // `self.cycles_balance_change` to the initial balance.
+        let expected_balance = match self.cycles_balance_change {
+            CyclesBalanceChange::Added(added) => initial_balance + added,
+            CyclesBalanceChange::Removed(removed) => initial_balance - removed,
+        };
+        assert_eq!(state.balance(), expected_balance);
     }
 
     fn add_consumed_cycles(&mut self, consumed_cycles: &[(CyclesUseCase, Cycles)]) {
@@ -503,6 +525,8 @@ pub struct SandboxSafeSystemState {
     memory_allocation: MemoryAllocation,
     compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
+    initial_reserved_balance: Cycles,
+    reserved_balance_limit: Option<Cycles>,
     call_context_balances: BTreeMap<CallContextId, Cycles>,
     cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
@@ -528,6 +552,8 @@ impl SandboxSafeSystemState {
         memory_allocation: MemoryAllocation,
         compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
+        initial_reserved_balance: Cycles,
+        reserved_balance_limit: Option<Cycles>,
         call_context_balances: BTreeMap<CallContextId, Cycles>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
@@ -551,6 +577,8 @@ impl SandboxSafeSystemState {
             compute_allocation,
             system_state_changes: SystemStateChanges::default(),
             initial_cycles_balance,
+            initial_reserved_balance,
+            reserved_balance_limit,
             call_context_balances,
             cycles_account_manager,
             next_callback_id,
@@ -609,6 +637,8 @@ impl SandboxSafeSystemState {
             system_state.memory_allocation,
             compute_allocation,
             system_state.balance(),
+            system_state.reserved_balance(),
+            system_state.reserved_balance_limit(),
             call_context_balances,
             cycles_account_manager,
             system_state
@@ -677,9 +707,17 @@ impl SandboxSafeSystemState {
             .push(CallbackUpdate::Unregister(id))
     }
 
+    /// Computes the current main balance of the canister based
+    /// on the initial value and the changes during the execution.
     pub(super) fn cycles_balance(&self) -> Cycles {
         let cycles_change = self.system_state_changes.cycles_balance_change;
         cycles_change.apply(self.initial_cycles_balance)
+    }
+
+    /// Computes the current reserved balance of the canister based
+    /// on the initial value and the changes during the execution.
+    pub(super) fn reserved_balance(&self) -> Cycles {
+        self.initial_reserved_balance + self.system_state_changes.reserved_cycles
     }
 
     pub(super) fn msg_cycles_available(&self, call_context_id: CallContextId) -> Cycles {
@@ -804,6 +842,7 @@ impl SandboxSafeSystemState {
                 &mut new_balance,
                 amount,
                 self.subnet_size,
+                self.reserved_balance(),
             )
             .map_err(HypervisorError::InsufficientCyclesBalance);
         self.update_balance_change(new_balance);
@@ -830,6 +869,7 @@ impl SandboxSafeSystemState {
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
             self.subnet_size,
+            self.reserved_balance(),
         ) {
             Ok(consumed_cycles) => consumed_cycles,
             Err(_) => return Err(msg),
@@ -910,6 +950,7 @@ impl SandboxSafeSystemState {
                     new_memory_usage,
                     self.compute_allocation,
                     self.subnet_size,
+                    self.reserved_balance(),
                 );
                 if self.cycles_balance() >= threshold {
                     Ok(())
@@ -954,6 +995,86 @@ impl SandboxSafeSystemState {
             }
         }
     }
+
+    /// Reserves cycles for the given number of allocated bytes at the given
+    /// subnet memory saturation if:
+    /// - the message type requires reservation and
+    /// - the canister has a best-effort memory allocation and
+    /// - there are enough cycles in the main balance.
+    ///
+    /// The reserved cycles are removed from the main balance and added to the
+    /// reserved balance. In pseudocode, reserving means:
+    ///   - `self.system_state_changes.cycles_balance_change -= reserved_cycles`
+    ///   - `self.system_state_changes.reserved_cycles += reserved_cycles`
+    pub(super) fn reserve_storage_cycles(
+        &mut self,
+        allocated_bytes: NumBytes,
+        subnet_memory_saturation: &ResourceSaturation,
+        api_type: &ApiType,
+    ) -> HypervisorResult<()> {
+        if !self.should_reserve_storage_cycles(api_type) {
+            return Ok(());
+        }
+        match self.memory_allocation {
+            MemoryAllocation::Reserved(_) => Ok(()),
+            MemoryAllocation::BestEffort => {
+                let cycles_to_reserve = self.cycles_account_manager.storage_reservation_cycles(
+                    allocated_bytes,
+                    subnet_memory_saturation,
+                    self.subnet_size,
+                );
+
+                if let Some(limit) = self.reserved_balance_limit {
+                    if self.reserved_balance() + cycles_to_reserve > limit {
+                        return Err(HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
+                            bytes: allocated_bytes,
+                            requested: self.reserved_balance() + cycles_to_reserve,
+                            limit,
+                        });
+                    }
+                }
+
+                let old_balance = self.cycles_balance();
+                if old_balance < cycles_to_reserve {
+                    return Err(HypervisorError::InsufficientCyclesInMemoryGrow {
+                        bytes: allocated_bytes,
+                        available: old_balance,
+                        threshold: cycles_to_reserve,
+                    });
+                }
+                let new_balance = old_balance - cycles_to_reserve;
+                self.update_balance_change(new_balance);
+                self.system_state_changes.reserved_cycles += cycles_to_reserve;
+                Ok(())
+            }
+        }
+    }
+
+    // Returns `true` if storage cycles need to be reserved for the given
+    // API type when growing memory.
+    fn should_reserve_storage_cycles(&self, api_type: &ApiType) -> bool {
+        match api_type {
+            ApiType::Update { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::Cleanup { .. } => true,
+
+            ApiType::Start { .. } | ApiType::Init { .. } | ApiType::PreUpgrade { .. } => {
+                // Individual endpoints of install_code do not reserve cycles.
+                // Instead, it is reserved at the end of install_code.
+                false
+            }
+
+            ApiType::InspectMessage { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. } => {
+                // Queries do not reserve storage cycles because the state
+                // changes are discarded anyways.
+                false
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -971,7 +1092,7 @@ mod tests {
 
     #[test]
     fn test_apply_balance_changes() {
-        let mut system_state = SystemState::new_running(
+        let mut system_state = SystemState::new_running_for_testing(
             canister_test_id(0),
             user_test_id(1).get(),
             Cycles::new(1_000_000_000),

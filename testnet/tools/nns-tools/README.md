@@ -6,7 +6,7 @@ A small collection of tools for testing NNS canisters and upgrades on testnets.
 
 Most functionality should be written in small self-contained functions that do not reference any global state.
 This makes the entire library more composable and functions can be easily used in other contexts where the conventions
-for naming are different, or conventions for what variables mean. 
+for naming are different, or conventions for what variables mean.
 
 To add documentation to a particular function so that it shows up in `./cmd.sh` output, Use the following structure and put
 your function in a file inside of `./lib`.
@@ -17,23 +17,20 @@ your function in a file inside of `./lib`.
 ## My function does something very very useful
 ##   PARAM1: Param 1 description...
 ##   PARAM2: You get the idea...
-##   OPTTIONAL_PARAM1: that you should document how to use parameters 
-##   OPTTIONAL_PARAM2: if it is going to be exposed 
+##   OPTTIONAL_PARAM1: that you should document how to use parameters
+##   OPTTIONAL_PARAM2: if it is going to be exposed
 my_useful_function() {
  ...
 }
 ```
 
-## Replicate mainnet state in a testnet
+## Replicate mainnet state in a dynamic testnet
 
 An overview of this procedure
 
-  1. Reserve a testnet using Dee.
+  1. Deploy a `recovered_mainnet_nns` dynamic testnet using `ict`.
 
-  2. Run `nns_dev_testnet.sh`. This creates and populates NNS canisters in the
-     testnet with data from mainnet.
-
-  3. `source` files written by the previous step.
+  2. `source` shell script written by the previous step containing environment variable exports.
 
   4. Start using the testnet containing real data. For example, we use this to
      do [upgrade testing](#upgrade-testing) as part of our release procedure.
@@ -52,86 +49,47 @@ sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 PATH=$PATH:$HOME/bin
 ```
 
-Knowledge of testnets. Read [go/testnets](http://go/testnets) if you need to be brought up to speed.
+### How to deploy a `recovered_mainnet_nns` dynamic testnet?
 
-You must reserve a testnet using Dee. The testnet must be one that has a
-`hosts_unassigned.ini` file. Use [this query][suitable-testnets] to list
-testnets that meet this requirement. E.g. currently, small01 has such a file.
-
-[suitable-testnets]: https://sourcegraph.com/search?q=context:global+repo:dfinity/ic+f:hosts_unassigned.ini+f:%28small%7Cmedium%7Clarge%29&patternType=regexp&case=yes&sm=1&groupBy=repo
-
-### Basic usage of nns_dev_testnet.sh
-
-Needs to be run on zh1-spm22.zh1.dfinity.network. (Ideally, we'd be able to run
-this locally; implementing that is probably feasible, but we haven't done it
-yet.)
-
-For example, if you reserved small02, you would typically run the script like
-so:
+For best performance, run the following from a host in the `zh1` DC inside the root of the `ic` repo (note that this command is expected to take 10-15 min until the testnet is deployed):
 
 ```bash
-TESTNET=small02
-export DIR=/tmp/$USER-nns-test
-./nns_dev_testnet.sh $TESTNET
+gitlab-ci/container/container-run.sh
+
+rm -rf test_tmpdir; \
+  ict testnet create recovered_mainnet_nns \
+    --lifetime-mins 120 \
+    --set-required-host-features=dc=zh1 \
+    --verbose \
+    -- --test_tmpdir=test_tmpdir
 ```
 
-`DIR` tells `nns_dev_testnet.sh` where to put its results, including the
-`source`-able files mentioned earlier.
+`--lifetime-mins` specifies how long your testnet will be online. Make sure that it's long enough to complete your testing.
 
-If you run into problems, see the
-["Troubleshooting nns_dev_testnet.sh" section](#troubleshooting-nns-dev-testnet-sh).
+`--set-required-host-features=dc=zh1` ensures the testnet will be created in the `zh1` DC which speeds up the deployment. This is because the program needs to download the NNS state backup from the backup pod hosted in `zh1` and upload it from the test driver, running in `zh1`, to the IC deployed in `zh1`.
 
-For more information, run `./nns_dev_testnet.sh` without arguments.
-
-### What nns_dev_testnet.sh does, in greater detail
-
-The main thing this does is create a testnet with mainnet state.
-
-In addition, this does the following using `test_user.pem` to facilitate release
-testing, and other development tasks:
-
-1. Adds an application subnet.
-2. Sets CMC default subnet list to that application subnet.
-3. Creates a cycles wallet for our shared principal on the application subnet.
-4. Configures SNS-W to create SNS's on application subnet, and to respond to our principal's wallet.
-5. Uploads the latest SNS Wasms into SNS-W canister
-
-At the end, this stores all the variables in a file that can be `source`-ed so
-that you can easily refer to the entities that the script made and [interact
-with the testnet](#interacting-afterwards).
-
-### Advanced Usage
-
-It is possible to run only a subset of the steps that `nns_dev_testnet.sh`
-normally runs. The following sections show how you can use environment variables
-to control which steps it takes.
-
-This can be useful if you already completed some slow steps earlier, and do not
-want to redo them.
-
-#### Run only the full step 1 of the script.
-
-Sometimes, during testnet setup or when developing the script, you may want to only run some parts.  To see the parts,
-read the script source for current descriptions.
-
-```
-DIR=/tmp/$USER-nns-test STEPS='1' ./nns_dev_testnet.sh small02
-```
-
-#### Within step 1, run only sub-steps 3 and 4 of nns_state_deployment.sh.
-```
-DIR=/tmp/$USER-nns-test STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_dev_testnet.sh small02
-```
+`-- --test_tmpdir=test_tmpdir` makes sure all the artifacts produced by the test driver are accessible on the filesystem in directory `test_tmpdir` which we need later on.
 
 ### Interacting Afterwards
 
-Variables needed to interact with the testnet are captured in the `DIR`
-directory (or a temporary directory) which is printed at the end of the
-script. You'll want to activate those definitions in your shell. This is done
-like so:
+To interact with the NNS Dapp search for a log line containing `NNS Dapp` like the following and follow the link:
+```
+2023-09-05 14:24:15.459 INFO[setup:rs/tests/nns/ic_mainnet_nns_recovery/src/lib.rs:293:0] NNS Dapp: https://qoctq-giaaa-aaaaa-aaaea-cai.ic0.farm.dfinity.systems
+```
+Not everything will work since signing in to the NNS dapp will redirect to the mainnet II (`https://identity.internetcomputer.org/`) instead of using a testnet-local II. This could be fixed later.
+
+To interact with the testnet using the shell scripts in this directory certain environment variable are required to be defined. The test driver, launched in the previous step, will write a shell script `set_testnet_env_variables.sh` to `test_tmpdir` setting the required variables. This script can be sourced in your current shell. Just wait for a log line like the following:
 
 ```
-source $DIR/output_vars_nns_dev_testnet.sh
+2023-09-05 11:12:45.704 INFO[setup:rs/tests/nns/ic_mainnet_nns_recovery/src/lib.rs:616:0] source "/ic/test_tmpdir/_tmp/c689987f6ae05176e3097f73827ab180/setup/set_testnet_env_variables.sh"
+```
+
+Then go into another container again and source that script:
+
+```
+gitlab-ci/container/container-run.sh
+
+source "/ic/test_tmpdir/_tmp/c689987f6ae05176e3097f73827ab180/setup/set_testnet_env_variables.sh"
 ```
 
 Once you have those definitions, the following commands become possible:
@@ -148,11 +106,11 @@ $SNS_CLI deploy --network "$SUBNET_URL" \
 ```
 
 Note: When making calls _through_ the wallet canister with `dfx` or `sns` you need to set the `--network` argument
-to be the $SUBNET_URL (found in `$DIR/output_vars_nns_dev_testnet.sh`), as the $NNS_URL points at the NNS replica and 
-will not route your requests to the correct subnet where the wallet canister lives.  
+to be the $SUBNET_URL (found in `$DIR/output_vars_nns_dev_testnet.sh`), as the $NNS_URL points at the NNS replica and
+will not route your requests to the correct subnet where the wallet canister lives.
 
-An example is `sns deploy`, which has to send cycles with the call, and therefore needs to use the wallet canister.  
-That particular call also requires `--wallet-canister-override $WALLET_CANISTER` in order to specify the correct wallet.  
+An example is `sns deploy`, which has to send cycles with the call, and therefore needs to use the wallet canister.
+That particular call also requires `--wallet-canister-override $WALLET_CANISTER` in order to specify the correct wallet.
 ```
 sns deploy --network $SUBNET_URL --wallet-canister-override $WALLET_CANISTER --init-config-file "<your_config_file>"
 ```
@@ -167,7 +125,7 @@ code you have (even if it's not committed) by running one simple command:
 ```bash
 # Assuming you have sourced the various *.sh files mentioned above,
 # and you are currently in this directory,
-./upgrade-canister-to-working-tree.sh governance
+./testnet/tools/nns-tools/upgrade-canister-to-working-tree.sh governance
 ```
 
 If all goes well, you should see "Upgrade was successful." on the last line (or
@@ -192,14 +150,11 @@ This is usually done as one of the steps in the [NNS release process][1].
 
 In order to test a canister upgrade, you will first need to spin up a testnet.  See [Spinning up a testnet](#spinning-up-a-testnet) above.
 
-If you have a working testnet, start by sourcing variables into your local shell if you have not already done so.
-```bash
-source $DIR/output_vars_nns_dev_testnet.sh
-````
+If you have a working testnet, start by [sourcing variables into your local shell](#interacting-afterwards) if you have not already done so.
 
 Next, we test the upgrade
 ```bash
-./test-canister-upgrade.sh <CANISTER_NAME> <TARGET_VERSION>
+./testnet/tools/nns-tools/test-canister-upgrade.sh <CANISTER_NAME> <TARGET_VERSION>
 ```
 
 * `<CANISTER_NAME>` is the key of the canister in `rs/nns/canister_ids.json`.
@@ -213,7 +168,7 @@ Next, we test the upgrade
 For example:
 
 ```bash
-./test-canister-upgrade.sh registry 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
+./testnet/tools/nns-tools/test-canister-upgrade.sh registry 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
 ```
 
 The script will test upgrading the canister via proposal, and then upgrading it again via proposal.  It uses the gzipped
@@ -231,25 +186,25 @@ The commands in this section need to be run locally, not in zh1-spm22, like the 
 in other sections.
 
 After you have verified your upgrade works with mainnet state
-(See [`NNS Canister Upgrade Testing Process`](#nns-canister-upgrade-testing-process)), 
+(See [`NNS Canister Upgrade Testing Process`](#nns-canister-upgrade-testing-process)),
 you will prepare an upgrade proposal (i.e. come up with a file containing proposal text) and make the proposal.
 
 This process will be done on a machine that has an HSM key available.
 (This is why these commands must be run locally.)
 
-First, to begin writing a file with some pre-populated proposal text, run 
+First, to begin writing a file with some pre-populated proposal text, run
 
 ```bash
-./prepare-nns-upgrade-proposal-text.sh  <CANISTER_NAME> <TARGET_VERSION> <OUTPUT_PROPOSAL_FILE>
+./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh  <CANISTER_NAME> <TARGET_VERSION> <OUTPUT_PROPOSAL_FILE>
 ```
 
-`PREVIOUS_COMMIT` can be optionally added as an environment variable if the canister in question does not have its currently  
- deployed commit as canister metadata. 
+`PREVIOUS_COMMIT` can be optionally added as an environment variable if the canister in question does not have its currently
+ deployed commit as canister metadata.
 
 For example:
 
 ```bash
-./prepare-nns-upgrade-proposal-text.sh \
+./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
     registry \
     d2d9d63309cf568e3b2c2a0bc366b6850b044792 \
     /tmp/upgrade_registry.md
@@ -269,7 +224,7 @@ pkcs11-tool --list-slots
 Finally, run
 
 ```bash
-./submit-mainnet-nns-upgrade-proposal.sh <PROPOSAL_FILE> <YOUR_NEURON_ID>
+./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh <PROPOSAL_FILE> <YOUR_NEURON_ID>
 ```
 
 In this case, it is the neuron id associated with your HSM key.
@@ -277,7 +232,7 @@ In this case, it is the neuron id associated with your HSM key.
 For example:
 
 ```bash
-./submit-mainnet-nns-upgrade-proposal.sh /tmp/upgrade_registry.md 123
+./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh /tmp/upgrade_registry.md 123
 ```
 
 This script will read the proposal and validate the following:

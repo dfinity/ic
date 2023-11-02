@@ -186,7 +186,7 @@ impl Registry {
 ///
 /// To decouple proposal payload and registry content, this does not directly
 /// import any part of the registry schema. However it is required that, from a
-/// BlessReplicaVersionPayload, it is possible to construct a ReplicaVersionRecord.
+/// UpdateElectedReplicaVersionsPayload, it is possible to construct a ReplicaVersionRecord.
 ///
 /// See /rs/protobuf/def/registry/replica_version/v1/replica_version.proto
 #[derive(CandidType, Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]

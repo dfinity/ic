@@ -9,7 +9,6 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_sns_governance::{
-    account_to_proto,
     neuron::NeuronState,
     pb::{
         sns_root_types::{
@@ -32,9 +31,10 @@ use ic_sns_governance::{
             neuron,
             neuron::{DissolveState, Followees},
             proposal::Action,
-            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty,
-            GovernanceError, ManageNeuronResponse, Motion, Neuron, NeuronId, NeuronPermission,
+            Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
+            ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
+            MintTokensRequest, MintTokensResponse, Motion, Neuron, NeuronId, NeuronPermission,
             NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
             RegisterDappCanisters, Vote, WaitForQuietState,
         },
@@ -317,7 +317,7 @@ fn test_disburse_maturity_succeeds_to_other() {
         owner: receiver.0,
         subaccount: None,
     };
-    let destination_account_proto = account_to_proto(destination_account);
+    let destination_account_proto = AccountProto::from(destination_account);
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
@@ -437,7 +437,7 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
             owner: destination.0,
             subaccount: None,
         };
-        let destination_account_proto = account_to_proto(destination_account);
+        let destination_account_proto = AccountProto::from(destination_account);
         let command_response = env
             .gov_fixture
             .manage_neuron(
@@ -532,7 +532,7 @@ fn test_disburse_maturity_fails_if_maturity_too_low() {
     assert_matches!(
         command_response,
         CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
-            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't disburse an amount less than"));
 }
 
 #[test]
@@ -615,7 +615,7 @@ fn test_disburse_maturity_fails_if_invalid_percentage_to_disburse() {
 ///
 /// This test sets up a GovernanceCanisterFixture, then sets up an exhaustive pair of manage_neuron
 /// requests and expected responses, and then calls manage_neuron for each request/response pair
-/// and asserts that the actual reponse is equal to the expected response.
+/// and asserts that the actual response is equal to the expected response.
 #[test]
 fn test_vesting_neuron_manage_neuron_operations() {
     use manage_neuron::Command;
@@ -682,6 +682,7 @@ fn test_vesting_neuron_manage_neuron_operations() {
 
     let disburse_maturity_response = DisburseMaturityResponse {
         amount_disbursed_e8s: 100000,
+        amount_deducted_e8s: Some(100000),
     };
 
     let merge_maturity = MergeMaturity {
@@ -782,6 +783,73 @@ fn test_vesting_neuron_manage_neuron_operations() {
     let expected_response = ManageNeuronResponse::register_vote_response();
     let actual_response = gov.manage_neuron(&neuron_id2, command, user_principal2);
     assert_eq!(expected_response, actual_response);
+}
+
+#[test]
+fn test_refresh_neuron() {
+    use manage_neuron::Command;
+
+    let claim_or_refresh = ClaimOrRefresh {
+        by: Some(claim_or_refresh::By::NeuronId(Empty {})),
+    };
+
+    let user_principal1 = PrincipalId::new_user_test_id(1000);
+    let neuron_id1 = neuron_id(user_principal1, /*memo*/ 0);
+
+    let user_principal2 = PrincipalId::new_user_test_id(1002);
+    let neuron_id2 = neuron_id(user_principal2, /*memo*/ 0);
+
+    // Set up the test environment with a single dissolved neuron
+    let mut gov = GovernanceCanisterFixtureBuilder::new()
+        // Add a neuron that will be configured the way a neuron originating from an NNS Neurons' Fund participation
+        // in a decentralization swap will be
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id1.clone(),
+                E8,
+                NeuronPermission::all(&PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)),
+            )
+            .add_neuron_permission(NeuronPermission {
+                principal: Some(user_principal1),
+                permission_type: vec![NeuronPermissionType::Vote as i32],
+            }),
+        )
+        // Add a regular neuron for comparison's sake
+        .add_neuron(NeuronBuilder::new(
+            neuron_id2.clone(),
+            E8,
+            NeuronPermission::all(&user_principal2),
+        ))
+        .create();
+
+    {
+        let actual_response = gov.manage_neuron(
+            &neuron_id1,
+            Command::ClaimOrRefresh(claim_or_refresh.clone()),
+            user_principal1,
+        );
+        assert_eq!(
+            ManageNeuronResponse {
+                command: Some(CommandResponse::Error(GovernanceError {
+                    error_type: ErrorType::PreconditionFailed as i32,
+                    error_message: "Cannot refresh an SNS Neuron controlled by the Neurons' Fund"
+                        .to_string()
+                }))
+            },
+            actual_response
+        );
+    }
+    {
+        let actual_response = gov.manage_neuron(
+            &neuron_id2,
+            Command::ClaimOrRefresh(claim_or_refresh),
+            user_principal2,
+        );
+        assert_eq!(
+            ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id2.clone()),
+            actual_response
+        );
+    }
 }
 
 #[test]
@@ -2565,8 +2633,10 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
 
     let DisburseMaturityResponse {
         amount_disbursed_e8s,
+        amount_deducted_e8s,
     } = disburse_maturity_response;
-    assert_eq!(amount_disbursed_e8s, expected_amount_disbursed_e8s);
+    assert_eq!(amount_deducted_e8s.unwrap(), amount_disbursed_e8s);
+    assert_eq!(amount_deducted_e8s.unwrap(), initial_maturity_e8s);
 
     // Assert that the neuron's maturity is now zero
     let neuron = canister_fixture.get_neuron(&neuron_id);
@@ -2583,4 +2653,250 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
         account_balance_after_disbursal,
         expected_amount_disbursed_e8s
     );
+}
+
+/// Tests that `ManageNeuron::DisburseMaturity` applies maturity modulation at the
+/// end of the time window.
+#[tokio::test]
+async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
+    let initial_maturity_modulation_basis_points = 100;
+    let time_of_disbursement_maturity_modulation_basis_points = 200;
+    let initial_maturity_e8s = E8;
+
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id = neuron_id(user_principal, /*memo*/ 0);
+
+    // Set up the test environment with a single dissolved neuron
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&user_principal),
+            )
+            .set_maturity(initial_maturity_e8s),
+        )
+        // Set an initial maturity modulation that will be different then the final maturity modulation
+        .set_maturity_modulation(initial_maturity_modulation_basis_points)
+        .create();
+
+    // This is supposed to cause Governance to poll CMC for the maturity modulation.
+    canister_fixture.heartbeat();
+
+    let current_basis_points = canister_fixture
+        .get_maturity_modulation()
+        .maturity_modulation
+        .unwrap()
+        .current_basis_points
+        .unwrap();
+
+    assert_eq!(
+        current_basis_points,
+        initial_maturity_modulation_basis_points
+    );
+
+    // Get the Neuron and assert its maturity is set as expected
+    let neuron = canister_fixture.get_neuron(&neuron_id);
+    let neuron_maturity_before_disbursal = neuron.maturity_e8s_equivalent;
+    assert_eq!(neuron_maturity_before_disbursal, E8);
+
+    let destination_account = icrc_ledger_types::icrc1::account::Account {
+        owner: user_principal.into(),
+        subaccount: None,
+    };
+
+    let account_balance_before_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+    assert_eq!(account_balance_before_disbursal, 0);
+
+    // Disburse the neuron to self and assert that it succeeds
+    let manage_neuron_response = canister_fixture.manage_neuron(
+        &neuron_id,
+        manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: Some(AccountProto {
+                owner: Some(user_principal),
+                subaccount: None,
+            }),
+        }),
+        user_principal,
+    );
+
+    let disburse_maturity_response = match manage_neuron_response.command.unwrap() {
+        CommandResponse::DisburseMaturity(response) => response,
+        CommandResponse::Error(error) => {
+            panic!("Unexpected error when disbursing maturity: {}", error)
+        }
+        _ => panic!("Unexpected command response when disbursing maturity"),
+    };
+
+    let DisburseMaturityResponse {
+        amount_disbursed_e8s,
+        amount_deducted_e8s,
+    } = disburse_maturity_response;
+    assert_eq!(amount_disbursed_e8s, amount_deducted_e8s.unwrap());
+    assert_eq!(amount_deducted_e8s.unwrap(), initial_maturity_e8s);
+
+    // Assert that the neuron's maturity is now zero
+    let neuron = canister_fixture.get_neuron(&neuron_id);
+    assert_eq!(neuron.maturity_e8s_equivalent, 0);
+
+    // Update the maturity_modulation that the CMC will serve before the disbursement
+    *canister_fixture
+        .cmc_fixture
+        .maturity_modulation
+        .try_lock()
+        .unwrap() = time_of_disbursement_maturity_modulation_basis_points;
+
+    // Advancing time and triggering a heartbeat should force a query of the new modulation
+    canister_fixture.advance_time_by(2 * SECONDS_PER_DAY);
+    canister_fixture.heartbeat();
+    let current_basis_points = canister_fixture
+        .get_maturity_modulation()
+        .maturity_modulation
+        .unwrap()
+        .current_basis_points
+        .unwrap();
+
+    assert_eq!(
+        current_basis_points,
+        time_of_disbursement_maturity_modulation_basis_points
+    );
+    // Assert that the Neuron owner's account balance has not changed
+    let account_balance_before_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+
+    assert_eq!(account_balance_before_disbursal, 0);
+
+    // Advancing time and triggering a heartbeat should trigger the final disbursal
+    canister_fixture.advance_time_by(5 * SECONDS_PER_DAY + 1);
+    canister_fixture.heartbeat();
+
+    // Assert that the Neuron owner's account balance has increased the expected amount
+    let account_balance_after_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+
+    assert_eq!(account_balance_after_disbursal, 102_000_000);
+}
+
+#[test]
+fn test_add_maturity() {
+    let (mut canister_fixture, _user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    const MATURITY_TO_ADD: u64 = 100_000;
+
+    let neuron_original = canister_fixture.get_neuron(&neuron_id);
+    let add_maturity_result = canister_fixture
+        .governance
+        .add_maturity(AddMaturityRequest {
+            id: Some(neuron_id.clone()),
+            amount_e8s: Some(MATURITY_TO_ADD),
+        });
+    let neuron_new = canister_fixture.get_neuron(&neuron_id);
+
+    assert_eq!(
+        neuron_original.maturity_e8s_equivalent + MATURITY_TO_ADD,
+        neuron_new.maturity_e8s_equivalent
+    );
+    assert_eq!(
+        add_maturity_result.new_maturity_e8s,
+        Some(neuron_new.maturity_e8s_equivalent)
+    );
+}
+
+#[tokio::test]
+async fn test_mint_tokens() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    const E8S_TO_MINT: u64 = 100_000;
+
+    let account = AccountProto {
+        owner: Some(user_principal),
+        subaccount: None,
+    };
+
+    let balance_original = canister_fixture
+        .get_account_balance(&(account.clone().try_into().unwrap()), TargetLedger::Sns);
+    let MintTokensResponse {} = canister_fixture
+        .governance
+        .mint_tokens(MintTokensRequest {
+            recipient: Some(account.clone()),
+            amount_e8s: Some(E8S_TO_MINT),
+        })
+        .await;
+    let balance_new = canister_fixture
+        .get_account_balance(&(account.clone().try_into().unwrap()), TargetLedger::Sns);
+
+    assert_eq!(balance_original + E8S_TO_MINT, balance_new);
+}
+
+#[tokio::test]
+async fn test_process_proposals_tallies_votes_for_proposals_where_voting_is_possible() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(10)
+        .create();
+
+    canister_fixture.governance.proto.proposals.insert(
+        10,
+        ProposalData {
+            decided_timestamp_seconds: 9, // proposal is decided
+            action: 1,
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: 20, // voting period is still open
+            }),
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Test".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            latest_tally: None,
+            ..ProposalData::default()
+        },
+    );
+    canister_fixture.governance.process_proposals();
+    let proposal = canister_fixture
+        .governance
+        .proto
+        .proposals
+        .get(&10)
+        .unwrap();
+
+    assert!(proposal.latest_tally.is_some());
+}
+
+#[tokio::test]
+async fn test_process_proposals_doesnt_tally_votes_for_proposals_where_voting_is_impossible() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(30)
+        .create();
+
+    canister_fixture.governance.proto.proposals.insert(
+        10,
+        ProposalData {
+            decided_timestamp_seconds: 9, // proposal is decided
+            action: 1,
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: 20, // voting period is still open
+            }),
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Test".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            latest_tally: None,
+            ..ProposalData::default()
+        },
+    );
+    canister_fixture.governance.process_proposals();
+    let proposal = canister_fixture
+        .governance
+        .proto
+        .proposals
+        .get(&10)
+        .unwrap();
+
+    assert_eq!(proposal.latest_tally, None);
 }

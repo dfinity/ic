@@ -1,4 +1,4 @@
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

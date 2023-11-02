@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/protobuf",
+    "//rs/types/types",
     "@crate_index//:hex",
 ]
 

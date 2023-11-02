@@ -35,7 +35,7 @@ use crate::{
             generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
             wait_until_authentication_is_granted, AuthMean,
         },
-        subnet_recovery::{enable_ecdsa_on_nns, run_ecdsa_signature_test},
+        subnet_recovery::{enable_ecdsa_on_subnet, run_ecdsa_signature_test},
         upgrade::{
             assert_assigned_replica_version, bless_public_replica_version,
             get_assigned_replica_version, update_subnet_replica_version, UpdateImageType,
@@ -151,7 +151,7 @@ pub fn test(env: TestEnv) {
         &agent,
         nns_node.effective_canister_id(),
     ));
-    let key = enable_ecdsa_on_nns(
+    let key = enable_ecdsa_on_subnet(
         &nns_node,
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),
@@ -198,7 +198,6 @@ pub fn test(env: TestEnv) {
         versions_hot: 1,
     });
     let config = Config {
-        version: 1,
         push_metrics: false,
         metrics_urls: vec![],
         network_name: "testnet".to_string(),
@@ -208,7 +207,8 @@ pub fn test(env: TestEnv) {
         root_dir: backup_dir.clone(),
         excluded_dirs: vec![],
         ssh_private_key: private_key_path,
-        disk_threshold_warn: 75,
+        hot_disk_resource_threshold_percentage: 75,
+        cold_disk_resource_threshold_percentage: 95,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
         cold_storage,
         blacklisted_nodes: None,
@@ -300,7 +300,7 @@ pub fn test(env: TestEnv) {
             good_progress,
         );
         if new_height > 0 && checkpoint > good_progress && archive_height > good_progress {
-            info!(log, "New version was sucessfully backed up and archived");
+            info!(log, "New version was successfully backed up and archived");
             break;
         }
         sleep_secs(5);
@@ -398,6 +398,7 @@ fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBu
 
 fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
     let mut perms = fs::metadata(&file_path)?.permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
     fs::set_permissions(&file_path, perms)?;
     let mut file = OpenOptions::new()

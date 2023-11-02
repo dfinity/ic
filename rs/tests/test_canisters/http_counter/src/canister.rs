@@ -1,5 +1,3 @@
-use candid::parser::types::FuncMode;
-use candid::types::Function;
 use candid::types::Serializer;
 use candid::types::Type;
 use candid::CandidType;
@@ -91,11 +89,7 @@ impl From<&str> for Callback {
 
 impl CandidType for Callback {
     fn _ty() -> Type {
-        Type::Func(Function {
-            modes: vec![FuncMode::Query],
-            args: vec![Token::ty()],
-            rets: vec![HttpResponse::ty()],
-        })
+        candid::func!((Token) -> (HttpResponse) query)
     }
     fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
         self.0.idl_serialize(serializer)

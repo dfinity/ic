@@ -200,19 +200,43 @@ export class CanisterResolver {
     mainNet = isMainNet
   ): boolean {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/')) {
-      return false;
-    }
 
+    return (
+      url.pathname.startsWith('/api/') &&
+      this.isGatewayCall(url, gatewayUrl, mainNet)
+    );
+  }
+
+  /**
+   * Checks if the given request is a call to the `/_/raw/` endpoint.
+   * @param request The request to check
+   * @param gatewayUrl The current gateway URL
+   * @param mainNet Whether the current network is mainnet or not
+   * @returns True if the request is a call to the `/_/raw/` endpoint, false otherwise
+   */
+  public isUnderscoreRawCall(
+    request: Request,
+    gatewayUrl: URL,
+    mainNet = isMainNet
+  ): boolean {
+    const url = new URL(request.url);
+
+    return (
+      url.pathname.startsWith('/_/raw') &&
+      this.isGatewayCall(url, gatewayUrl, mainNet)
+    );
+  }
+
+  private isGatewayCall(
+    url: URL,
+    gatewayUrl: URL,
+    mainNet = isMainNet
+  ): boolean {
     if (!mainNet && url.hostname.endsWith(gatewayUrl.hostname)) {
       return true;
     }
 
-    const hasApiGateway = apiGateways.some((apiGateway) =>
-      url.hostname.endsWith(apiGateway)
-    );
-
-    return hasApiGateway;
+    return apiGateways.some((apiGateway) => url.hostname.endsWith(apiGateway));
   }
 
   /**

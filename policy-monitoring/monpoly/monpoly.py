@@ -78,7 +78,7 @@ class Monpoly:
     # Sending this datum via [submit] enables I/O synchronization.
     SYNC_MARKER = ">get_pos<"
 
-    # The absolute minumum of the output-stream-draining timeout in [finalize].
+    # The absolute minimum of the output-stream-draining timeout in [finalize].
     MIN_DRAIN_TIMEOUT = 4.0  # seconds
 
     # The absolute maximum of the output-stream-draining timeout in [finalize].

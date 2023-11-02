@@ -28,6 +28,7 @@ fn huge_proto_encoding_roundtrip() {
             method_name: "do_update".into(),
             method_payload: vec![169; 2 << 20],
             cycles_payment: Some(cycles),
+            metadata: None,
         })),
     };
     // A queue of 2K requests with 2 MB payloads.

@@ -15,10 +15,14 @@ use ic_crypto_tree_hash::{
     WitnessGeneratorImpl,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgsBuilder, CreateCanisterArgs, Method, IC_00,
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CreateCanisterArgs, Method, IC_00,
 };
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedSub;
+use ic_nervous_system_governance::maturity_modulation::{
+    MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
+};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
@@ -54,10 +58,6 @@ const ONE_MINUTE_SECONDS: u64 = 60;
 const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
-
-/// The maturity modulation range in basis points.
-const MIN_MATURITY_MODULATION_PERMYRIAD: i32 = -500;
-const MAX_MATURITY_MODULATION_PERMYRIAD: i32 = 500;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = RefCell::new(None);
@@ -591,18 +591,15 @@ fn remove_subnets_from_type(
 
 #[candid_method(query, rename = "get_subnet_types_to_subnets")]
 fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
-    with_state(|state| {
-        let subnet_types_to_subnets: Vec<(String, Vec<SubnetId>)> = state
+    with_state(|state: &State| {
+        let data: Vec<(String, Vec<SubnetId>)> = state
             .subnet_types_to_subnets
             .as_ref()
             .expect("subnet types to subnets mapping is not `None`")
             .iter()
             .map(|(k, v)| (k.clone(), v.iter().copied().collect()))
             .collect();
-
-        SubnetTypesToSubnetsResponse {
-            data: subnet_types_to_subnets,
-        }
+        SubnetTypesToSubnetsResponse { data }
     })
 }
 
@@ -610,6 +607,29 @@ fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
 #[export_name = "canister_query get_subnet_types_to_subnets"]
 fn get_subnet_types_to_subnets_() {
     over(candid_one, |_: ()| get_subnet_types_to_subnets())
+}
+
+#[candid_method(
+    query,
+    rename = "get_principals_authorized_to_create_canisters_to_subnets"
+)]
+fn get_principals_authorized_to_create_canisters_to_subnets() -> AuthorizedSubnetsResponse {
+    with_state(|state| {
+        let data = state
+            .authorized_subnets
+            .iter()
+            .map(|(k, v)| (*k, v.to_vec()))
+            .collect();
+        AuthorizedSubnetsResponse { data }
+    })
+}
+
+/// Returns the current mapping of authorized principals to subnets.
+#[export_name = "canister_query get_principals_authorized_to_create_canisters_to_subnets"]
+fn get_principals_authorized_to_create_canisters_to_subnets_() {
+    over(candid_one, |_: ()| {
+        get_principals_authorized_to_create_canisters_to_subnets()
+    })
 }
 
 /// Constructs a hash tree that can be used to certify requests for the
@@ -951,7 +971,6 @@ fn remove_subnet_from_authorized_subnet_list(subnet_to_remove: SubnetId) {
         state
             .authorized_subnets
             .values_mut()
-            .into_iter()
             .for_each(|subnet_list| subnet_list.retain(|subnet| *subnet != subnet_to_remove))
     });
 }
@@ -1075,6 +1094,7 @@ async fn notify_create_canister(
         block_index,
         controller,
         subnet_type,
+        settings,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
     let cmc_id = dfn_core::api::id();
@@ -1110,7 +1130,8 @@ async fn notify_create_canister(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_create_canister(controller, from, amount, subnet_type).await;
+            let result =
+                process_create_canister(controller, from, amount, subnet_type, settings).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.as_mut().unwrap().insert(
@@ -1177,7 +1198,7 @@ fn memo_to_intent_str(memo: Memo) -> String {
     match memo {
         MEMO_CREATE_CANISTER => "CreateCanister".into(),
         MEMO_TOP_UP_CANISTER => "TopUp".into(),
-        _ => "unrecognized".into(),
+        a => format!("unrecognized: {a:?}"),
     }
 }
 
@@ -1273,7 +1294,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             .ok_or_else(|| "Reserving requires a principal.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_create_canister(controller, from, tn.amount, None).await {
+        match process_create_canister(controller, from, tn.amount, None, None).await {
             Ok(canister_id) => (
                 Ok(CyclesResponse::CanisterCreated(canister_id)),
                 Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
@@ -1376,6 +1397,7 @@ async fn process_create_canister(
     from: AccountIdentifier,
     amount: Tokens,
     subnet_type: Option<String>,
+    settings: Option<CanisterSettingsArgs>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -1389,7 +1411,7 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match create_canister(controller, cycles, subnet_type).await {
+    match create_canister(controller, cycles, subnet_type, settings).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
@@ -1561,6 +1583,7 @@ async fn create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
     subnet_type: Option<String>,
+    settings: Option<CanisterSettingsArgs>,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
@@ -1600,17 +1623,26 @@ async fn create_canister(
         ensure_balance(cycles)?;
     }
 
+    let canister_settings = settings
+        .map(|mut settings| {
+            if settings.controllers.is_none() {
+                settings.controllers = Some(BoundedVec::new(vec![controller_id]));
+            }
+            settings
+        })
+        .unwrap_or_else(|| {
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller_id])
+                .build()
+        });
+
     for subnet_id in subnets {
         let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
             subnet_id.into(),
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(
-                    CanisterSettingsArgsBuilder::new()
-                        .with_controllers(vec![controller_id])
-                        .build(),
-                ),
+                settings: Some(canister_settings.clone()),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),

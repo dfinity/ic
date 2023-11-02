@@ -97,17 +97,16 @@ Must be a file of key/value pairs separated by "=" (one per line) with the follo
 
 This configuration file should only be used for testnet deployments (to achieve shorter retention times) and must be missing for production deployments, where suitable production default values are assumed.
 
-=== journalbeat.conf
+=== filebeat.conf
 
-Configures journalbeat to export logs out of the system.
+Configures filebeat to export logs out of the system.
 
 Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
 
-- journalbeat_hosts: Space-separated lists of hosts to ship logs to.
+- elasticsearch_hosts: Space-separated lists of hosts to ship logs to.
+- elasticsearch_tags: Space-separated list of tags to apply to exported log records.
 
-- journalbeat_tags: Space-separated list of tags to apply to exported log records.
-
-If left unspecified, journalbeat will be left unconfigured and no logs are exported.
+If left unspecified, filebeat will be left unconfigured and no logs are exported.
 
 === log.conf
 
@@ -130,12 +129,6 @@ Configuration for socks proxy.
 Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
 
 - socks_proxy: URL of the socks proxy to use. E.g socks5://socksproxy.com:1080
-
-=== onchain_observability_overrides.json
-
-A json object containing config-values that will override the existing values in the onchain observability config. Key names must match those in the actual config.
-
-- onchain_observability_overrides: Struct containing the overrides
 
 === bitcoin_addr.conf
 

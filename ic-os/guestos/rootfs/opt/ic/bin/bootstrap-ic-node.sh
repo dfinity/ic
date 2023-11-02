@@ -13,13 +13,67 @@
 
 set -eo pipefail
 
+SCRIPT="$(basename $0)[$$]"
+METRICS_DIR="/run/node_exporter/collector_textfile"
+GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
+
+write_log() {
+    local message=$1
+
+    if [ -t 1 ]; then
+        echo "${SCRIPT} ${message}" >/dev/stdout
+    fi
+
+    logger -t ${SCRIPT} "${message}"
+}
+
+write_metric_attr() {
+    local name=$1
+    local attr=$2
+    local value=$3
+    local help=$4
+    local type=$5
+
+    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name}${attr} ${value}" >"${METRICS_DIR}/${name}.prom"
+}
+
+write_metric() {
+    local name=$1
+    local value=$2
+    local help=$3
+    local type=$4
+
+    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
+}
+
+function get_guestos_version() {
+    if [ -r ${GUESTOS_VERSION_FILE} ]; then
+        GUESTOS_VERSION=$(cat ${GUESTOS_VERSION_FILE})
+        GUESTOS_VERSION_OK=1
+    else
+        GUESTOS_VERSION="unknown"
+        GUESTOS_VERSION_OK=0
+    fi
+    write_log "GuestOS version ${GUESTOS_VERSION}"
+    write_metric_attr "guestos_version" \
+        "{version=\"${GUESTOS_VERSION}\"}" \
+        "${GUESTOS_VERSION_OK}" \
+        "GuestOS version string" \
+        "gauge"
+}
+
 # List all block devices marked as "removable".
 function find_removable_devices() {
     for DEV in $(ls -C /sys/class/block); do
         echo "Consider device $DEV" >&2
         if [ -e /sys/class/block/"${DEV}"/removable ]; then
+            # In production, a removable device is used to pass configuration
+            # into the VM.
+            # In some test environments where this is not available, the
+            # configuration device is identified by the serial "config".
             local IS_REMOVABLE=$(cat /sys/class/block/"${DEV}"/removable)
-            if [ "${IS_REMOVABLE}" == 1 ]; then
+            local CONFIG_SERIAL=$(udevadm info --name=/dev/"${DEV}" | grep "ID_SCSI_SERIAL=config")
+            if [ "${IS_REMOVABLE}" == 1 ] || [ "${CONFIG_SERIAL}" != "" ]; then
                 # If this is a partitioned device (and it usually is), then
                 # the first partition is of relevance.
                 # return first partition for use instead.
@@ -59,18 +113,18 @@ function process_bootstrap() {
     # take injected config bits and move them to state directories
     if [ -e "${TMPDIR}/ic_crypto" ]; then
         echo "Installing initial crypto material"
-        cp -r -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
+        cp -rL -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
     fi
     for ITEM in ic_registry_local_store nns_public_key.pem node_operator_private_key.pem; do
         if [ -e "${TMPDIR}/${ITEM}" ]; then
             echo "Setting up initial ${ITEM}"
-            cp -r -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
+            cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
         fi
     done
 
     # stash the following configuration files to config store
     # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
-    for FILE in journalbeat.conf network.conf nns.conf backup.conf log.conf malicious_behavior.conf bitcoind_addr.conf socks_proxy.conf onchain_observability_overrides.json; do
+    for FILE in filebeat.conf network.conf nns.conf backup.conf log.conf malicious_behavior.conf bitcoind_addr.conf socks_proxy.conf; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
@@ -79,7 +133,7 @@ function process_bootstrap() {
     for DIR in accounts_ssh_authorized_keys; do
         if [ -e "${TMPDIR}/${DIR}" ]; then
             echo "Setting up accounts_ssh_authorized_keys"
-            cp -r "${TMPDIR}/${DIR}" "${CONFIG_ROOT}/${DIR}"
+            cp -rL "${TMPDIR}/${DIR}" "${CONFIG_ROOT}/${DIR}"
         fi
     done
 
@@ -91,6 +145,8 @@ function process_bootstrap() {
 }
 
 MAX_TRIES=10
+
+get_guestos_version
 
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"

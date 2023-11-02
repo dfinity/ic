@@ -62,7 +62,7 @@ fn swap_remove_if<T>(v: &mut Vec<T>, predicate: impl Fn(&T) -> bool) {
 // Defined in Rust instead of PB, because we want CanisterStatusResultV2
 // (defined in ic00_types) to be in the response, but CSRV2 doesn't have a
 // corresponding PB definition.
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Default, PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryRequest {
     /// If set to true, root will update the list of canisters it owns before building the
     /// GetSnsCanistersSummaryResponse. This currently amounts to asking ledger about its archive
@@ -71,7 +71,7 @@ pub struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Default, PartialEq, Eq, Clone, Debug, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,
     pub governance: Option<CanisterSummary>,
@@ -112,7 +112,7 @@ impl GetSnsCanistersSummaryResponse {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Default, PartialEq, Eq, Clone, Debug, candid::CandidType, candid::Deserialize)]
 pub struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
     pub status: Option<CanisterStatusResultV2>,
@@ -721,9 +721,12 @@ impl SnsRootCanister {
 
 async fn get_swap_status(env: &impl Environment, swap_id: PrincipalId) -> CanisterSummary {
     let Ok(canister_id) = CanisterId::new(swap_id) else {
-        log!(ERROR,
-        "The recorded Swap principal id, '{}', is not a valid CanisterId.", swap_id);
-       return CanisterSummary::new_with_no_status(swap_id);
+        log!(
+            ERROR,
+            "The recorded Swap principal id, '{}', is not a valid CanisterId.",
+            swap_id
+        );
+        return CanisterSummary::new_with_no_status(swap_id);
     };
 
     let status = match env
@@ -875,7 +878,7 @@ mod tests {
             arg: Vec<u8>,
         ) -> Result<Vec<u8>, (i32, String)> {
             let mut calls = self.calls.lock().unwrap();
-            let result = match calls.pop_front().unwrap() {
+            match calls.pop_front().unwrap() {
                 EnvironmentCall::CallCanister {
                     expected_canister,
                     expected_method,
@@ -902,9 +905,7 @@ mod tests {
 
                     result
                 }
-            };
-
-            result
+            }
         }
     }
 

@@ -4,22 +4,20 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/constants",
-    "//rs/crypto",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/registry/keys",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/types/types",
     "//rs/validator",
-    "@crate_index//:bincode",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
 ]

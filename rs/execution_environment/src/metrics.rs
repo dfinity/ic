@@ -213,6 +213,11 @@ impl<'a> MeasurementScope<'a> {
         core.slices += slices;
         core.messages += messages;
     }
+
+    /// Returns the number of messages associated with this measurement scope.
+    pub fn messages(&self) -> NumMessages {
+        self.core.borrow().messages
+    }
 }
 
 impl<'a> Clone for MeasurementScope<'a> {

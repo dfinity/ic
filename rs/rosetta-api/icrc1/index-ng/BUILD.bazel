@@ -4,12 +4,13 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_profiler",
     "//rs/rust_canisters/http_types",
+    "//rs/rust_canisters/canister_log",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
@@ -19,6 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
     "@crate_index//:ic-stable-structures",
 ]
 
@@ -35,21 +37,39 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_canister(
-    name = "index_ng_canister",
-    srcs = ["src/main.rs"],
-    compile_data = [":index-ng.did"],
-    crate_name = "ic_icrc1_index_ng_canister",
-    edition = "2018",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    rustc_env = {
-        "INDEX_DID_PATH": "$(location :index-ng.did)",
-    },
-    service_file = ":index-ng.did",
-    deps = [
-        ":index-ng",
-    ] + DEPENDENCIES,
-)
+[
+    rust_canister(
+        name = "index_ng_canister" + name_suffix,
+        srcs = [
+            "src/logs.rs",
+            "src/main.rs",
+        ],
+        compile_data = [":index-ng.did"],
+        crate_features = features,
+        crate_name = "ic_icrc1_index_ng_canister",
+        edition = "2018",
+        proc_macro_deps = MACRO_DEPENDENCIES,
+        rustc_env = {
+            "INDEX_DID_PATH": "$(location :index-ng.did)",
+        },
+        service_file = ":index-ng.did",
+        deps = [
+            ":index-ng",
+        ] + DEPENDENCIES + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/rosetta-api/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/rosetta-api/icrc1/tokens_u256"],
+        ),
+    ]
+]
 
 rust_test(
     name = "index_ng_unit_test",
@@ -61,37 +81,46 @@ rust_test(
     ],
 )
 
-rust_test(
-    name = "index_ng_test",
-    srcs = ["tests/tests.rs"],
-    data = [
-        ":index_ng_canister.wasm",
-        "//rs/rosetta-api/icrc1/index:index_canister.wasm",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
-    ],
-    edition = "2018",
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index-ng",
-        "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister.wasm)",
-        "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath :index_ng_canister.wasm)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
-    },
-    deps = [
-        ":index-ng",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/rosetta-api/icrc1",
-        "//rs/rosetta-api/icrc1/index",
-        "//rs/rosetta-api/icrc1/ledger",
-        "//rs/rosetta-api/icrc1/test_utils",
-        "//rs/rosetta-api/ledger_canister_core",
-        "//rs/rosetta-api/ledger_core",
-        "//rs/state_machine_tests",
-        "//rs/test_utilities/load_wasm",
-        "//rs/types/base_types",
-        "@crate_index//:assert_matches",
-        "@crate_index//:candid",
-        "@crate_index//:num-traits",
-        "@crate_index//:proptest",
-        "@crate_index//:serde",
-    ],
-)
+[
+    rust_test(
+        name = "index_ng_test" + name_suffix,
+        srcs = ["tests/tests.rs"],
+        data = [
+            ":index_ng_canister" + name_suffix + ".wasm",
+            "//rs/rosetta-api/icrc1/index:index_canister.wasm",
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index-ng",
+            "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister.wasm)",
+            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath :index_ng_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+        },
+        deps = [
+            ":index-ng",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/rosetta-api/icrc1",
+            "//rs/rosetta-api/icrc1/index",
+            "//rs/rosetta-api/icrc1/ledger",
+            "//rs/rosetta-api/icrc1/test_utils",
+            "//rs/rosetta-api/icrc1/tokens_u64",
+            "//rs/rosetta-api/ledger_canister_core",
+            "//rs/rosetta-api/ledger_core",
+            "//rs/rust_canisters/http_types",
+            "//rs/state_machine_tests",
+            "//rs/test_utilities/load_wasm",
+            "//rs/types/base_types",
+            "@crate_index//:assert_matches",
+            "@crate_index//:candid",
+            "@crate_index//:num-traits",
+            "@crate_index//:proptest",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+            "@crate_index//:serde_json",
+        ],
+    )
+    for name_suffix in [
+        "",
+        "_u256",
+    ]
+]

@@ -1,7 +1,9 @@
 //! ECDSA specific stats.
 
-use crate::consensus::metrics::{EcdsaSignatureMetrics, EcdsaTranscriptMetrics};
-use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, RequestId};
+use crate::consensus::metrics::{
+    EcdsaQuadrupleMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
+};
+use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, QuadrupleId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
 };
@@ -16,11 +18,13 @@ use std::time::{Duration, Instant};
 pub struct EcdsaStatsImpl {
     state: Mutex<EcdsaStatsInternal>,
     transcript_metrics: EcdsaTranscriptMetrics,
+    quadruple_metrics: EcdsaQuadrupleMetrics,
     signature_metrics: EcdsaSignatureMetrics,
 }
 
 struct EcdsaStatsInternal {
     transcript_stats: HashMap<IDkgTranscriptId, TranscriptStats>,
+    quadruple_stats: HashMap<QuadrupleId, QuadrupleStats>,
     signature_stats: HashMap<RequestId, SignatureStats>,
 }
 
@@ -30,6 +34,10 @@ struct TranscriptStats {
     support_validation_duration: Vec<Duration>,
     support_aggregation_duration: Vec<Duration>,
     create_transcript_duration: Vec<Duration>,
+}
+
+struct QuadrupleStats {
+    start_time: Instant,
 }
 
 struct SignatureStats {
@@ -44,9 +52,11 @@ impl EcdsaStatsImpl {
         Self {
             state: Mutex::new(EcdsaStatsInternal {
                 transcript_stats: HashMap::new(),
+                quadruple_stats: HashMap::new(),
                 signature_stats: HashMap::new(),
             }),
             transcript_metrics: EcdsaTranscriptMetrics::new(metrics_registry.clone()),
+            quadruple_metrics: EcdsaQuadrupleMetrics::new(metrics_registry.clone()),
             signature_metrics: EcdsaSignatureMetrics::new(metrics_registry),
         }
     }
@@ -95,6 +105,14 @@ impl EcdsaStatsImpl {
             .transcript_e2e_latency
             .with_label_values(&[&transcript_stats.transcript_type])
             .observe(transcript_stats.start_time.elapsed().as_secs_f64());
+    }
+
+    /// Called when the quadruple completed building. Reports the accumulated
+    /// stats.
+    fn on_quadruple_done(&self, quadruple_stats: &QuadrupleStats) {
+        self.quadruple_metrics
+            .quadruple_e2e_latency
+            .observe(quadruple_stats.start_time.elapsed().as_secs_f64());
     }
 
     /// Called when the signature is completed. Reports the accumulated
@@ -149,7 +167,7 @@ impl EcdsaStats for EcdsaStatsImpl {
                 });
         }
 
-        // Remove the entries no longer active, and finish reporting their
+        // Remove the entries that are no longer active, and finish reporting their
         // metrics
         let mut to_remove = HashSet::new();
         for (transcript_id, transcript_stats) in &state.transcript_stats {
@@ -164,6 +182,33 @@ impl EcdsaStats for EcdsaStatsImpl {
         self.transcript_metrics
             .active_transcripts
             .set(state.transcript_stats.len() as i64);
+    }
+
+    fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader) {
+        let mut active_quadruples = HashSet::new();
+        let mut state = self.state.lock().unwrap();
+        for quadruple_id in block_reader.quadruples_in_creation() {
+            active_quadruples.insert(*quadruple_id);
+            state
+                .quadruple_stats
+                .entry(*quadruple_id)
+                .or_insert(QuadrupleStats {
+                    start_time: Instant::now(),
+                });
+        }
+
+        // Remove the entries that are no longer active, and finish reporting their
+        // metrics
+        let mut to_remove = HashSet::new();
+        for (quadruple_id, quadruple_stats) in &state.quadruple_stats {
+            if !active_quadruples.contains(quadruple_id) {
+                to_remove.insert(*quadruple_id);
+                self.on_quadruple_done(quadruple_stats);
+            }
+        }
+        for quadruple_id in &to_remove {
+            state.quadruple_stats.remove(quadruple_id);
+        }
     }
 
     fn record_support_validation(&self, support: &IDkgDealingSupport, duration: Duration) {

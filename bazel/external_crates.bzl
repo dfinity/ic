@@ -13,15 +13,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
         cargo_lockfile = cargo_lockfile,
         lockfile = lockfile,
         cargo_config = "//:bazel/cargo.config",
-        generator_urls = {
-            "aarch64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-aarch64-apple-darwin",
-            "x86_64-pc-windows-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-pc-windows-gnu.exe",
-            "x86_64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-unknown-linux-gnu",
-            "x86_64-pc-windows-msvc": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-pc-windows-msvc.exe",
-            "x86_64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-apple-darwin",
-            "x86_64-unknown-linux-musl": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-unknown-linux-musl",
-            "aarch64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-aarch64-unknown-linux-gnu",
-        },
         annotations = {
             "ic_bls12_381": [crate.annotation(
                 rustc_flags = [
@@ -33,6 +24,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 build_script_env = {
                     "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
                 },
+            )],
+            "ic-wasm": [crate.annotation(
+                gen_binaries = True,
             )],
             "openssl-sys": [] if not static_openssl else [crate.annotation(
                 build_script_data = [
@@ -82,20 +76,20 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^4.3.0",
             ),
             "addr": crate.spec(
-                version = "=0.15.6",
+                version = "^0.15.6",
                 default_features = False,
                 features = [
                     "idna",
                 ],
             ),
             "arbitrary": crate.spec(
-                version = "=1.3.0",
+                version = "^1.3.0",
             ),
             "arc-swap": crate.spec(
                 version = "^1",
             ),
-            "assert_approx_eq": crate.spec(
-                version = "^1.1.0",
+            "atomic-counter": crate.spec(
+                version = "^1.0.1",
             ),
             "anyhow": crate.spec(
                 version = "^1",
@@ -131,10 +125,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.1",
             ),
             "async-stream": crate.spec(
-                version = "^0.3.2",
+                version = "^0.3.5",
             ),
             "async-trait": crate.spec(
-                version = "^0.1.31",
+                version = "^0.1.73",
             ),
             "axum": crate.spec(
                 version = "^0.6.1",
@@ -225,19 +219,19 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.3.4",
             ),
             "bytes": crate.spec(
-                version = "^1.0.1",
+                version = "^1.5.0",
             ),
             "cached": crate.spec(
                 version = "^0.41",
                 default_features = False,
             ),
             "candid": crate.spec(
-                version = "^0.8.1",
+                version = "^0.9.5",
+                features = ["parser"],
             ),
             "cargo_metadata": crate.spec(
                 version = "^0.14.2",
             ),
-            "candid_derive": crate.spec(version = "^0.5.0"),
             "cc": crate.spec(
                 version = "^1.0",
             ),
@@ -289,7 +283,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.2.0",
             ),
             "criterion": crate.spec(
-                version = "^0.3",
+                version = "^0.5",
                 features = [
                     "html_reports",
                     "async_tokio",
@@ -342,6 +336,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ethabi": crate.spec(
                 version = "18.0.0",
             ),
+            "ethers-core": crate.spec(
+                version = "2.0.7",
+            ),
             "ethnum": crate.spec(
                 version = "^1.3.2",
                 features = ["serde"],
@@ -351,9 +348,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "eyre": crate.spec(
                 version = "^0.6.8",
-            ),
-            "features": crate.spec(
-                version = "^0.10.0",
             ),
             "ff": crate.spec(
                 version = "^0.12.0",
@@ -378,13 +372,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.2.0",
             ),
             "futures": crate.spec(
-                version = "^0.3.6",
+                version = "^0.3.28",
             ),
             "futures-util": crate.spec(
                 version = "^0.3.8",
-            ),
-            "futures-core": crate.spec(
-                version = "^0.3.21",
             ),
             "getrandom": crate.spec(
                 version = "^0.2",
@@ -417,7 +408,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.1",
             ),
             "http": crate.spec(
-                version = "^0.2.6",
+                version = "^0.2.9",
             ),
             "http-body": crate.spec(
                 version = "^0.4",
@@ -438,7 +429,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.0",
             ),
             "hyper": crate.spec(
-                version = "^0.14.18",
+                version = "^0.14.27",
                 features = [
                     "client",
                     "full",
@@ -460,38 +451,44 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "hyper-tls": crate.spec(
                 version = "^0.5.0",
             ),
-            "iai": crate.spec(
-                version = "^0.1",
-            ),
             "ic0": crate.spec(
-                version = "0.18.9",
+                version = "^0.18.11",
+            ),
+            "icrc1-test-env": crate.spec(
+                version = "^0.1.1",
+            ),
+            "icrc1-test-suite": crate.spec(
+                version = "^0.1.1",
             ),
             "ic-agent": crate.spec(
-                version = "^0.24.1",
+                version = "^0.27.0",
                 features = [
                     "hyper",
                 ],
             ),
             "ic-btc-interface": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "bed90536df60ff215675a048d5ebaf19411c95cb",
+                rev = "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c",
             ),
             "ic-btc-validation": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "bed90536df60ff215675a048d5ebaf19411c95cb",
+                rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7",
             ),
             "ic-btc-test-utils": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "bed90536df60ff215675a048d5ebaf19411c95cb",
+                rev = "26552e8e7d1b2e23d7195499bd6aed650b263ae7",
+            ),
+            "ic-canister-log": crate.spec(
+                version = "0.2.0",
             ),
             "ic-cdk": crate.spec(
-                version = "0.7.0",
+                version = "^0.10.0",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "0.1.0",
+                version = "^0.4.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.6.8",
+                version = "^0.7.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -503,33 +500,29 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.0",
             ),
             "ic-response-verification": crate.spec(
-                version = "^0.2.1",
+                version = "^1.2.0",
             ),
             "ic-test-state-machine-client": crate.spec(
-                version = "^2.2.0",
+                version = "^3.0.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.24.1",
-                features = [
-                    "raw",
-                ],
+                version = "^0.27.0",
+                features = ["raw"],
             ),
             "ic-wasm": crate.spec(
-                version = "^0.1.3",
+                version = "^0.4.0",
+                features = [
+                    "exe",
+                ],
+                default_features = False,
             ),
             "ic-xrc-types": crate.spec(
-                version = "^1.0.0",
+                version = "^1.1.0",
             ),
             "idna": crate.spec(
                 version = "^0.3.0",
             ),
             "indicatif": crate.spec(
-                version = "^0.15",
-                features = [
-                    "improved_unicode",
-                ],
-            ),
-            "indicatif_0_17_3": crate.spec(
                 package = "indicatif",
                 version = "^0.17.3",
             ),
@@ -537,7 +530,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.0.6",
             ),
             "insta": crate.spec(
-                version = "=1.8.0",
+                version = "^1.31.0",
             ),
             "instant-acme": crate.spec(
                 version = "^0.3.2",
@@ -579,12 +572,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
-            ),
-            "lazy-regex": crate.spec(
-                version = "^2",
-            ),
-            "leaky-bucket": crate.spec(
-                version = "^0.11.0",
             ),
             "leb128": crate.spec(
                 version = "^0.2.5",
@@ -702,19 +689,24 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "openssl-sys": crate.spec(
                 version = "0.9",
             ),
-            "opentelemetry": crate.spec(
-                version = "^0.17.0",
-            ),
             "opentelemetry_0_18_0": crate.spec(
                 package = "opentelemetry",
                 version = "^0.18.0",
             ),
-            "opentelemetry-prometheus": crate.spec(
-                version = "^0.10.0",
+            "opentelemetry_0_20_0_metrics": crate.spec(
+                package = "opentelemetry",
+                version = "^0.20.0",
+                features = [
+                    "metrics",
+                ],
             ),
             "opentelemetry_prometheus_0_11_0": crate.spec(
                 package = "opentelemetry-prometheus",
                 version = "^0.11.0",
+            ),
+            "opentelemetry_prometheus_0_13_0": crate.spec(
+                package = "opentelemetry-prometheus",
+                version = "^0.13.0",
             ),
             "p256": crate.spec(
                 version = "^0.13.2",
@@ -747,11 +739,14 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "pico-args": crate.spec(
                 version = "^0.3",
             ),
+            "pkcs8": crate.spec(
+                version = "^0.10.2",
+            ),
             "pkg-config": crate.spec(
                 version = "^0.3",
             ),
             "pprof": crate.spec(
-                version = "^0.10.1",
+                version = "^0.12.1",
                 features = [
                     "flamegraph",
                     "prost-codec",
@@ -786,8 +781,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "process",
                 ],
             ),
-            "prometheus-parse": crate.spec(
-                version = "^0.2.3",
+            "prometheus-http-query": crate.spec(
+                version = "^0.6.6",
             ),
             "proptest": crate.spec(
                 version = "^1.0.0",
@@ -799,13 +794,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.3.0",
             ),
             "prost": crate.spec(
-                version = "=0.11.0",
+                version = "^0.11",
             ),
             "prost-build": crate.spec(
-                version = "=0.11.1",
+                version = "^0.11",
             ),
             "prost-derive": crate.spec(
-                version = "=0.11.0",
+                version = "^0.11",
             ),
             "protobuf": crate.spec(
                 version = "^2.27.1",
@@ -817,7 +812,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.10.0",
+                version = "^0.10.2",
                 features = [
                     "ring",
                 ],
@@ -852,6 +847,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "rcgen": crate.spec(
                 version = "^0.10.0",
             ),
+            "rcgen-0_11": crate.spec(
+                package = "rcgen",
+                version = "^0.11.1",
+                features = [
+                    "zeroize",
+                ],
+            ),
             "regex": crate.spec(
                 version = "^1.3.9",
             ),
@@ -878,16 +880,16 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ripemd": crate.spec(
                 version = "^0.1.1",
             ),
+            "rlp": crate.spec(
+                version = "^0.5.2",
+            ),
             "rocksdb": crate.spec(
                 version = "^0.15.0",
                 default_features = False,
             ),
             "rsa": crate.spec(
-                version = "^0.6.1",
-            ),
-            "rsa-0_4_0": crate.spec(
-                package = "rsa",
-                version = "^0.4.0",
+                version = "^0.9.2",
+                features = ["sha2"],
             ),
             "rstack-self": crate.spec(
                 version = "^0.3",
@@ -936,7 +938,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "serde": crate.spec(
-                version = "^1.0.99",
+                version = "=1.0.171",
                 features = [
                     "derive",
                 ],
@@ -970,7 +972,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.8.0",
             ),
             "sev": crate.spec(
-                version = "=1.1.0",  # Pinned to 1.1.0. The crate broke semantic versioning with breaking changes in 1.2.0 (https://github.com/virtee/sev/issues/81).
+                version = "^1.2.0",
                 features = [
                     "openssl",
                 ],
@@ -1037,9 +1039,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.0",
             ),
             "socket2": crate.spec(
-                version = "^0.3.19",
+                version = "^0.5.2",
                 features = [
-                    "reuseport",
+                    "all",
                 ],
             ),
             "ssh2": crate.spec(
@@ -1112,7 +1114,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.3.20",
             ),
             "tokio": crate.spec(
-                version = "^1.29.0",
+                version = "^1.32.0",
                 features = [
                     "full",
                     "io-util",
@@ -1127,7 +1129,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.2.0",
             ),
             "tokio-metrics": crate.spec(
-                version = "^0.2.2",
+                version = "^0.3.0",
             ),
             "tokio-openssl": crate.spec(
                 version = "^0.6.1",
@@ -1162,27 +1164,25 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.8.2",
+                version = "^0.9",
             ),
             "tonic-build": crate.spec(
-                version = "^0.8.2",
+                version = "^0.9",
             ),
             "tower": crate.spec(
-                version = "^0.4.11",
+                version = "^0.4.13",
+                features = ["full"],
+            ),
+            "tower-http": crate.spec(
+                version = "^0.4.4",
                 features = [
-                    "buffer",
-                    "limit",
-                    "load-shed",
-                    "steer",
-                    "timeout",
+                    "trace",
+                    "request-id",
                     "util",
                 ],
             ),
-            "tower-http": crate.spec(
-                version = "^0.3",
-                features = [
-                    "trace",
-                ],
+            "tower_governor": crate.spec(
+                version = "^0.1",
             ),
             "tower-request-id": crate.spec(
                 version = "^0.2.1",
@@ -1240,19 +1240,19 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.23.0",
+                version = "^0.31.0",
             ),
             "wasm-smith": crate.spec(
                 version = "^0.12.4",
             ),
             "wasmparser": crate.spec(
-                version = "^0.100.0",
+                version = "^0.109.0",
             ),
             "wasmprinter": crate.spec(
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^9.0.3",
+                version = "^11.0.2",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1261,10 +1261,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^9.0.3",
+                version = "^11.0.2",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^9.0.3",
+                version = "^11.0.2",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",
@@ -1285,17 +1285,15 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5",
             ),
             "wiremock": crate.spec(
-                # Pinning to 0.5.18 because we are pinned to Rust 1.66
-                # where pin_macro is unstable.
-                version = "=0.5.18",
+                version = "^0.5.19",
             ),
             "x509-parser": crate.spec(
-                version = "^0.12.0",
-            ),
-            "x509-parser_0_15": crate.spec(
-                package = "x509-parser",
-                version = "^0.15.0",
+                version = "^0.15.1",
                 features = ["verify"],
+            ),
+            "x509-parser-without-verify": crate.spec(
+                package = "x509-parser",
+                version = "^0.14.0",
             ),
             "yansi": crate.spec(
                 version = "^0.5.0",
@@ -1305,6 +1303,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 features = [
                     "zeroize_derive",
                 ],
+            ),
+            "zstd": crate.spec(
+                version = "^0.12.4",
             ),
         },
         splicing_config = splicing_config(

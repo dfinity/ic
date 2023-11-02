@@ -12,6 +12,7 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
@@ -24,13 +25,14 @@ use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{registry::RegistryClientError, Height, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_42};
-use rand::thread_rng;
+use rand::{CryptoRng, Rng};
 
 #[test]
 fn should_call_csp_with_correct_arguments() {
     const COMPLAINER: NodeId = NODE_4;
     const DEALER: NodeId = NODE_2;
-    let complainer_key = generate_mega_public_key();
+    let rng = &mut reproducible_rng();
+    let complainer_key = generate_mega_public_key(rng);
     let internal_complaint_raw = valid_internal_complaint_raw();
     let internal_dealing_raw = valid_internal_dealing_raw();
     let dealer_index = 2;
@@ -89,6 +91,7 @@ fn should_call_csp_with_correct_arguments() {
 
 #[test]
 fn should_fail_on_transcript_id_mismatch() {
+    let rng = &mut reproducible_rng();
     let transcript_id_1 = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let transcript_id_2 = transcript_id_1.increment();
     assert_ne!(transcript_id_1, transcript_id_2);
@@ -108,7 +111,7 @@ fn should_fail_on_transcript_id_mismatch() {
         internal_complaint_raw: valid_internal_complaint_raw(),
     };
     let csp = MockAllCryptoServiceProvider::new();
-    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
+    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1, rng));
 
     let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
@@ -121,6 +124,7 @@ fn should_fail_on_transcript_id_mismatch() {
 #[test]
 fn should_fail_if_dealing_missing_in_transcript() {
     const COMPLAINT_DEALER_ID: NodeId = NODE_2;
+    let rng = &mut reproducible_rng();
     let verified_dealings_missing_complaint_dealer_id = BTreeMap::new();
 
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
@@ -139,7 +143,7 @@ fn should_fail_if_dealing_missing_in_transcript() {
         internal_complaint_raw: valid_internal_complaint_raw(),
     };
     let csp = MockAllCryptoServiceProvider::new();
-    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
+    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1, rng));
 
     let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
@@ -153,6 +157,8 @@ fn should_fail_if_dealing_missing_in_transcript() {
 #[test]
 fn should_fail_if_complainer_missing_in_transcript() {
     const COMPLAINER_ID: NodeId = NODE_2;
+
+    let rng = &mut reproducible_rng();
 
     let receivers_missing_complainer_id = IDkgReceivers::new(node_set(&[NODE_1])).unwrap();
     assert!(!receivers_missing_complainer_id
@@ -177,7 +183,7 @@ fn should_fail_if_complainer_missing_in_transcript() {
         internal_complaint_raw: valid_internal_complaint_raw(),
     };
     let csp = MockAllCryptoServiceProvider::new();
-    let registry = registry_with(mega_encryption_pk_record(COMPLAINER_ID, REG_V1));
+    let registry = registry_with(mega_encryption_pk_record(COMPLAINER_ID, REG_V1, rng));
 
     let result = verify_complaint(
         &csp,
@@ -198,6 +204,8 @@ fn should_fail_if_complainer_missing_in_transcript() {
 fn should_fail_if_deserializing_complaint_fails() {
     let invalid_internal_complaint_raw = b"invalid complaint".to_vec();
 
+    let rng = &mut reproducible_rng();
+
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, batch_signed_dealing(NODE_1));
@@ -216,7 +224,7 @@ fn should_fail_if_deserializing_complaint_fails() {
         internal_complaint_raw: invalid_internal_complaint_raw,
     };
     let csp = MockAllCryptoServiceProvider::new();
-    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
+    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1, rng));
 
     let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
@@ -229,6 +237,7 @@ fn should_fail_if_deserializing_complaint_fails() {
 
 #[test]
 fn should_fail_if_deserializing_dealing_fails() {
+    let rng = &mut reproducible_rng();
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, batch_signed_dealing_with_invalid_internal(NODE_1));
 
@@ -248,7 +257,7 @@ fn should_fail_if_deserializing_dealing_fails() {
         internal_complaint_raw: valid_internal_complaint_raw(),
     };
     let csp = MockAllCryptoServiceProvider::new();
-    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
+    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1, rng));
 
     let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
@@ -411,6 +420,7 @@ fn should_fail_if_registry_client_returns_error() {
 
 #[test]
 fn should_return_ok_if_csp_returns_ok() {
+    let rng = &mut reproducible_rng();
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, batch_signed_dealing(NODE_1));
@@ -429,7 +439,7 @@ fn should_return_ok_if_csp_returns_ok() {
         internal_complaint_raw: valid_internal_complaint_raw(),
     };
     let csp = csp_with_verify_complaint_returning(Ok(()));
-    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
+    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1, rng));
 
     let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
@@ -438,6 +448,7 @@ fn should_return_ok_if_csp_returns_ok() {
 
 #[test]
 fn should_return_error_if_csp_returns_error() {
+    let rng = &mut reproducible_rng();
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, batch_signed_dealing(NODE_1));
@@ -458,7 +469,7 @@ fn should_return_error_if_csp_returns_error() {
 
     let csp_error = IDkgVerifyComplaintError::InvalidComplaint;
     let csp = csp_with_verify_complaint_returning(Err(csp_error.clone()));
-    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
+    let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1, rng));
 
     let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
@@ -502,11 +513,12 @@ fn valid_internal_complaint_raw() -> Vec<u8> {
     hex::decode(VALID_INTERNAL_COMPLAINT_HEX).expect("failed to hex-decode")
 }
 
-fn mega_encryption_pk_record(
+fn mega_encryption_pk_record<R: Rng + CryptoRng>(
     node_id: NodeId,
     registry_version: RegistryVersion,
+    rng: &mut R,
 ) -> CryptoRegistryRecord {
-    let mega_pk = generate_mega_public_key();
+    let mega_pk = generate_mega_public_key(rng);
     let key_value = mega_pk.serialize();
 
     mega_encryption_pk_record_with(node_id, key_value, registry_version)
@@ -520,13 +532,11 @@ fn mega_encryption_pk_record_with_key(
     mega_encryption_pk_record_with(node_id, key.serialize(), registry_version)
 }
 
-fn generate_mega_public_key() -> MEGaPublicKey {
-    let rng = &mut thread_rng();
+fn generate_mega_public_key<R: Rng + CryptoRng>(rng: &mut R) -> MEGaPublicKey {
     let (mega_pk, _mega_sk) = ic_crypto_internal_threshold_sig_ecdsa::gen_keypair(
         EccCurveType::K256,
         Seed::from_rng(rng),
-    )
-    .expect("failed to generate keypair");
+    );
     mega_pk
 }
 

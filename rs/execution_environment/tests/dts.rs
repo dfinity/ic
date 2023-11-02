@@ -2,7 +2,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use candid::Encode;
 use ic_config::{
-    embedders::Config as EmbeddersConfig,
+    embedders::{Config as EmbeddersConfig, MeteringType},
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
@@ -114,7 +114,8 @@ fn dts_subnet_config(
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code: message_instruction_limit,
             max_instructions_per_install_code_slice: slice_instruction_limit,
-            max_instructions_per_round: slice_instruction_limit + slice_instruction_limit,
+            // We should execute just one slice per round.
+            max_instructions_per_round: slice_instruction_limit + slice_instruction_limit / 2,
             max_instructions_per_message: message_instruction_limit,
             max_instructions_per_message_without_dts: slice_instruction_limit,
             max_instructions_per_slice: slice_instruction_limit,
@@ -130,8 +131,11 @@ fn dts_state_machine_config(subnet_config: SubnetConfig) -> StateMachineConfig {
     StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
+            embedders_config: EmbeddersConfig {
+                cost_to_compile_wasm_instruction: 0.into(),
+                ..EmbeddersConfig::default()
+            },
             deterministic_time_slicing: FlagStatus::Enabled,
-            cost_to_compile_wasm_instruction: 0.into(),
             ..Default::default()
         },
     )
@@ -141,18 +145,21 @@ fn dts_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> StateMachine {
-    StateMachine::new_with_config(dts_state_machine_config(dts_subnet_config(
-        message_instruction_limit,
-        slice_instruction_limit,
-    )))
+    ic_state_machine_tests::StateMachineBuilder::new()
+        .with_config(Some(dts_state_machine_config(dts_subnet_config(
+            message_instruction_limit,
+            slice_instruction_limit,
+        ))))
+        .with_subnet_type(SubnetType::Application)
+        .build()
 }
 
 fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
-) -> StateMachine {
+) -> (StateMachine, DtsEnvConfig) {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    StateMachine::new_with_config(StateMachineConfig::new(
+    let config = DtsEnvConfig::new(
         SubnetConfig {
             scheduler_config: SchedulerConfig {
                 max_instructions_per_install_code: message_instruction_limit,
@@ -171,7 +178,17 @@ fn dts_install_code_env(
             deterministic_time_slicing: FlagStatus::Enabled,
             ..Default::default()
         },
-    ))
+    );
+    (
+        ic_state_machine_tests::StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                config.subnet_config.clone(),
+                config.hypervisor_config.clone(),
+            )))
+            .with_subnet_type(SubnetType::Application)
+            .build(),
+        config,
+    )
 }
 
 /// Extracts the ingress state from the ingress status.
@@ -194,10 +211,43 @@ fn ingress_time(ingress_status: IngressStatus) -> Option<SystemTime> {
     }
 }
 
+struct DtsEnvConfig {
+    subnet_config: SubnetConfig,
+    hypervisor_config: HypervisorConfig,
+}
+
+impl DtsEnvConfig {
+    pub fn new(subnet_config: SubnetConfig, hypervisor_config: HypervisorConfig) -> Self {
+        Self {
+            subnet_config,
+            hypervisor_config,
+        }
+    }
+
+    fn dirty_page_overhead_cycles(&self, num_pages: u64) -> Cycles {
+        match self.hypervisor_config.embedders_config.metering_type {
+            MeteringType::New => {
+                let dirty_page_overhead = self
+                    .subnet_config
+                    .scheduler_config
+                    .dirty_page_overhead
+                    .get();
+
+                self.subnet_config
+                    .cycles_account_manager_config
+                    .ten_update_instructions_execution_fee
+                    * (num_pages * dirty_page_overhead / 10)
+            }
+            MeteringType::Old | MeteringType::None => Cycles::new(0),
+        }
+    }
+}
+
 struct DtsInstallCode {
     env: StateMachine,
     canister_id: CanisterId,
     install_code_ingress_id: MessageId,
+    config: DtsEnvConfig,
 }
 
 /// A helper that:
@@ -237,7 +287,7 @@ fn setup_dts_install_code(
             (memory 0 20)
         )"#;
 
-    let env = dts_install_code_env(
+    let (env, config) = dts_install_code_env(
         NumInstructions::from(1_000_000),
         NumInstructions::from(1000),
     );
@@ -274,6 +324,7 @@ fn setup_dts_install_code(
         env,
         canister_id,
         install_code_ingress_id,
+        config,
     }
 }
 
@@ -309,6 +360,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         env,
         canister_id,
         install_code_ingress_id,
+        config,
     } = setup_dts_install_code(initial_balance, 0);
 
     // Start execution of `install_code`.
@@ -322,8 +374,12 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_eq!(
         env.cycle_balance(canister_id),
-        (initial_balance - install_code_ingress_cost - normal_ingress_cost - actual_execution_cost)
-            .get()
+        (initial_balance
+            - install_code_ingress_cost
+            - normal_ingress_cost
+            - actual_execution_cost
+            - config.dirty_page_overhead_cycles(1))
+        .get()
     );
 }
 
@@ -345,6 +401,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         env,
         canister_id,
         install_code_ingress_id,
+        config,
     } = setup_dts_install_code(initial_balance, 0);
 
     // Start execution of `install_code`.
@@ -372,7 +429,11 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_eq!(
         env.cycle_balance(canister_id),
-        (initial_balance - install_code_ingress_cost - actual_execution_cost).get()
+        (initial_balance
+            - install_code_ingress_cost
+            - actual_execution_cost
+            - config.dirty_page_overhead_cycles(1))
+        .get()
     );
 }
 
@@ -397,6 +458,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         env,
         canister_id,
         install_code_ingress_id,
+        config,
     } = setup_dts_install_code(initial_balance, 1);
 
     // Start execution of `install_code`.
@@ -424,7 +486,11 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_eq!(
         env.cycle_balance(canister_id),
-        (initial_balance - install_code_ingress_cost - actual_execution_cost).get()
+        (initial_balance
+            - install_code_ingress_cost
+            - actual_execution_cost
+            - config.dirty_page_overhead_cycles(1))
+        .get()
     );
 }
 
@@ -534,7 +600,7 @@ fn dts_scheduling_of_install_code() {
         return;
     }
 
-    let env = dts_install_code_env(
+    let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
@@ -689,7 +755,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
         return;
     }
 
-    let env = dts_install_code_env(
+    let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );

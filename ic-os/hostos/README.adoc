@@ -69,7 +69,6 @@ In addition to the regular, built-in Ubuntu user accounts, the following users a
 |backup       |var/lib/backup     |/bin/bash        |Backup subnet state
 |readonly     |/var/lib/readonly  |/bin/bash        |Administrative read-only account for Node Providers/Technicians
 |admin        |/var/lib/admin     |/bin/bash        |Administrative account for Node Providers/Technicians
-|journalbeat  |/home/journalbeat  |/usr/sbin/nologin|Journalbeat service account
 |node_exporter|/home/node_exporter|/usr/sbin/nologin|node_exporter service account
 |====
 

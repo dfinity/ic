@@ -4,6 +4,7 @@ Rules to manipulate with artifacts: download, upload etc.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@openssl_static_env//:defs.bzl", "DFINITY_OPENSSL_STATIC")
+load("//bazel:status.bzl", "FAKE_IC_VERSION")
 
 def _upload_artifact_impl(ctx):
     """
@@ -38,6 +39,7 @@ def _upload_artifact_impl(ctx):
             "@@REMOTE_SUBDIR@@": remote_subdir,
             "@@VERSION_FILE@@": ctx.version_file.path,
             "@@VERSION_TXT@@": ctx.file._version_txt.path,
+            "@@FAKE_IC_VERSION@@": FAKE_IC_VERSION,
         },
         is_executable = True,
     )
