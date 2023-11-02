@@ -5,6 +5,7 @@ use crate::{
         neuron::{DissolveState, Followees},
         Governance as GovernanceProto,
     },
+    storage::with_stable_neuron_indexes,
 };
 use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger};
 use maplit::{btreemap, hashmap, hashset};
@@ -166,9 +167,8 @@ fn test_add_neuron_after_indexes_migration() {
     neuron_store.add_neuron(neuron_2.clone()).unwrap();
 
     // Step 3: verifies that the indexes can be looked up for the new neuron.
-    let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
+    let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron_2.subaccount().unwrap())
             .unwrap()
@@ -202,9 +202,8 @@ fn test_add_neuron_during_indexes_migration_smaller_id() {
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 4: assert that the neuron can be looked up by subaccount index.
-    let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
+    let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap())
             .unwrap()
@@ -237,9 +236,8 @@ fn test_remove_neuron_after_indexes_migration() {
     neuron_store.remove_neuron(&neuron.id.unwrap());
 
     // Step 3: verifies that the neuron has also been removed from the subaccount index.
-    let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
+    let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap())
     });
@@ -278,9 +276,8 @@ fn test_modify_neuron_after_indexes_migration() {
         .unwrap();
 
     // Step 3: verifies that the neuron can be looked up by the neuron controller but not the old one.
-    let neuron_ids_found_by_new_controller = NEURON_INDEXES.with(|indexes| {
+    let neuron_ids_found_by_new_controller = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .principal()
             .get_neuron_ids(PrincipalId::new_user_test_id(2))
     });
@@ -288,9 +285,8 @@ fn test_modify_neuron_after_indexes_migration() {
         neuron_ids_found_by_new_controller,
         hashset! {neuron.id.unwrap().id}
     );
-    let neuron_ids_found_by_old_controller = NEURON_INDEXES.with(|indexes| {
+    let neuron_ids_found_by_old_controller = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .principal()
             .get_neuron_ids(PrincipalId::new_user_test_id(1))
     });
@@ -323,9 +319,8 @@ fn test_add_neuron_during_indexes_migration() {
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 4: assert that the subaccount index has not picked up the neuron.
-    let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
+    let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap())
     });
@@ -342,9 +337,8 @@ fn test_add_neuron_during_indexes_migration() {
     );
 
     // Step 6: assert that the subaccount index has now picked up the neuron.
-    let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
+    let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap())
     });
@@ -377,9 +371,8 @@ fn test_remove_neuron_during_indexes_migration() {
     neuron_store.remove_neuron(&neuron.id.unwrap());
 
     // Step 4: assert that the subaccount index does not have the removed neuron.
-    let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
+    let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap())
     });
@@ -396,9 +389,8 @@ fn test_remove_neuron_during_indexes_migration() {
     );
 
     // Step 6: assert that the subaccount index still does not have the removed neuron.
-    let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
+    let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
-            .borrow()
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap())
     });
@@ -439,12 +431,8 @@ fn test_modify_neuron_during_indexes_migration() {
         .unwrap();
 
     // Step 4: assert that the principal index has not picked up the neuron.
-    let neuron_id_found_by_principal_index = NEURON_INDEXES.with(|indexes| {
-        indexes
-            .borrow()
-            .principal()
-            .get_neuron_ids(new_principal_id)
-    });
+    let neuron_id_found_by_principal_index =
+        with_stable_neuron_indexes(|indexes| indexes.principal().get_neuron_ids(new_principal_id));
     assert_eq!(neuron_id_found_by_principal_index, hashset! {});
 
     // Step 5: let migration proceed and assert it succeeds.
@@ -458,12 +446,8 @@ fn test_modify_neuron_during_indexes_migration() {
     );
 
     // Step 6: assert that the principal index has now picked up the neuron.
-    let neuron_id_found_by_principal_index = NEURON_INDEXES.with(|indexes| {
-        indexes
-            .borrow()
-            .principal()
-            .get_neuron_ids(new_principal_id)
-    });
+    let neuron_id_found_by_principal_index =
+        with_stable_neuron_indexes(|indexes| indexes.principal().get_neuron_ids(new_principal_id));
     assert_eq!(neuron_id_found_by_principal_index, hashset! {neuron_id.id});
 }
 
@@ -507,8 +491,7 @@ fn test_batch_add_inactive_neurons_to_stable_memory() {
         (id, neuron)
     }));
 
-    // No need to clear STABLE_NEURON_STORE, because each #[test] is run in its
-    // own thread.
+    // No need to clear stable_neuron_store, because each #[test] is run in its own thread.
 
     // Step 2: Call the code under test.
     let mut neuron_store = NeuronStore::new(id_to_neuron);
@@ -520,7 +503,7 @@ fn test_batch_add_inactive_neurons_to_stable_memory() {
     assert_eq!(batch_result, Ok(Some(last_neuron_id)));
 
     fn read(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
-        STABLE_NEURON_STORE.with(|s| s.borrow().read(neuron_id))
+        with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.read(neuron_id))
     }
 
     // Step 3.1: Assert that neurons 3 and 12 were copied, since they are inactive.
@@ -674,8 +657,9 @@ fn test_with_neuron_mut_inactive_neuron() {
     // Step 3.1: The main thing that we want to see is that the unfunded Neuron ends up in stable
     // memory (and has the modification).
     assert_eq!(
-        STABLE_NEURON_STORE
-            .with(|stable_neuron_store| { stable_neuron_store.borrow().read(unfunded_neuron_id) }),
+        with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store.read(unfunded_neuron_id)
+        }),
         Ok(Neuron {
             account: vec![1, 2, 3],
             ..unfunded_neuron
@@ -685,8 +669,8 @@ fn test_with_neuron_mut_inactive_neuron() {
     // Step 3.2: Negative result: funded neuron should not be copied to stable memory. Perhaps, less
     // interesting, but also important is that some neurons (to wit, the funded Neuron) do NOT get
     // copied to stable memory.
-    let funded_neuron_read_result = STABLE_NEURON_STORE
-        .with(|stable_neuron_store| stable_neuron_store.borrow().read(funded_neuron_id));
+    let funded_neuron_read_result =
+        with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.read(funded_neuron_id));
     match &funded_neuron_read_result {
         Ok(_ok) => {
             panic!(

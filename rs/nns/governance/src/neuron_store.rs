@@ -14,7 +14,8 @@ use crate::{
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
-        NeuronIdU64, TopicSigned32, NEURON_INDEXES, STABLE_NEURON_STORE,
+        with_stable_neuron_indexes_mut, with_stable_neuron_store, with_stable_neuron_store_mut,
+        NeuronIdU64, TopicSigned32,
     },
     Clock, IcClock,
 };
@@ -392,8 +393,7 @@ impl NeuronStore {
             &self.indexes_migration,
             neuron.id.expect("Neuron must have an id."),
         ) {
-            if let Err(error) =
-                NEURON_INDEXES.with(|indexes| indexes.borrow_mut().add_neuron(neuron))
+            if let Err(error) = with_stable_neuron_indexes_mut(|indexes| indexes.add_neuron(neuron))
             {
                 println!(
                     "{}WARNING: issues found when adding neuron to indexes, possibly because \
@@ -435,7 +435,7 @@ impl NeuronStore {
         let neuron_id = neuron.id.expect("Neuron must have id");
         if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, neuron_id) {
             if let Err(error) =
-                NEURON_INDEXES.with(|indexes| indexes.borrow_mut().remove_neuron(neuron))
+                with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(neuron))
             {
                 println!(
                     "{}WARNING: issues found when adding neuron to indexes, possibly because of \
@@ -611,7 +611,7 @@ impl NeuronStore {
 
         let result = Ok(f(&mut new_neuron));
 
-        // Update STABLE_NEURON_STORE. For now, this functionality is disabled by default. It is
+        // Update stable_neuron_store. For now, this functionality is disabled by default. It is
         // enabled when building tests, and when feature = "test" is enabled.
         if is_copy_inactive_neurons_to_stable_memory_enabled() {
             write_through_to_stable_neuron_store(&new_neuron, now);
@@ -631,9 +631,9 @@ impl NeuronStore {
     fn update_neuron_indexes(&mut self, old_neuron: &Neuron, new_neuron: &Neuron) {
         // Update indexes by passing in both old and new versions of neuron.
         if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, old_neuron.id.unwrap()) {
-            if let Err(error) = NEURON_INDEXES
-                .with(|indexes| indexes.borrow_mut().update_neuron(old_neuron, new_neuron))
-            {
+            if let Err(error) = with_stable_neuron_indexes_mut(|indexes| {
+                indexes.update_neuron(old_neuron, new_neuron)
+            }) {
                 println!(
                     "{}WARNING: issues found when updating neuron indexes, possibly because of \
                  neuron indexes are out-of-sync with neurons: {}",
@@ -750,8 +750,7 @@ impl NeuronStore {
         // around and start with 0 again.
         let start_neuron_id = last_neuron_id.id.saturating_add(1);
         for (neuron_id, neuron) in self.heap_neurons.range(start_neuron_id..).take(batch_size) {
-            NEURON_INDEXES
-                .with(|indexes| indexes.borrow_mut().add_neuron(neuron))
+            with_stable_neuron_indexes_mut(|indexes| indexes.add_neuron(neuron))
                 .map_err(|error| GovernanceError::from(error).error_message)?;
             count += 1;
             new_last_neuron_id = Some(NeuronId { id: *neuron_id });
@@ -782,8 +781,7 @@ impl NeuronStore {
         // TODO: Make this owned by self, and stop accessing accessing data via global. There is
         // no known way to do this right now, because StableBTreeMap is used, and it is not
         // Send.
-        STABLE_NEURON_STORE.with(|stable_neuron_store| {
-            let mut stable_neuron_store = stable_neuron_store.borrow_mut();
+        with_stable_neuron_store_mut(|stable_neuron_store| {
             let batch_len = batch.len();
 
             let mut new_last_neuron_id = None; // result/work tracker
@@ -959,18 +957,15 @@ impl NeuronStore {
     // Census
 
     pub fn stable_neuron_store_len(&self) -> u64 {
-        STABLE_NEURON_STORE.with(|stable_neuron_store| stable_neuron_store.borrow().len())
+        with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len())
     }
 
     pub fn stable_indexes_lens(&self) -> NeuronIndexesLens {
-        NEURON_INDEXES.with(|indexes| {
-            let indexes = indexes.borrow();
-            NeuronIndexesLens {
-                subaccount: indexes.subaccount().num_entries(),
-                principal: indexes.principal().num_entries(),
-                following: indexes.following().num_entries(),
-                known_neuron: indexes.known_neuron().num_entries(),
-            }
+        with_stable_neuron_indexes_mut(|indexes| NeuronIndexesLens {
+            subaccount: indexes.subaccount().num_entries(),
+            principal: indexes.principal().num_entries(),
+            following: indexes.following().num_entries(),
+            known_neuron: indexes.known_neuron().num_entries(),
         })
     }
 }
@@ -1006,12 +1001,13 @@ fn write_through_to_stable_neuron_store(neuron: &Neuron, now: u64) {
         // returned. Before a full copy sweep has been performed, we have to instead use
         // more the "permissive" upsert method, because it is not necessary wrong that the
         // Neuron was not already in stable_neuron_store.
-        let upsert_result = STABLE_NEURON_STORE
-            .with(|stable_neuron_store| stable_neuron_store.borrow_mut().upsert(neuron.clone()));
+        let upsert_result = with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.upsert(neuron.clone())
+        });
         if let Err(err) = upsert_result {
             // TODO(NNS1-2493): Increment some error metric.
             println!(
-                "{}ERROR: Failed to update inactive Neuron in STABLE_NEURON_STORE: {}",
+                "{}ERROR: Failed to update inactive Neuron in stable_neuron_store: {}",
                 LOG_PREFIX, err,
             );
         }
@@ -1021,8 +1017,9 @@ fn write_through_to_stable_neuron_store(neuron: &Neuron, now: u64) {
         // then we can expect that delete returns Ok or Err, depending on
         // was_inactive_before. Before a full copy sweep has been performed, it is not feasible
         // to determine whether the Neuron should have been there or not.
-        let _ignore_result = STABLE_NEURON_STORE
-            .with(|stable_neuron_store| stable_neuron_store.borrow_mut().delete(neuron_id));
+        let _ignore_result = with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.delete(neuron_id)
+        });
     }
 }
 

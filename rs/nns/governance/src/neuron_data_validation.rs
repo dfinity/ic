@@ -1,7 +1,7 @@
 use crate::{
     neuron_store::{get_neuron_subaccount, NeuronStore, NeuronStoreError},
     pb::v1::{Neuron, Topic},
-    storage::{Signed32, NEURON_INDEXES, STABLE_NEURON_STORE},
+    storage::{with_stable_neuron_indexes, with_stable_neuron_store, Signed32},
 };
 
 use candid::{CandidType, Deserialize};
@@ -438,7 +438,7 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary = neuron_store.heap_neurons().len() as u64;
         let cardinality_index =
-            NEURON_INDEXES.with(|indexes| indexes.borrow().subaccount().num_entries()) as u64;
+            with_stable_neuron_indexes(|indexes| indexes.subaccount().num_entries()) as u64;
         if cardinality_primary != cardinality_index {
             Some(ValidationIssue::SubaccountIndexCardinalityMismatch {
                 primary: cardinality_primary,
@@ -458,11 +458,8 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
             Ok(subaccount) => subaccount,
             Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
         };
-        let subaccount_in_index = NEURON_INDEXES.with(|indexes| {
-            indexes
-                .borrow()
-                .subaccount()
-                .contains_entry(neuron_id, &subaccount)
+        let subaccount_in_index = with_stable_neuron_indexes(|indexes| {
+            indexes.subaccount().contains_entry(neuron_id, &subaccount)
         });
         if !subaccount_in_index {
             Some(ValidationIssue::SubaccountMissingFromIndex {
@@ -490,7 +487,7 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
             .map(|neuron| neuron.principal_ids_with_special_permissions().len() as u64)
             .sum();
         let cardinality_index =
-            NEURON_INDEXES.with(|indexes| indexes.borrow().principal().num_entries()) as u64;
+            with_stable_neuron_indexes(|indexes| indexes.principal().num_entries()) as u64;
         if cardinality_primary != cardinality_index {
             Some(ValidationIssue::PrincipalIndexCardinalityMismatch {
                 primary: cardinality_primary,
@@ -515,9 +512,8 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
         let missing_principal_ids: Vec<_> = principal_ids
             .into_iter()
             .filter(|principal_id| {
-                let pair_exists_in_index = NEURON_INDEXES.with(|indexes| {
+                let pair_exists_in_index = with_stable_neuron_indexes(|indexes| {
                     indexes
-                        .borrow()
                         .principal()
                         .contains_entry(&neuron_id.id, *principal_id)
                 });
@@ -550,7 +546,7 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
             .map(|neuron| neuron.topic_followee_pairs().len() as u64)
             .sum();
         let cardinality_index =
-            NEURON_INDEXES.with(|indexes| indexes.borrow().following().num_entries()) as u64;
+            with_stable_neuron_indexes(|indexes| indexes.following().num_entries()) as u64;
         if cardinality_primary != cardinality_index {
             Some(ValidationIssue::FollowingIndexCardinalityMismatch {
                 primary: cardinality_primary,
@@ -574,8 +570,8 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
         let missing_topic_followee_pairs: Vec<_> = topic_followee_pairs
             .into_iter()
             .filter(|(topic, followee)| {
-                let pair_exists_in_index = NEURON_INDEXES.with(|indexes| {
-                    indexes.borrow().following().contains_entry(
+                let pair_exists_in_index = with_stable_neuron_indexes(|indexes| {
+                    indexes.following().contains_entry(
                         Signed32::from(*topic as i32),
                         &followee.id,
                         &neuron_id.id,
@@ -608,7 +604,7 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
             .filter(|neuron| neuron.known_neuron_data.is_some())
             .count();
         let cardinality_index =
-            NEURON_INDEXES.with(|indexes| indexes.borrow().known_neuron().num_entries());
+            with_stable_neuron_indexes(|indexes| indexes.known_neuron().num_entries());
         if cardinality_primary != cardinality_index {
             Some(ValidationIssue::KnownNeuronIndexCardinalityMismatch {
                 primary: cardinality_primary as u64,
@@ -635,9 +631,8 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
             Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
             Ok(Some(known_neuron_name)) => known_neuron_name,
         };
-        let index_has_entry = NEURON_INDEXES.with(|indexes| {
+        let index_has_entry = with_stable_neuron_indexes(|indexes| {
             indexes
-                .borrow()
                 .known_neuron()
                 .contains_entry(neuron_id, &known_neuron_name)
         });
@@ -673,7 +668,7 @@ impl NeuronCopyValidator {
     /// Validate that the expected number of neurons are in stable storage.
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
         let stable_entry_count =
-            STABLE_NEURON_STORE.with(|stable_neuron_store| stable_neuron_store.borrow().len());
+            with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len());
 
         let matching_heap_entries = neuron_store
             .heap_neurons()
@@ -742,9 +737,7 @@ impl ValidationTask for NeuronCopyValidator {
             None => return vec![],
         };
 
-        STABLE_NEURON_STORE.with(|stable_neuron_store| {
-            let stable_neuron_store = stable_neuron_store.borrow();
-
+        with_stable_neuron_store(|stable_neuron_store| {
             stable_neuron_store
                 .range_neurons(next_neuron_id..)
                 .take(self.chunk_size)
@@ -773,7 +766,10 @@ mod tests {
     use ic_base_types::PrincipalId;
     use maplit::{btreemap, hashmap};
 
-    use crate::pb::v1::{neuron::Followees, KnownNeuronData, Neuron};
+    use crate::{
+        pb::v1::{neuron::Followees, KnownNeuronData, Neuron},
+        storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
+    };
 
     thread_local! {
         static NEXT_TEST_NEURON_ID: RefCell<u64> = RefCell::new(1);
@@ -871,12 +867,9 @@ mod tests {
 
         let neuron_store = NeuronStore::new(btree_map);
 
-        STABLE_NEURON_STORE.with(|stable_neuron_store| {
+        with_stable_neuron_store_mut(|stable_neuron_store| {
             for neuron in idle_neurons {
-                stable_neuron_store
-                    .borrow_mut()
-                    .create(neuron)
-                    .expect("Couldn't create");
+                stable_neuron_store.create(neuron).expect("Couldn't create");
             }
         });
 
@@ -915,12 +908,9 @@ mod tests {
 
         let neuron_store = NeuronStore::new(btree_map);
 
-        STABLE_NEURON_STORE.with(|stable_neuron_store| {
+        with_stable_neuron_store_mut(|stable_neuron_store| {
             for neuron in idle_neurons {
-                stable_neuron_store
-                    .borrow_mut()
-                    .create(neuron)
-                    .expect("Couldn't create");
+                stable_neuron_store.create(neuron).expect("Couldn't create");
             }
         });
 
@@ -999,14 +989,12 @@ mod tests {
     #[test]
     fn test_validator_invalid_issues() {
         // Step 1: Cause as many issues as possible by having an inactive neuron (without adding it
-        // to STABLE_NEURON_STORE, and remove the only neuron from indexes).
+        // to stable_neuron_store, and remove the only neuron from indexes).
         let neuron = next_test_neuron();
         let mut neuron_store =
             NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron.clone()});
         neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
-        NEURON_INDEXES
-            .with(|indexes| indexes.borrow_mut().remove_neuron(&neuron))
-            .unwrap();
+        with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(&neuron)).unwrap();
 
         // Step 2: Validate and get validation summary.
         let mut validator = NeuronDataValidator::new();
@@ -1116,9 +1104,9 @@ mod tests {
             .collect();
         let mut neuron_store = NeuronStore::new(neurons.clone());
         neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
-        NEURON_INDEXES.with(|indexes| {
+        with_stable_neuron_indexes_mut(|indexes| {
             for neuron in neurons.values() {
-                indexes.borrow_mut().remove_neuron(neuron).unwrap()
+                indexes.remove_neuron(neuron).unwrap()
             }
         });
 

@@ -5,7 +5,7 @@ use crate::{
         settle_community_fund_participation, ExecuteNnsFunction, GovernanceError, Neuron,
         OpenSnsTokenSwap, SettleCommunityFundParticipation,
     },
-    storage::STABLE_NEURON_STORE,
+    storage::with_stable_neuron_store,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -2211,8 +2211,7 @@ fn copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(
 }
 
 fn assert_copied_neurons(expected_neuron_ids: &[NeuronId]) {
-    STABLE_NEURON_STORE.with(|stable_neuron_store| {
-        let stable_neuron_store = stable_neuron_store.borrow();
+    with_stable_neuron_store(|stable_neuron_store| {
         for id in 0..20 {
             let neuron_id = NeuronId { id };
             let read_result = stable_neuron_store.read(neuron_id);

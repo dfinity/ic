@@ -37,28 +37,38 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
+    static STATE: RefCell<State> = RefCell::new(State::new());
+}
+
+struct State {
     // The memory where the governance reads and writes its state during an upgrade.
-    pub static UPGRADES_MEMORY: RefCell<VM> = MEMORY_MANAGER
-        .with(|memory_manager| RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+    upgrades_memory: VM,
 
     // Events for audit purposes.
-    pub static AUDIT_EVENTS_LOG: RefCell<StableLog<AuditEvent, VM, VM>> =
-        MEMORY_MANAGER.with(|memory_manager| {
+    audit_events_log: StableLog<AuditEvent, VM, VM>,
+
+    // Neurons stored in stable storage.
+    stable_neuron_store: neurons::StableNeuronStore<VM>,
+
+    // Neuron indexes stored in stable storage.
+    stable_neuron_indexes: neuron_indexes::StableNeuronIndexes<VM>,
+}
+
+impl State {
+    pub fn new() -> Self {
+        let upgrades_memory =
+            MEMORY_MANAGER.with(|memory_manager| memory_manager.borrow().get(UPGRADES_MEMORY_ID));
+        let audit_events_log = MEMORY_MANAGER.with(|memory_manager| {
             let memory_manager = memory_manager.borrow();
-            RefCell::new(
-                StableLog::init(
-                    memory_manager.get(AUDIT_EVENTS_INDEX_MEMORY_ID),
-                    memory_manager.get(AUDIT_EVENTS_DATA_MEMORY_ID),
-                )
-                .expect("Failed to initialize stable log"),
+            StableLog::init(
+                memory_manager.get(AUDIT_EVENTS_INDEX_MEMORY_ID),
+                memory_manager.get(AUDIT_EVENTS_DATA_MEMORY_ID),
             )
+            .expect("Failed to initialize stable log")
         });
-
-    pub(crate) static STABLE_NEURON_STORE: RefCell<neurons::StableNeuronStore<VM>> =
-        MEMORY_MANAGER.with(|memory_manager| {
+        let stable_neuron_store = MEMORY_MANAGER.with(|memory_manager| {
             let memory_manager = memory_manager.borrow();
-
-            let stable_neuron_store = neurons::StableNeuronStoreBuilder {
+            neurons::StableNeuronStoreBuilder {
                 main: memory_manager.get(MAIN_NEURONS_MEMORY_ID),
 
                 // Collections
@@ -70,29 +80,91 @@ thread_local! {
                 known_neuron_data: memory_manager.get(KNOWN_NEURON_DATA_NEURONS_MEMORY_ID),
                 transfer: memory_manager.get(TRANSFER_NEURONS_MEMORY_ID),
             }
-            .build();
-
-            RefCell::new(stable_neuron_store)
+            .build()
         });
 
-    pub(crate) static NEURON_INDEXES: RefCell<neuron_indexes::StableNeuronIndexes<VM>> = MEMORY_MANAGER
-        .with(|memory_manager| {
+        let stable_neuron_indexes = MEMORY_MANAGER.with(|memory_manager| {
             let memory_manager = memory_manager.borrow();
-            RefCell::new(
-                neuron_indexes::StableNeuronIndexesBuilder {
-                    subaccount: memory_manager.get(NEURON_SUBACCOUNT_INDEX_MEMORY_ID),
-                    principal: memory_manager.get(NEURON_PRINCIPAL_INDEX_MEMORY_ID),
-                    following: memory_manager.get(NEURON_FOLLOWING_INDEX_MEMORY_ID),
-                    known_neuron: memory_manager.get(NEURON_KNOWN_NEURON_INDEX_MEMORY_ID),
-                }
-                .build(),
-            )
+            neuron_indexes::StableNeuronIndexesBuilder {
+                subaccount: memory_manager.get(NEURON_SUBACCOUNT_INDEX_MEMORY_ID),
+                principal: memory_manager.get(NEURON_PRINCIPAL_INDEX_MEMORY_ID),
+                following: memory_manager.get(NEURON_FOLLOWING_INDEX_MEMORY_ID),
+                known_neuron: memory_manager.get(NEURON_KNOWN_NEURON_INDEX_MEMORY_ID),
+            }
+            .build()
         });
+
+        Self {
+            upgrades_memory,
+            audit_events_log,
+            stable_neuron_store,
+            stable_neuron_indexes,
+        }
+    }
+}
+
+pub fn with_upgrades_memory<R>(f: impl FnOnce(&VM) -> R) -> R {
+    STATE.with(|state| {
+        let upgrades_memory = &state.borrow().upgrades_memory;
+        f(upgrades_memory)
+    })
+}
+
+pub(crate) fn with_audit_events_log<R>(f: impl FnOnce(&StableLog<AuditEvent, VM, VM>) -> R) -> R {
+    STATE.with(|state| {
+        let audit_events_log = &state.borrow().audit_events_log;
+        f(audit_events_log)
+    })
+}
+
+pub(crate) fn with_stable_neuron_store<R>(
+    f: impl FnOnce(&neurons::StableNeuronStore<VM>) -> R,
+) -> R {
+    STATE.with(|state| {
+        let stable_neuron_store = &state.borrow().stable_neuron_store;
+        f(stable_neuron_store)
+    })
+}
+
+pub(crate) fn with_stable_neuron_store_mut<R>(
+    f: impl FnOnce(&mut neurons::StableNeuronStore<VM>) -> R,
+) -> R {
+    STATE.with(|state| {
+        let stable_neuron_store = &mut state.borrow_mut().stable_neuron_store;
+        f(stable_neuron_store)
+    })
+}
+
+pub(crate) fn with_stable_neuron_indexes<R>(
+    f: impl FnOnce(&neuron_indexes::StableNeuronIndexes<VM>) -> R,
+) -> R {
+    STATE.with(|state| {
+        let stable_neuron_indexes = &state.borrow().stable_neuron_indexes;
+        f(stable_neuron_indexes)
+    })
+}
+
+pub(crate) fn with_stable_neuron_indexes_mut<R>(
+    f: impl FnOnce(&mut neuron_indexes::StableNeuronIndexes<VM>) -> R,
+) -> R {
+    STATE.with(|state| {
+        let stable_neuron_indexes = &mut state.borrow_mut().stable_neuron_indexes;
+        f(stable_neuron_indexes)
+    })
+}
+
+// Clears and initializes stable memory and stable structures before testing. Typically only needed
+// in proptest! where stable storage data needs to be accessed in multiple iterations within one
+// thread.
+#[allow(dead_code)]
+#[cfg(test)]
+pub(crate) fn reset_stable_memory() {
+    MEMORY_MANAGER.with(|mm| *mm.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
+    STATE.with(|cell| *cell.borrow_mut() = State::new());
 }
 
 pub fn grow_upgrades_memory_to(target_pages: u64) {
-    UPGRADES_MEMORY.with(|upgrades_memory| {
-        let upgrades_memory = upgrades_memory.borrow();
+    with_upgrades_memory(|upgrades_memory| {
         let current_size = upgrades_memory.size();
         let diff = target_pages.saturating_sub(current_size);
         if diff == 0 {
@@ -186,37 +258,37 @@ mod tests {
     #[test]
     fn grow_upgrades_memory_to_success() {
         grow_upgrades_memory_to(10);
-        UPGRADES_MEMORY.with(|upgrades_memory| {
-            assert_eq!(upgrades_memory.borrow().size(), 10);
+        with_upgrades_memory(|memory| {
+            assert_eq!(memory.size(), 10);
         });
     }
 
     #[test]
     fn grow_upgrades_memory_to_smaller_no_op() {
         grow_upgrades_memory_to(20);
-        UPGRADES_MEMORY.with(|upgrades_memory| {
-            assert_eq!(upgrades_memory.borrow().size(), 20);
+        with_upgrades_memory(|memory| {
+            assert_eq!(memory.size(), 20);
         });
 
         grow_upgrades_memory_to(10);
-        UPGRADES_MEMORY.with(|upgrades_memory| {
-            assert_eq!(upgrades_memory.borrow().size(), 20);
+        with_upgrades_memory(|memory| {
+            assert_eq!(memory.size(), 20);
         });
     }
 
     #[test]
     fn grow_upgrades_memory_to_fails() {
         grow_upgrades_memory_to(10);
-        UPGRADES_MEMORY.with(|upgrades_memory| {
-            assert_eq!(upgrades_memory.borrow().size(), 10);
+        with_upgrades_memory(|memory| {
+            assert_eq!(memory.size(), 10);
         });
 
         // Try to grow to 2^22 + 1, where 2^22 is the max number of pages allowed by stable
         // structures memory manager. It's very unlikely that we want to grow to this number, but
         // this test is just to make sure that we do not panic here.
         grow_upgrades_memory_to(4_194_305);
-        UPGRADES_MEMORY.with(|upgrades_memory| {
-            assert_eq!(upgrades_memory.borrow().size(), 10);
+        with_upgrades_memory(|memory| {
+            assert_eq!(memory.size(), 10);
         });
     }
 }
