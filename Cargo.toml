@@ -406,6 +406,9 @@ jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
 [workspace.dependencies]
 base64 = { version = "0.13.1" }
+# build-info and build-info-build MUST be kept in sync!
+build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764" }
+build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764", default_features = false }
 bytes = "1.5.0"
 candid = { version = "0.9.10", features = ["parser"] }
 chrono = { version = "0.4.19", features = ["serde"] }
