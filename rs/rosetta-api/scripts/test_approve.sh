@@ -10,16 +10,12 @@ if (($# != 0)); then
     exit 1
 fi
 
-LEDGER_CANISTER_ID="ryjl3-tyaaa-aaaaa-aaaba-cai"
-ARCHIVE_CANISTER_ID="qjdve-lqaaa-aaaaa-aaaeq-cai"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-LEDGER_DID="$SCRIPT_DIR/../icp_ledger/ledger.did"
-TMP_DIR="$SCRIPT_DIR/tmp" # need a persistent directory from within dev container
+source "$SCRIPT_DIR/constants.sh"
+
 NUM_OF_BATCHES=50
 NUM_OF_APPROVALS_PER_BATCH=21 # 100 fails for some reason related to the testnet setup
-HOME="${DFX_HOME:-$HOME}"
 
-NNS_TEST_ID="nns_test_user_dfx_identity"
 dfx identity use "$NNS_TEST_ID"
 
 SPENDER_1_PRINCIPAL="pcwbg-y26mf-k62dw-7xo2m-jfv2n-un56b-pjkp7-oirek-obdjm-bklck-2ae"
