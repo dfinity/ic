@@ -1,5 +1,6 @@
+use std::os::unix::fs::PermissionsExt;
 use std::{
-    fs::File,
+    fs::{self, File, Permissions},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -7,16 +8,13 @@ use std::{
 use anyhow::{Context, Error};
 use clap::{Args, Parser};
 use ipnet::Ipv6Net;
-use loopdev::{create_loop_device, detach_loop_device};
-use sysmount::{mount, umount};
-use tempfile::tempdir;
-use tokio::fs;
+use tempfile::NamedTempFile;
 use url::Url;
 
 mod deployment;
 use deployment::DeploymentJson;
-mod loopdev;
-mod sysmount;
+
+use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
 
 const SERVICE_NAME: &str = "setupos-inject-configuration";
 
@@ -67,111 +65,97 @@ struct DeploymentConfig {
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
-    // Create a loop device
-    let device_path = create_loop_device(&cli.image_path)
-        .await
-        .context("failed to create loop device")?;
-
-    let config_partition_path = format!("{device_path}p3");
-
-    // Mount config partition
-    let target_dir = tempdir().context("failed to create temporary dir")?;
-
-    mount(
-        &config_partition_path,               // source
-        &target_dir.path().to_string_lossy(), // target
-    )
-    .await
-    .context("failed to mount partition")?;
+    // Open config partition
+    let mut config = FatPartition::open(cli.image_path.clone(), 3).await?;
 
     // Print previous config.ini
     println!("Previous config.ini:\n---");
-    print_file_contents(&target_dir.path().join("config.ini"))
+    let previous_config = config
+        .read_file(Path::new("/config.ini"))
         .await
         .context("failed to print previous config")?;
+    println!("{previous_config}");
 
     // Update config.ini
-    write_config(&target_dir.path().join("config.ini"), &cli.network)
+    let config_ini = NamedTempFile::new()?;
+    write_config(config_ini.path(), &cli.network)
         .await
         .context("failed to write config file")?;
+    config
+        .write_file(config_ini.path(), Path::new("/config.ini"))
+        .await
+        .context("failed to copy config file")?;
 
     // Update node-provider private-key
     if let Some(private_key_path) = cli.private_key_path {
-        fs::copy(
-            private_key_path,
-            &target_dir.path().join("node_operator_private_key.pem"),
-        )
-        .await
-        .context("failed to copy private-key")?;
+        config
+            .write_file(
+                &private_key_path,
+                Path::new("/node_operator_private_key.pem"),
+            )
+            .await
+            .context("failed to copy private-key")?;
     }
 
     // Print previous public keys
     println!("Previous ssh_authorized_keys/admin:\n---");
-    print_file_contents(&target_dir.path().join("ssh_authorized_keys/admin"))
+    let previous_admin_keys = config
+        .read_file(Path::new("ssh_authorized_keys/admin"))
         .await
         .context("failed to print previous config")?;
+    println!("{previous_admin_keys}");
 
     // Update SSH keys
     if let Some(ks) = cli.public_keys {
-        write_public_keys(&target_dir.path().join("ssh_authorized_keys/admin"), ks)
+        let public_keys = NamedTempFile::new()?;
+        write_public_keys(public_keys.path(), ks)
             .await
             .context("failed to write public keys")?;
+
+        config
+            .write_file(public_keys.path(), Path::new("/ssh_authorized_keys/admin"))
+            .await
+            .context("failed to copy public keys")?;
     }
 
-    // Unmount partition
-    umount(&target_dir.path().to_string_lossy())
-        .await
-        .context("failed to unmount partition")?;
+    // Close config partition
+    config.close().await?;
 
-    let data_partition_path = format!("{device_path}p4");
-
-    // Mount data partition
-    let target_dir = tempdir().context("failed to create temporary dir")?;
-
-    mount(
-        &data_partition_path,                 // source
-        &target_dir.path().to_string_lossy(), // target
-    )
-    .await
-    .context("failed to mount partition")?;
+    // Open data partition
+    let mut data = ExtPartition::open(cli.image_path.clone(), 4).await?;
 
     // Print previous deployment.json
     println!("Previous deployment.json:\n---");
-    print_file_contents(&target_dir.path().join("deployment.json"))
+    let previous_deployment = data
+        .read_file(Path::new("/deployment.json"))
         .await
         .context("failed to print previous deployment config")?;
+    println!("{previous_deployment}");
 
     // Update deployment.json
-    update_deployment(&target_dir.path().join("deployment.json"), &cli.deployment)
+    let mut deployment_json = NamedTempFile::new()?;
+    deployment_json.write_all(previous_deployment.as_bytes())?;
+    fs::set_permissions(deployment_json.path(), Permissions::from_mode(0o644))?;
+    update_deployment(deployment_json.path(), &cli.deployment)
         .await
         .context("failed to write deployment config file")?;
+    data.write_file(deployment_json.path(), Path::new("/deployment.json"))
+        .await
+        .context("failed to copy deployment config file")?;
 
     // Update NNS key
     if let Some(public_key) = cli.deployment.nns_public_key {
-        let mut f = File::create(target_dir.path().join("nns_public_key.pem"))
-            .context("failed to create nns key file")?;
-        write!(&mut f, "{public_key}")?;
+        let mut nns_key = NamedTempFile::new()?;
+        write!(&mut nns_key, "{public_key}")?;
+        fs::set_permissions(nns_key.path(), Permissions::from_mode(0o644))?;
+
+        data.write_file(nns_key.path(), Path::new("/nns_public_key.pem"))
+            .await
+            .context("failed to copy nns key file")?;
     }
 
-    // Unmount partition
-    umount(&target_dir.path().to_string_lossy())
-        .await
-        .context("failed to unmount partition")?;
-
-    // Detach loop device
-    detach_loop_device(&device_path)
-        .await
-        .context("failed to detach loop device")?;
-
-    Ok(())
-}
-
-async fn print_file_contents(path: &Path) -> Result<(), Error> {
-    let s = fs::read_to_string(path).await;
-
-    if let Ok(s) = s {
-        println!("{s}");
-    }
+    // Close data partition
+    data.close().await?;
 
     Ok(())
 }

@@ -128,6 +128,7 @@ members = [
   "rs/ic_os/guestos_tool",
   "rs/ic_os/launch-single-vm",
   "rs/ic_os/setupos-inject-configuration",
+  "rs/ic_os/partition_tools",
   "rs/ic_os/setupos-disable-checks",
   "rs/ic_os/sev_interfaces",
   "rs/ic_os/sev",

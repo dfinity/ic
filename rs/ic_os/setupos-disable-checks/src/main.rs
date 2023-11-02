@@ -1,14 +1,13 @@
-use std::path::PathBuf;
+use std::fs::Permissions;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Error};
 use clap::Parser;
-use loopdev::{create_loop_device, detach_loop_device};
-use sysmount::{mount, umount};
-use tempfile::tempdir;
+use tempfile::NamedTempFile;
 use tokio::fs;
 
-mod loopdev;
-mod sysmount;
+use partition_tools::{ext::ExtPartition, Partition};
 
 const SERVICE_NAME: &str = "setupos-disable-checks";
 
@@ -23,26 +22,15 @@ struct Cli {
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
-    // Create a loop device
-    let device_path = create_loop_device(&cli.image_path)
-        .await
-        .context("failed to create loop device")?;
-
-    let rootfs_partition_path = format!("{device_path}p6");
-
-    // Mount rootfs partition
-    let target_dir = tempdir().context("failed to create temporary dir")?;
-
-    mount(
-        &rootfs_partition_path,               // source
-        &target_dir.path().to_string_lossy(), // target
-    )
-    .await
-    .context("failed to mount partition")?;
+    // Open rootfs partition
+    println!("Opening root partition");
+    let mut rootfs = ExtPartition::open(cli.image_path, 6).await?;
 
     // Overwrite hardware checks
+    println!("Clearing hardware checks");
+    let hardware = NamedTempFile::new()?;
     fs::write(
-        target_dir.path().join("opt/ic/bin/hardware.sh"), // path
+        hardware.path(),
         indoc::formatdoc!(
             r#"
                 #!/usr/bin/env bash
@@ -52,10 +40,16 @@ async fn main() -> Result<(), Error> {
     )
     .await
     .context("failed to write file")?;
+    fs::set_permissions(hardware.path(), Permissions::from_mode(0o755)).await?;
+    rootfs
+        .write_file(hardware.path(), Path::new("/opt/ic/bin/hardware.sh"))
+        .await?;
 
     // Overwrite network checks
+    println!("Clearing network checks");
+    let network = NamedTempFile::new()?;
     fs::write(
-        target_dir.path().join("opt/ic/bin/network.sh"), // path
+        network.path(),
         indoc::formatdoc!(
             r#"
                 #!/usr/bin/env bash
@@ -65,16 +59,14 @@ async fn main() -> Result<(), Error> {
     )
     .await
     .context("failed to write file")?;
+    fs::set_permissions(network.path(), Permissions::from_mode(0o755)).await?;
+    rootfs
+        .write_file(network.path(), Path::new("/opt/ic/bin/network.sh"))
+        .await?;
 
-    // Unmount partition
-    umount(&target_dir.path().to_string_lossy())
-        .await
-        .context("failed to unmount partition")?;
-
-    // Detach loop device
-    detach_loop_device(&device_path)
-        .await
-        .context("failed to detach loop device")?;
+    // Close rootfs partition
+    println!("Closing root partition");
+    rootfs.close().await?;
 
     Ok(())
 }
