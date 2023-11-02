@@ -284,6 +284,7 @@ where
         cycles_account_manager,
         SchedulerConfig::application_subnet().scheduler_cores,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        subnet_configs.scheduler_config.heap_delta_rate_limit,
     );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(

@@ -112,6 +112,8 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_controllers: usize,
     pub(crate) rate_limiting_of_instructions: FlagStatus,
     pub(crate) wasm_chunk_store: FlagStatus,
+    rate_limiting_of_heap_delta: FlagStatus,
+    heap_delta_rate_limit: NumBytes,
 }
 
 impl CanisterMgrConfig {
@@ -127,6 +129,8 @@ impl CanisterMgrConfig {
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
         wasm_chunk_store: FlagStatus,
+        rate_limiting_of_heap_delta: FlagStatus,
+        heap_delta_rate_limit: NumBytes,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -139,6 +143,8 @@ impl CanisterMgrConfig {
                 as u64,
             rate_limiting_of_instructions,
             wasm_chunk_store,
+            rate_limiting_of_heap_delta,
+            heap_delta_rate_limit,
         }
     }
 }
@@ -312,6 +318,11 @@ pub(crate) struct CanisterManager {
     cycles_account_manager: Arc<CyclesAccountManager>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+}
+
+pub(crate) struct UploadChunkResult {
+    pub(crate) reply: UploadChunkReply,
+    pub(crate) heap_delta_increase: NumBytes,
 }
 
 impl CanisterManager {
@@ -1452,7 +1463,7 @@ impl CanisterManager {
         subnet_available_memory: &mut SubnetAvailableMemory,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<UploadChunkReply, CanisterManagerError> {
+    ) -> Result<UploadChunkResult, CanisterManagerError> {
         if self.config.wasm_chunk_store == FlagStatus::Disabled {
             return Err(CanisterManagerError::WasmChunkStoreError {
                 message: "Wasm chunk store not enabled".to_string(),
@@ -1469,6 +1480,17 @@ impl CanisterManager {
 
         let chunk_bytes = wasm_chunk_store::chunk_size();
         let new_memory_usage = canister.memory_usage() + chunk_bytes;
+
+        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
+            && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
+        {
+            return Err(CanisterManagerError::WasmChunkStoreError {
+                message: format!(
+                    "Canister is heap delta rate limited. Current delta debit: {}, limit: {}",
+                    canister.scheduler_state.heap_delta_debit, self.config.heap_delta_rate_limit
+                ),
+            });
+        }
 
         match canister.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => {
@@ -1558,6 +1580,10 @@ impl CanisterManager {
             }
         }
 
+        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
+            canister.scheduler_state.heap_delta_debit += chunk_bytes;
+        }
+
         // We initially checked that this chunk can be inserted, so the unwarp
         // here is guaranteed to succeed.
         let hash = canister
@@ -1565,8 +1591,11 @@ impl CanisterManager {
             .wasm_chunk_store
             .insert_chunk(chunk)
             .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
-        Ok(UploadChunkReply {
-            hash: hash.to_vec(),
+        Ok(UploadChunkResult {
+            reply: UploadChunkReply {
+                hash: hash.to_vec(),
+            },
+            heap_delta_increase: chunk_bytes,
         })
     }
 

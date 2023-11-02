@@ -142,6 +142,7 @@ impl ExecutionServices {
             Arc::clone(&cycles_account_manager),
             scheduler_config.scheduler_cores,
             Arc::clone(&fd_factory),
+            scheduler_config.heap_delta_rate_limit,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),

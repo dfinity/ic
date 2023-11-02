@@ -1,7 +1,7 @@
 use crate::{
     canister_manager::{
         CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
-        InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult,
+        InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
     },
     canister_settings::CanisterSettings,
     execution::{
@@ -325,6 +325,7 @@ impl ExecutionEnvironment {
         cycles_account_manager: Arc<CyclesAccountManager>,
         resource_saturation_scaling: usize,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        heap_delta_rate_limit: NumBytes,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
@@ -343,6 +344,8 @@ impl ExecutionEnvironment {
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
             config.wasm_chunk_store,
+            config.rate_limiting_of_heap_delta,
+            heap_delta_rate_limit,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -1561,7 +1564,15 @@ impl ExecutionEnvironment {
                 subnet_size,
                 resource_saturation,
             )
-            .map(|reply| reply.encode())
+            .map(
+                |UploadChunkResult {
+                     reply,
+                     heap_delta_increase,
+                 }| {
+                    state.metadata.heap_delta_estimate += heap_delta_increase;
+                    reply.encode()
+                },
+            )
             .map_err(|err| err.into())
     }
 
