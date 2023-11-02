@@ -146,6 +146,22 @@ fn governance_mut() -> &'static mut Governance {
     unsafe { GOVERNANCE.as_mut().expect("Canister not initialized!") }
 }
 
+// Sets governance global state to the given object.
+fn set_governance(gov: Governance) {
+    unsafe {
+        assert!(
+            GOVERNANCE.is_none(),
+            "{}Trying to initialize an already-initialized governance canister!",
+            LOG_PREFIX
+        );
+        GOVERNANCE = Some(gov);
+    }
+
+    governance()
+        .validate()
+        .expect("Error initializing the governance canister.");
+}
+
 struct CanisterEnv {
     rng: ChaCha20Rng,
     time_warp: TimeWarp,
@@ -318,22 +334,12 @@ fn canister_init_(init_payload: GovernanceProto) {
         init_payload.neurons.len()
     );
 
-    unsafe {
-        assert!(
-            GOVERNANCE.is_none(),
-            "{}Trying to initialize an already-initialized governance canister!",
-            LOG_PREFIX
-        );
-        GOVERNANCE = Some(Governance::new(
-            init_payload,
-            Box::new(CanisterEnv::new()),
-            Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
-            Box::new(CMCCanister::<DfnRuntime>::new()),
-        ));
-    }
-    governance()
-        .validate()
-        .expect("Error initializing the governance canister.");
+    set_governance(Governance::new(
+        init_payload,
+        Box::new(CanisterEnv::new()),
+        Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
+        Box::new(CMCCanister::<DfnRuntime>::new()),
+    ));
 }
 
 #[export_name = "canister_pre_upgrade"]
@@ -366,7 +372,7 @@ fn canister_post_upgrade() {
     // 22169421 bytes (which is ~22MB, and is much smaller than governance in mainnet (about 500MB))
     // Meaning there is no real possibility of these bytes being misinterpreted
     // TODO NNS1-2357 Remove conditional after deploying the updated version to production
-    let proto = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
+    let restored_state = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
         UPGRADES_MEMORY
             .with(|um| {
                 let result: Result<GovernanceProto, _> =
@@ -386,7 +392,20 @@ fn canister_post_upgrade() {
     };
     grow_upgrades_memory_to(WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY);
 
-    canister_init_(proto);
+    println!(
+        "{}canister_post_upgrade: Initializing with: economics: \
+          {:?}, genesis_timestamp_seconds: {}, neuron count: {}",
+        LOG_PREFIX,
+        restored_state.economics,
+        restored_state.genesis_timestamp_seconds,
+        restored_state.neurons.len()
+    );
+    set_governance(Governance::new_restored(
+        restored_state,
+        Box::new(CanisterEnv::new()),
+        Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
+        Box::new(CMCCanister::<DfnRuntime>::new()),
+    ));
 }
 
 #[cfg(feature = "test")]

@@ -23,7 +23,7 @@ use dfn_core::println;
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
-    neuron_following::{add_neuron_followees, HeapNeuronFollowingIndex, NeuronFollowingIndex},
+    neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
     neuron_principal::{
         add_neuron_id_principal_ids, remove_neuron_id_principal_ids, HeapNeuronPrincipalIndex,
         NeuronPrincipalIndex,
@@ -246,15 +246,48 @@ impl PartialEq for NeuronStore {
 }
 
 impl NeuronStore {
-    pub fn new(
+    // Initializes NeuronStore for the first time assuming no persisted data has been prepared (e.g.
+    // data in stable storage and those persisted through serialization/deserialization like
+    // topic_followee_index). If restoring after an upgrade, call NeuronStore::new_restored instead.
+    pub fn new(neurons: BTreeMap<u64, Neuron>) -> Self {
+        // Initializes a neuron store with no neurons.
+        let mut neuron_store = Self {
+            heap_neurons: BTreeMap::new(),
+            topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
+            principal_to_neuron_ids_index: HeapNeuronPrincipalIndex::new(),
+            known_neuron_name_set: HashSet::new(),
+            indexes_migration: Migration::default(),
+            clock: Box::new(IcClock::new()),
+        };
+
+        // Adds the neurons one by one into neuron store.
+        for neuron in neurons.into_values() {
+            // We are still relying on `Governance::add_neuron()` to call this method. This will be
+            // gone when the stable storage indexes is used and the heap version is retired.
+            neuron_store.add_neuron_to_principal_to_neuron_ids_index(
+                neuron.id.expect("Neuron must have an id"),
+                neuron.principal_ids_with_special_permissions(),
+            );
+            // We are not adding the neuron into the known_neuron_index even if it has known neuron
+            // data. This is somewhat what we want - we can never create a neuron as a known neuron,
+            // and it requires a proposal to do so. Ideally, the neuron type accepted by
+            // `NeuronStore::new` should not have the known neuron data to begin with.
+            neuron_store
+                .add_neuron(neuron)
+                .expect("Failed to add neuron during initialization");
+        }
+
+        neuron_store
+    }
+
+    // Restores NeuronStore after an upgrade, assuming data  are already in the stable storage (e.g.
+    // neuron indexes and inactive neurons) and persisted data are already calculated (e.g.
+    // topic_followee_index).
+    pub fn new_restored(
         heap_neurons: BTreeMap<u64, Neuron>,
-        topic_followee_index: Option<HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>>,
+        topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
         indexes_migration: Migration,
     ) -> Self {
-        // As an intermediate state, this may not be available post_upgrade.
-        let topic_followee_index =
-            topic_followee_index.unwrap_or_else(|| build_topic_followee_index(&heap_neurons));
-
         let principal_to_neuron_ids_index = build_principal_to_neuron_ids_index(&heap_neurons);
         let known_neuron_name_set = build_known_neuron_name_index(&heap_neurons);
         let clock = Box::new(IcClock::new());
@@ -267,30 +300,6 @@ impl NeuronStore {
             indexes_migration,
             clock,
         }
-    }
-
-    #[cfg(test)]
-    pub fn new_for_test(heap_neurons: Vec<Neuron>) -> Self {
-        let mut neuron_store = Self::new(
-            heap_neurons
-                .into_iter()
-                .map(|neuron| (neuron.id.unwrap().id, neuron))
-                .collect(),
-            None,
-            Migration {
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            },
-        );
-
-        assert_eq!(
-            neuron_store
-                .batch_add_heap_neurons_to_stable_indexes(NeuronId { id: 0 }, u64::MAX as usize)
-                .unwrap(),
-            None
-        );
-        neuron_store
     }
 
     /// Takes the heap neurons for serialization. The `self.heap_neurons` will become empty, so
@@ -1037,35 +1046,6 @@ fn build_principal_to_neuron_ids_index(
     index
 }
 
-/// From the `neurons` part of this `Governance` struct, build the
-/// index (per topic) from followee to set of followers. The
-/// neurons themselves map followers (the neuron ID) to a set of
-/// followees (per topic).
-fn build_topic_followee_index(
-    heap_neurons: &BTreeMap<u64, Neuron>,
-) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
-    let mut index = HeapNeuronFollowingIndex::new(BTreeMap::new());
-    for neuron in heap_neurons.values() {
-        let neuron_id = NeuronIdU64::from(neuron.id.expect("Neuron must have an id"));
-        let already_present_topic_followee_pairs = add_neuron_followees(
-            &mut index,
-            &neuron_id,
-            neuron
-                .topic_followee_pairs()
-                .into_iter()
-                .map(|(topic, neuron_id)| {
-                    (TopicSigned32::from(topic), NeuronIdU64::from(neuron_id))
-                })
-                .collect(),
-        );
-        log_already_present_topic_followee_pairs(
-            NeuronIdU64::from(neuron_id),
-            already_present_topic_followee_pairs,
-        );
-    }
-    index
-}
-
 fn build_known_neuron_name_index(heap_neurons: &BTreeMap<u64, Neuron>) -> HashSet<String> {
     let mut index = HashSet::new();
     for neuron in heap_neurons.values() {
@@ -1074,18 +1054,6 @@ fn build_known_neuron_name_index(heap_neurons: &BTreeMap<u64, Neuron>) -> HashSe
         }
     }
     index
-}
-
-fn log_already_present_topic_followee_pairs(
-    neuron_id: NeuronIdU64,
-    already_present_topic_followee_pairs: Vec<(TopicSigned32, NeuronIdU64)>,
-) {
-    for (topic, followee) in already_present_topic_followee_pairs {
-        println!(
-            "{} Topic {:?} and followee {:?} already present in the index for neuron {:?}",
-            LOG_PREFIX, topic, followee, neuron_id
-        );
-    }
 }
 
 #[cfg(test)]

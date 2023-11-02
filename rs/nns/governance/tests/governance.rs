@@ -9255,7 +9255,7 @@ fn test_compute_cached_metrics() {
             ..Default::default()
         },
         6 => Neuron {
-            id: Some(NeuronId {id: 5}),
+            id: Some(NeuronId {id: 6}),
             cached_neuron_stake_e8s: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
             ..Default::default()
