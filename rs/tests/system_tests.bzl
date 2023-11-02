@@ -2,9 +2,8 @@
 Rules for system-tests.
 """
 
-load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:defs.bzl", "mcopy", "untar", "zstd_compress")
+load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
@@ -222,34 +221,7 @@ def system_test(
         flaky = flaky,
     )
 
-def _uvm_config_image_impl(ctx):
-    out = ctx.actions.declare_file(ctx.label.name)
-
-    ctx.actions.run(
-        executable = ctx.executable._create_universal_vm_config_image,
-        arguments = ["--input", ctx.file.src.path, "--output", out.path, "--label", "CONFIG"],
-        inputs = [ctx.file.src],
-        outputs = [out],
-    )
-    return [
-        DefaultInfo(
-            files = depset([out]),
-        ),
-    ]
-
-uvm_config_image_impl = rule(
-    implementation = _uvm_config_image_impl,
-    attrs = {
-        "src": attr.label(allow_single_file = True),
-        "_create_universal_vm_config_image": attr.label(
-            executable = True,
-            cfg = "exec",
-            default = ":create_universal_vm_config_image_ci_sh",
-        ),
-    },
-)
-
-def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, **kwargs):
+def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
     """This macro creates bazel targets for uvm config images.
 
     Args:
@@ -259,30 +231,25 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         srcs: Source files that are copied into a vfat image.
         remap_paths: Dict that maps a current filename to a desired filename,
             e.g. {"activate.sh": "activate"}
-        **kwargs: Keyworded arguments for pkg_tar.
     """
-    tar = name + "_tar"
-
-    # TODO: remove tar and untar by copy with remap and mode
-    pkg_tar(
-        name = tar,
+    native.genrule(
+        name = name + "_size",
         srcs = srcs,
-        remap_paths = remap_paths,
-        tags = ["manual"],
-        visibility = ["//visibility:private"],
-        **kwargs
-    )
-
-    untar(
-        name = name + "_untar",
-        src = ":" + tar,
+        outs = [name + "_size.txt"],
+        cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
         tags = ["manual"],
         visibility = ["//visibility:private"],
     )
 
-    uvm_config_image_impl(
+    # TODO: install dosfstools as dependency
+    native.genrule(
         name = name + "_vfat",
-        src = ":" + name + "_untar",
+        srcs = [":" + name + "_size"],
+        outs = [name + "_vfat.img"],
+        cmd = """
+        truncate -s $$(cat $<) $@
+        /usr/sbin/mkfs.vfat -i "0" -n CONFIG $@
+        """,
         tags = ["manual"],
         visibility = ["//visibility:private"],
     )
