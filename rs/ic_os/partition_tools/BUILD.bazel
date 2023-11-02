@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,15 +7,15 @@ DEPENDENCIES = [
     "@crate_index//:clap_4_0_0",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "//rs/ic_os/partition_tools",
 ]
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:indoc",
+    "@crate_index//:async-trait",
 ]
 
-rust_binary(
-    name = "setupos-disable-checks",
+rust_library(
+    name = "partition_tools",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",

@@ -668,9 +668,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.73"
+version = "0.1.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc00ceb34980c03614e35a3a4e218276a0a824e911d07651cd0d858a51e8c0f0"
+checksum = "a66537f1bb974b254c98ed142ff995236e81b9d0fe4db0575f46612cb15eb0f9"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.31",
@@ -1259,7 +1259,7 @@ dependencies = [
  "hyper 0.14.26",
  "ic-agent",
  "ic-utils 0.27.0",
- "indoc",
+ "indoc 1.0.9",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -4904,7 +4904,7 @@ dependencies = [
  "humantime",
  "hyper 0.14.26",
  "ic-agent",
- "indoc",
+ "indoc 1.0.9",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -11854,6 +11854,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa799dd5ed20a7e349f3b4639aa80d74549c81716d9ec4f994c9b5815598306"
 
 [[package]]
+name = "indoc"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e186cfbae8084e513daff4240b4797e342f988cecda4fb6c939150f96315fd8"
+
+[[package]]
 name = "infer"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13915,6 +13921,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82db48cac18f0963b10ddad303fa88447b95bbe0e6dbe3385f98402b63d0cc48"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "partition_tools"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "indoc 2.0.4",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -16329,7 +16346,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.4.6",
- "indoc",
+ "indoc 1.0.9",
+ "partition_tools",
  "tempfile",
  "tokio",
 ]
@@ -16342,6 +16360,7 @@ dependencies = [
  "clap 4.4.6",
  "ipnet",
  "once_cell",
+ "partition_tools",
  "serde",
  "serde_json",
  "serde_with",
@@ -17321,7 +17340,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
- "indoc",
+ "indoc 1.0.9",
  "itertools",
  "json5",
  "k256",
