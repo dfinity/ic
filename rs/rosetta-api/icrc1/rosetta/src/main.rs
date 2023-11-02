@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use clap::{Parser, ValueEnum};
-use endpoints::{health, network_list, network_options, network_status};
+use endpoints::{block, health, network_list, network_options, network_status};
 use http::Request;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, identity::AnonymousIdentity, Agent,
@@ -307,6 +307,7 @@ async fn main() -> Result<()> {
         .route("/network/list", post(network_list))
         .route("/network/options", post(network_options))
         .route("/network/status", post(network_status))
+        .route("/block", post(block))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())

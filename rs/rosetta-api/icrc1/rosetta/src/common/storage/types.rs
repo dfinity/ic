@@ -70,6 +70,12 @@ impl RosettaBlock {
         )
     }
 
+    pub fn get_effective_fee(&self) -> anyhow::Result<Option<Tokens>> {
+        Block::decode(self.encoded_block.clone())
+            .map(|b| b.effective_fee)
+            .map_err(anyhow::Error::msg)
+    }
+
     pub fn get_transaction(&self) -> anyhow::Result<Transaction<Tokens>> {
         Ok(Block::decode(self.encoded_block.clone())
             .map_err(anyhow::Error::msg)?

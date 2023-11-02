@@ -80,14 +80,13 @@ pub async fn get_testing_agent(context: &ReplicaContext) -> Agent {
     agent
 }
 
-// Deploy an icrc ledger with the default arguments from sm-tests and return the canister id of the icrc ledger
-pub async fn deploy_icrc_ledger_with_default_args(context: &ReplicaContext) -> CanisterId {
+pub async fn icrc_ledger_default_args_builder(context: &ReplicaContext) -> InitArgsBuilder {
     let testing_account: Account = get_testing_agent(context)
         .await
         .get_principal()
         .unwrap()
         .into();
-    let default_init_args = InitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
+    InitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
         .with_minting_account(testing_account)
         .with_initial_balance(testing_account, 1_000_000_000_000u64)
         .with_transfer_fee(FEE)
@@ -104,7 +103,11 @@ pub async fn deploy_icrc_ledger_with_default_args(context: &ReplicaContext) -> C
         .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
         .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
         .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
-        .build();
+}
+
+// Deploy an icrc ledger with the default arguments from sm-tests and return the canister id of the icrc ledger
+pub async fn deploy_icrc_ledger_with_default_args(context: &ReplicaContext) -> CanisterId {
+    let default_init_args = icrc_ledger_default_args_builder(context).await.build();
     deploy_icrc_ledger_with_custom_args(context, default_init_args).await
 }
 
