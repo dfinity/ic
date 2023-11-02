@@ -733,14 +733,16 @@ pub fn valid_transactions_strategy(
     .prop_map(|res| res.transactions)
 }
 
-fn decimals_strategy() -> impl Strategy<Value = u8> {
+pub fn decimals_strategy() -> impl Strategy<Value = u8> {
     0..u8::MAX
 }
 
+pub fn symbol_strategy() -> impl Strategy<Value = String> {
+    prop::string::string_regex("[A-Za-z0-9]{1,5}").expect("failed to make generator")
+}
+
 pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>> {
-    let symbol_strategy =
-        prop::string::string_regex("[A-Za-z0-9]{1,5}").expect("failed to make generator");
-    (symbol_strategy, decimals_strategy()).prop_map(|(symbol, decimals)| {
+    (symbol_strategy(), decimals_strategy()).prop_map(|(symbol, decimals)| {
         vec![
             ("icrc1:symbol".to_string(), MetadataValue::Text(symbol)),
             (

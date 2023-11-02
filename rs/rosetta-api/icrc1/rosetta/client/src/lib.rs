@@ -1,5 +1,6 @@
 use ic_icrc_rosetta::common::types::{
-    MetadataRequest, NetworkIdentifier, NetworkListResponse, NetworkRequest, NetworkStatusResponse,
+    BlockRequest, BlockResponse, MetadataRequest, NetworkIdentifier, NetworkListResponse,
+    NetworkRequest, NetworkStatusResponse, PartialBlockIdentifier,
 };
 use reqwest::{Client, Url};
 use url::ParseError;
@@ -56,6 +57,23 @@ impl RosettaClient {
             .json(&NetworkRequest {
                 network_identifier,
                 metadata: None,
+            })
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    pub async fn block(
+        &self,
+        network_identifier: NetworkIdentifier,
+        block_identifier: PartialBlockIdentifier,
+    ) -> reqwest::Result<BlockResponse> {
+        self.http_client
+            .post(self.url("/block"))
+            .json(&BlockRequest {
+                network_identifier: network_identifier.clone(),
+                block_identifier: block_identifier.clone(),
             })
             .send()
             .await?

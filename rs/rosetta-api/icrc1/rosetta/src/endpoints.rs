@@ -4,11 +4,13 @@ use std::time::Duration;
 use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_icrc_rosetta::{
     common::types::{
-        Allow, BlockIdentifier, Error, MetadataRequest, NetworkIdentifier, NetworkListResponse,
-        NetworkOptionsResponse, NetworkRequest, NetworkStatusResponse, Version,
+        Allow, BlockIdentifier, BlockRequest, BlockResponse, Currency, Error, MetadataRequest,
+        NetworkIdentifier, NetworkListResponse, NetworkOptionsResponse, NetworkRequest,
+        NetworkStatusResponse, Version,
     },
     AppState,
 };
+use serde_bytes::ByteBuf;
 
 const ROSETTA_VERSION: &str = "1.4.13";
 const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -90,4 +92,77 @@ pub async fn network_status(
         oldest_block_identifier: Some(genesis_block_identifier),
         sync_status: None,
     }))
+}
+
+pub async fn block(
+    State(state): State<Arc<AppState>>,
+    request: Json<BlockRequest>,
+) -> Result<Json<BlockResponse>> {
+    verify_network_id(&request.network_identifier, &state)?;
+    let rosetta_block = match (
+        request.block_identifier.index,
+        request.block_identifier.hash.as_ref(),
+    ) {
+        (None, Some(hash)) => {
+            let hash_bytes = hex::decode(hash).map_err(|e| {
+                Error::unable_to_find_block(format!("Invalid block hash provided: {}", e))
+            })?;
+            let hash_buf = ByteBuf::from(hash_bytes);
+            state
+                .storage
+                .get_block_by_hash(hash_buf)
+                .map_err(|e| {
+                    Error::unable_to_find_block(format!("Unable to retrieve block: {}", e))
+                })?
+                .ok_or_else(|| {
+                    Error::unable_to_find_block(format!(
+                        "Block with hash {} could not be found",
+                        hash
+                    ))
+                })?
+        }
+        (Some(block_idx), None) => state
+            .storage
+            .get_block_at_idx(block_idx)
+            .map_err(|e| Error::unable_to_find_block(format!("Unable to retrieve block: {}", e)))?
+            .ok_or_else(|| {
+                Error::unable_to_find_block(format!(
+                    "Block at index {} could not be found",
+                    block_idx
+                ))
+            })?,
+        (Some(block_idx), Some(hash)) => {
+            let rosetta_block = state
+                .storage
+                .get_block_at_idx(block_idx)
+                .map_err(|e| {
+                    Error::unable_to_find_block(format!("Unable to retrieve block: {}", e))
+                })?
+                .ok_or_else(|| {
+                    Error::unable_to_find_block(format!(
+                        "Block at index {} could not be found",
+                        block_idx
+                    ))
+                })?;
+            if &hex::encode(&rosetta_block.block_hash) != hash {
+                return Err(Error::invalid_block_identifier().into());
+            }
+            rosetta_block
+        }
+        (None, None) => return Err(Error::invalid_block_identifier().into()),
+    };
+
+    let currency = Currency {
+        symbol: state.metadata.symbol.clone(),
+        decimals: state.metadata.decimals,
+        ..Default::default()
+    };
+
+    let response = BlockResponse::builder()
+        .with_rosetta_block(rosetta_block)
+        .with_currency(currency)
+        .build()
+        .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
+
+    Ok(Json(response))
 }
