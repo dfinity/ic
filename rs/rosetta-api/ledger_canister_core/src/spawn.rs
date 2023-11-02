@@ -21,7 +21,6 @@ where
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     Rt::call(IC_00, "install_code", /*cycles=*/ 0, (install_code,)).await?;

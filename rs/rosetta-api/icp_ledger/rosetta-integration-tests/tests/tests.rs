@@ -127,7 +127,6 @@ async fn install_canister(
             sender_canister_version: None,
             memory_allocation: None,
             compute_allocation: None,
-            keep_main_memory: None,
         })?)
         .call_and_wait()
         .await?;

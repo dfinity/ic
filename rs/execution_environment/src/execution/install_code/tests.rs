@@ -109,7 +109,6 @@ fn dts_resume_works_in_install_code() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
@@ -161,7 +160,6 @@ fn dts_abort_works_in_install_code() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
@@ -240,7 +238,6 @@ fn install_code_validate_input_compute_allocation() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
@@ -292,7 +289,6 @@ fn install_code_validate_input_memory_allocation() {
         memory_allocation: Some(candid::Nat::from(260 * mib)),
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
@@ -333,7 +329,6 @@ fn install_code_validate_input_controller() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     // Install code from a non-controller.
@@ -374,7 +369,6 @@ fn install_code_validates_execution_state() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     // Install code on empty canister.
@@ -421,7 +415,6 @@ fn install_code_fails_when_not_enough_wasm_custom_sections_memory() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     // Install code on canister with Wasm sections that are larger than the available memory on the subnet.
@@ -453,7 +446,6 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     // Install code on canister with Wasm sections that fit in the available memory on the subnet.
@@ -500,7 +492,6 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
             memory_allocation: None,
             query_allocation: None,
             sender_canister_version: None,
-            keep_main_memory: None,
         };
 
         if test
@@ -529,7 +520,6 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
     let result = test.subnet_message(Method::InstallCode, payload.encode());
 
@@ -554,7 +544,6 @@ fn execute_install_code_message_dts_helper(
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     // Send install code message.
@@ -671,7 +660,6 @@ fn start_install_code_dts(
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     // Send install code message.
@@ -800,7 +788,6 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
     let original_balance = test.canister_state(canister_id).system_state.balance();
     let message_id = test.dts_install_code(payload);
@@ -850,7 +837,6 @@ fn install_code_running_out_of_instructions() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     // Send install code message and start execution.
@@ -963,7 +949,6 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     test.inject_call_to_ic00(
@@ -1045,7 +1030,6 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     };
 
     test.inject_call_to_ic00(

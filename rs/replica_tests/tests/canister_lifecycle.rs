@@ -733,7 +733,6 @@ fn can_get_canister_information() {
                         None,
                         None,
                         None,
-                        None,
                     )
                     .encode(),
                 ),
@@ -813,7 +812,6 @@ fn installing_a_canister_with_lower_memory_allocation_than_it_uses_fails() {
                     // Set memory allocation to 42 bytes (i.e. something ridiculously small).
                     Some(42),
                     None,
-                    None,
                 )
                 .encode(),
             ),
@@ -829,7 +827,6 @@ fn installing_a_canister_with_lower_memory_allocation_than_it_uses_fails() {
                 canister_id,
                 UNIVERSAL_CANISTER_WASM.to_vec(),
                 vec![],
-                None,
                 None,
                 None,
                 None,
@@ -851,7 +848,6 @@ fn installing_a_canister_with_lower_memory_allocation_than_it_uses_fails() {
                     None,
                     // Set memory allocation to 10 bytes.
                     Some(10),
-                    None,
                     None,
                 )
                 .encode(),
@@ -889,7 +885,6 @@ fn upgrading_a_canister_with_lower_memory_allocation_than_it_needs_fails() {
                 None,
                 None,
                 None,
-                None,
             )
             .encode(),
         )
@@ -907,7 +902,6 @@ fn upgrading_a_canister_with_lower_memory_allocation_than_it_needs_fails() {
                     vec![],
                     None,
                     Some(10),
-                    None,
                     None,
                 )
                 .encode(),

@@ -38,7 +38,6 @@ fn run_memory_grows(grows: &[GrowCommand]) {
         None,
         None,
         None,
-        None,
     );
     let result = test.install_code(args).unwrap();
     if let WasmResult::Reject(s) = result {

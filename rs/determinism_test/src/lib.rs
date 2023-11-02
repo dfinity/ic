@@ -180,7 +180,6 @@ fn install_canister(
                 None,
                 None,
                 None,
-                None,
             )
             .encode(),
         )

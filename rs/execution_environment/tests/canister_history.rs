@@ -171,7 +171,6 @@ fn canister_history_tracks_create_install_reinstall() {
             None,
             None,
             None,
-            None,
         )
         .encode(),
     )
@@ -209,7 +208,6 @@ fn canister_history_tracks_create_install_reinstall() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            None,
             None,
             None,
             None,
@@ -296,7 +294,6 @@ fn canister_history_tracks_upgrade() {
             None,
             None,
             None,
-            None,
         )
         .encode(),
     )
@@ -322,7 +319,6 @@ fn canister_history_tracks_upgrade() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
             None,
             None,
             None,
@@ -406,7 +402,6 @@ fn canister_history_tracks_uninstall() {
             canister_id,
             test_canister,
             vec![],
-            None,
             None,
             None,
             None,
@@ -598,7 +593,6 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
             Some(1), // set compute allocation to 1 per cent
             None,
             None,
-            None,
         )
         .encode(),
     )
@@ -722,7 +716,6 @@ fn canister_history_tracks_changes_from_canister() {
             None,
             None,
             None,
-            None,
         )
         .encode(),
         Cycles::new(0),
@@ -819,7 +812,6 @@ fn canister_history_fails_with_incorrect_sender_version() {
             memory_allocation: None,
             query_allocation: None,
             sender_canister_version: Some(666), // this value of sender_canister_version does not match the actual sender_canister_version
-            keep_main_memory: None,
         }
         .encode(),
         Cycles::new(0),
@@ -907,7 +899,6 @@ fn canister_info_retrieval() {
             None,
             None,
             None,
-            None,
         )
         .encode(),
     )
@@ -933,7 +924,6 @@ fn canister_info_retrieval() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
             None,
             None,
             None,
