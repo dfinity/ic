@@ -1,44 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "@crate_index//:anyhow",
-    "@crate_index//:axum",
-    "@crate_index//:base64",
-    "@crate_index//:bytes",
-    "@crate_index//:candid",
-    "@crate_index//:clap_4_0_0",
-    "@crate_index//:flate2",
-    "@crate_index//:form_urlencoded",
-    "@crate_index//:futures",
-    "@crate_index//:h2",
-    "@crate_index//:hex",
-    "@crate_index//:http",
-    "@crate_index//:http-body",
-    "@crate_index//:hyper",
-    "@crate_index//:hyper-rustls",
-    "@crate_index//:itertools",
-    "@crate_index//:ic-agent",
-    "@crate_index//:ic-utils",
-    "@crate_index//:opentelemetry_0_20_0_metrics",
-    "@crate_index//:opentelemetry_prometheus_0_13_0",
-    "@crate_index//:prometheus",
-    "@crate_index//:rustls",
-    "@crate_index//:rustls-native-certs",
-    "@crate_index//:rustls-pemfile",
-    "@crate_index//:tower",
-    "@crate_index//:tower-http",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:sha2",
-    "@crate_index//:tokio",
-    "@crate_index//:ic-response-verification",
-    "@crate_index//:thiserror",
-]
+DEPENDENCIES = all_crate_deps()
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",

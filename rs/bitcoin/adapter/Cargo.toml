@@ -32,7 +32,7 @@ thiserror = "1.0.26"
 tokio = { workspace = true }
 tokio-socks = "0.5.1"
 tonic = { workspace = true }
-tower = { workspace = true, optional = true }
+tower = { workspace = true }
 
 [dev-dependencies]
 bitcoind = "0.32.0"

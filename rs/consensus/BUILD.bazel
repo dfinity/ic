@@ -1,9 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
@@ -27,14 +28,9 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
-    "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:rayon",
-    "@crate_index//:slog",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     # Keep sorted.
     "//rs/bitcoin/types/internal",
     "//rs/consensus/mocks",
@@ -54,16 +50,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "//rs/utils",
-    "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
-    "@crate_index//:mockall_0_7_2",
-    "@crate_index//:proptest",
-    "@crate_index//:prost",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-envlogger",
-    "@crate_index//:slog-term",
-    "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = [

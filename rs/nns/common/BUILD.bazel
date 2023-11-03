@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -8,7 +9,7 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
@@ -20,14 +21,6 @@ DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/types",
-    "@crate_index//:candid",
-    "@crate_index//:comparable",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:lazy_static",
-    "@crate_index//:num-traits",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:sha2",
 ]
 
 DEV_DEPENDENCIES = [

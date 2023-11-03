@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/config",
     "//rs/crypto/for_verification_only",
     "//rs/crypto/utils/threshold_sig_der",
@@ -18,13 +19,6 @@ DEPENDENCIES = [
     "//rs/registry/nns_data_provider",
     "//rs/registry/routing_table",
     "//rs/types/types",
-    "@crate_index//:clap",
-    "@crate_index//:prometheus",
-    "@crate_index//:prost",
-    "@crate_index//:slog",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []

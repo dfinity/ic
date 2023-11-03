@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
@@ -19,8 +20,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/registry",
     "//rs/types/types",
-    "@crate_index//:mockall_0_7_2",
-    "@crate_index//:slog",
 ]
 
 rust_library(

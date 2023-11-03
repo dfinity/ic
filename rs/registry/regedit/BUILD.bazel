@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto",
     "//rs/crypto/sha2",
     "//rs/protobuf",
@@ -14,15 +15,6 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/types/base_types",
     "//rs/types/types",
-    "@crate_index//:anyhow",
-    "@crate_index//:base64",
-    "@crate_index//:clap",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:thiserror",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []

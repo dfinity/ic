@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,16 +8,8 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_http_utils",
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/crypto/sha2",
         "//rs/monitoring/logger",
-        "@crate_index//:flate2",
-        "@crate_index//:hex",
-        "@crate_index//:http",
-        "@crate_index//:hyper",
-        "@crate_index//:hyper-rustls",
-        "@crate_index//:slog",
-        "@crate_index//:tar",
-        "@crate_index//:tokio",
     ],
 )

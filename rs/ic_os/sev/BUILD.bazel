@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -15,18 +16,12 @@ rust_library(
         "//conditions:default": [
             "@crate_index//:sev",
         ],
-    }) + [
+    }) + all_crate_deps() + [
         "//rs/ic_os/sev_interfaces",
         "//rs/interfaces/registry",
         "//rs/registry/helpers",
         "//rs/registry/subnet_features",
         "//rs/types/base_types",
-        "@crate_index//:openssl",
-        "@crate_index//:serde",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:sha2",
-        "@crate_index//:thiserror",
-        "@crate_index//:tokio",
     ],
 )
 

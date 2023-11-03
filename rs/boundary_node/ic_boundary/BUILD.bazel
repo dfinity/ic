@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/config",
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/utils/threshold_sig_der",
@@ -21,60 +22,13 @@ DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/types/types",
     "//rs/types/ic00_types",
-    "@crate_index//:anyhow",
-    "@crate_index//:arc-swap",
-    "@crate_index//:async-scoped",
-    "@crate_index//:axum-server",
-    "@crate_index//:axum",
-    "@crate_index//:bytes",
-    "@crate_index//:candid",
-    "@crate_index//:clap_4_0_0",
-    "@crate_index//:dashmap",
-    "@crate_index//:ethnum",
-    "@crate_index//:futures-util",
-    "@crate_index//:futures",
-    "@crate_index//:hex",
-    "@crate_index//:http",
-    "@crate_index//:http-body",
-    "@crate_index//:hyper",
-    "@crate_index//:hyper-rustls",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:instant-acme",
-    "@crate_index//:jemallocator",
-    "@crate_index//:jemalloc-ctl",
-    "@crate_index//:lazy_static",
-    "@crate_index//:mockall",
-    "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rcgen",
-    "@crate_index//:regex",
-    "@crate_index//:reqwest",
-    "@crate_index//:rustls",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
-    "@crate_index//:stretto",
-    "@crate_index//:tempfile",
-    "@crate_index//:thiserror",
-    "@crate_index//:tokio-rustls",
-    "@crate_index//:tokio",
-    "@crate_index//:tower",
-    "@crate_index//:tower_governor",
-    "@crate_index//:tower-http",
-    "@crate_index//:tracing-slog",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:tracing",
-    "@crate_index//:url",
-    "@crate_index//:wiremock",
-    "@crate_index//:x509-parser",
 ]
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True)
 
 MACRO_DEV_DEPENDENCIES = []
 

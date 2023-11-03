@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/bitcoin/types/internal",
     "//rs/config",
     "//rs/interfaces",
@@ -17,22 +18,15 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/types/error_types",
     "//rs/types/types",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:prometheus",
-    "@crate_index//:prost",
-    "@crate_index//:slog",
-    "@crate_index//:thiserror",
 ]
 
 MACRO_DEPENDENCIES = []
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/interfaces/state_manager/mocks",
     "//rs/interfaces/registry/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
-    "@crate_index//:mockall",
-    "@crate_index//:proptest",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

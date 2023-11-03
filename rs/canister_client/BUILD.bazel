@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 # The package is deprecated, NET-1274.
@@ -16,7 +17,7 @@ package(default_visibility = [
     "//rs/workload_generator:__pkg__",
 ])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/canister_client/sender",
     "//rs/canonical_state",
     "//rs/certification",
@@ -27,18 +28,6 @@ DEPENDENCIES = [
     "//rs/tree_deserializer",
     "//rs/types/ic00_types",
     "//rs/types/types",
-    "@crate_index//:backoff",
-    "@crate_index//:futures-util",
-    "@crate_index//:hyper",
-    "@crate_index//:hyper-rustls",
-    "@crate_index//:itertools",
-    "@crate_index//:prost",
-    "@crate_index//:rustls",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [

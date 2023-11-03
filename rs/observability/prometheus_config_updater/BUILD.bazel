@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/async_utils",
     "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
@@ -11,21 +12,6 @@ DEPENDENCIES = [
     "//rs/observability/service_discovery",
     "//rs/observability/config_writer_common",
     "//rs/types/types",
-    "@crate_index//:anyhow",
-    "@crate_index//:base64",
-    "@crate_index//:clap",
-    "@crate_index//:crossbeam",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:futures-util",
-    "@crate_index//:humantime",
-    "@crate_index//:regex",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []

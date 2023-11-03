@@ -1,9 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
+BASE_DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
@@ -15,19 +16,6 @@ BASE_DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/sns/root",
     "//rs/types/base_types",
-    "@crate_index//:anyhow",
-    "@crate_index//:base64",
-    "@crate_index//:candid",
-    "@crate_index//:clap",
-    "@crate_index//:hex",
-    "@crate_index//:json-patch",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:regex",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:serde_yaml",
-    "@crate_index//:tempfile",
-    "@crate_index//:url",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

@@ -1,10 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/ic_os/vsock/vsock_lib:vsock_lib",
-    "@crate_index//:clap",
 ]
 
 MACRO_DEPENDENCIES = []

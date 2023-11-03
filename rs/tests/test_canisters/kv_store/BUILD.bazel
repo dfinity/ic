@@ -1,18 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-certified-map",
-    "@crate_index//:base64",
-    "@crate_index//:serde",
-    "@crate_index//:flate2",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:sha2",
-    "@crate_index//:candid",
-]
+DEPENDENCIES = all_crate_deps()
 
 DEV_DEPENDENCIES = []
 

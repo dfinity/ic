@@ -1,40 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-    "@crate_index//:anyhow",
-    "@crate_index//:axum",
-    "@crate_index//:candid",
-    "@crate_index//:chacha20poly1305",
-    "@crate_index//:clap_4_0_0",
-    "@crate_index//:cloudflare",
-    "@crate_index//:flate2",
-    "@crate_index//:futures",
-    "@crate_index//:ic-agent",
-    "@crate_index//:ic-utils",
-    "@crate_index//:ic-response-verification",
-    "@crate_index//:idna",
-    "@crate_index//:instant-acme",
-    "@crate_index//:leb128",
-    "@crate_index//:mockall",
-    "@crate_index//:opentelemetry_0_20_0_metrics",
-    "@crate_index//:opentelemetry_prometheus_0_13_0",
-    "@crate_index//:pem",
-    "@crate_index//:prometheus",
-    "@crate_index//:rcgen",
-    "@crate_index//:reqwest",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:sha2",
-    "@crate_index//:serde",
-    "@crate_index//:thiserror",
-    "@crate_index//:tokio",
-    "@crate_index//:tower",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:tracing",
-    "@crate_index//:trust-dns-resolver",
 ]
 
 MACRO_DEPENDENCIES = [

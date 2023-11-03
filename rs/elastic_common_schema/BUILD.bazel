@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -10,16 +11,7 @@ rust_library(
         "@crate_index//:slog_derive",
     ],
     version = "0.8.0",
-    deps = [
-        "@crate_index//:chrono",
-        "@crate_index//:erased-serde",
-        "@crate_index//:hyper",
-        "@crate_index//:serde",
-        "@crate_index//:serde_json",
-        "@crate_index//:slog",
-        "@crate_index//:slog-json",
-        "@crate_index//:uuid",
-    ],
+    deps = all_crate_deps(),
 )
 
 rust_doc_test(

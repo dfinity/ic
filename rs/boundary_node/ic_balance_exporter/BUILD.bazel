@@ -1,28 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "@crate_index//:anyhow",
-    "@crate_index//:axum",
-    "@crate_index//:candid",
-    "@crate_index//:clap",
-    "@crate_index//:dashmap",
-    "@crate_index//:futures",
-    "@crate_index//:humantime",
-    "@crate_index//:hyper",
-    "@crate_index//:ic-agent",
-    "@crate_index//:mockall",
-    "@crate_index//:opentelemetry_0_20_0_metrics",
-    "@crate_index//:opentelemetry_prometheus_0_13_0",
-    "@crate_index//:prometheus",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
-]
+DEPENDENCIES = all_crate_deps()
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",

@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
@@ -11,7 +12,7 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
@@ -32,22 +33,6 @@ DEPENDENCIES = [
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
-    "@crate_index//:base64",
-    "@crate_index//:build-info",
-    "@crate_index//:candid",
-    "@crate_index//:clap",
-    "@crate_index//:comparable",
-    "@crate_index//:hex",
-    "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:lazy_static",
-    "@crate_index//:maplit",
-    "@crate_index//:num-traits",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:rust_decimal",
-    "@crate_index//:serde",
-    "@crate_index//:strum",
 ]
 
 MACRO_DEPENDENCIES = [

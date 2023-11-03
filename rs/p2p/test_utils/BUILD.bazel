@@ -1,10 +1,11 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
     "//rs/p2p:__subpackages__",
 ])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/artifact_manager",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces",
@@ -28,18 +29,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/types/base_types",
     "//rs/types/types",
-    "@crate_index//:axum",
-    "@crate_index//:bytes",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:either",
-    "@crate_index//:futures",
-    "@crate_index//:mockall",
-    "@crate_index//:quinn",
-    "@crate_index//:serde",
-    "@crate_index//:slog",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:turmoil",
 ]
 
 MACRO_DEPENDENCIES = [

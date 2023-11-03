@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/config",
     "//rs/monitoring/logger",
     "//rs/prep",
@@ -11,13 +12,6 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/types/ic00_types",
     "//rs/types/types",
-    "@crate_index//:anyhow",
-    "@crate_index//:clap",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
-    "@crate_index//:tempfile",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []

@@ -1,9 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/artifact_pool",
     "//rs/async_utils",
     "//rs/bitcoin/client",
@@ -43,31 +44,6 @@ DEPENDENCIES = [
     "//rs/utils",
     "//rs/xnet/endpoint",
     "//rs/xnet/payload_builder",
-    "@crate_index//:base64",
-    "@crate_index//:clap",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:hex",
-    "@crate_index//:jemalloc-ctl",
-    "@crate_index//:jemallocator",
-    "@crate_index//:libc",
-    "@crate_index//:nix",
-    "@crate_index//:num_cpus",
-    "@crate_index//:pprof",
-    "@crate_index//:prometheus",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:regex",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:slog",
-    "@crate_index//:slog-async",
-    "@crate_index//:static_assertions",
-    "@crate_index//:tempfile",
-    "@crate_index//:thread_profiler",
-    "@crate_index//:tokio",
-    "@crate_index//:tower",
-    "@crate_index//:tracing",
 ] + select({
     "@rules_rust//rust/platform:linux": [
         "//rs/monitoring/backtrace",

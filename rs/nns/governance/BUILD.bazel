@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
@@ -14,7 +15,7 @@ filegroup(
 )
 
 # See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
+BASE_DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
@@ -38,25 +39,6 @@ BASE_DEPENDENCIES = [
     "//rs/sns/root",
     "//rs/types/base_types",
     "//rs/types/types",
-    "@crate_index//:build-info",
-    "@crate_index//:bytes",
-    "@crate_index//:candid",
-    "@crate_index//:comparable",
-    "@crate_index//:dyn-clone",
-    "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:itertools",
-    "@crate_index//:lazy_static",
-    "@crate_index//:maplit",
-    "@crate_index//:mockall",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:rust_decimal",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:strum",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [

@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-LIB_DEPENDENCIES = [
+LIB_DEPENDENCIES = all_crate_deps() + [
     "//rs/config",
     "//rs/crypto",
     "//rs/crypto/iccsa",
@@ -15,26 +16,6 @@ LIB_DEPENDENCIES = [
     "//rs/types/ic00_types",
     "//rs/crypto/sha2",
     "//rs/utils",
-    "@crate_index//:axum",
-    "@crate_index//:itertools",
-    "@crate_index//:tokio",
-    "@crate_index//:tempfile",
-    "@crate_index//:candid",
-    "@crate_index//:clap",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:hex",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:sha2",
-    "@crate_index//:time",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:tracing-appender",
-    "@crate_index//:tower-http",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:base64",
-    "@crate_index//:wat",
-    "@crate_index//:flate2",
 ]
 
 TEST_DEPENDENCIES = [

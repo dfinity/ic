@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
@@ -46,7 +47,7 @@ rust_library(
 rust_test(
     name = "messaging_test",
     crate = ":messaging",
-    deps = [
+    deps = all_crate_deps(normal_dev = True) + [
         "//rs/crypto/test_utils/ni-dkg",
         "//rs/interfaces/state_manager/mocks",
         "//rs/registry/fake",
@@ -59,14 +60,6 @@ rust_test(
         "//rs/test_utilities/logger",
         "//rs/test_utilities/metrics",
         "//rs/test_utilities/registry",
-        "@crate_index//:assert_matches",
-        "@crate_index//:candid",
-        "@crate_index//:lazy_static",
-        "@crate_index//:maplit",
-        "@crate_index//:mockall_0_7_2",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:tempfile",
     ],
 )
 

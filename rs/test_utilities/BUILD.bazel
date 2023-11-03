@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -10,7 +11,7 @@ rust_library(
         "@crate_index//:async-trait",
     ],
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/bitcoin/types/internal",
         "//rs/canister_client/sender",
         "//rs/canonical_state/certification_version",
@@ -54,26 +55,6 @@ rust_library(
         "//rs/types/types_test_utils",
         "//rs/types/wasm_types",
         "//rs/universal_canister/lib",
-        "@crate_index//:bincode",
-        "@crate_index//:ed25519-consensus",
-        "@crate_index//:hex-literal",
-        "@crate_index//:lazy_static",
-        "@crate_index//:mockall_0_7_2",
-        "@crate_index//:nix",
-        "@crate_index//:parking_lot",
-        "@crate_index//:proptest",
-        "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:serde",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:slog",
-        "@crate_index//:socket2",
-        "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-        "@crate_index//:tokio-rustls",
-        "@crate_index//:tower",
-        "@crate_index//:wat",
     ],
 )
 

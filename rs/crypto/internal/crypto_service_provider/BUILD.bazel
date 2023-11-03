@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -8,7 +9,7 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
@@ -35,34 +36,9 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/types",
     "//rs/utils",
-    "@crate_index//:base64",
-    "@crate_index//:bincode",
-    "@crate_index//:bytes",
-    "@crate_index//:hex",
-    "@crate_index//:time",
-    "@crate_index//:parking_lot",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:rcgen",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:simple_asn1",
-    "@crate_index//:slog",
-    "@crate_index//:strum",
-    "@crate_index//:stubborn-io",
-    "@crate_index//:tarpc",
-    "@crate_index//:tempfile",
-    "@crate_index//:threadpool",
-    "@crate_index//:tokio",
-    "@crate_index//:tokio-serde",
-    "@crate_index//:tokio-util",
-    "@crate_index//:x509-parser",
-    "@crate_index//:zeroize",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/node_key_generation",
@@ -75,14 +51,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/in_memory_logger",
     "//rs/types/types_test_utils",
-    "@crate_index//:assert_matches",
-    "@crate_index//:lazy_static",
-    "@crate_index//:mockall_0_7_2",
-    "@crate_index//:proptest",
-    "@crate_index//:rsa",
-    "@crate_index//:slog-async",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
 ]
 
 MACRO_DEPENDENCIES = [

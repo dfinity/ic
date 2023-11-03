@@ -36,3 +36,4 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 mockall = "0.7.2"
+proptest = "1.0"

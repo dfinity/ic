@@ -1,49 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "@crate_index//:anyhow",
-    "@crate_index//:axum",
-    "@crate_index//:chacha20poly1305",
-    "@crate_index//:clap",
-    "@crate_index//:flate2",
-    "@crate_index//:futures",
-    "@crate_index//:httptest",
-    "@crate_index//:mockall",
-    "@crate_index//:nix",
-    "@crate_index//:opentelemetry_0_20_0_metrics",
-    "@crate_index//:opentelemetry_prometheus_0_13_0",
-    "@crate_index//:prometheus",
-    "@crate_index//:reqwest",
-    "@crate_index//:rsa",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:sha2",
-    "@crate_index//:tar",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
-]
-
-DENYLIST_ENCODER_DEPENDENCIES = [
-    "@crate_index//:anyhow",
-    "@crate_index//:chacha20poly1305",
-    "@crate_index//:clap",
-    "@crate_index//:flate2",
-    "@crate_index//:rsa",
-    "@crate_index//:sha2",
-    "@crate_index//:tar",
-    "@crate_index//:tokio",
-]
-
-GENERATE_KEY_PAIR_DEPENDENCIES = [
-    "@crate_index//:anyhow",
-    "@crate_index//:clap",
-    "@crate_index//:rsa",
-    "@crate_index//:tokio",
-]
+DEPENDENCIES = all_crate_deps()
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
@@ -63,7 +24,7 @@ rust_binary(
     srcs = ["src/bin/denylist-encoder.rs"],
     crate_name = "denylist_encoder",
     version = "0.1.0",
-    deps = DENYLIST_ENCODER_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 rust_binary(
@@ -71,7 +32,7 @@ rust_binary(
     srcs = ["src/bin/generate-key-pair.rs"],
     crate_name = "generate_key_pair",
     version = "0.1.0",
-    deps = GENERATE_KEY_PAIR_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 rust_test(

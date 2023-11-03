@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
 load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
@@ -11,7 +12,7 @@ exports_files([
     "log_config.yml",
 ])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/constants",
@@ -31,25 +32,6 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "@crate_index//:actix-rt",
-    "@crate_index//:actix-web",
-    "@crate_index//:base64",
-    "@crate_index//:candid",
-    "@crate_index//:clap",
-    "@crate_index//:hex",
-    "@crate_index//:ic-agent",
-    "@crate_index//:lazy_static",
-    "@crate_index//:log",
-    "@crate_index//:log4rs",
-    "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:reqwest",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:strum",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [

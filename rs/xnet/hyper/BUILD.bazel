@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,12 +8,9 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_xnet_hyper",
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/crypto/tls_interfaces",
         "//rs/interfaces/registry",
         "//rs/xnet/uri",
-        "@crate_index//:hyper",
-        "@crate_index//:socket2",
-        "@crate_index//:tokio",
     ],
 )

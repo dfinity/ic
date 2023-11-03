@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -11,10 +12,8 @@ rust_library(
         "@crate_index//:async-trait",
     ],
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/crypto/tls_interfaces",
         "//rs/types/base_types",
-        "@crate_index//:mockall",
-        "@crate_index//:tokio",
     ],
 )

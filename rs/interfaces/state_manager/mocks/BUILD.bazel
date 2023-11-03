@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,11 +8,10 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_interfaces_state_manager_mocks",
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/crypto/tree_hash",
         "//rs/interfaces/state_manager",
         "//rs/replicated_state",
         "//rs/types/types",
-        "@crate_index//:mockall",
     ],
 )

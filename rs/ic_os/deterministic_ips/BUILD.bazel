@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -6,10 +7,8 @@ rust_binary(
     name = "deterministic-ips",
     srcs = ["src/main.rs"],
     crate_name = "deterministic_ips",
-    deps = [
+    deps = all_crate_deps() + [
         ":deterministic_ips",
-        "@crate_index//:anyhow",
-        "@crate_index//:clap_4_0_0",
     ],
 )
 

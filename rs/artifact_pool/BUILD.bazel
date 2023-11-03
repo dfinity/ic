@@ -1,9 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     # Keep sorted.
     "//rs/config",
     "//rs/constants",
@@ -13,19 +14,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/types",
     "//rs/utils",
-    "@crate_index//:bincode",
-    "@crate_index//:byteorder",
-    "@crate_index//:clap",
-    "@crate_index//:nix",
-    "@crate_index//:prometheus",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
-    "@crate_index//:strum",
-    "@crate_index//:tempfile",
-    "@lmdb_rkv",
-    "@lmdb_rkv//lmdb-sys",
 ] + select({
     "@platforms//os:osx": [
         "@crate_index//:rocksdb",

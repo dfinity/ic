@@ -1,9 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nns/constants",
@@ -18,21 +19,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/runtime",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
-    "@crate_index//:anyhow",
-    "@crate_index//:build-info",
-    "@crate_index//:bytes",
-    "@crate_index//:by_address",
-    "@crate_index//:candid",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:json5",
-    "@crate_index//:maplit",
-    "@crate_index//:mockall",
-    "@crate_index//:priority-queue",
-    "@crate_index//:prost",
-    "@crate_index//:rust_decimal",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
 ]
 
 MACRO_DEPENDENCIES = [

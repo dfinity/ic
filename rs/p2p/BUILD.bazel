@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
@@ -37,7 +38,7 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:strum_macros",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/artifact_manager",
     "//rs/artifact_pool",
     "//rs/cycles_account_manager",
@@ -51,8 +52,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
-    "@crate_index//:mockall_0_7_2",
-    "@crate_index//:tempfile",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

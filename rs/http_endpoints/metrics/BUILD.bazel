@@ -1,22 +1,15 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/async_utils",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
     "//rs/types/types",
-    "@crate_index//:hyper",
-    "@crate_index//:prometheus",
-    "@crate_index//:serde",
-    "@crate_index//:slog",
-    "@crate_index//:thiserror",
-    "@crate_index//:tokio",
-    "@crate_index//:tokio-io-timeout",
-    "@crate_index//:tower",
 ]
 
 DEV_DEPENDENCIES = [

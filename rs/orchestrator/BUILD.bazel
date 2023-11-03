@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps", "crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -14,7 +15,7 @@ rust_library(
         "@crate_index//:strum_macros",
     ],
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/async_utils",
         "//rs/canister_client",
         "//rs/canister_client/sender",
@@ -44,22 +45,6 @@ rust_library(
         "//rs/types/ic00_types",
         "//rs/types/types",
         "//rs/utils",
-        "@crate_index//:candid",
-        "@crate_index//:clap",
-        "@crate_index//:exec",
-        "@crate_index//:hex",
-        "@crate_index//:nix",
-        "@crate_index//:prometheus",
-        "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:serde",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:slog",
-        "@crate_index//:slog-async",
-        "@crate_index//:strum",
-        "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-        "@crate_index//:url",
     ],
 )
 
@@ -67,18 +52,19 @@ rust_binary(
     name = "orchestrator",
     srcs = ["src/main.rs"],
     crate_name = "ic_state_tool",
-    deps = [
+    deps = crate_deps([
+        "clap",
+        "tokio",
+    ]) + [
         ":lib",
         "//rs/async_utils",
-        "@crate_index//:clap",
-        "@crate_index//:tokio",
     ],
 )
 
 rust_test(
     name = "orchestrator_test",
     crate = ":lib",
-    deps = [
+    deps = all_crate_deps(normal_dev = True) + [
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/reproducible_rng",
@@ -86,6 +72,5 @@ rust_test(
         "//rs/test_utilities",
         "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
-        "@crate_index//:mockall_0_8_3",
     ],
 )

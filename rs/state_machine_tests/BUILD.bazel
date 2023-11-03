@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -62,7 +63,7 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-BIN_DEPENDENCIES = [
+BIN_DEPENDENCIES = all_crate_deps() + [
     "//rs/config",
     "//rs/crypto",
     "//rs/crypto/iccsa",
@@ -71,13 +72,6 @@ BIN_DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/ic00_types",
     ":state_machine_tests",
-    "@crate_index//:candid",
-    "@crate_index//:ciborium",
-    "@crate_index//:clap",
-    "@crate_index//:ic-test-state-machine-client",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:hex",
 ]
 
 MACRO_DEPENDENCIES = [

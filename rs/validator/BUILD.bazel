@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -14,15 +15,11 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     # Keep sorted.
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/test_utils/root_of_trust",
     "//rs/test_utilities",
-    "@crate_index//:assert_matches",
-    "@crate_index//:base64",
-    "@crate_index//:mockall",
-    "@crate_index//:rand_0_8_4",
 ]
 
 rust_library(

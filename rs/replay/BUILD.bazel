@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/artifact_pool",
     "//rs/canister_client",
     "//rs/canister_sandbox/backend_lib",
@@ -38,17 +39,6 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/state_manager",
     "//rs/types/types",
-    "@crate_index//:candid",
-    "@crate_index//:clap",
-    "@crate_index//:hex",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
-    "@crate_index//:slog-async",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [

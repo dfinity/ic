@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/nns/constants",
     "//rs/nns/governance",
     "//rs/nns/gtc",
@@ -10,12 +11,6 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger/ledger",
     "//rs/rust_canisters/stable_reader",
     "//rs/types/base_types",
-    "@crate_index//:clap",
-    "@crate_index//:csv",
-    "@crate_index//:hex",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
 ]
 
 rust_binary(

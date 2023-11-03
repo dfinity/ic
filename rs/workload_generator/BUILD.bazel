@@ -1,9 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/config",
@@ -12,27 +13,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/identity",
     "//rs/types/ic00_types",
     "//rs/types/types",
-    "@crate_index//:backoff",
-    "@crate_index//:byte-unit",
-    "@crate_index//:candid",
-    "@crate_index//:chrono",
-    "@crate_index//:clap",
-    "@crate_index//:console",
-    "@crate_index//:futures",
-    "@crate_index//:hex",
-    "@crate_index//:indicatif",
-    "@crate_index//:itertools",
-    "@crate_index//:lazy_static",
-    "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
-    "@crate_index//:slog-scope",
-    "@crate_index//:slog-term",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
-    "@crate_index//:wat",
 ]
 
 MACRO_DEPENDENCIES = []

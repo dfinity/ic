@@ -1,18 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-BIN_DEPS = [
-    "@crate_index//:askama",
-    "@crate_index//:clap",
-    "@crate_index//:eyre",
-    "@crate_index//:lazy_static",
-    "@crate_index//:maplit",
-    "@crate_index//:pathdiff",
-    "@crate_index//:semver",
-    "@crate_index//:serde",
-    "@crate_index//:toml",
-]
+BIN_DEPS = all_crate_deps()
 
 rust_binary(
     name = "bazelifier",

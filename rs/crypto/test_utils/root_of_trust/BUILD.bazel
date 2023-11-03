@@ -1,11 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/types/types",
-    "@crate_index//:mockall",
-    "@crate_index//:thiserror",
 ]
 
 MACRO_DEPENDENCIES = []

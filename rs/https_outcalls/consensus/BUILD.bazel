@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -20,15 +21,13 @@ DEPENDENCIES = [
     "@crate_index//:slog",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
     "//rs/registry/subnet_type",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
-    "@crate_index//:mockall_0_7_2",
-    "@crate_index//:proptest",
 ]
 
 rust_library(

@@ -1,19 +1,13 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/sha2",
     "//rs/types/types",
     "//rs/crypto/getrandom_for_wasm",
-    "@crate_index//:num-bigint",
-    "@crate_index//:num-traits",
-    "@crate_index//:pkcs8",
-    "@crate_index//:rsa",
-    "@crate_index//:serde",
-    "@crate_index//:sha2",
-    "@crate_index//:simple_asn1",
 ]
 
 MACRO_DEPENDENCIES = []

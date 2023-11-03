@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -29,12 +30,10 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/test_utilities",
-    "@crate_index//:mockall_0_7_2",
-    "@crate_index//:wat",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

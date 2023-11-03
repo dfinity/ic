@@ -103,7 +103,7 @@ rust_binary(
     deps = [
         "//rs/test_utilities",
         "@crate_index//:arbitrary",
-        "@crate_index//:clap",
+        "@crate_index//:clap-3.2.25",
         "@crate_index//:wasm-smith",
         "@crate_index//:wasmprinter",
     ],

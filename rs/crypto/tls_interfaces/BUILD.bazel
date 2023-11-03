@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = [
@@ -27,14 +28,10 @@ rust_library(
         "@crate_index//:async-trait",
     ],
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/crypto/sha2",
         "//rs/protobuf",
         "//rs/types/types",
-        "@crate_index//:serde",
-        "@crate_index//:tokio",
-        "@crate_index//:tokio-rustls",
-        "@crate_index//:x509-parser",
     ],
 )
 
