@@ -14,7 +14,7 @@ use std::{
 };
 use thiserror::Error;
 
-const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
 #[derive(Clone)]
 pub struct ProtoRegistryDataProvider {
@@ -35,6 +35,10 @@ pub enum ProtoRegistryDataProviderError {
 impl ProtoRegistryDataProvider {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.read().unwrap().is_empty()
     }
 
     pub fn add<T>(
