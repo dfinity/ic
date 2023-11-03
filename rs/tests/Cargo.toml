@@ -620,3 +620,7 @@ path = "boundary_nodes/api_boundary_node_decentralization_test.rs"
 [[bin]]
 name = "ic-systest-mainnet-boundary-node-performance"
 path = "boundary_nodes/mainnet_boundary_node_performance_test.rs"
+
+[[bin]]
+name = "ic-systest-nested-registration"
+path = "nested/registration.rs"

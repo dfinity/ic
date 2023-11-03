@@ -155,7 +155,10 @@ impl Farm {
         let form = multipart::Form::new()
             .file(filename.to_string(), path)
             .expect("could not create multipart for image");
-        let rb = self.post("file").multipart(form);
+        let rb = self
+            .post("file")
+            .multipart(form)
+            .timeout(TIMEOUT_SETTINGS_LONG.max_http_timeout);
         let resp = rb.send()?;
         let mut file_ids = resp.json::<ImageUploadResponse>()?.image_ids;
         if file_ids.len() != 1 || !file_ids.contains_key(filename) {
@@ -606,6 +609,7 @@ impl CreateVmRequest {
 #[serde(rename_all = "camelCase")]
 pub enum VmType {
     Production,
+    Nested,
     Test,
     Sev,
 }
@@ -647,6 +651,7 @@ pub enum FarmError {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VMCreateResponse {
     pub ipv6: Ipv6Addr,
+    pub mac6: String,
     pub hostname: String,
     pub spec: VmSpec,
 }

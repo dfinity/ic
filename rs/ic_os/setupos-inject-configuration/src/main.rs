@@ -59,6 +59,9 @@ struct DeploymentConfig {
 
     #[arg(long)]
     memory_gb: Option<u32>,
+
+    #[arg(long)]
+    cpu_mode: Option<String>,
 }
 
 #[tokio::main]
@@ -213,6 +216,10 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
 
     if let Some(memory) = cfg.memory_gb {
         deployment_json.resources.memory = memory;
+    }
+
+    if let Some(cpu_mode) = &cfg.cpu_mode {
+        deployment_json.resources.cpu = Some(cpu_mode.to_owned());
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;

@@ -1,18 +1,26 @@
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::universal_vm::UniversalVm;
-use anyhow;
+use anyhow::{self, bail};
+use flate2::{write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::{self, Write};
 use std::net::Ipv6Addr;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use url::Url;
 
 use crate::driver::farm::FarmResult;
+use crate::driver::farm::FileId;
 use crate::driver::farm::ImageLocation;
 use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
+use crate::driver::farm::VMCreateResponse;
 use crate::driver::farm::{CreateVmRequest, HostFeature};
 use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
+use crate::driver::nested::NestedNode;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::HasIcDependencies;
 use crate::driver::test_setup::GroupSetup;
@@ -95,12 +103,14 @@ pub struct VmSpec {
     pub has_ipv4: bool,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
+    pub alternate_template: Option<VmType>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BootImage {
     GroupDefault,
     Image(DiskImage),
+    File(FileId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -127,6 +137,7 @@ pub struct AllocatedVm {
     pub name: String,
     pub group_name: String,
     pub ipv6: Ipv6Addr,
+    pub mac6: String,
 }
 
 /// This translates the configuration structure from InternetComputer to a
@@ -181,6 +192,42 @@ pub fn get_resource_request(
     Ok(res_req)
 }
 
+/// Create a `ResourceRequest` for a set of nested nodes.
+pub fn get_resource_request_for_nested_nodes(
+    nodes: &[NestedNode],
+    test_env: &TestEnv,
+    group_name: &str,
+    farm: &Farm,
+) -> anyhow::Result<ResourceRequest> {
+    // TODO: We always supply an image for VMs in this group, so these are not
+    // being used. Ideally, we will replace the group default with an empty
+    // image, and collapse this logic.
+    let default_url = Url::parse("https://www.dfinity.org")?;
+    let default_image_sha256 = "na".to_string();
+
+    // Build and upload an empty image.
+    // TODO: This is temporary until farm can do this natively.
+    let empty_image_name = "empty.img.tar.gz";
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let empty_image = build_empty_image(tmp_dir.path(), empty_image_name)?;
+    let image_id = farm.upload_file(empty_image, empty_image_name)?;
+
+    // Add a VM request for each node.
+    let mut res_req = ResourceRequest::new(ImageType::IcOsImage, default_url, default_image_sha256);
+    let group_setup = GroupSetup::read_attribute(test_env);
+    let default_vm_resources = group_setup.default_vm_resources;
+    res_req.group_name = group_name.to_string();
+    for node in nodes {
+        res_req.add_vm_request(vm_spec_from_nested_node(
+            node,
+            default_vm_resources,
+            image_id.clone(),
+        ));
+    }
+
+    Ok(res_req)
+}
+
 /// The SHA-256 hash of the Universal VM disk image.
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
@@ -229,6 +276,7 @@ pub fn get_resource_request_for_universal_vm(
         has_ipv4: universal_vm.has_ipv4,
         vm_allocation: universal_vm.vm_allocation.clone(),
         required_host_features: universal_vm.required_host_features.clone(),
+        alternate_template: None,
     });
     Ok(res_req)
 }
@@ -242,13 +290,17 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
         let vm_name = vm_config.name.clone();
         let create_vm_request = CreateVmRequest::new(
             vm_name.clone(),
-            VmType::Production,
+            vm_config
+                .alternate_template
+                .clone()
+                .unwrap_or(VmType::Production),
             vm_config.vcpus,
             vm_config.memory_kibibytes,
             vec![],
             match &vm_config.boot_image {
                 BootImage::GroupDefault => From::from(req.primary_image.clone()),
                 BootImage::Image(disk_image) => From::from(disk_image.clone()),
+                BootImage::File(id) => ImageLocation::IcOsImageViaId { id: id.clone() },
             },
             vm_config.boot_image_minimal_size_gibibytes,
             vm_config.has_ipv4,
@@ -269,10 +321,12 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
         let (vm_name, created_vm) = thread
             .join()
             .expect("Couldn't join on the associated thread");
+        let VMCreateResponse { ipv6, mac6, .. } = created_vm?;
         res_group.add_vm(AllocatedVm {
             name: vm_name,
             group_name: group_name.clone(),
-            ipv6: created_vm?.ipv6,
+            ipv6,
+            mac6,
         })
     }
     Ok(res_group)
@@ -302,5 +356,71 @@ fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmS
         has_ipv4: false,
         vm_allocation: n.vm_allocation.clone(),
         required_host_features: n.required_host_features.clone(),
+        alternate_template: None,
     }
+}
+
+/// Create a `VmSpec` for a given Nested VM, using the specified image file.
+fn vm_spec_from_nested_node(
+    node: &NestedNode,
+    default_vm_resources: Option<VmResources>,
+    image: FileId,
+) -> VmSpec {
+    VmSpec {
+        name: node.name.clone(),
+        vcpus: default_vm_resources
+            .and_then(|vm_resources| vm_resources.vcpus)
+            .unwrap_or(DEFAULT_VCPUS_PER_VM),
+        memory_kibibytes: default_vm_resources
+            .and_then(|vm_resources| vm_resources.memory_kibibytes)
+            .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
+        boot_image: BootImage::File(image),
+        boot_image_minimal_size_gibibytes: default_vm_resources
+            .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes),
+        has_ipv4: false,
+        vm_allocation: None,
+        required_host_features: Vec::new(),
+        alternate_template: Some(VmType::Nested),
+    }
+}
+
+fn build_empty_image(tmp_dir: &Path, out_file_name: &str) -> anyhow::Result<PathBuf> {
+    // Truncate large empty file
+    let img_name = "disk.img";
+
+    let img_path = PathBuf::from(tmp_dir).join(img_name);
+    let mut cmd = Command::new("truncate");
+    cmd.arg("-s").arg("101G").arg(img_path);
+    let output = cmd.output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+    if !output.status.success() {
+        bail!("could not create empty image");
+    }
+
+    // Compress it like we would a config image
+    let tar_path = PathBuf::from(tmp_dir).join("empty.img.tar");
+    let mut cmd = Command::new("tar");
+    cmd.arg("Scf")
+        .arg(&tar_path)
+        .arg("-C")
+        .arg(tmp_dir)
+        .arg(img_name);
+    let output = cmd.output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+    if !output.status.success() {
+        bail!("could not archive empty image");
+    }
+
+    let compressed_img_path = PathBuf::from(&tmp_dir).join(out_file_name);
+
+    let mut tar_file = File::open(tar_path)?;
+    let compressed_img_file = File::create(&compressed_img_path)?;
+    let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
+    let _ = io::copy(&mut tar_file, &mut encoder)?;
+    let mut write_stream = encoder.finish()?;
+    write_stream.flush()?;
+
+    Ok(compressed_img_path)
 }

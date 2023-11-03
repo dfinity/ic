@@ -165,6 +165,7 @@ GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
 GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
+    "//ic-os:scripts/build-bootstrap-config-image.sh",
 ]
 
 MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
@@ -346,14 +347,6 @@ BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
 ]
 
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
-
-GUESTOS_MALICIOUS_RUNTIME_DEPS = [
-    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.cas-url",
-    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.sha256",
-    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.cas-url",
-    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.sha256",
-    "//ic-os:scripts/build-bootstrap-config-image.sh",
-]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests:http_uvm_config_image",
