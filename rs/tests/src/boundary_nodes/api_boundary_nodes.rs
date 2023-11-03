@@ -1,3 +1,10 @@
+use crate::boundary_nodes::{
+    constants::{API_BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
+    helpers::{
+        create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
+        set_counters_on_counter_canisters,
+    },
+};
 use crate::{
     driver::{
         api_boundary_node::ApiBoundaryNodeVm,
@@ -10,16 +17,8 @@ use crate::{
     nns::{self, vote_execute_proposal_assert_executed},
     util::{assert_create_agent, block_on, runtime_from_url},
 };
-use std::{net::SocketAddrV6, time::Duration};
-
-use crate::boundary_nodes::{
-    constants::{API_BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
-    helpers::{
-        create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
-        set_counters_on_counter_canisters,
-    },
-};
 use anyhow::{anyhow, bail, Error};
+use discower_bowndary::api_nodes_discovery::{Fetch, RegistryFetcher};
 use futures::stream::FuturesUnordered;
 use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
 use ic_canister_client::Sender;
@@ -28,14 +27,10 @@ use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
-use ic_registry_keys::API_BOUNDARY_NODE_RECORD_KEY_PREFIX;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_transport::Error as RegistryError;
-use prost::Message;
 use registry_canister::mutations::do_add_api_boundary_node::AddApiBoundaryNodePayload;
 use serde::Deserialize;
 use slog::{error, info};
+use std::{net::SocketAddrV6, time::Duration};
 use tokio::runtime::Runtime;
 
 /* tag::catalog[]
@@ -698,23 +693,16 @@ end::catalog[] */
 pub fn decentralization_test(env: TestEnv) {
     let log = env.logger();
     let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let nns_url = nns_node.get_public_url();
     let unassigned_nodes: Vec<_> = env.topology_snapshot().unassigned_nodes().collect();
-    let registry_client = RegistryCanister::new(vec![nns_node.get_public_url()]);
-    info!(log, "Asserting no records of the API BN in the registry");
-    unassigned_nodes.iter().for_each(|node| {
-        let key = API_BOUNDARY_NODE_RECORD_KEY_PREFIX.to_string()
-            + node.node_id.get().to_string().as_str();
-        let result = block_on(registry_client.get_value(key.into(), None));
-        match result {
-            Err(RegistryError::KeyNotPresent(_)) => {}
-            _ => {
-                panic!("API BN should not be present in the registry yet")
-            }
-        };
-    });
+    info!(log, "Asserting no API BN domains exist in the registry");
+    let fetcher = RegistryFetcher::new(nns_url);
+    let api_domains: Vec<String> =
+        block_on(fetcher.api_node_domains_from_registry()).expect("failed to get API BN domains");
+    assert_eq!(api_domains, Vec::<&str>::new());
     info!(
         log,
-        "Adding two unassigned nodes to the registry via proposals"
+        "Adding two API BNs from the unassigned nodes to the registry via proposals"
     );
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = nns::get_governance_canister(&nns_runtime);
@@ -749,26 +737,9 @@ pub fn decentralization_test(env: TestEnv) {
     }
     info!(
         log,
-        "Asserting API BN records are now present in the registry"
+        "Asserting API BN domains are now present in the registry"
     );
-    let records: Vec<ApiBoundaryNodeRecord> = unassigned_nodes
-        .iter()
-        .map(|node| {
-            let key = API_BOUNDARY_NODE_RECORD_KEY_PREFIX.to_string()
-                + node.node_id.get().to_string().as_str();
-            let (value, _) = block_on(registry_client.get_value(key.into(), None)).unwrap();
-            ApiBoundaryNodeRecord::decode(&value[..]).expect("Error decoding value from registry.")
-        })
-        .collect();
-    let expected_records = vec![
-        ApiBoundaryNodeRecord {
-            domain: "api1.com".to_string(),
-            version: version.to_string(),
-        },
-        ApiBoundaryNodeRecord {
-            domain: "api2.com".to_string(),
-            version: version.to_string(),
-        },
-    ];
-    assert_eq!(records, expected_records);
+    let api_domains: Vec<String> =
+        block_on(fetcher.api_node_domains_from_registry()).expect("failed to get API BN domains");
+    assert_eq!(api_domains, vec!["api1.com", "api2.com"]);
 }
