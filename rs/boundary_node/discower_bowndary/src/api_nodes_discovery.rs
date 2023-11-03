@@ -1,29 +1,35 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_registry_client::client::{RegistryClient, RegistryClientError, RegistryClientImpl};
 use ic_registry_nns_data_provider_wrappers::NnsDataProvider;
+use prost::Message;
 use thiserror;
-use url::{ParseError, Url};
+use url::Url;
 
-const API_BN_URL: &str = "https://icp-api.io";
+const API_BN_DOMAIN: &str = "icp-api.io";
 const API_BOUNDARY_NODE_RECORD_KEY_PREFIX: &str = "api_boundary_node_";
 
 #[derive(thiserror::Error, Debug)]
 pub enum ApiNodeRegistryFetchError {
     #[error("Registry client error: {0}")]
     RegistryClientError(#[from] RegistryClientError),
-    #[error("Failed to parse a url `{url}` returned from the registry: {error_msg}")]
-    InvalidUrl { url: String, error_msg: ParseError },
+    #[error("No Api boundary node with key {0} found in the registry")]
+    NoApiBoundaryNodeRecordFound(String),
+    #[error("Failed to deserialize registry record to ApiBoundaryNodeRecord")]
+    RecordDeserializationFailure,
 }
 
-pub fn api_nodes_list() -> Vec<Url> {
-    vec![Url::parse(API_BN_URL).expect("invalid url")]
+pub fn api_node_domains() -> Vec<String> {
+    vec![API_BN_DOMAIN.to_string()]
 }
 
 #[async_trait]
 pub trait Fetch {
-    async fn api_nodes_from_registry(&self) -> Result<Vec<Url>, ApiNodeRegistryFetchError>;
+    async fn api_node_domains_from_registry(
+        &self,
+    ) -> Result<Vec<String>, ApiNodeRegistryFetchError>;
 }
 
 pub struct RegistryFetcher {
@@ -38,7 +44,9 @@ impl RegistryFetcher {
 
 #[async_trait]
 impl Fetch for RegistryFetcher {
-    async fn api_nodes_from_registry(&self) -> Result<Vec<Url>, ApiNodeRegistryFetchError> {
+    async fn api_node_domains_from_registry(
+        &self,
+    ) -> Result<Vec<String>, ApiNodeRegistryFetchError> {
         let registry_client = RegistryClientImpl::new(
             Arc::new(NnsDataProvider::new(
                 tokio::runtime::Handle::current(),
@@ -46,19 +54,27 @@ impl Fetch for RegistryFetcher {
             )),
             None,
         );
-        let urls: Vec<String> = registry_client
+        registry_client.try_polling_latest_version(usize::MAX)?;
+        let version = registry_client.get_latest_version();
+        let keys: Vec<String> = registry_client
             .get_key_family(
                 API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
                 registry_client.get_latest_version(),
             )
-            .map_err(ApiNodeRegistryFetchError::RegistryClientError)?;
-        urls.iter()
-            .map(|url_str| {
-                Url::parse(url_str).map_err(|err| ApiNodeRegistryFetchError::InvalidUrl {
-                    url: url_str.to_string(),
-                    error_msg: err,
-                })
+            .map_err(|err: RegistryClientError| {
+                ApiNodeRegistryFetchError::RegistryClientError(err)
+            })?;
+        let urls: Result<Vec<String>, ApiNodeRegistryFetchError> = keys
+            .iter()
+            .map(|key| {
+                let value = registry_client.get_value(key, version)?.ok_or(
+                    ApiNodeRegistryFetchError::NoApiBoundaryNodeRecordFound(key.to_string()),
+                )?;
+                let record = ApiBoundaryNodeRecord::decode(&value[..])
+                    .map_err(|_| ApiNodeRegistryFetchError::RecordDeserializationFailure)?;
+                Ok(record.domain)
             })
-            .collect()
+            .collect();
+        urls
     }
 }

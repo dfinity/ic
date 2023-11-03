@@ -91,6 +91,7 @@ DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",
     "//rs/utils",
+    "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "@crate_index//:anyhow",
     "@crate_index//:assert-json-diff",
     "@crate_index//:assert_matches",
