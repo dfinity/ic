@@ -1,5 +1,5 @@
 {
-  "checksum": "b559e4590d57cd436416fa53501758130d6b277128e979da0d1ecbff93ca7ed9",
+  "checksum": "c9f93b85b93fa3aa07a4928b96308cbe0fdf06b97e3f6c3cae4e0f73c106f640",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4429,20 +4429,20 @@
       },
       "license": "MIT"
     },
-    "bindgen 0.59.2": {
+    "bindgen 0.65.1": {
       "name": "bindgen",
-      "version": "0.59.2",
+      "version": "0.65.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bindgen/0.59.2/download",
-          "sha256": "2bd2a9a458e8f4304c52c43ebb0cfbd520289f8379a52e329a38afda99bf8eb8"
+          "url": "https://crates.io/api/v1/crates/bindgen/0.65.1/download",
+          "sha256": "cfdf7b466f9a4903edc73f95d6d2bcd5baf8ae620638762244d3f60143643cc5"
         }
       },
       "targets": [
         {
           "Library": {
             "crate_name": "bindgen",
-            "crate_root": "src/lib.rs",
+            "crate_root": "lib.rs",
             "srcs": [
               "**/*.rs"
             ]
@@ -4472,7 +4472,7 @@
         "deps": {
           "common": [
             {
-              "id": "bindgen 0.59.2",
+              "id": "bindgen 0.65.1",
               "target": "build_script_build"
             },
             {
@@ -4500,6 +4500,10 @@
               "target": "peeking_take_while"
             },
             {
+              "id": "prettyplease 0.2.12",
+              "target": "prettyplease"
+            },
+            {
               "id": "proc-macro2 1.0.66",
               "target": "proc_macro2"
             },
@@ -4518,12 +4522,16 @@
             {
               "id": "shlex 1.1.0",
               "target": "shlex"
+            },
+            {
+              "id": "syn 2.0.26",
+              "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.59.2"
+        "version": "0.65.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -4534,6 +4542,10 @@
             {
               "id": "clang-sys 1.6.1",
               "target": "clang_sys"
+            },
+            {
+              "id": "prettyplease 0.2.12",
+              "target": "prettyplease"
             }
           ],
           "selects": {}
@@ -6869,6 +6881,77 @@
         "version": "1.3.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "bzip2-sys 0.1.11+1.0.8": {
+      "name": "bzip2-sys",
+      "version": "0.1.11+1.0.8",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/bzip2-sys/0.1.11+1.0.8/download",
+          "sha256": "736a955f3fa7875102d57c82b8cac37ec45224a07fd32d58f9f7a186b6cd4cdc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bzip2_sys",
+            "crate_root": "lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "bzip2_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bzip2-sys 0.1.11+1.0.8",
+              "target": "build_script_build"
+            },
+            {
+              "id": "libc 0.2.147",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.1.11+1.0.8"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.79",
+              "target": "cc"
+            },
+            {
+              "id": "pkg-config 0.3.27",
+              "target": "pkg_config"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "bzip2"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "cached 0.41.0": {
       "name": "cached",
@@ -12870,7 +12953,7 @@
               "target": "bincode"
             },
             {
-              "id": "bindgen 0.59.2",
+              "id": "bindgen 0.65.1",
               "target": "bindgen"
             },
             {
@@ -13613,7 +13696,7 @@
               "target": "rlp"
             },
             {
-              "id": "rocksdb 0.15.0",
+              "id": "rocksdb 0.21.0",
               "target": "rocksdb"
             },
             {
@@ -21506,7 +21589,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "0e996988693f2d55fc9533c44dc20ae5310a1894"
+            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
           },
           "strip_prefix": "validation"
         }
@@ -26109,13 +26192,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "librocksdb-sys 6.20.3": {
+    "librocksdb-sys 0.11.0+8.1.1": {
       "name": "librocksdb-sys",
-      "version": "6.20.3",
+      "version": "0.11.0+8.1.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/librocksdb-sys/6.20.3/download",
-          "sha256": "c309a9d2470844aceb9a4a098cf5286154d20596868b75a6b36357d2bb9ca25d"
+          "url": "https://crates.io/api/v1/crates/librocksdb-sys/0.11.0+8.1.1/download",
+          "sha256": "d3386f101bcb4bd252d8e9d2fb41ec3b0862a15a62b478c355b2982efa469e3e"
         }
       },
       "targets": [
@@ -26157,14 +26240,14 @@
               "target": "libc"
             },
             {
-              "id": "librocksdb-sys 6.20.3",
+              "id": "librocksdb-sys 0.11.0+8.1.1",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "6.20.3"
+        "version": "0.11.0+8.1.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -26173,7 +26256,7 @@
         "deps": {
           "common": [
             {
-              "id": "bindgen 0.59.2",
+              "id": "bindgen 0.65.1",
               "target": "bindgen"
             },
             {
@@ -26947,12 +27030,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -26986,12 +27084,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2021",
         "version": "0.4.3"
@@ -35881,6 +35994,68 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "prettyplease 0.2.12": {
+      "name": "prettyplease",
+      "version": "0.2.12",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/prettyplease/0.2.12/download",
+          "sha256": "6c64d9ba0963cdcea2e1b2230fbae2bab30eb25a174be395c41e764bfb65dd62"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prettyplease",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "prettyplease",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "prettyplease 0.2.12",
+              "target": "build_script_build"
+            },
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "syn 2.0.26",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.12"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "links": "prettyplease02"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "primeorder 0.13.2": {
       "name": "primeorder",
       "version": "0.13.2",
@@ -41034,13 +41209,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "rocksdb 0.15.0": {
+    "rocksdb 0.21.0": {
       "name": "rocksdb",
-      "version": "0.15.0",
+      "version": "0.21.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rocksdb/0.15.0/download",
-          "sha256": "23d83c02c429044d58474eaf5ae31e062d0de894e21125b47437ec0edc1397e6"
+          "url": "https://crates.io/api/v1/crates/rocksdb/0.21.0/download",
+          "sha256": "bb6f170a4041d50a0ce04b0d2e14916d6ca863ea2e422689a5b694395d299ffe"
         }
       },
       "targets": [
@@ -41066,14 +41241,14 @@
               "target": "libc"
             },
             {
-              "id": "librocksdb-sys 6.20.3",
+              "id": "librocksdb-sys 0.11.0+8.1.1",
               "target": "librocksdb_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.15.0"
+        "version": "0.21.0"
       },
       "license": "Apache-2.0"
     },
