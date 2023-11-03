@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::metrics::{StateSyncManagerHandlerMetrics, ADVERT_HANDLER_LABEL};
 use axum::{
     body::Bytes,
     extract::State,
@@ -20,12 +19,6 @@ pub(crate) async fn state_sync_advert_handler(
     Extension(peer): Extension<NodeId>,
     payload: Bytes,
 ) -> Result<(), StatusCode> {
-    let _timer = state
-        .metrics
-        .request_duration
-        .with_label_values(&[ADVERT_HANDLER_LABEL])
-        .start_timer();
-
     let id: StateSyncArtifactId = pb::StateSyncId::decode(payload)
         .map_err(|_| StatusCode::BAD_REQUEST)?
         .into();
@@ -42,19 +35,16 @@ pub(crate) async fn state_sync_advert_handler(
 pub(crate) struct StateSyncAdvertHandler {
     _log: ReplicaLogger,
     advert_sender: tokio::sync::mpsc::Sender<(StateSyncArtifactId, NodeId)>,
-    metrics: StateSyncManagerHandlerMetrics,
 }
 
 impl StateSyncAdvertHandler {
     pub fn new(
         log: ReplicaLogger,
         advert_sender: tokio::sync::mpsc::Sender<(StateSyncArtifactId, NodeId)>,
-        metrics: StateSyncManagerHandlerMetrics,
     ) -> Self {
         Self {
             _log: log,
             advert_sender,
-            metrics,
         }
     }
 }

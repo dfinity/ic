@@ -36,7 +36,7 @@ use std::{
     time::Duration,
 };
 
-use axum::Router;
+use axum::{middleware::from_fn_with_state, Router};
 use either::Either;
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
@@ -68,6 +68,7 @@ use tokio_util::time::DelayQueue;
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
+    utils::collect_metrics,
     ConnId,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
@@ -199,11 +200,14 @@ pub(crate) fn start_connection_manager(
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
     socket: Either<SocketAddr, impl AsyncUdpSocket>,
-    router: Router,
+    router: Option<Router>,
 ) {
     let topology = watcher.borrow().clone();
 
     let metrics = QuicTransportMetrics::new(metrics_registry);
+    let router = router
+        .map(|r| r.route_layer(from_fn_with_state(metrics.clone(), collect_metrics)))
+        .unwrap_or_default();
     // We use a random reset key here. The downside of this is that
     // during a crash and restart the peer will not recognize our
     // CONNECTION_RESETS.Not recognizing the reset might lead

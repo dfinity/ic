@@ -1,6 +1,8 @@
 use ic_base_types::NodeId;
-use ic_metrics::{tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry};
-use prometheus::{GaugeVec, IntCounter, IntCounterVec, IntGauge};
+use ic_metrics::{
+    buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
+};
+use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use quinn::Connection;
 use tokio_metrics::TaskMonitor;
 
@@ -8,6 +10,7 @@ const CONNECTION_RESULT_LABEL: &str = "status";
 const PEER_ID_LABEL: &str = "peer";
 const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
 const STREAM_TYPE_LABEL: &str = "stream";
+const HANDLER_LABEL: &str = "handler";
 const REQUEST_TYPE_LABEL: &str = "request";
 const ERROR_TYPE_LABEL: &str = "error";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
@@ -40,6 +43,8 @@ pub struct QuicTransportMetrics {
     // Request handler
     pub request_task_monitor: TaskMonitor,
     pub request_handle_errors_total: IntCounterVec,
+    pub request_handle_total: IntCounterVec,
+    pub request_handle_duration: HistogramVec,
     // Connection handle
     pub connection_handle_requests_total: IntCounterVec,
     pub connection_handle_errors_total: IntCounterVec,
@@ -105,6 +110,17 @@ impl QuicTransportMetrics {
                 "quic_transport_request_handle_errors_total",
                 "Request handler errors by stream type and error type.",
                 &[STREAM_TYPE_LABEL, ERROR_TYPE_LABEL],
+            ),
+            request_handle_total: metrics_registry.int_counter_vec(
+                "quic_transport_request_handle_total",
+                "Request handler requests total by handler.",
+                &[HANDLER_LABEL],
+            ),
+            request_handle_duration: metrics_registry.histogram_vec(
+                "quic_transport_handle_requests_duration",
+                "Request handler request execution duration by handler.",
+                decimal_buckets(-2, 0),
+                &[HANDLER_LABEL],
             ),
             // Connection handler
             connection_handle_requests_total: metrics_registry.int_counter_vec(
