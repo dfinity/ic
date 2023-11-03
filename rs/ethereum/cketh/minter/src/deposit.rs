@@ -83,9 +83,9 @@ async fn mint_cketh() {
     }
 }
 
-/// Scraps Ethereum logs between `from` and `min(from + 1024, to)` since certain RPC providers
-/// require that the number of blocks queried is no greater than 1024.
-/// Returns the last block number that was scraped (which is `min(from + 1024, to)`).
+/// Scraps Ethereum logs between `from` and `min(from + MAX_BLOCK_SPREAD, to)` since certain RPC providers
+/// require that the number of blocks queried is no greater than MAX_BLOCK_SPREAD.
+/// Returns the last block number that was scraped (which is `min(from + MAX_BLOCK_SPREAD, to)`).
 async fn scrap_eth_logs_range_inclusive(
     contract_address: Address,
     from: BlockNumber,
@@ -118,7 +118,7 @@ async fn scrap_eth_logs_range_inclusive(
                 Err(e) => {
                     log!(
                         INFO,
-                        "Failed to get ETH logs from block {from} to block {to}: {e:?}",
+                        "Failed to get ETH logs from block {from} to block {last_scraped_block_number}: {e:?}",
                     );
                     return from;
                 }
