@@ -1,8 +1,5 @@
-use super::{
-    InvertibleFunction, NonDecreasingFunction, PolynomialMatchingFunction,
-    PolynomialMatchingFunctionPersistentData,
-};
-use crate::E8;
+use super::*;
+use crate::{DeserializableFunction, SerializableFunction, E8};
 use assert_matches::assert_matches;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
@@ -24,7 +21,7 @@ lazy_static! {
 
 #[test]
 fn known_values_test() {
-    let f = PolynomialMatchingFunction::from_persistant_data(PERSISTENT_DATA_FOR_TESTS.clone())
+    let f = PolynomialMatchingFunction::from_persistent_data(PERSISTENT_DATA_FOR_TESTS.clone())
         .unwrap();
     println!("Testing {:#?} ...", f);
     let assert_close_enough = |arg_icp_e8s: u64, expected_icp: Decimal| {
@@ -45,8 +42,32 @@ fn known_values_test() {
 }
 
 #[test]
+fn polynomial_matching_function_viability_test() {
+    for i in 0..64 {
+        let total_maturity_equivalent_icp_e8s = 2_u64.pow(i);
+        println!(
+            "Testing with total_maturity_equivalent_icp_e8s = 2^{} = {}",
+            i, total_maturity_equivalent_icp_e8s,
+        );
+        // Test the main constructor.
+        let f = PolynomialMatchingFunction::new(total_maturity_equivalent_icp_e8s).unwrap();
+        // Test serializability.
+        let f_repr = f.serialize();
+        let f1 = PolynomialMatchingFunction::from_repr(&f_repr).unwrap();
+        assert_eq!(format!("{:#?}", f1), format!("{:#?}", f));
+        // Test that the function can be plotted.
+        let _plot = f.plot(NonZeroU64::try_from(1_000).unwrap()).unwrap();
+        // Test that it is safe to apply the function over a broad range of values.
+        for j in 0..64 {
+            let x_icp_e8s = 2_u64.pow(j);
+            let _y_icp = f.apply_and_rescale_to_icp_e8s(x_icp_e8s).unwrap();
+        }
+    }
+}
+
+#[test]
 fn plot_test() {
-    let f = PolynomialMatchingFunction::from_persistant_data(PERSISTENT_DATA_FOR_TESTS.clone())
+    let f = PolynomialMatchingFunction::from_persistent_data(PERSISTENT_DATA_FOR_TESTS.clone())
         .unwrap();
     println!("Testing {:#?} ...", f);
     println!(

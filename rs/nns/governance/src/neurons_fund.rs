@@ -516,7 +516,8 @@ where
             .fold(0_u64, |a, n| a.saturating_add(n))
     }
 
-    /// Create a new Neurons' Fund participation for the given `swap_participation_limits`.
+    /// Create a new Neurons' Fund participation for the given `swap_participation_limits`
+    /// and `ideal_matched_participation_function`.
     #[cfg(test)]
     pub fn new_for_test(
         swap_participation_limits: SwapParticipationLimits,
@@ -778,9 +779,8 @@ impl PolynomialNeuronsFundParticipation {
     ) -> Result<Self, String> {
         let total_maturity_equivalent_icp_e8s =
             Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund);
-        let ideal_matched_participation_function = Box::from(PolynomialMatchingFunction::new(
-            total_maturity_equivalent_icp_e8s,
-        ));
+        let ideal_matched_participation_function =
+            Box::from(PolynomialMatchingFunction::new(total_maturity_equivalent_icp_e8s).unwrap());
         Self::new_impl(
             total_maturity_equivalent_icp_e8s,
             swap_participation_limits.max_direct_participation_icp_e8s, // best case scenario
