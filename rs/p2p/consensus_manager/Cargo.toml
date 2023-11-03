@@ -29,3 +29,9 @@ slog = { version = "2.5.2", features = [
     "release_max_level_debug",
 ] }
 tokio = { workspace = true }
+
+[dev-dependencies]
+ic-p2p-test-utils = { path = "../test_utils" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+turmoil = "0.5"

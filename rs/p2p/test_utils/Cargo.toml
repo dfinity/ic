@@ -7,10 +7,13 @@ edition = "2021"
 async-trait = "0.1.36"
 axum = "0.6.12"
 bytes = { workspace = true }
+crossbeam-channel = "0.5.5"
 either = "1.6.0"
 futures = { workspace = true }
+ic-artifact-manager = { path = "../../artifact_manager" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
+ic-consensus-manager = { path = "../consensus_manager" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
@@ -32,6 +35,11 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 mockall = "0.11.4"
 quinn = { version = "0.10.2", features = ["ring"] }
+serde = "1.0.99"
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 tempfile = "3.0"
 tokio = { workspace = true }
 turmoil = "0.5"

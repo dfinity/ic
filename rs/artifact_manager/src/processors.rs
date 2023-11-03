@@ -74,7 +74,7 @@ impl<
 }
 
 /// The ingress `OnStateChange` client.
-pub struct IngressProcessor<P: MutablePool<IngressArtifact>> {
+pub(crate) struct IngressProcessor<P: MutablePool<IngressArtifact>> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     ingress_pool: Arc<RwLock<P>>,

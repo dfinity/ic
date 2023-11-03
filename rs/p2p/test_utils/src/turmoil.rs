@@ -2,22 +2,29 @@ use std::{
     future::Future,
     io::{self, IoSliceMut},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, RwLock},
     task::Poll,
     time::Duration,
 };
 
 use crate::{
+    consensus::{TestConsensus, U64Artifact},
     create_peer_manager_and_registry_handle, temp_crypto_component_with_tls_keys,
     RegistryConsensusHandle,
 };
 use axum::Router;
 use either::Either;
 use futures::{future::BoxFuture, FutureExt};
+use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
 use ic_icos_sev::Sev;
 use ic_icos_sev_interfaces::ValidateAttestedStream;
-use ic_interfaces::state_sync_client::StateSyncClient;
+use ic_interfaces::{
+    artifact_manager::{ArtifactProcessorEvent, JoinGuard},
+    artifact_pool::UnvalidatedArtifactEvent,
+    state_sync_client::StateSyncClient,
+    time_source::SysTimeSource,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
@@ -240,6 +247,7 @@ pub fn add_peer_manager_to_sim(
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub fn add_transport_to_sim<F>(
     sim: &mut Sim,
     log: ReplicaLogger,
@@ -250,11 +258,13 @@ pub fn add_transport_to_sim<F>(
     crypto: Option<Arc<dyn TlsConfig + Send + Sync>>,
     sev: Option<Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>>,
     state_sync_client: Option<Arc<dyn StateSyncClient>>,
+    consensus_manager: Option<TestConsensus<U64Artifact>>,
     post_setup_future: F,
 ) where
     F: Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static,
 {
     let node_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 4100).into();
+    let consensus_manager = consensus_manager.map(|m| Arc::new(RwLock::new(m.clone())));
 
     let node_crypto =
         crypto.unwrap_or_else(|| temp_crypto_component_with_tls_keys(&registry_handler, peer));
@@ -271,6 +281,7 @@ pub fn add_transport_to_sim<F>(
         let topology_watcher_clone = topology_watcher.clone();
         let post_setup_future_clone = post_setup_future.clone();
         let state_sync_client_clone = state_sync_client.clone();
+        let consensus_manager_clone = consensus_manager.clone();
 
         async move {
             let udp_listener = turmoil::net::UdpSocket::bind(node_addr).await.unwrap();
@@ -289,6 +300,14 @@ pub fn add_transport_to_sim<F>(
             } else {
                 None
             };
+            let consensus_rx = if let Some(ref consensus) = consensus_manager_clone {
+                let (consensus_router, consensus_tx) =
+                    ic_consensus_manager::build_axum_router(log.clone(), consensus.clone());
+                router = router.merge(consensus_router);
+                Some(consensus_tx)
+            } else {
+                None
+            };
 
             let transport = Arc::new(QuicTransport::build(
                 &log,
@@ -298,14 +317,14 @@ pub fn add_transport_to_sim<F>(
                 registry_client,
                 sev_handshake_clone,
                 peer,
-                topology_watcher_clone,
+                topology_watcher_clone.clone(),
                 Either::Right(custom_udp),
                 Some(router),
             ));
 
             if let Some(state_sync_rx) = state_sync_rx {
                 ic_state_sync_manager::start_state_sync_manager(
-                    log,
+                    log.clone(),
                     &MetricsRegistry::default(),
                     &tokio::runtime::Handle::current(),
                     transport.clone(),
@@ -313,6 +332,27 @@ pub fn add_transport_to_sim<F>(
                     state_sync_rx,
                 );
             }
+
+            let _artifact_processor_jh = if let Some(consensus_rx) = consensus_rx {
+                let consensus = consensus_manager_clone.clone().unwrap();
+                let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
+                    start_test_processor(consensus.clone(), consensus.read().unwrap().clone());
+                ic_consensus_manager::start_consensus_manager(
+                    log,
+                    &MetricsRegistry::default(),
+                    tokio::runtime::Handle::current(),
+                    artifact_manager_event_rx,
+                    consensus_rx,
+                    consensus.clone(),
+                    Arc::new(consensus.read().unwrap().clone()),
+                    artifact_sender,
+                    transport.clone(),
+                    topology_watcher_clone,
+                );
+                Some(artifact_processor_jh)
+            } else {
+                None
+            };
 
             post_setup_future_clone(peer, transport).await;
             Ok(())
@@ -330,4 +370,27 @@ pub fn waiter_fut(
         }
         .boxed()
     }
+}
+
+#[allow(clippy::type_complexity)]
+fn start_test_processor(
+    pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
+    change_set_producer: TestConsensus<U64Artifact>,
+) -> (
+    Box<dyn JoinGuard>,
+    tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
+    crossbeam_channel::Sender<UnvalidatedArtifactEvent<U64Artifact>>,
+) {
+    let (tx, rx) = tokio::sync::mpsc::channel(1000);
+    let time_source = Arc::new(SysTimeSource::new());
+    let client = ic_artifact_manager::processors::Processor::new(pool, change_set_producer);
+    let (jh, sender) = run_artifact_processor(
+        time_source,
+        MetricsRegistry::default(),
+        Box::new(client),
+        move |req| {
+            let _ = tx.blocking_send(req);
+        },
+    );
+    (jh, rx, sender)
 }
