@@ -227,6 +227,12 @@ const COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN: usize = if cfg!(test) {
     5
 };
 
+// Constant set of deprecated but not yet deleted topics. These topics should
+// not be allowed to be followed on. They are represented as a constant array
+// instead of a static HashSet for brevity, and because search time is equivalent
+// on small arrays.
+pub const DEPRECATED_TOPICS: [Topic; 1] = [Topic::SnsDecentralizationSale];
+
 // Wrapping MakeProposalLock in Option seems to cause #[must_use] to not have
 // the desired effect. Therefore, #[must_use] is kind of useless here, except to
 // convey intent to the reader.
@@ -3290,7 +3296,7 @@ impl Governance {
                 return Err(GovernanceError::new(ErrorType::NotAuthorized));
             }
         }
-        Ok(neuron_clone)
+        Ok(neuron_clone.without_deprecated_topics_from_followees())
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -5934,12 +5940,6 @@ impl Governance {
         caller: &PrincipalId,
         follow_request: &manage_neuron::Follow,
     ) -> Result<(), GovernanceError> {
-        // Constant set of deprecated but not yet deleted topics. These topics should
-        // not be allowed to be followed on. They are represented in a local constant
-        // for clarity, and represented as a constant array instead of a static HashSet
-        // for brevity, and because search time is equivalent on small arrays.
-        const DEPRECATED_TOPICS: [Topic; 1] = [Topic::SnsDecentralizationSale];
-
         // The implementation of this method is complicated by the
         // fact that we have to maintain a reverse index of all follow
         // relationships, i.e., the `topic_followee_index`.
@@ -5990,6 +5990,7 @@ impl Governance {
             )
         })?;
 
+        // Validate topic is not deprecated
         if DEPRECATED_TOPICS.iter().any(|t| t == &topic) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
@@ -6379,7 +6380,7 @@ impl Governance {
     ) -> Result<ManageNeuronResponse, GovernanceError> {
         // We run claim or refresh before we check whether a neuron exists because it
         // may not in the case of the neuron being claimed
-        if let Some(manage_neuron::Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
+        if let Some(Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
             // Note that we return here, so none of the rest of this method is executed
             // in this case.
             return match &claim_or_refresh.by {
@@ -6426,43 +6427,43 @@ impl Governance {
         let id = self.neuron_id_from_manage_neuron(mgmt)?;
 
         match &mgmt.command {
-            Some(manage_neuron::Command::Configure(c)) => self
+            Some(Command::Configure(c)) => self
                 .configure_neuron(&id, caller, c)
                 .map(|_| ManageNeuronResponse::configure_response()),
-            Some(manage_neuron::Command::Disburse(d)) => self
+            Some(Command::Disburse(d)) => self
                 .disburse_neuron(&id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_response),
-            Some(manage_neuron::Command::Spawn(s)) => self
+            Some(Command::Spawn(s)) => self
                 .spawn_neuron(&id, caller, s)
                 .await
                 .map(ManageNeuronResponse::spawn_response),
-            Some(manage_neuron::Command::MergeMaturity(m)) => self
+            Some(Command::MergeMaturity(m)) => self
                 .redirect_merge_maturity_to_stake_maturity(&id, caller, m)
                 .map(ManageNeuronResponse::merge_maturity_response),
-            Some(manage_neuron::Command::StakeMaturity(s)) => self
+            Some(Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
                 .map(|(response, _)| ManageNeuronResponse::stake_maturity_response(response)),
-            Some(manage_neuron::Command::Split(s)) => self
+            Some(Command::Split(s)) => self
                 .split_neuron(&id, caller, s)
                 .await
                 .map(ManageNeuronResponse::split_response),
-            Some(manage_neuron::Command::DisburseToNeuron(d)) => self
+            Some(Command::DisburseToNeuron(d)) => self
                 .disburse_to_neuron(&id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_to_neuron_response),
-            Some(manage_neuron::Command::Merge(s)) => self.merge_neurons(&id, caller, s).await,
-            Some(manage_neuron::Command::Follow(f)) => self
+            Some(Command::Merge(s)) => self.merge_neurons(&id, caller, s).await,
+            Some(Command::Follow(f)) => self
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
-            Some(manage_neuron::Command::MakeProposal(p)) => self
+            Some(Command::MakeProposal(p)) => self
                 .make_proposal(&id, caller, p)
                 .await
                 .map(ManageNeuronResponse::make_proposal_response),
-            Some(manage_neuron::Command::RegisterVote(v)) => self
+            Some(Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
                 .map(|_| ManageNeuronResponse::register_vote_response()),
-            Some(manage_neuron::Command::ClaimOrRefresh(_)) => {
+            Some(Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")
             }
             None => panic!(),

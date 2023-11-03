@@ -18,8 +18,8 @@ use ic_nns_governance::{
 };
 use ic_nns_governance::{
     governance::{
-        MAX_DISSOLVE_DELAY_SECONDS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        ONE_YEAR_SECONDS,
+        DEPRECATED_TOPICS, MAX_DISSOLVE_DELAY_SECONDS,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, ONE_YEAR_SECONDS,
     },
     pb::v1::{
         governance_error::ErrorType::{self, NotAuthorized, NotFound, PreconditionFailed},
@@ -182,14 +182,14 @@ fn test_merge_neurons_fails() {
         .add_neuron(
             NeuronBuilder::new(16, icp_to_e8s(1_234), principal(123))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_managers(Followees {
+                .insert_managers(Followees {
                     followees: vec![NeuronId { id: 14 }],
                 }),
         )
         .add_neuron(
             NeuronBuilder::new(17, icp_to_e8s(2_345), principal(123))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_managers(Followees {
+                .insert_managers(Followees {
                     followees: vec![NeuronId { id: 15 }],
                 }),
         )
@@ -565,25 +565,25 @@ fn test_simulate_merge_neuron_allowed_for_hotkey_controlled_neurons() {
         .add_neuron(
             NeuronBuilder::new(1, icp_to_e8s(1), principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
-                .set_maturity(crate::icp_to_e8s(123))
+                .set_maturity(icp_to_e8s(123))
                 .set_aging_since_timestamp(0)
                 .set_creation_timestamp(10)
                 .set_kyc_verified(true)
                 .set_not_for_profit(true),
         )
         .add_neuron(
-            NeuronBuilder::new(2, crate::icp_to_e8s(1), principal(2))
+            NeuronBuilder::new(2, icp_to_e8s(1), principal(2))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(crate::icp_to_e8s(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10)
                 .set_creation_timestamp(20)
                 .set_kyc_verified(true)
                 .set_not_for_profit(false),
         )
         .add_neuron(
-            NeuronBuilder::new(3, crate::icp_to_e8s(1), principal(2))
+            NeuronBuilder::new(3, icp_to_e8s(1), principal(2))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(crate::icp_to_e8s(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_hotkeys(vec![principal(1)])
                 .set_aging_since_timestamp(10)
                 .set_creation_timestamp(20)
@@ -647,7 +647,7 @@ fn do_test_merge_neurons(
     n2_fees: u64,
     n2_dissolve: u64,
     n2_age: u64,
-) -> std::result::Result<(), TestCaseError> {
+) -> Result<(), TestCaseError> {
     // Ensure that the cached_stake includes the fees
     n1_cached_stake += n1_fees;
     n2_cached_stake += n2_fees;
@@ -1031,7 +1031,7 @@ fn test_neuron_merge_follow() {
             NeuronBuilder::new(2, n2_stake, principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
                 .set_aging_since_timestamp(DEFAULT_TEST_START_TIMESTAMP_SECONDS)
-                .set_managers(Followees {
+                .insert_managers(Followees {
                     followees: vec![NeuronId { id: 1 }],
                 }),
         )
@@ -1040,7 +1040,7 @@ fn test_neuron_merge_follow() {
             NeuronBuilder::new(3, n3_stake, principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
                 .set_aging_since_timestamp(DEFAULT_TEST_START_TIMESTAMP_SECONDS)
-                .set_managers(Followees {
+                .insert_managers(Followees {
                     followees: vec![NeuronId { id: 1 }],
                 }),
         )
@@ -1093,4 +1093,73 @@ fn test_neuron_merge_follow() {
             ])]),
         ])
     );
+}
+
+/// Test that the full neurons returned in the MergeResponse omit deprecated topics from
+/// each neuron's followees field.
+#[test]
+fn test_merge_neuron_omits_deprecated_topics_from_followees() {
+    let deprecated_topic = *DEPRECATED_TOPICS.first().unwrap();
+    let normal_topic = Topic::Governance;
+
+    let mut nns = NNSBuilder::new()
+        .set_economics(NetworkEconomics::with_default_values())
+        .add_neuron(
+            NeuronBuilder::new(1, icp_to_e8s(1), principal(1))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
+                .insert_followees(
+                    deprecated_topic,
+                    Followees {
+                        followees: vec![NeuronId { id: 3 }],
+                    },
+                )
+                .insert_followees(
+                    normal_topic,
+                    Followees {
+                        followees: vec![NeuronId { id: 3 }],
+                    },
+                ),
+        )
+        .add_neuron(
+            NeuronBuilder::new(2, icp_to_e8s(1), principal(1))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
+                .insert_followees(
+                    deprecated_topic,
+                    Followees {
+                        followees: vec![NeuronId { id: 3 }],
+                    },
+                )
+                .insert_followees(
+                    normal_topic,
+                    Followees {
+                        followees: vec![NeuronId { id: 3 }],
+                    },
+                ),
+        )
+        .create();
+
+    let response =
+        nns.simulate_merge_neurons(&NeuronId { id: 1 }, &principal(1), &NeuronId { id: 2 });
+
+    let merge_response = match response.command.unwrap() {
+        CommandResponse::Merge(merge) => merge,
+        _ => panic!("Expected a Merge response from the ManageNeuron API"),
+    };
+
+    let target_neuron = merge_response
+        .target_neuron
+        .expect("Expected target_neuron to be present");
+    let source_neuron = merge_response
+        .source_neuron
+        .expect("Expected source_neuron to be present");
+
+    assert!(!target_neuron
+        .followees
+        .contains_key(&(deprecated_topic as i32)));
+    assert!(target_neuron.followees.contains_key(&(normal_topic as i32)));
+
+    assert!(!source_neuron
+        .followees
+        .contains_key(&(deprecated_topic as i32)));
+    assert!(source_neuron.followees.contains_key(&(normal_topic as i32)));
 }
