@@ -333,9 +333,14 @@ impl NeuronBuilder {
         self
     }
 
-    pub fn set_managers(mut self, managers: neuron::Followees) -> Self {
+    pub fn insert_managers(mut self, managers: neuron::Followees) -> Self {
         self.followees
             .insert(Topic::NeuronManagement as i32, managers);
+        self
+    }
+
+    pub fn insert_followees(mut self, topic: Topic, followees: neuron::Followees) -> Self {
+        self.followees.insert(topic as i32, followees);
         self
     }
 
