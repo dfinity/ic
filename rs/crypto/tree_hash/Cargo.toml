@@ -23,6 +23,7 @@ maplit = "1.0.2"
 proptest = "1.0"
 prost = { workspace = true }
 rand = "0.8.4"
+rand_chacha = "0.3.1"
 serde_cbor = { workspace = true }
 
 [[bench]]

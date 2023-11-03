@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
@@ -33,17 +34,10 @@ DEPENDENCIES = [
     "@crate_index//:thousands",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/reproducible_rng",
-    "@crate_index//:assert_matches",
-    "@crate_index//:hex-literal",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:proptest",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:rusty-fork",
 ]
 
 MACRO_DEV_DEPENDENCIES = [

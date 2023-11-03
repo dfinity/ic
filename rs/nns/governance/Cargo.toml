@@ -27,6 +27,7 @@ harness = false
 
 [dependencies]
 build-info = { workspace = true }
+build-info-build = { workspace = true }
 
 async-trait = "0.1.42"
 bytes = { workspace = true }

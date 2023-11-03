@@ -1,14 +1,11 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "@crate_index//:assert_matches",
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/tree_hash",
-    "@crate_index//:proptest",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:thiserror",
 ]
 
 DEV_DEPENDENCIES = [

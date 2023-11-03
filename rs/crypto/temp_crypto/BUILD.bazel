@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/config",
     "//rs/crypto",
     "//rs/crypto/interfaces/sig_verification",
@@ -22,23 +23,17 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/types/base_types",
     "//rs/types/types",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:tokio-rustls",
 ]
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/test_utilities",
     "//rs/types/types_test_utils",
-    "@crate_index//:assert_matches",
-    "@crate_index//:rand_chacha_0_3_1",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

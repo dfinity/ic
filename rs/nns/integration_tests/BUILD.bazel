@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
@@ -29,47 +30,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        "//rs/canister_client/sender",
-        "//rs/config",
-        "//rs/crypto",
-        "//rs/crypto/sha2",
-        "//rs/nervous_system/common/test_keys",
-        "//rs/nervous_system/root",
-        "//rs/phantom_newtype",
-        "//rs/protobuf",
-        "//rs/registry/canister",
-        "//rs/registry/keys",
-        "//rs/registry/routing_table",
-        "//rs/registry/subnet_type",
-        "//rs/registry/transport",
-        "//rs/rosetta-api/tvl/xrc_mock",
-        "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/http_types",
-        "//rs/rust_canisters/on_wire",
-        "//rs/state_machine_tests",
-        "//rs/test_utilities",
-        "//rs/types/error_types",
-        "//rs/types/ic00_types",
-        "//rs/types/types",
-        "@crate_index//:crossbeam",
-        "@crate_index//:crossbeam-channel",
-        "@crate_index//:futures-util",
-        "@crate_index//:hex",
-        "@crate_index//:ic-xrc-types",
-        "@crate_index//:libsecp256k1",
-        "@crate_index//:maplit",
-        "@crate_index//:rand_0_8_4",
-        # "@crate_index//:randomkit",
-        "@crate_index//:rustc-hash",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:tokio",
-        "@crate_index//:wat",
-    ],
-})
+]
 
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.

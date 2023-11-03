@@ -1,20 +1,11 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/getrandom_for_wasm",
-    "@crate_index//:ic_bls12_381",
-    "@crate_index//:itertools",
-    "@crate_index//:hex",
-    "@crate_index//:lazy_static",
-    "@crate_index//:pairing",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:sha2_0_9_1",
-    "@crate_index//:subtle",
-    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [

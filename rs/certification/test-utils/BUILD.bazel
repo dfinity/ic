@@ -1,18 +1,15 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/types/types",
-    "@crate_index//:leb128",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
 ]
 
 rust_library(

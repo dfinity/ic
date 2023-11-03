@@ -1,17 +1,14 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/on_wire",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_pcg",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
 ]
 
 MACRO_DEPENDENCIES = [

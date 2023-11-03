@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 prost = { workspace = true }
 tonic = { workspace = true }
+tonic-build = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true }

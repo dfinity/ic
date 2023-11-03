@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
@@ -14,7 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/canister_client/sender",
     "//rs/certification/test-utils",
     "//rs/constants",
@@ -24,9 +25,6 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/registry/helpers",
     "//rs/validator/http_request_test_utils",
-    "@crate_index//:assert_matches",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:strum",
 ]
 
 MACRO_DEPENDENCIES = []

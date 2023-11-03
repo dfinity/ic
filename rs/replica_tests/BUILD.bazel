@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/async_utils",
     "//rs/bitcoin/service",
     "//rs/bitcoin/types/internal",
@@ -35,18 +36,6 @@ DEPENDENCIES = [
     "//rs/types/ic00_types",
     "//rs/types/types",
     "//rs/utils",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:futures",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:prometheus",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:slog",
-    "@crate_index//:slog-scope",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:tonic",
-    "@crate_index//:wat",
 ]
 
 MACRO_DEPENDENCIES = []

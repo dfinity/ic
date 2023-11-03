@@ -26,7 +26,7 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/test_utilities",
@@ -34,11 +34,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "//rs/types/ic00_types",
-    "@crate_index//:criterion",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-envlogger",
-    "@crate_index//:slog-term",
 ]
 
 DEV_MACRO_DEPENDENCIES = []

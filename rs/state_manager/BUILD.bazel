@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench")
 
@@ -12,7 +13,7 @@ rust_library(
     }),
     crate_name = "ic_state_manager",
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/canonical_state",
         "//rs/canonical_state/tree_hash",
         "//rs/config",
@@ -34,21 +35,6 @@ rust_library(
         "//rs/types/error_types",
         "//rs/types/types",
         "//rs/utils",
-        "@crate_index//:bit-vec",
-        "@crate_index//:crossbeam-channel",
-        "@crate_index//:hex",
-        "@crate_index//:nix",
-        "@crate_index//:parking_lot",
-        "@crate_index//:prometheus",
-        "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:scoped_threadpool",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:slog",
-        "@crate_index//:tempfile",
-        "@crate_index//:uuid",
     ],
 )
 

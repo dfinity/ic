@@ -12,6 +12,7 @@ proc-macro = true
 test = false
 
 [dependencies]
+rustversion = "1.0"
 syn = { workspace = true }
 quote = "1.0"
 proc-macro2 = "1.0"

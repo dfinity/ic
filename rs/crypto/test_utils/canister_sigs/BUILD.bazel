@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,7 +8,7 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_canister_sigs",
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/certification/test-utils",
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils",
@@ -21,9 +22,5 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/types/types",
         "//rs/types/types_test_utils",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:serde",
-        "@crate_index//:serde_cbor",
     ],
 )

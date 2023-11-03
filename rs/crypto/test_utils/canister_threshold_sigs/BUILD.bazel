@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,7 +8,7 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_canister_threshold_sigs",
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
         "//rs/crypto/internal/crypto_service_provider",
         "//rs/crypto/temp_crypto",
@@ -20,9 +21,6 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities/in_memory_logger",
         "//rs/types/types",
-        "@crate_index//:assert_matches",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
     ],
 )
 

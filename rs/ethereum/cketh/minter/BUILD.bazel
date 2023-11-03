@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
@@ -78,14 +79,8 @@ rust_doc_test(
 rust_test(
     name = "lib_tests",
     crate = ":minter",
-    deps = [
+    deps = all_crate_deps(normal_dev = True) + [
         ":minter",
-        "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:assert_matches",
-        "@crate_index//:ethers-core",
-        "@crate_index//:maplit",
-        "@crate_index//:proptest",
-        "@crate_index//:rand_0_8_4",
     ],
 )
 

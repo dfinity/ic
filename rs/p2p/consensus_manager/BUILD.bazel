@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = [
@@ -5,7 +6,7 @@ package(default_visibility = [
     "//rs/replica:__subpackages__",
 ])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/async_utils",
     "//rs/artifact_pool",
     "//rs/interfaces",
@@ -15,17 +16,6 @@ DEPENDENCIES = [
     "//rs/p2p/peer_manager",
     "//rs/p2p/quic_transport",
     "//rs/types/types",
-    "@crate_index//:axum",
-    "@crate_index//:backoff",
-    "@crate_index//:bincode",
-    "@crate_index//:bytes",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:futures",
-    "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:serde",
-    "@crate_index//:slog",
-    "@crate_index//:tokio",
 ]
 
 DEV_DEPENDENCIES = [

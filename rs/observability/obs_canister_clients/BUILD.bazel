@@ -1,15 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "@crate_index//:candid",
-    "@crate_index//:ic-agent",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:serde",
-    "@crate_index//:slog",
-    "@crate_index//:url",
-]
+DEPENDENCIES = all_crate_deps()
 
 MACRO_DEPENDENCIES = []
 

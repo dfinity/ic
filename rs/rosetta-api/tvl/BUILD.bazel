@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
@@ -80,15 +81,12 @@ DEV_ENV = {
     "TVL_WASM": "$(rootpath //rs/rosetta-api/tvl:tvl_canister)",
 }
 
-DEPENDENCIES_TEST = [
+DEPENDENCIES_TEST = all_crate_deps(normal_dev = True) + [
     "//rs/nns/test_utils",
     "//rs/rosetta-api/tvl",
     "//rs/rosetta-api/tvl/xrc_mock",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
-    "@crate_index//:assert_matches",
-    "@crate_index//:candid",
-    "@crate_index//:rand_0_8_4",
 ]
 
 DEV_DATA = [

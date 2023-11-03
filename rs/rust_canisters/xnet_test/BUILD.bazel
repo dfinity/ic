@@ -1,14 +1,11 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/rust_canisters/dfn_core",
-    "@crate_index//:candid",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_pcg",
-    "@crate_index//:serde",
 ]
 
 rust_library(

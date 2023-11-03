@@ -1,9 +1,10 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/bitcoin/types/internal",
     "//rs/canonical_state/certification_version",
     "//rs/config",
@@ -23,19 +24,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
-    "@crate_index//:cvt",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:lazy_static",
-    "@crate_index//:libc",
-    "@crate_index//:maplit",
-    "@crate_index//:prometheus",
-    "@crate_index//:nix",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:serde",
-    "@crate_index//:slog",
-    "@crate_index//:tempfile",
-    "@crate_index//:uuid",
 ]
 
 MACRO_DEPENDENCIES = []

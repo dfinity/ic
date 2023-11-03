@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,15 +8,10 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_icrc1_test_utils",
     version = "0.8.0",
-    deps = [
+    deps = all_crate_deps() + [
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
-        "@crate_index//:candid",
-        "@crate_index//:num-traits",
-        "@crate_index//:proptest",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:serde_bytes",
     ],
 )

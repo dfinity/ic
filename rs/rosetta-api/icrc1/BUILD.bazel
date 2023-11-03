@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -27,16 +28,12 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:ic-cdk-macros",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
-    "@crate_index//:ciborium",
-    "@crate_index//:leb128",
-    "@crate_index//:proptest",
-    "@crate_index//:rand_0_8_4",
 ]
 
 MACRO_DEV_DEPENDENCIES = [

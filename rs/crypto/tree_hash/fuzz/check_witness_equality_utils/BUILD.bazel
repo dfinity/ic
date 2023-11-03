@@ -1,15 +1,14 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs/crypto/tree_hash/fuzz:__subpackages__"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps(package_name = "rs/crypto/tree_hash") + [
     "//rs/canonical_state/tree_hash",
     "//rs/canonical_state/tree_hash/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/crypto/tree_hash/test_utils",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
 ]
 
 rust_library(

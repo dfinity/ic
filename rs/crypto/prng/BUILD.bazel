@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,13 +8,10 @@ filegroup(
     srcs = glob(["**"]),
 )
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/sha2",
     "//rs/interfaces",
     "//rs/types/types",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:strum",
 ]
 
 DEV_DEPENDENCIES = [

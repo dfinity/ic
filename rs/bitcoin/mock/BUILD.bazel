@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
@@ -55,7 +56,7 @@ rust_test(
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath :bitcoin_canister_mock)",
     },
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
-    deps = [
+    deps = all_crate_deps() + [
         ":mock",
         "//rs/config",
         "//rs/rust_canisters/canister_test",
@@ -63,11 +64,5 @@ rust_test(
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "//rs/universal_canister/lib",
-        "@crate_index//:bitcoin",
-        "@crate_index//:candid",
-        "@crate_index//:hex",
-        "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:rand_0_8_4",
     ],
 )

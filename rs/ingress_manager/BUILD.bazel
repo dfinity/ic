@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench")
 
@@ -25,7 +26,7 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/artifact_pool",
     "//rs/config",
     "//rs/interfaces/state_manager/mocks",
@@ -34,11 +35,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
-    "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
-    "@crate_index//:proptest",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:tokio",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -81,7 +77,7 @@ rust_bench(
     srcs = ["benches/build_payload.rs"],
     data = DATA,
     env = ENV,
-    deps = [
+    deps = all_crate_deps() + [
         ":ingress_manager",
         "//rs/artifact_pool",
         "//rs/constants",
@@ -99,9 +95,6 @@ rust_bench(
         "//rs/test_utilities/registry",
         "//rs/types/ic00_types",
         "//rs/types/types",
-        "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:tokio",
     ],
 )
 
@@ -111,7 +104,7 @@ rust_bench(
     srcs = ["benches/handle_ingress.rs"],
     data = DATA,
     env = ENV,
-    deps = [
+    deps = all_crate_deps() + [
         ":ingress_manager",
         "//rs/artifact_pool",
         "//rs/config",
@@ -131,8 +124,5 @@ rust_bench(
         "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",
         "//rs/types/types",
-        "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:tokio",
     ],
 )

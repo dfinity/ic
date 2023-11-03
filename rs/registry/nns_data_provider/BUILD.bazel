@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/certification",
@@ -12,11 +13,6 @@ DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/tree_deserializer",
     "//rs/types/types",
-    "@crate_index//:chrono",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:serde",
-    "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [

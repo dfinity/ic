@@ -1,32 +1,16 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "utils",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_utils",
     version = "0.8.0",
-    deps = [
-        "@crate_index//:hex",
-        "@crate_index//:prost",
-        "@crate_index//:scoped_threadpool",
-        "@crate_index//:serde",
-    ] + select({
-        "@rules_rust//rust/platform:unix": [
-            "@crate_index//:rand_0_8_4",
-        ],
-        "//conditions:default": [],
-    }) + select({
-        "@rules_rust//rust/platform:linux": [
-            "//rs/sys",
-            "@crate_index//:cvt",
-            "@crate_index//:libc",
-            "@crate_index//:nix",
-            "@crate_index//:thiserror",
-        ],
-        "//conditions:default": [],
-    }),
+    deps = all_crate_deps() + [
+        "//rs/sys",
+    ],
 )
 
 rust_test(

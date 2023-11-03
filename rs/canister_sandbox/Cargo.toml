@@ -10,6 +10,7 @@ documentation.workspace = true
 cc = "1.0"
 
 [dependencies]
+cc = "1.0"
 ic-canister-sandbox-backend-lib = { path = "backend_lib" }
 libc = "0.2.119"
 

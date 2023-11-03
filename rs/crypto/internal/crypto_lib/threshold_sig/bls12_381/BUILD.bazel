@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
@@ -8,7 +9,7 @@ package(default_visibility = [
     "//rs/validator/http_request_test_utils:__subpackages__",
 ])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/internal/crypto_lib/bls12_381/type",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
@@ -16,18 +17,6 @@ DEPENDENCIES = [
     "//rs/crypto/secrets_containers",
     "//rs/crypto/sha2",
     "//rs/types/types",
-    "@crate_index//:base64",
-    "@crate_index//:cached",
-    "@crate_index//:hex",
-    "@crate_index//:lazy_static",
-    "@crate_index//:parking_lot",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:subtle",
-    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -73,13 +62,11 @@ rust_bench(
     name = "bls_bench",
     testonly = True,
     srcs = ["benches/bls.rs"],
-    deps = [
+    deps = all_crate_deps() + [
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
     ],
 )
 
@@ -87,12 +74,10 @@ rust_bench(
     name = "dlog_bench",
     testonly = True,
     srcs = ["benches/dlog.rs"],
-    deps = [
+    deps = all_crate_deps() + [
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
     ],
 )
 
@@ -112,11 +97,9 @@ rust_bench(
     name = "zk_bench",
     testonly = True,
     srcs = ["benches/zk.rs"],
-    deps = [
+    deps = all_crate_deps() + [
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
     ],
 )

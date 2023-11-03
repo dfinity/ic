@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(
@@ -7,28 +8,19 @@ package(
     ],
 )
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
     "//rs/types/types",
-    "@crate_index//:base64",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:simple_asn1",
-    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = []
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
-    "@crate_index//:assert_matches",
-    "@crate_index//:hex",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:wycheproof",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

@@ -1,18 +1,17 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = [
     "//rs/crypto:__subpackages__",
 ])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/crypto/temp_crypto",
     "//rs/interfaces",
     "//rs/registry/fake",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/types/types",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
 ]
 
 rust_library(

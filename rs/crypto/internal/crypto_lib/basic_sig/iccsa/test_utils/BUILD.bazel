@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
@@ -5,12 +6,11 @@ package(default_visibility = [
     "//rs/validator/http_request_test_utils:__pkg__",
 ])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     "//rs/certification/test-utils",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/types/types",
-    "@crate_index//:rand_0_8_4",
 ]
 
 rust_library(

@@ -1,8 +1,9 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+DEPENDENCIES = all_crate_deps() + [
     # Keep sorted.
     "//rs/crypto/prng",
     "//rs/interfaces",
@@ -13,9 +14,6 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/types/types",
-    "@crate_index//:hex",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:slog",
 ]
 
 DEV_DEPENDENCIES = [

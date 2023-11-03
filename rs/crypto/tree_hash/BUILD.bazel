@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
@@ -13,16 +14,9 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = all_crate_deps(normal_dev = True) + [
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash/test_utils",
-    "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
-    "@crate_index//:maplit",
-    "@crate_index//:proptest",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:serde_cbor",
 ]
 
 rust_library(
@@ -53,7 +47,7 @@ rust_test_suite(
 rust_doc_test(
     name = "tree_hash_doc_test",
     crate = ":tree_hash",
-    deps = DEV_DEPENDENCIES + ["@crate_index//:rand_chacha_0_3_1"],
+    deps = DEV_DEPENDENCIES,
 )
 
 rust_bench(

@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 rust_library(
@@ -15,7 +16,7 @@ rust_library(
         "//rs/test_utilities:__pkg__",
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
-    deps = [
+    deps = all_crate_deps() + [
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/internal/csp_test_utils",
         "//rs/crypto/tls_interfaces",
@@ -28,10 +29,5 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/types/types",
         "//rs/types/types_test_utils",
-        "@crate_index//:ed25519-consensus",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:serde",
-        "@crate_index//:tokio",
     ],
 )
