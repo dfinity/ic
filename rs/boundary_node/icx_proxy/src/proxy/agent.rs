@@ -4,8 +4,9 @@ use std::{
     net::{IpAddr, SocketAddr},
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc,
+        Arc, OnceLock,
     },
+    thread::available_parallelism,
 };
 
 use anyhow::bail;
@@ -26,12 +27,14 @@ use ic_utils::{
     call::{AsyncCall, SyncCall},
     interfaces::http_request::HttpRequestCanister,
 };
+use tokio_util::task::LocalPoolHandle;
 use tracing::{enabled, error, info, instrument, trace, warn, Level};
 
 use crate::error::ErrorFactory;
 use crate::http;
 use crate::http::request::HttpRequest;
 use crate::http::response::{AgentResponseAny, HttpResponse};
+use crate::http_client::{HEADERS_IN, HEADERS_OUT};
 use crate::metrics::RequestContext;
 use crate::{
     canister_id,
@@ -41,6 +44,9 @@ use crate::{
 
 // The maximum length of a body we should log as tracing.
 const MAX_LOG_BODY_SIZE: usize = 100;
+
+// Local thread pool to execute Axum handler
+static LOCAL_THREAD_POOL: OnceLock<LocalPoolHandle> = OnceLock::new();
 
 pub struct Args<V, C> {
     agent: Agent,
@@ -141,6 +147,48 @@ fn is_h2_goaway(e: &anyhow::Error) -> bool {
     }
 
     false
+}
+
+// This function wraps Axum handler.
+// The local thread pool is used to pin all async calls in the handler to a single thread
+// which is needed to use TLS (Thread Local Storage)
+pub async fn handler_wrapper<V: Validate + 'static, C: HyperService<Body> + 'static>(
+    State(args): State<Args<V, C>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    uri_canister_id: Option<canister_id::UriHost>,
+    host_canister_id: Option<canister_id::HostHeader>,
+    query_param_canister_id: Option<canister_id::QueryParam>,
+    referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
+    referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
+    request: Request<Body>,
+) -> Response<Body> {
+    let (tx, rx) = futures::channel::oneshot::channel();
+    let pool_handle = LOCAL_THREAD_POOL
+        .get_or_init(|| {
+            tokio_util::task::LocalPoolHandle::new(
+                // Reserve 3x the number of CPUs to accomodate for request peaks
+                available_parallelism().map(Into::into).unwrap_or(8) * 3,
+            )
+        })
+        .clone();
+
+    pool_handle.spawn_pinned(move || async move {
+        let res = handler(
+            State(args),
+            ConnectInfo(addr),
+            uri_canister_id,
+            host_canister_id,
+            query_param_canister_id,
+            referer_host_canister_id,
+            referer_query_param_canister_id,
+            request,
+        )
+        .await;
+
+        _ = tx.send(res);
+    });
+
+    rx.await.unwrap()
 }
 
 // Suppresses a clippy::let_with_type_underscore lint error which only manifests on GitHub CI
@@ -263,6 +311,12 @@ async fn process_request_inner(
     );
 
     let (parts, body) = request.into_parts();
+
+    // Store the request headers in TLS
+    HEADERS_OUT.with(|f| {
+        *f.borrow_mut() = parts.headers.clone();
+    });
+
     let http_request = HttpRequest::from((
         &parts,
         match HttpRequest::read_body(body).await {
@@ -361,6 +415,13 @@ async fn process_request_inner(
             Some(body) => body,
             None => Body::from(http_response.body.clone()),
         })?;
+
+    // Extract response headers from TLS
+    HEADERS_IN.with(|f| {
+        for (k, v) in (*f.borrow()).iter() {
+            response.headers_mut().insert(k, v.clone());
+        }
+    });
 
     // Create per-request context
     let ctx = RequestContext {

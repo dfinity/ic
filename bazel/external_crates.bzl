@@ -1219,6 +1219,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 features = [
                     "codec",
                     "time",
+                    "rt",
                 ],
             ),
             "toml": crate.spec(

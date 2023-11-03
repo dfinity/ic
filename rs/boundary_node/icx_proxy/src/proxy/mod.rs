@@ -44,7 +44,7 @@ pub struct ProxyOpts {
 
 pub mod agent;
 
-use agent::{handler as agent_handler, Pool};
+use agent::{handler_wrapper as agent_handler, Pool};
 
 trait HandleError {
     type B;
