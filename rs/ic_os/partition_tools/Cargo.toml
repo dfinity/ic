@@ -9,5 +9,5 @@ edition = "2021"
 anyhow = "1.0.75"
 tempfile = "3.8.0"
 tokio = { workspace = true }
-indoc = "2.0.4"
+indoc = "1.0.9"
 async-trait = "0.1.74"

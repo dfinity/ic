@@ -567,7 +567,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.17.3",
             ),
             "indoc": crate.spec(
-                version = "^1.0.6",
+                version = "^1.0.9",
             ),
             "insta": crate.spec(
                 version = "^1.31.0",
