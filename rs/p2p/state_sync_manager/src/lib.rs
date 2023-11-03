@@ -67,7 +67,7 @@ pub fn build_axum_router(
     ));
 
     let (tx, rx) = tokio::sync::mpsc::channel(20);
-    let advert_handler_state = Arc::new(StateSyncAdvertHandler::new(log, tx, metrics));
+    let advert_handler_state = Arc::new(StateSyncAdvertHandler::new(log, tx));
 
     let app = Router::new()
         .route(STATE_SYNC_CHUNK_PATH, any(state_sync_chunk_handler))

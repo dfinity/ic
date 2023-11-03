@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::metrics::{StateSyncManagerHandlerMetrics, CHUNK_HANDLER_LABEL};
+use crate::metrics::StateSyncManagerHandlerMetrics;
 use crate::ongoing::DownloadChunkError;
 use axum::{
     body::Bytes,
@@ -46,12 +46,6 @@ pub(crate) async fn state_sync_chunk_handler(
     State(state): State<Arc<StateSyncChunkHandler>>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode> {
-    let _timer = state
-        .metrics
-        .request_duration
-        .with_label_values(&[CHUNK_HANDLER_LABEL])
-        .start_timer();
-
     // Parse payload
     let pb::StateSyncChunkRequest { id, chunk_id } =
         pb::StateSyncChunkRequest::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
