@@ -4833,42 +4833,17 @@ impl Governance {
         }
     }
 
-    fn make_manage_neuron_proposal(
+    fn validate_manage_neuron_proposal(
         &mut self,
-        proposer_id: &NeuronId,
-        caller: &PrincipalId,
-        now_seconds: u64,
         manage_neuron: &ManageNeuron,
-        summary: &str,
-        url: &str,
-    ) -> Result<ProposalId, GovernanceError> {
-        // Validate
+    ) -> Result<(), GovernanceError> {
         let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Failed to validate ManageNeuron {}", e),
             )
         })?;
-        let neuron_management_fee_per_proposal_e8s =
-            self.economics().neuron_management_fee_per_proposal_e8s;
-        // Find the proposing neuron.
-        let (is_proposer_authorized_to_vote, proposer_minted_stake_e8s) =
-            self.with_neuron(proposer_id, |proposer| {
-                (
-                    proposer.is_authorized_to_vote(caller),
-                    proposer.minted_stake_e8s(),
-                )
-            })?;
 
-        // Check that the caller is authorized, i.e., either the
-        // controller or a registered hot key, to vote on behalf of
-        // the proposing neuron.
-        if !is_proposer_authorized_to_vote {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                "Caller not authorized to propose.",
-            ));
-        }
         let managed_id = manage_neuron
             .get_neuron_id_or_subaccount()?
             .ok_or_else(|| {
@@ -4878,27 +4853,17 @@ impl Governance {
                 )
             })?;
 
-        let (is_managed_neuron_not_for_profit, followees, managed_neuron_id) = self
-            .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
-                let is_managed_neuron_not_for_profit = managed_neuron.not_for_profit;
-                let followees = managed_neuron
-                    .followees
-                    .get(&(Topic::NeuronManagement as i32))
-                    .cloned();
-                let managed_neuron_id = managed_neuron.id;
-                (
-                    is_managed_neuron_not_for_profit,
-                    followees,
-                    managed_neuron_id,
-                )
-            })?;
-
         let command = manage_neuron.command.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "A manage neuron action must have a command",
             )
         })?;
+
+        let is_managed_neuron_not_for_profit = self
+            .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
+                managed_neuron.not_for_profit
+            })?;
 
         // Only not-for-profit neurons can issue disburse/split/disburse-to-neuron
         // commands through a proposal.
@@ -4916,120 +4881,11 @@ impl Governance {
                         "Cannot issue a disburse to neuron command through a proposal",
                     ));
                 }
-                _ => (),
+                _ => {}
             }
         }
 
-        // A neuron can be managed only by its followees on the
-        // 'manage neuron' topic.
-        let followees = followees.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Managed neuron does not specify any followees on the 'manage neuron' topic.",
-            )
-        })?;
-        if !followees.followees.iter().any(|x| x.id == proposer_id.id) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Proposer not among the followees of neuron.",
-            ));
-        }
-        if proposer_minted_stake_e8s < neuron_management_fee_per_proposal_e8s {
-            return Err(
-                // Not enough stake to make proposal.
-                GovernanceError::new_with_message(
-                    ErrorType::InsufficientFunds,
-                    "Proposer doesn't have enough minted stake for proposal.",
-                ),
-            );
-        }
-        // Check that there are not too many open manage neuron
-        // proposals already.
-        if self
-            .heap_data
-            .proposals
-            .values()
-            .filter(|info| info.is_manage_neuron() && info.status() == ProposalStatus::Open)
-            .count()
-            >= MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::ResourceExhausted,
-                "Reached maximum number of 'manage neuron' proposals. \
-                Please try again later.",
-            ));
-        }
-        // The electoral roll to put into the proposal.
-        let electoral_roll: HashMap<u64, Ballot> = followees
-            .followees
-            .iter()
-            .map(|x| {
-                (
-                    x.id,
-                    Ballot {
-                        vote: Vote::Unspecified as i32,
-                        voting_power: 1,
-                    },
-                )
-            })
-            .collect();
-        if electoral_roll.is_empty() {
-            // Cannot make a proposal with no eligible voters.  This
-            // is a precaution that shouldn't happen as we check that
-            // the voter is allowed to vote.
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Empty electoral roll.",
-            ));
-        }
-        // === Validation done.
-        // Create a new proposal ID for this proposal.
-        let proposal_num = self.next_proposal_id();
-        let proposal_id = ProposalId { id: proposal_num };
-
-        let title = Some(format!(
-            "Manage neuron proposal for neuron: {}",
-            managed_neuron_id.expect("Neurons must have an id").id
-        ));
-
-        // Create the proposal.
-        let mut info = ProposalData {
-            id: Some(proposal_id),
-            proposer: Some(*proposer_id),
-            proposal: Some(Proposal {
-                title,
-                summary: summary.to_string(),
-                url: url.to_string(),
-                action: Some(proposal::Action::ManageNeuron(Box::new(
-                    manage_neuron.into_proto(),
-                ))),
-            }),
-            proposal_timestamp_seconds: now_seconds,
-            ballots: electoral_roll,
-            ..Default::default()
-        };
-
-        // The neuron should be found since the neuron id is found by looking
-        // through neurons in the first place, and the neuron has already been
-        // borrowed immutably at the top of this method.
-        self.with_neuron_mut(proposer_id, |proposer| {
-            // Charge fee.
-            proposer.neuron_fees_e8s += neuron_management_fee_per_proposal_e8s;
-        })?;
-
-        Governance::cast_vote_and_cascade_follow(
-            &proposal_id,
-            &mut info.ballots,
-            proposer_id,
-            Vote::Yes,
-            Topic::NeuronManagement,
-            &mut self.neuron_store,
-        );
-
-        // Add this proposal as an open proposal.
-        self.insert_proposal(proposal_num, info);
-
-        Ok(proposal_id)
+        Ok(())
     }
 
     pub(crate) fn economics(&self) -> &NetworkEconomics {
@@ -5064,7 +4920,7 @@ impl Governance {
             .map_or(1, |(k, _)| k + 1)
     }
 
-    async fn validate_proposal(&mut self, proposal: &Proposal) -> Result<(), GovernanceError> {
+    async fn validate_proposal(&mut self, proposal: &Proposal) -> Result<Action, GovernanceError> {
         impl From<String> for GovernanceError {
             fn from(message: String) -> Self {
                 Self::new_with_message(ErrorType::InvalidProposal, message)
@@ -5107,15 +4963,19 @@ impl Governance {
                 self.validate_create_service_nervous_system(create_service_nervous_system)
             }
 
-            Action::ManageNeuron(_)
-            | Action::ManageNetworkEconomics(_)
+            Action::ManageNeuron(manage_neuron) => {
+                self.validate_manage_neuron_proposal(manage_neuron)
+            }
+            Action::ManageNetworkEconomics(_)
             | Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
             | Action::SetDefaultFollowees(_)
             | Action::RewardNodeProviders(_)
             | Action::RegisterKnownNeuron(_) => Ok(()),
-        }
+        }?;
+
+        Ok(action.clone())
     }
 
     fn validate_execute_nns_function(
@@ -5429,7 +5289,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
-        self.validate_proposal(proposal).await?;
+        let action = self.validate_proposal(proposal).await?;
 
         // Gather additional information for OpenSnsTokenSwap.
         let mut swap_background_information = None;
@@ -5459,19 +5319,6 @@ impl Governance {
                 .await?,
             );
         }
-
-        if let Some(Action::ManageNeuron(m)) = &proposal.action {
-            assert_eq!(topic, Topic::NeuronManagement);
-            return self.make_manage_neuron_proposal(
-                proposer_id,
-                caller,
-                now_seconds,
-                m,
-                &proposal.summary,
-                &proposal.url,
-            );
-        }
-        let reject_cost_e8s = self.economics().reject_cost_e8s;
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
         // electoral roll.
@@ -5489,8 +5336,6 @@ impl Governance {
             )
         })?;
 
-        // === Validation
-        //
         // Check that the caller is authorized, i.e., either the
         // controller or a registered hot key.
         if !is_proposer_authorized_to_vote {
@@ -5499,95 +5344,88 @@ impl Governance {
                 "Caller not authorized to propose.",
             ));
         }
-        // The proposer must be eligible to vote on its own
-        // proposal. This also ensures that the neuron cannot be
-        // dissolved until the proposal has been adopted or rejected.
-        if proposer_dissolve_delay_seconds < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Neuron's dissolve delay is too short.",
-            ));
-        }
+
+        let proposal_submission_fee = self.proposal_submission_fee(proposal)?;
+
+        let reject_cost_e8s = self.reject_cost_e8s(proposal)?;
+
         // If the current stake of this neuron is less than the cost
-        // of having a proposal rejected, the neuron cannot vote -
+        // of having a proposal rejected, the neuron cannot make the proposal -
         // because the proposal may be rejected.
-        if proposer_minted_stake_e8s < reject_cost_e8s {
+        if proposer_minted_stake_e8s < proposal_submission_fee {
             return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
+                ErrorType::InsufficientFunds,
                 format!(
                     "Neuron doesn't have enough minted stake to submit proposal: {}",
                     proposer_minted_stake_e8s,
                 ),
             ));
         }
-        // Check that there are not too many proposals.  What matters
-        // here is the number of proposals for which ballots have not
-        // yet been cleared, because ballots take the most amount of
-        // space. (In the case of proposals with a wasm module in the
-        // payload, the payload also takes a lot of space). Manage
-        // neuron proposals are not counted as they have a smaller
-        // electoral roll and use their own limit.
-        if self
-            .heap_data
-            .proposals
-            .values()
-            .filter(|info| !info.ballots.is_empty() && !info.is_manage_neuron())
-            .count()
-            >= MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS
-            && !proposal.allowed_when_resources_are_low()
-        {
+
+        let min_dissolve_delay_seconds_to_vote = match action {
+            Action::ManageNeuron(_) => 0,
+            _ => MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        };
+
+        // The proposer must be eligible to vote. This also ensures that the
+        // neuron cannot be dissolved until the proposal has been adopted or
+        // rejected.
+        if proposer_dissolve_delay_seconds < min_dissolve_delay_seconds_to_vote {
             return Err(GovernanceError::new_with_message(
-                ErrorType::ResourceExhausted,
-                "Reached maximum number of proposals that have not yet \
-                been taken into account for voting rewards. \
-                Please try again later.",
+                ErrorType::InsufficientFunds,
+                "Neuron's dissolve delay is too short.",
             ));
         }
-        // === Preparation
-        //
-        // For normal proposals, every neuron with a
-        // dissolve delay over six months is allowed to
-        // vote, with a voting power determined at the
-        // time of the proposal (i.e., now).
-        //
-        // The electoral roll to put into the proposal.
-        assert!(
-            !proposal.is_manage_neuron(),
-            "{}Internal error: missing code to compute voting eligibility for a manage neuron \
-             proposal with restricted voting. This code path is only for unrestricted proposals, and this function is \
-             supposed to early-return for restricted proposals, but did not. \
-             The offending proposal is: {:?}",
-            LOG_PREFIX,
-            proposal
-        );
-        let mut electoral_roll = HashMap::<u64, Ballot>::new();
-        let mut total_power: u128 = 0;
-        // No neuron in the stable storage should have maturity.
 
-        self.neuron_store
-            .map_voting_eligible_neurons(now_seconds, |neuron| {
-                let voting_power = neuron.voting_power(now_seconds);
-
-                total_power += voting_power as u128;
-
-                electoral_roll.insert(
-                    neuron.id.expect("Neuron must have an id").id,
-                    Ballot {
-                        vote: Vote::Unspecified as i32,
-                        voting_power,
-                    },
-                );
-            });
-
-        if total_power >= (u64::MAX as u128) {
-            // The way the neurons are configured, the total voting
-            // power on this proposal would overflow a u64!
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Voting power overflow.",
-            ));
+        // Check that there are not too many proposals.
+        match action {
+            Action::ManageNeuron(_) => {
+                // Check that there are not too many open manage neuron
+                // proposals already.
+                if self
+                    .heap_data
+                    .proposals
+                    .values()
+                    .filter(|info| info.is_manage_neuron() && info.status() == ProposalStatus::Open)
+                    .count()
+                    >= MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::ResourceExhausted,
+                        "Reached maximum number of 'manage neuron' proposals. \
+                        Please try again later.",
+                    ));
+                }
+            }
+            _ => {
+                // What matters here is the number of proposals for which
+                // ballots have not yet been cleared, because ballots take the
+                // most amount of space. (In the case of proposals with a wasm
+                // module in the payload, the payload also takes a lot of
+                // space). Manage neuron proposals are not counted as they have
+                // a smaller electoral roll and use their own limit.
+                if self
+                    .heap_data
+                    .proposals
+                    .values()
+                    .filter(|info| !info.ballots.is_empty() && !info.is_manage_neuron())
+                    .count()
+                    >= MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS
+                    && !proposal.allowed_when_resources_are_low()
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::ResourceExhausted,
+                        "Reached maximum number of proposals that have not yet \
+                        been taken into account for voting rewards. \
+                        Please try again later.",
+                    ));
+                }
+            }
         }
-        if electoral_roll.is_empty() {
+
+        let ballots = self.compute_ballots_for_new_proposal(&action, proposer_id, now_seconds)?;
+
+        if ballots.is_empty() {
             // Cannot make a proposal with no eligible voters.  This
             // is a precaution that shouldn't happen as we check that
             // the voter is allowed to vote.
@@ -5596,15 +5434,49 @@ impl Governance {
                 "No eligible voters.",
             ));
         }
+
+        // In some cases we want to customize some aspects of the proposal
+        let proposal = match action {
+            // We want to customize the title for manage neuron proposals, to
+            // specify the ID of the neuron being managed
+            Action::ManageNeuron(ref manage_neuron) => {
+                let managed_id = manage_neuron
+                    .get_neuron_id_or_subaccount()?
+                    .ok_or_else(|| {
+                        GovernanceError::new_with_message(
+                            ErrorType::NotFound,
+                            "Proposal must include a neuron to manage.",
+                        )
+                    })?;
+
+                let managed_neuron_id = self
+                    .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
+                        managed_neuron.id
+                    })?;
+
+                let title = Some(format!(
+                    "Manage neuron proposal for neuron: {}",
+                    managed_neuron_id.expect("Neurons must have an id").id
+                ));
+
+                Proposal {
+                    title,
+                    ..proposal.clone()
+                }
+            }
+            _ => proposal.clone(),
+        };
+
+        // Wait-For-Quiet is not enabled for ManageNeuron
+        let wait_for_quiet_enabled = !matches!(action, Action::ManageNeuron(_));
+
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
-        let original_total_community_fund_maturity_e8s_equivalent = match proposal.action {
-            Some(Action::OpenSnsTokenSwap(_)) | Some(Action::CreateServiceNervousSystem(_)) => {
-                Some(total_community_fund_maturity_e8s_equivalent(
-                    &self.neuron_store,
-                ))
-            }
+        let original_total_community_fund_maturity_e8s_equivalent = match action {
+            Action::OpenSnsTokenSwap(_) | Action::CreateServiceNervousSystem(_) => Some(
+                total_community_fund_maturity_e8s_equivalent(&self.neuron_store),
+            ),
             _ => None,
         };
 
@@ -5616,46 +5488,179 @@ impl Governance {
         } else {
             None
         };
-        let mut info = ProposalData {
+        let wait_for_quiet_state = if wait_for_quiet_enabled {
+            Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: now_seconds
+                    .saturating_add(self.voting_period_seconds()(topic)),
+            })
+        } else {
+            None
+        };
+        let mut proposal_data = ProposalData {
             id: Some(proposal_id),
             proposer: Some(*proposer_id),
             reject_cost_e8s,
             proposal: Some(proposal.clone()),
             proposal_timestamp_seconds: now_seconds,
-            ballots: electoral_roll,
+            ballots,
             original_total_community_fund_maturity_e8s_equivalent,
             derived_proposal_information,
+            wait_for_quiet_state,
             ..Default::default()
         };
 
-        info.wait_for_quiet_state = Some(WaitForQuietState {
-            current_deadline_timestamp_seconds: now_seconds
-                .saturating_add(self.voting_period_seconds()(topic)),
-        });
-
-        // Charge the cost of rejection upfront.
+        // Charge the proposal submission fee upfront.
         // This will protect from DOS in couple of ways:
         // - It prevents a neuron from having too many proposals outstanding.
         // - It reduces the voting power of the submitter so that for every proposal
         //   outstanding the submitter will have less voting power to get it approved.
         self.with_neuron_mut(proposer_id, |neuron| {
-            neuron.neuron_fees_e8s += info.reject_cost_e8s;
+            neuron.neuron_fees_e8s += proposal_submission_fee;
         })
         .expect("Proposer not found.");
 
         // Cast self-vote, including following.
         Governance::cast_vote_and_cascade_follow(
             &proposal_id,
-            &mut info.ballots,
+            &mut proposal_data.ballots,
             proposer_id,
             Vote::Yes,
             topic,
             &mut self.neuron_store,
         );
         // Finally, add this proposal as an open proposal.
-        self.insert_proposal(proposal_num, info);
+        self.insert_proposal(proposal_num, proposal_data);
 
         Ok(proposal_id)
+    }
+
+    /// Computes what ballots a new proposal should have, based on the action.
+    fn compute_ballots_for_new_proposal(
+        &mut self,
+        action: &Action,
+        proposer_id: &NeuronId,
+        now_seconds: u64,
+    ) -> Result<HashMap<u64, Ballot>, GovernanceError> {
+        Ok(match *action {
+            // A neuron can be managed only by its followees on the
+            // 'manage neuron' topic.
+            Action::ManageNeuron(ref manage_neuron) => {
+                let managed_id = manage_neuron
+                    .get_neuron_id_or_subaccount()?
+                    .ok_or_else(|| {
+                        GovernanceError::new_with_message(
+                            ErrorType::NotFound,
+                            "Proposal must include a neuron to manage.",
+                        )
+                    })?;
+
+                let followees =
+                    self.with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
+                        managed_neuron
+                            .followees
+                            .get(&(Topic::NeuronManagement as i32))
+                            .cloned()
+                    })?;
+
+                let followees = followees.ok_or_else(|| {
+                    GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "Managed neuron does not specify any followees on the 'manage neuron' topic.",
+                    )
+                })?;
+                if !followees.followees.iter().any(|x| x.id == proposer_id.id) {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "Proposer not among the followees of neuron.",
+                    ));
+                }
+                let ballots: HashMap<u64, Ballot> = followees
+                    .followees
+                    .iter()
+                    .map(|x| {
+                        (
+                            x.id,
+                            Ballot {
+                                vote: Vote::Unspecified as i32,
+                                voting_power: 1,
+                            },
+                        )
+                    })
+                    .collect();
+                ballots
+            }
+            // For normal proposals, every neuron with a
+            // dissolve delay over six months is allowed to
+            // vote, with a voting power determined at the
+            // time of the proposal (i.e., now).
+            _ => {
+                let mut ballots = HashMap::<u64, Ballot>::new();
+                let mut total_power: u128 = 0;
+                // No neuron in the stable storage should have maturity.
+
+                self.neuron_store
+                    .map_voting_eligible_neurons(now_seconds, |neuron| {
+                        let voting_power = neuron.voting_power(now_seconds);
+
+                        total_power += voting_power as u128;
+
+                        ballots.insert(
+                            neuron.id.expect("Neuron must have an id").id,
+                            Ballot {
+                                vote: Vote::Unspecified as i32,
+                                voting_power,
+                            },
+                        );
+                    });
+
+                if total_power >= (u64::MAX as u128) {
+                    // The way the neurons are configured, the total voting
+                    // power on this proposal would overflow a u64!
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "Voting power overflow.",
+                    ));
+                }
+                ballots
+            }
+        })
+    }
+
+    /// Calculate the reject_cost_e8s of a proposal. This value is set in `ProposalData` and
+    /// is the amount reimbursed to the proposing neuron if the proposal passes.
+    fn reject_cost_e8s(&self, proposal: &Proposal) -> Result<u64, GovernanceError> {
+        let action = proposal.action.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Proposal lacks an action: {:?}", proposal),
+            )
+        })?;
+        match *action {
+            // We don't return proposal submission fee for ManageNeuron proposals.
+            // if we did, there would be no cost to creating a bunch of ManageNeuron
+            // proposals, because you could always vote to adopt them and get the
+            // fee back. Therefore, we set this value to 0 and if the proposal
+            // is adopted, 0 e8s is reimbursed to the proposing neuron.
+            Action::ManageNeuron(_) => Ok(0),
+            // For all other proposals, we return the proposal submission fee.
+            _ => self.proposal_submission_fee(proposal),
+        }
+    }
+
+    /// This value captures the amount of e8s decremented from the proposers
+    /// stake. The amount returned to the proposer on proposal adoption can be
+    /// found in `reject_cost_e8s`.
+    fn proposal_submission_fee(&self, proposal: &Proposal) -> Result<u64, GovernanceError> {
+        let action = proposal.action.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Proposal lacks an action: {:?}", proposal),
+            )
+        })?;
+        match *action {
+            Action::ManageNeuron(_) => Ok(self.economics().neuron_management_fee_per_proposal_e8s),
+            _ => Ok(self.economics().reject_cost_e8s),
+        }
     }
 
     /// Register `voting_neuron_id` voting according to
