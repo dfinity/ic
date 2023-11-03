@@ -1058,6 +1058,11 @@ impl ProcessWithdrawal {
             "eth_feeHistory",
             eth_get_fee_history(),
         );
+        self.setup.handle_rpc_call(
+            "https://cloudflare-eth.com",
+            "eth_feeHistory",
+            eth_get_fee_history(),
+        );
         tick_until_next_http_request(&self.setup.env, "eth_getTransactionCount");
         self.setup.handle_rpc_call(
             "https://rpc.ankr.com/eth",
@@ -1069,6 +1074,7 @@ impl ProcessWithdrawal {
             "eth_getTransactionCount",
             eth_get_transaction_count(0),
         );
+
         assert_eq!(
             self.setup.retrieve_eth_status(block_index),
             RetrieveEthStatus::TxCreated

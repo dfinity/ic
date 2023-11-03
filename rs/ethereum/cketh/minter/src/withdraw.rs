@@ -4,8 +4,8 @@ use crate::eth_rpc::{
 };
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
-use crate::eth_rpc_client::{EthRpcClient, SingleCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionCount};
@@ -413,7 +413,7 @@ async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallErro
         .reduce_with_equality()
 }
 
-pub async fn eth_fee_history() -> Result<FeeHistory, SingleCallError> {
+pub async fn eth_fee_history() -> Result<FeeHistory, MultiCallError<FeeHistory>> {
     read_state(EthRpcClient::from_state)
         .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
