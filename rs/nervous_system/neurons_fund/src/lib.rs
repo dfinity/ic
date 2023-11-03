@@ -22,9 +22,15 @@ mod binomial_tests;
 mod polynomial_matching_function_tests;
 pub mod test_functions;
 
+pub(crate) const LOG_PREFIX: &str = "[Neurons' Fund] ";
+
 /// This is a theoretical limit which should be smaller than any realistic amount of maturity
 /// that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
 pub const MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S: u64 = 333_000 * E8;
+
+const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_1_ICP: Decimal = dec!(33_000);
+const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_2_ICP: Decimal = dec!(100_000);
+const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_3_ICP: Decimal = dec!(167_000);
 
 // The maximum number of bytes that a serialized representation of an ideal matching function
 // `IdealMatchedParticipationFunction` may have.
@@ -659,7 +665,10 @@ impl SerializableFunction for PolynomialMatchingFunction {
 }
 
 impl PolynomialMatchingFunction {
-    fn from_persistant_data(
+    /// Attempts to create an instance of `Self` from `persistent_data`. This might fail, e.g.,
+    /// if there is an overflow or division by zero during the computation of the polynomial
+    /// coefficients.
+    fn from_persistent_data(
         persistent_data: PolynomialMatchingFunctionPersistentData,
     ) -> Result<Self, String> {
         let cache = PolynomialMatchingFunctionCache::from_persistent_data(&persistent_data)?;
@@ -670,7 +679,7 @@ impl PolynomialMatchingFunction {
     }
 
     /// Creates a monotonically non-decreasing polynomial function for Neurons' Fund Matched Funding.
-    pub fn new(total_maturity_equivalent_icp_e8s: u64) -> Self {
+    pub fn new(total_maturity_equivalent_icp_e8s: u64) -> Result<Self, String> {
         // Computations defined in ICP rather than ICP e8s to avoid multiplication overflows for
         // the `Decimal` type for the range of values that this type is expected to operate on.
         let global_cap_icp =
@@ -680,21 +689,30 @@ impl PolynomialMatchingFunction {
             dec!(0.1) * total_maturity_equivalent_icp, // 10%
         );
         let persistent_data = PolynomialMatchingFunctionPersistentData {
-            t_1: dec!(0.1) * global_cap_icp, // 10%
-            t_2: dec!(0.3) * global_cap_icp, // 30%
-            t_3: dec!(0.5) * global_cap_icp, // 50%
-            t_4: dec!(2.0) * cap,            // 200%
+            t_1: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_1_ICP,
+            t_2: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_2_ICP,
+            t_3: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_3_ICP,
+            t_4: dec!(2.0) * cap, // 200%
             cap,
         };
-        // TODO: support this case
-        assert!(
-            persistent_data.t_4 > persistent_data.t_3,
-            "t_4 ({}) should be greater than t_3 ({}).",
-            persistent_data.t_4,
-            persistent_data.t_3
-        );
-        // Unwrapping here is safe due to the FIXME test.
-        Self::from_persistant_data(persistent_data).unwrap()
+        if persistent_data.t_4 < persistent_data.t_3 {
+            if persistent_data.t_4 < persistent_data.t_1 {
+                println!(
+                    "{}WARNING: total_maturity_equivalent_icp_e8s ({}) is too low for this \
+                    PolynomialMatchingFunction instance to have a non-zero value for any direct \
+                    participation amount: {:?}.",
+                    LOG_PREFIX, total_maturity_equivalent_icp_e8s, persistent_data,
+                );
+            } else {
+                println!(
+                    "{}INFO: total_maturity_equivalent_icp_e8s ({}) is too low for some \
+                    Matched Funding milestones to be achievable for any direct participation \
+                    amount: {:?}.",
+                    LOG_PREFIX, total_maturity_equivalent_icp_e8s, persistent_data,
+                );
+            }
+        }
+        Self::from_persistent_data(persistent_data)
     }
 }
 
@@ -702,7 +720,7 @@ impl DeserializableFunction for PolynomialMatchingFunction {
     /// Attempts to create an instance of `Self` from a serialized representation, `repr`.
     fn from_repr(repr: &str) -> Result<Box<Self>, String> {
         let persistent_data = serde_json::from_str(repr).map_err(|e| e.to_string())?;
-        Self::from_persistant_data(persistent_data).map(Box::from)
+        Self::from_persistent_data(persistent_data).map(Box::from)
     }
 }
 

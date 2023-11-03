@@ -11640,7 +11640,7 @@ lazy_static! {
     };
 
     static ref SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR: Option<String> = Some(
-        PolynomialMatchingFunction::new(1_000_000 * E8).serialize()
+        PolynomialMatchingFunction::new(1_000_000 * E8).unwrap().serialize()
     );
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
@@ -11659,7 +11659,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            41663623082,
+                            42515867976,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             600_000 * E8,
@@ -11676,7 +11676,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            6943937180,
+                            7085977996,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             100_000 * E8,
@@ -11693,7 +11693,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            20831811541,
+                            21257933988,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             300_000 * E8,
@@ -11729,10 +11729,10 @@ lazy_static! {
             1_000_000 * E8,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            69439371804,
+            70859779960,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
-            69439371804,
+            70859779960,
         ),
     });
 
@@ -11770,7 +11770,7 @@ lazy_static! {
             100000000000000,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            69439371804,
+            70859779960,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
             0,
@@ -11793,7 +11793,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            12144577009,
+                            12805431519,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             60000000000000,
@@ -11810,7 +11810,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            6072288505,
+                            6402715760,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             30000000000000,
@@ -11846,10 +11846,10 @@ lazy_static! {
             100000000000000,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            69439371804,
+            70859779960,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
-            20240961682,
+            21342385865,
         ),
     });
 
@@ -11862,7 +11862,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    41663623082,
+                    42515867976,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,
@@ -11879,7 +11879,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    6943937180,
+                    7085977996,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     10000000000000,
@@ -11896,7 +11896,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    20831811541,
+                    21257933988,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     30000000000000,
@@ -11918,7 +11918,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    29519046073,
+                    29710436457,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,
@@ -11935,7 +11935,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    6943937180,
+                    7085977996,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     10000000000000,
@@ -11952,7 +11952,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    14759523036,
+                    14855218228,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     30000000000000,
@@ -11994,7 +11994,7 @@ lazy_static! {
         // `NeuronsFundParticipation::compute_constraints` in rs/nns/governance/src/neurons_fund.rs
         NeuronsFundParticipationConstraints {
             min_direct_participation_threshold_icp_e8s: Some(36_000 * E8),
-            max_neurons_fund_participation_icp_e8s: Some(69_439_371_804),
+            max_neurons_fund_participation_icp_e8s: Some(70859779960),
             coefficient_intervals: vec![
                 LinearScalingCoefficient {
                     from_direct_participation_icp_e8s: Some(0),
