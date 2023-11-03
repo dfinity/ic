@@ -1,6 +1,7 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = [
+    "//rs/p2p:__subpackages__",
     "//rs/replica:__subpackages__",
 ])
 
@@ -27,10 +28,23 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/p2p/test_utils",
+    "//rs/test_utilities/logger",
+    "//rs/types/types_test_utils",
+    "@crate_index//:turmoil",
+]
+
 rust_library(
     name = "consensus_manager",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_consensus_manager",
     version = "0.8.0",
     deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "consensus_manager_integration",
+    srcs = ["tests/test.rs"],
+    deps = [":consensus_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

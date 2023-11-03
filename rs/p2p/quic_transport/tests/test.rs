@@ -52,6 +52,7 @@ fn ping_pong() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -62,6 +63,7 @@ fn ping_pong() {
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,
@@ -200,6 +202,7 @@ fn test_sending_large_message() {
             None,
             None,
             None,
+            None,
             send_large_msg_to_node_2,
         );
 
@@ -210,6 +213,7 @@ fn test_sending_large_message() {
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,
@@ -261,6 +265,7 @@ fn test_peer_restart() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -271,6 +276,7 @@ fn test_peer_restart() {
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,
@@ -358,6 +364,7 @@ fn test_changing_subnet_membership() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -368,6 +375,7 @@ fn test_changing_subnet_membership() {
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,
@@ -384,6 +392,7 @@ fn test_changing_subnet_membership() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -397,6 +406,7 @@ fn test_changing_subnet_membership() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -407,6 +417,7 @@ fn test_changing_subnet_membership() {
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,
@@ -575,6 +586,7 @@ fn test_transient_failing_sev() {
             None,
             Some(sev.clone()),
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -587,6 +599,7 @@ fn test_transient_failing_sev() {
             Some(ConnectivityChecker::router()),
             None,
             Some(sev.clone()),
+            None,
             None,
             conn_checker.check_fut(),
         );
@@ -690,6 +703,7 @@ fn test_transient_failing_tls() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -702,6 +716,7 @@ fn test_transient_failing_tls() {
             topology_watcher,
             Some(ConnectivityChecker::router()),
             Some(tls_2.clone()),
+            None,
             None,
             None,
             conn_checker.check_fut(),
@@ -767,6 +782,7 @@ fn test_bad_network() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -777,6 +793,7 @@ fn test_bad_network() {
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,
@@ -793,6 +810,7 @@ fn test_bad_network() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -806,6 +824,7 @@ fn test_bad_network() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -816,6 +835,7 @@ fn test_bad_network() {
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,
@@ -923,6 +943,7 @@ fn test_bad_network_and_membership_change() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -933,6 +954,7 @@ fn test_bad_network_and_membership_change() {
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,
@@ -949,6 +971,7 @@ fn test_bad_network_and_membership_change() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -962,6 +985,7 @@ fn test_bad_network_and_membership_change() {
             None,
             None,
             None,
+            None,
             conn_checker.check_fut(),
         );
 
@@ -972,6 +996,7 @@ fn test_bad_network_and_membership_change() {
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
+            None,
             None,
             None,
             None,

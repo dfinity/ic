@@ -47,7 +47,6 @@ type ReceivedAdvertSender<A> = Sender<(AdvertUpdate<A>, NodeId, ConnId)>;
 #[allow(unused)]
 pub fn build_axum_router<Artifact: ArtifactKind>(
     log: ReplicaLogger,
-    rt: Handle,
     pool: ValidatedPoolReaderRef<Artifact>,
 ) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>)
 where

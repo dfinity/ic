@@ -96,7 +96,7 @@ mod unformatted {
 
 pub mod manager;
 mod pool_readers;
-mod processors;
+pub mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{

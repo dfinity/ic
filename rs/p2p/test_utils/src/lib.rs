@@ -34,6 +34,7 @@ use std::{
 use tempfile::TempDir;
 use tokio::{runtime::Handle, sync::watch::Receiver, task::JoinHandle};
 
+pub mod consensus;
 pub mod mocks;
 pub mod turmoil;
 
