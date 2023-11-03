@@ -1517,7 +1517,7 @@ async fn test_sufficient_stake() {
         .expect("Neuron not found");
     // This should fail because the reject_cost_e8s is 1 ICP.
     assert_eq!(
-        ErrorType::PreconditionFailed as i32,
+        ErrorType::InsufficientFunds as i32,
         gov.make_proposal(
             &NeuronId { id: 1 },
             // Must match neuron 1's serialized_id.
@@ -2325,9 +2325,8 @@ async fn test_sufficient_stake_for_manage_neuron() {
         .expect("Neuron not found.");
     // Try to make a proposal... This should fail because the
     // neuron_management_fee_per_proposal_e8s is 0.01 ICP.
-    assert_eq!(
-        ErrorType::InsufficientFunds as i32,
-        gov.make_proposal(
+    let err = gov
+        .make_proposal(
             &NeuronId { id: 2 },
             // Must match neuron 1's serialized_id.
             &principal(2),
@@ -2335,7 +2334,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
                 title: Some("A Reasonable Title".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
-                        id: 1
+                        id: 1,
                     })),
                     id: None,
                     command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
@@ -2347,8 +2346,12 @@ async fn test_sufficient_stake_for_manage_neuron() {
             },
         )
         .await
-        .unwrap_err()
-        .error_type
+        .unwrap_err();
+    assert_eq!(
+        ErrorType::InsufficientFunds,
+        ErrorType::from_i32(err.error_type).unwrap(),
+        "actual error: {:?}",
+        err
     );
     // Set stake to 2 ICP.
     gov.neuron_store
