@@ -48,7 +48,7 @@ use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
-use rand::{thread_rng, Rng};
+use rand::{rngs::StdRng, thread_rng, Rng};
 use std::{
     collections::{BTreeMap, VecDeque},
     net::SocketAddr,
@@ -244,6 +244,9 @@ pub struct XNetPayloadBuilderImpl {
     /// `XNetPayloads`.
     registry: Arc<dyn RegistryClient>,
 
+    /// A deterministic pseudo-random number generator.
+    deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
+
     /// A pool of slices, filled in the background by an async task.
     slice_pool: Box<dyn XNetSlicePool>,
 
@@ -326,6 +329,7 @@ impl XNetPayloadBuilderImpl {
             proximity_map.clone(),
         ));
 
+        let deterministic_rng_for_testing = Arc::new(None);
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(metrics_registry)));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
@@ -348,6 +352,7 @@ impl XNetPayloadBuilderImpl {
             state_manager,
             certified_stream_store,
             registry,
+            deterministic_rng_for_testing,
             slice_pool,
             refill_task_handle,
             metrics,
@@ -362,6 +367,7 @@ impl XNetPayloadBuilderImpl {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         registry: Arc<dyn RegistryClient>,
+        deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
         slice_pool: Box<dyn XNetSlicePool>,
         refill_task_handle: RefillTaskHandle,
         metrics: Arc<XNetPayloadBuilderMetrics>,
@@ -371,6 +377,7 @@ impl XNetPayloadBuilderImpl {
             state_manager,
             certified_stream_store,
             registry,
+            deterministic_rng_for_testing,
             slice_pool,
             refill_task_handle,
             count_bytes_fn: certified_slice_count_bytes,
@@ -756,6 +763,15 @@ impl XNetPayloadBuilderImpl {
         }
     }
 
+    /// Given a number of subnets, choose a random subnet among them.
+    fn choose_random_subnet(&self, num_subnets: usize) -> usize {
+        let positions_range = 0..num_subnets;
+        match *self.deterministic_rng_for_testing {
+            None => thread_rng().gen_range(positions_range),
+            Some(ref rng) => rng.lock().unwrap().gen_range(positions_range),
+        }
+    }
+
     /// Implementation of `get_xnet_payload()` that returns a `Result`, so it
     /// can use the `?` operator internally for clean and simple error handling.
     fn get_xnet_payload_impl(
@@ -784,7 +800,7 @@ impl XNetPayloadBuilderImpl {
 
         // Random rotation so all slices have equal chances if `byte_limit` is reached.
         let mut rotated_stream_positions: Vec<_> = stream_positions.clone().into_iter().collect();
-        let first_subnet = thread_rng().gen_range(0..rotated_stream_positions.len());
+        let first_subnet = self.choose_random_subnet(rotated_stream_positions.len());
         rotated_stream_positions.rotate_left(first_subnet);
 
         let mut bytes_left = byte_limit.get() as usize;

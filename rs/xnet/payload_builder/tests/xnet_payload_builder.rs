@@ -69,6 +69,7 @@ impl XNetPayloadBuilderFixture {
     fn new(fixture: StateManagerFixture) -> Self {
         let state_manager = Arc::new(fixture.state_manager);
         let registry = get_registry_for_test();
+        let rng = Arc::new(None);
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics)));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let (refill_trigger, _refill_receiver) = mpsc::channel(100);
@@ -78,6 +79,7 @@ impl XNetPayloadBuilderFixture {
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             registry,
+            rng,
             slice_pool,
             refill_task_handle,
             metrics,
