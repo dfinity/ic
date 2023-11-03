@@ -120,7 +120,7 @@ pub fn insert_initial_dkg_transcript(
         .expect("Failed to add subnet record.");
 }
 
-pub fn add_subnet_record(
+pub fn add_single_subnet_record(
     registry_data_provider: &Arc<ProtoRegistryDataProvider>,
     version: u64,
     subnet_id: SubnetId,
@@ -134,10 +134,20 @@ pub fn add_subnet_record(
             Some(record),
         )
         .expect("Failed to add subnet record.");
+}
+
+pub fn add_subnet_list_record(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    version: u64,
+    subnet_ids: Vec<SubnetId>,
+) {
+    let registry_version = RegistryVersion::from(version);
     let subnet_list_record = SubnetListRecord {
-        subnets: vec![subnet_id.get().into_vec()],
+        subnets: subnet_ids
+            .into_iter()
+            .map(|subnet_id| subnet_id.get().into_vec())
+            .collect(),
     };
-    // Set subnetwork list
     registry_data_provider
         .add(
             make_subnet_list_record_key().as_str(),
@@ -145,6 +155,16 @@ pub fn add_subnet_record(
             Some(subnet_list_record),
         )
         .unwrap();
+}
+
+pub fn add_subnet_record(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    version: u64,
+    subnet_id: SubnetId,
+    record: SubnetRecord,
+) {
+    add_single_subnet_record(registry_data_provider, version, subnet_id, record);
+    add_subnet_list_record(registry_data_provider, version, vec![subnet_id]);
 }
 
 /// Provides a `SubnetRecord` to unit tests
@@ -190,6 +210,27 @@ impl Default for SubnetRecordBuilder {
 impl SubnetRecordBuilder {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn with_max_ingress_bytes_per_message(
+        mut self,
+        max_ingress_bytes_per_message: u64,
+    ) -> Self {
+        self.record.max_ingress_bytes_per_message = max_ingress_bytes_per_message;
+        self
+    }
+
+    pub fn with_max_ingress_messages_per_block(
+        mut self,
+        max_ingress_messages_per_block: u64,
+    ) -> Self {
+        self.record.max_ingress_messages_per_block = max_ingress_messages_per_block;
+        self
+    }
+
+    pub fn with_max_block_payload_size(mut self, max_block_payload_size: u64) -> Self {
+        self.record.max_block_payload_size = max_block_payload_size;
+        self
     }
 
     pub fn from(committee: &[NodeId]) -> Self {
