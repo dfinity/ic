@@ -19,9 +19,9 @@ use ic_nervous_system_clients::{
     update_settings::{CanisterSettings, UpdateSettings},
 };
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
-use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
 
+pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
 pub mod pb;
 pub mod types;
@@ -797,10 +797,12 @@ async fn get_owned_canister_summary(
 mod tests {
     use super::*;
     use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
-    use ic_nervous_system_clients::canister_status::CanisterStatusResultFromManagementCanister;
-    use ic_nervous_system_clients::management_canister_client::{
-        MockManagementCanisterClient, MockManagementCanisterClientCall,
-        MockManagementCanisterClientReply,
+    use ic_nervous_system_clients::{
+        canister_status::CanisterStatusResultFromManagementCanister,
+        management_canister_client::{
+            MockManagementCanisterClient, MockManagementCanisterClientCall,
+            MockManagementCanisterClientReply,
+        },
     };
     use std::{
         collections::VecDeque,
