@@ -16,6 +16,7 @@ use crate::{
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::LedgerParameters,
+        get_neurons_fund_audit_info_response,
         governance::{
             migration::{self, MigrationStatus},
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
@@ -38,12 +39,15 @@ use crate::{
         settle_neurons_fund_participation_response,
         settle_neurons_fund_participation_response::NeuronsFundNeuron as NeuronsFundNeuronPb,
         swap_background_information, Ballot, CreateServiceNervousSystem,
-        DerivedProposalInformation, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceError, KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+        DerivedProposalInformation, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
+        GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
+        KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
         MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
-        NeuronState, NeuronsFundData, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal,
-        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
+        NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, OpenSnsTokenSwap,
+        Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
         RewardNodeProvider, RewardNodeProviders, SetSnsTokenSwapOpenTimeWindow,
         SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, SwapBackgroundInformation, Tally, Topic,
@@ -347,6 +351,22 @@ impl From<Result<NeuronsFundSnapshot, GovernanceError>> for SettleNeuronsFundPar
             Err(error) => settle_neurons_fund_participation_response::Result::Err(error),
         };
         Self {
+            result: Some(result),
+        }
+    }
+}
+
+impl From<Result<NeuronsFundAuditInfo, GovernanceError>> for GetNeuronsFundAuditInfoResponse {
+    fn from(result: Result<NeuronsFundAuditInfo, GovernanceError>) -> Self {
+        let result = match result {
+            Ok(neurons_fund_audit_info) => get_neurons_fund_audit_info_response::Result::Ok(
+                get_neurons_fund_audit_info_response::Ok {
+                    neurons_fund_audit_info: Some(neurons_fund_audit_info),
+                },
+            ),
+            Err(error) => get_neurons_fund_audit_info_response::Result::Err(error),
+        };
+        GetNeuronsFundAuditInfoResponse {
             result: Some(result),
         }
     }
@@ -3343,6 +3363,81 @@ impl Governance {
                 Some(self.proposal_data_to_info(pd, &caller_neurons, now, false))
             }
         }
+    }
+
+    /// Tries to get the Neurons' Fund participation data for an SNS Swap created via given proposal.
+    ///
+    /// - The returned structure is anomymized w.r.t. NNS neuron IDs.
+    pub fn get_neurons_fund_audit_info(
+        &self,
+        request: GetNeuronsFundAuditInfoRequest,
+    ) -> Result<NeuronsFundAuditInfo, GovernanceError> {
+        let proposal_id = request.nns_proposal_id.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "nns_proposal_id is not specified.",
+            )
+        })?;
+        let proposal_data =
+            self.get_proposal_data_or_fail(&proposal_id, "get_neurons_fund_audit_info")?;
+        let action = proposal_data
+            .proposal
+            .as_ref()
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Proposal data for {:?} is missing the `proposal` field.",
+                        proposal_id
+                    ),
+                )
+            })?
+            .action
+            .as_ref()
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Proposal data for {:?} is missing `proposal.action`.",
+                        proposal_id,
+                    ),
+                )
+            })?;
+        if !matches!(action, Action::CreateServiceNervousSystem(_)) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Proposal {:?} is not of type CreateServiceNervousSystem.",
+                    proposal_id,
+                ),
+            ));
+        }
+        let neurons_fund_data = proposal_data.neurons_fund_data.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!(
+                    "Proposal data for proposal {:?} does not specify `neurons_fund_data`.",
+                    proposal_id,
+                ),
+            )
+        })?;
+        let initial_neurons_fund_participation = neurons_fund_data
+            .initial_neurons_fund_participation
+            .as_ref()
+            .map(NeuronsFundParticipationPb::anonymized);
+        let final_neurons_fund_participation = neurons_fund_data
+            .final_neurons_fund_participation
+            .as_ref()
+            .map(NeuronsFundParticipationPb::anonymized);
+        let neurons_fund_refunds = neurons_fund_data
+            .neurons_fund_refunds
+            .as_ref()
+            .map(NeuronsFundSnapshotPb::anonymized);
+        Ok(NeuronsFundAuditInfo {
+            initial_neurons_fund_participation,
+            final_neurons_fund_participation,
+            neurons_fund_refunds,
+        })
     }
 
     /// Gets all open proposals
