@@ -16,6 +16,7 @@ use crate::{
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::LedgerParameters,
+        get_neurons_fund_audit_info_response,
         governance::{
             migration::{self, MigrationStatus},
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
@@ -38,12 +39,15 @@ use crate::{
         settle_neurons_fund_participation_response,
         settle_neurons_fund_participation_response::NeuronsFundNeuron as NeuronsFundNeuronPb,
         swap_background_information, Ballot, CreateServiceNervousSystem,
-        DerivedProposalInformation, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceError, KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+        DerivedProposalInformation, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
+        GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
+        KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
         MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
-        NeuronState, NeuronsFundData, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal,
-        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
+        NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, OpenSnsTokenSwap,
+        Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
         RewardNodeProvider, RewardNodeProviders, SetSnsTokenSwapOpenTimeWindow,
         SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, SwapBackgroundInformation, Tally, Topic,
@@ -227,6 +231,12 @@ const COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN: usize = if cfg!(test) {
     5
 };
 
+// Constant set of deprecated but not yet deleted topics. These topics should
+// not be allowed to be followed on. They are represented as a constant array
+// instead of a static HashSet for brevity, and because search time is equivalent
+// on small arrays.
+pub const DEPRECATED_TOPICS: [Topic; 1] = [Topic::SnsDecentralizationSale];
+
 // Wrapping MakeProposalLock in Option seems to cause #[must_use] to not have
 // the desired effect. Therefore, #[must_use] is kind of useless here, except to
 // convey intent to the reader.
@@ -341,6 +351,22 @@ impl From<Result<NeuronsFundSnapshot, GovernanceError>> for SettleNeuronsFundPar
             Err(error) => settle_neurons_fund_participation_response::Result::Err(error),
         };
         Self {
+            result: Some(result),
+        }
+    }
+}
+
+impl From<Result<NeuronsFundAuditInfo, GovernanceError>> for GetNeuronsFundAuditInfoResponse {
+    fn from(result: Result<NeuronsFundAuditInfo, GovernanceError>) -> Self {
+        let result = match result {
+            Ok(neurons_fund_audit_info) => get_neurons_fund_audit_info_response::Result::Ok(
+                get_neurons_fund_audit_info_response::Ok {
+                    neurons_fund_audit_info: Some(neurons_fund_audit_info),
+                },
+            ),
+            Err(error) => get_neurons_fund_audit_info_response::Result::Err(error),
+        };
+        GetNeuronsFundAuditInfoResponse {
             result: Some(result),
         }
     }
@@ -3290,7 +3316,7 @@ impl Governance {
                 return Err(GovernanceError::new(ErrorType::NotAuthorized));
             }
         }
-        Ok(neuron_clone)
+        Ok(neuron_clone.without_deprecated_topics_from_followees())
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -3337,6 +3363,81 @@ impl Governance {
                 Some(self.proposal_data_to_info(pd, &caller_neurons, now, false))
             }
         }
+    }
+
+    /// Tries to get the Neurons' Fund participation data for an SNS Swap created via given proposal.
+    ///
+    /// - The returned structure is anomymized w.r.t. NNS neuron IDs.
+    pub fn get_neurons_fund_audit_info(
+        &self,
+        request: GetNeuronsFundAuditInfoRequest,
+    ) -> Result<NeuronsFundAuditInfo, GovernanceError> {
+        let proposal_id = request.nns_proposal_id.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "nns_proposal_id is not specified.",
+            )
+        })?;
+        let proposal_data =
+            self.get_proposal_data_or_fail(&proposal_id, "get_neurons_fund_audit_info")?;
+        let action = proposal_data
+            .proposal
+            .as_ref()
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Proposal data for {:?} is missing the `proposal` field.",
+                        proposal_id
+                    ),
+                )
+            })?
+            .action
+            .as_ref()
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Proposal data for {:?} is missing `proposal.action`.",
+                        proposal_id,
+                    ),
+                )
+            })?;
+        if !matches!(action, Action::CreateServiceNervousSystem(_)) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Proposal {:?} is not of type CreateServiceNervousSystem.",
+                    proposal_id,
+                ),
+            ));
+        }
+        let neurons_fund_data = proposal_data.neurons_fund_data.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!(
+                    "Proposal data for proposal {:?} does not specify `neurons_fund_data`.",
+                    proposal_id,
+                ),
+            )
+        })?;
+        let initial_neurons_fund_participation = neurons_fund_data
+            .initial_neurons_fund_participation
+            .as_ref()
+            .map(NeuronsFundParticipationPb::anonymized);
+        let final_neurons_fund_participation = neurons_fund_data
+            .final_neurons_fund_participation
+            .as_ref()
+            .map(NeuronsFundParticipationPb::anonymized);
+        let neurons_fund_refunds = neurons_fund_data
+            .neurons_fund_refunds
+            .as_ref()
+            .map(NeuronsFundSnapshotPb::anonymized);
+        Ok(NeuronsFundAuditInfo {
+            initial_neurons_fund_participation,
+            final_neurons_fund_participation,
+            neurons_fund_refunds,
+        })
     }
 
     /// Gets all open proposals
@@ -5934,12 +6035,6 @@ impl Governance {
         caller: &PrincipalId,
         follow_request: &manage_neuron::Follow,
     ) -> Result<(), GovernanceError> {
-        // Constant set of deprecated but not yet deleted topics. These topics should
-        // not be allowed to be followed on. They are represented in a local constant
-        // for clarity, and represented as a constant array instead of a static HashSet
-        // for brevity, and because search time is equivalent on small arrays.
-        const DEPRECATED_TOPICS: [Topic; 1] = [Topic::SnsDecentralizationSale];
-
         // The implementation of this method is complicated by the
         // fact that we have to maintain a reverse index of all follow
         // relationships, i.e., the `topic_followee_index`.
@@ -5990,6 +6085,7 @@ impl Governance {
             )
         })?;
 
+        // Validate topic is not deprecated
         if DEPRECATED_TOPICS.iter().any(|t| t == &topic) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
@@ -6379,7 +6475,7 @@ impl Governance {
     ) -> Result<ManageNeuronResponse, GovernanceError> {
         // We run claim or refresh before we check whether a neuron exists because it
         // may not in the case of the neuron being claimed
-        if let Some(manage_neuron::Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
+        if let Some(Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
             // Note that we return here, so none of the rest of this method is executed
             // in this case.
             return match &claim_or_refresh.by {
@@ -6426,43 +6522,43 @@ impl Governance {
         let id = self.neuron_id_from_manage_neuron(mgmt)?;
 
         match &mgmt.command {
-            Some(manage_neuron::Command::Configure(c)) => self
+            Some(Command::Configure(c)) => self
                 .configure_neuron(&id, caller, c)
                 .map(|_| ManageNeuronResponse::configure_response()),
-            Some(manage_neuron::Command::Disburse(d)) => self
+            Some(Command::Disburse(d)) => self
                 .disburse_neuron(&id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_response),
-            Some(manage_neuron::Command::Spawn(s)) => self
+            Some(Command::Spawn(s)) => self
                 .spawn_neuron(&id, caller, s)
                 .await
                 .map(ManageNeuronResponse::spawn_response),
-            Some(manage_neuron::Command::MergeMaturity(m)) => self
+            Some(Command::MergeMaturity(m)) => self
                 .redirect_merge_maturity_to_stake_maturity(&id, caller, m)
                 .map(ManageNeuronResponse::merge_maturity_response),
-            Some(manage_neuron::Command::StakeMaturity(s)) => self
+            Some(Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
                 .map(|(response, _)| ManageNeuronResponse::stake_maturity_response(response)),
-            Some(manage_neuron::Command::Split(s)) => self
+            Some(Command::Split(s)) => self
                 .split_neuron(&id, caller, s)
                 .await
                 .map(ManageNeuronResponse::split_response),
-            Some(manage_neuron::Command::DisburseToNeuron(d)) => self
+            Some(Command::DisburseToNeuron(d)) => self
                 .disburse_to_neuron(&id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_to_neuron_response),
-            Some(manage_neuron::Command::Merge(s)) => self.merge_neurons(&id, caller, s).await,
-            Some(manage_neuron::Command::Follow(f)) => self
+            Some(Command::Merge(s)) => self.merge_neurons(&id, caller, s).await,
+            Some(Command::Follow(f)) => self
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
-            Some(manage_neuron::Command::MakeProposal(p)) => self
+            Some(Command::MakeProposal(p)) => self
                 .make_proposal(&id, caller, p)
                 .await
                 .map(ManageNeuronResponse::make_proposal_response),
-            Some(manage_neuron::Command::RegisterVote(v)) => self
+            Some(Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
                 .map(|_| ManageNeuronResponse::register_vote_response()),
-            Some(manage_neuron::Command::ClaimOrRefresh(_)) => {
+            Some(Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")
             }
             None => panic!(),

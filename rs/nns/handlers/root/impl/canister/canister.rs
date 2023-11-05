@@ -164,7 +164,10 @@ fn stop_or_start_nns_canister() {
             {
                 panic!("The governance, root and lifeline canisters can't be stopped or started.")
             }
-            canister_management::stop_or_start_nns_canister(proposal).await
+            // Unwrap here to not change the signature of the function.
+            canister_management::stop_or_start_nns_canister(proposal)
+                .await
+                .unwrap()
         },
     );
 }

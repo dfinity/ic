@@ -750,15 +750,12 @@ impl ReplicatedState {
 
     /// Updates the byte size of responses in streams for each canister.
     fn update_stream_responses_size_bytes(&mut self) {
-        let stream_responses_size_bytes = self.metadata.streams.responses_size_bytes();
-        for (canister_id, canister_state) in self.canister_states.iter_mut() {
-            canister_state.set_stream_responses_size_bytes(
-                stream_responses_size_bytes
-                    .get(canister_id)
-                    .cloned()
-                    .unwrap_or_default(),
-            )
+        for (canister_id, responses_size_bytes) in self.metadata.streams.responses_size_bytes() {
+            if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
+                canister_state.set_stream_responses_size_bytes(*responses_size_bytes);
+            }
         }
+        Arc::make_mut(&mut self.metadata.streams).prune_zero_responses_size_bytes()
     }
 
     /// Returns the number of canisters in this `ReplicatedState`.

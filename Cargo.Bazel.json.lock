@@ -73518,7 +73518,10 @@
           "common": [
             "codec",
             "default",
+            "futures-util",
+            "hashbrown",
             "io",
+            "rt",
             "slab",
             "time",
             "tracing"
@@ -73540,6 +73543,10 @@
               "target": "futures_sink"
             },
             {
+              "id": "futures-util 0.3.28",
+              "target": "futures_util"
+            },
+            {
               "id": "pin-project-lite 0.2.13",
               "target": "pin_project_lite"
             },
@@ -73556,7 +73563,14 @@
               "target": "tracing"
             }
           ],
-          "selects": {}
+          "selects": {
+            "cfg(tokio_unstable)": [
+              {
+                "id": "hashbrown 0.12.3",
+                "target": "hashbrown"
+              }
+            ]
+          }
         },
         "edition": "2021",
         "version": "0.7.8"
@@ -84126,6 +84140,7 @@
       "x86_64-pc-windows-msvc"
     ],
     "cfg(tokio_taskdump)": [],
+    "cfg(tokio_unstable)": [],
     "cfg(tracing_unstable)": [],
     "cfg(unix)": [
       "aarch64-apple-darwin",

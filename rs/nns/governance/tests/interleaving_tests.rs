@@ -169,7 +169,8 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     let effective_direct_participation_icp_e8s = 100_000 * E8;
     let effective_nf_participation_icp_e8s = 5_015_003_742_481;
     let max_participant_icp_e8s = 100_000 * E8;
-    let matching_function = PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s);
+    let matching_function =
+        PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s).unwrap();
 
     // We use channels to control how the cals are interleaved
     let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();

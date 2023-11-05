@@ -27,7 +27,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 35,
   "links": [
     {
       "asDropdown": true,
@@ -872,202 +871,6 @@
       "title": "peers serving state",
       "transparent": true,
       "type": "timeseries"
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "000000001"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 0,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 42
-      },
-      "hiddenSeries": false,
-      "id": 47,
-      "interval": "10s",
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": false,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "9.5.5",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "000000001"
-          },
-          "editorMode": "code",
-          "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  rate(state_sync_manager_chunk_download_duration_sum{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$period]) /\n  rate(state_sync_manager_chunk_download_duration_count{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$period]),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
-          "interval": "",
-          "legendFormat": "{{ic_subnet}} {{instance}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeRegions": [],
-      "title": "average chunk download duration",
-      "tooltip": {
-        "shared": true,
-        "sort": 2,
-        "value_type": "individual"
-      },
-      "transparent": true,
-      "type": "graph",
-      "xaxis": {
-        "mode": "time",
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:2277",
-          "format": "s",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:2278",
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "000000001"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 0,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 50
-      },
-      "hiddenSeries": false,
-      "id": 48,
-      "interval": "10s",
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": false,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "9.5.5",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "000000001"
-          },
-          "editorMode": "code",
-          "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  histogram_quantile(0.9, rate(state_sync_manager_chunk_download_duration_bucket{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$period])),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
-          "interval": "",
-          "legendFormat": "{{ic_subnet}} {{instance}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeRegions": [],
-      "title": "chunk download 0.9 percentile",
-      "tooltip": {
-        "shared": true,
-        "sort": 2,
-        "value_type": "individual"
-      },
-      "transparent": true,
-      "type": "graph",
-      "xaxis": {
-        "mode": "time",
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:2277",
-          "format": "s",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:2278",
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
     }
   ],
   "refresh": "",
@@ -1079,8 +882,8 @@
       {
         "current": {
           "selected": false,
-          "text": "rejoin_test_large_state--1693296554011",
-          "value": "rejoin_test_large_state--1693296554011"
+          "text": "rejoin_test_large_state--1698399505443",
+          "value": "rejoin_test_large_state--1698399505443"
         },
         "datasource": {
           "type": "prometheus",
@@ -1264,6 +1067,6 @@
   "timezone": "utc",
   "title": "State Sync Manager",
   "uid": "state-sync-manager",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }

@@ -191,6 +191,11 @@ fn streams_stats() {
         .unwrap()
         .discard_messages_before(2.into(), &Default::default());
     // No more responses from `local_a` in `streams`.
+    *expected_responses_size.get_mut(&local_a).unwrap() = 0;
+    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+
+    streams.prune_zero_responses_size_bytes();
+    // Zero valued entry for `local_a` pruned.
     expected_responses_size.remove(&local_a);
     assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
 

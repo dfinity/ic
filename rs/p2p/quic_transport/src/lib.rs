@@ -91,7 +91,7 @@ impl QuicTransport {
             peer_map.clone(),
             topology_watcher,
             udp_socket,
-            router.unwrap_or_default(),
+            router,
         );
 
         QuicTransport(peer_map)

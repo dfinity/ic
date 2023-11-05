@@ -164,7 +164,9 @@ async fn try_to_create_and_install_canister(
 }
 
 // Stops or starts any NNS canister.
-pub async fn stop_or_start_nns_canister(proposal: StopOrStartCanisterProposal) {
+pub async fn stop_or_start_nns_canister(
+    proposal: StopOrStartCanisterProposal,
+) -> Result<(), (i32, String)> {
     match proposal.action {
         CanisterAction::Start => start_canister::<DfnRuntime>(proposal.canister_id).await,
         CanisterAction::Stop => stop_canister::<DfnRuntime>(proposal.canister_id).await,

@@ -1,7 +1,7 @@
 use crate::{
     governance,
     governance::{
-        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        DEPRECATED_TOPICS, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     pb::v1::{
@@ -678,7 +678,7 @@ impl Neuron {
     ///
     /// Only a non-dissolving neuron has a non-zero age. The age of all other
     /// neurons (i.e., dissolving and dissolved) is represented as
-    /// `againg_since_timestamp_seconds == u64::MAX`. This method maintains
+    /// `aging_since_timestamp_seconds == u64::MAX`. This method maintains
     /// that invariant.
     pub fn update_stake_adjust_age(&mut self, updated_stake_e8s: u64, now: u64) {
         // If the updated stake is less than the original stake, preserve the
@@ -746,7 +746,7 @@ impl Neuron {
     /// Remarks about condition 2:
     ///
     /// A. Notice that under these criteria, a Neuron CAN INDEED become inactive merely by the passage
-    /// of time. This is unfortunate, but not catestrophic. As long as "most" inactive Neurons are
+    /// of time. This is unfortunate, but not catastrophic. As long as "most" inactive Neurons are
     /// in stable memory, and nothing is relying on "if a Neuron is inactive, then it is in stable
     /// memory", then we have achieved our goal: save heap space.
     ///
@@ -796,7 +796,7 @@ impl Neuron {
     /// Note that when self.dissolve_state == DissolveDelaySeconds(0), even though the Neuron is
     /// dissolved, we do not know when that happened. This tends to happen when Neurons are first
     /// created. In those cases, we could have set dissolve_state to
-    /// WhenDissolvedTimestampSeconeds(now()), but we didn't. This could be changed for new Neurons,
+    /// WhenDissolvedTimestampSeconds(now()), but we didn't. This could be changed for new Neurons,
     /// but there is no intention to do that (yet).
     pub fn dissolved_at_timestamp_seconds(&self) -> Option<u64> {
         use DissolveState::{DissolveDelaySeconds, WhenDissolvedTimestampSeconds};
@@ -817,6 +817,32 @@ impl Neuron {
             }
         }
     }
+
+    /// Omit deprecated topics from a Neuron's followees. Used to scrub deprecated
+    /// topics from Governance's APIs.
+    pub(crate) fn without_deprecated_topics_from_followees(mut self) -> Self {
+        for topic in DEPRECATED_TOPICS {
+            let converted_topic = topic as i32;
+            self.followees.remove(&converted_topic);
+        }
+        self
+    }
+}
+
+/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
+/// that operate on NeuronId ranges with internal u64 representations in data.
+pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
+    let first = match range.start_bound() {
+        std::ops::Bound::Included(start) => start.id,
+        std::ops::Bound::Excluded(start) => start.id + 1,
+        std::ops::Bound::Unbounded => 0,
+    };
+    let last = match range.end_bound() {
+        std::ops::Bound::Included(end) => end.id,
+        std::ops::Bound::Excluded(end) => end.id - 1,
+        std::ops::Bound::Unbounded => u64::MAX,
+    };
+    first..=last
 }
 
 #[cfg(test)]
@@ -1122,20 +1148,4 @@ mod tests {
             }
         }
     }
-}
-
-/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
-/// that operate on NeuronId ranges with internal u64 representations in data.
-pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
-    let first = match range.start_bound() {
-        std::ops::Bound::Included(start) => start.id,
-        std::ops::Bound::Excluded(start) => start.id + 1,
-        std::ops::Bound::Unbounded => 0,
-    };
-    let last = match range.end_bound() {
-        std::ops::Bound::Included(end) => end.id,
-        std::ops::Bound::Excluded(end) => end.id - 1,
-        std::ops::Bound::Unbounded => u64::MAX,
-    };
-    first..=last
 }

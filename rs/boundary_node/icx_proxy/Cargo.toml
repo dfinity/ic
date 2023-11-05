@@ -45,6 +45,7 @@ prometheus = { workspace = true }
 rustls = { version = "0.21", features = ["dangerous_configuration"] }
 rustls-native-certs = "0.6.2"
 rustls-pemfile = "1"
+tokio-util = { version = "0.7", features = ["rt"] }
 tower = { workspace = true }
 tower-http = { version = "0.3", features = ["trace"] }
 tracing = "0.1"

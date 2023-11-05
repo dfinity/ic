@@ -1383,6 +1383,59 @@ pub struct NeuronsFundData {
     #[prost(message, optional, tag = "3")]
     pub neurons_fund_refunds: ::core::option::Option<NeuronsFundSnapshot>,
 }
+/// This is a view of the NeuronsFundData returned by API queries and is NOT used for storage.
+/// Currently, the structure is identical to NeuronsFundData, but this may change over time.
+/// Some of the fields, e.g., actual IDs of neurons, are anonymized.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundAuditInfo {
+    /// See documentation for NeuronsFundData.neurons_fund_participation
+    #[prost(message, optional, tag = "1")]
+    pub initial_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    /// See documentation for NeuronsFundData.final_neurons_fund_participation
+    #[prost(message, optional, tag = "2")]
+    pub final_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    /// See documentation for NeuronsFundData.neurons_fund_refunds
+    #[prost(message, optional, tag = "3")]
+    pub neurons_fund_refunds: ::core::option::Option<NeuronsFundSnapshot>,
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetNeuronsFundAuditInfoRequest {
+    /// ID of the NNS proposal that resulted in the creation of the corresponding Swap.
+    #[prost(message, optional, tag = "1")]
+    pub nns_proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetNeuronsFundAuditInfoResponse {
+    #[prost(oneof = "get_neurons_fund_audit_info_response::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<get_neurons_fund_audit_info_response::Result>,
+}
+/// Nested message and enum types in `GetNeuronsFundAuditInfoResponse`.
+pub mod get_neurons_fund_audit_info_response {
+    /// Request was completed successfully.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Ok {
+        /// Represents public information suitable for auditing Neurons' Fund participation in an SNS swap.
+        #[prost(message, optional, tag = "1")]
+        pub neurons_fund_audit_info: ::core::option::Option<super::NeuronsFundAuditInfo>,
+    }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Err(super::GovernanceError),
+        #[prost(message, tag = "2")]
+        Ok(Ok),
+    }
+}
 /// Information for deciding how the Neurons' Fund should participate in an SNS Swap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]

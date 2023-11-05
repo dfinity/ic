@@ -65,6 +65,28 @@ impl PayloadBuilderImpl {
             logger,
         }
     }
+    /// Helper to create PayloadBuilder for testing
+    pub fn new_for_testing(
+        subnet_id: SubnetId,
+        registry_client: Arc<dyn RegistryClient>,
+        ingress_selector: Arc<dyn IngressSelector>,
+        xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+        metrics: MetricsRegistry,
+        logger: ReplicaLogger,
+    ) -> Self {
+        let section_builder = vec![
+            BatchPayloadSectionBuilder::Ingress(ingress_selector),
+            BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
+        ];
+
+        Self {
+            subnet_id,
+            registry_client,
+            section_builder,
+            metrics: PayloadBuilderMetrics::new(metrics),
+            logger,
+        }
+    }
 }
 
 impl PayloadBuilder for PayloadBuilderImpl {

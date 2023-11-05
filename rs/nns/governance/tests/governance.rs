@@ -44,7 +44,7 @@ use ic_nns_governance::{
         test_data::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
-        validate_proposal_title, Environment, Governance, HeapGrowthPotential,
+        validate_proposal_title, Environment, Governance, HeapGrowthPotential, DEPRECATED_TOPICS,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
         MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
@@ -4859,14 +4859,13 @@ fn test_set_dissolve_delay() {
             driver.now(),
             &Configure {
                 operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
-                    dissolve_timestamp_seconds: driver.now()
-                        + 2 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
+                    dissolve_timestamp_seconds: driver.now() + 2 * ONE_MONTH_SECONDS,
                 })),
             },
         )
         .is_err());
 
-    // Try to set the dissolve dealy to a value that is bigger that the max u32,
+    // Try to set the dissolve delay to a value that is bigger that the max u32,
     // should fail.
     assert!(neuron
         .configure(
@@ -4875,7 +4874,7 @@ fn test_set_dissolve_delay() {
             &Configure {
                 operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
                     dissolve_timestamp_seconds: driver.now()
-                        + 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS
+                        + 3 * ONE_MONTH_SECONDS
                         + u32::MAX as u64
                         + 1,
                 })),
@@ -4892,7 +4891,7 @@ fn test_set_dissolve_delay() {
             &Configure {
                 operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
                     dissolve_timestamp_seconds: driver.now()
-                        + 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS
+                        + 3 * ONE_MONTH_SECONDS
                         + u32::MAX as u64,
                 })),
             },
@@ -4943,7 +4942,7 @@ fn test_cant_disburse_without_paying_fees() {
             &id,
             &from,
             &Disburse {
-                amount: Some(manage_neuron::disburse::Amount {
+                amount: Some(Amount {
                     e8s: 1000 * 100_000_000,
                 }),
                 to_account: Some(AccountIdentifier::new(from, None).into()),
@@ -8534,6 +8533,132 @@ fn test_list_neurons() {
     );
 }
 
+#[test]
+fn test_list_proposals_omits_deprecated_topics_from_followees() {
+    let controller = principal(1);
+    let neuron_id = NeuronId { id: 1 };
+    let deprecated_topic = *DEPRECATED_TOPICS.first().unwrap();
+
+    let proto = GovernanceProto {
+        neurons: btreemap! {
+            1 => Neuron {
+                id: Some(neuron_id),
+                followees: hashmap! {
+                    deprecated_topic as i32 => Followees {
+                        followees: vec![NeuronId {id: 2}],
+                    }
+                },
+                controller: Some(controller),
+                ..Default::default()
+            }
+        },
+        ..Default::default()
+    };
+
+    let driver = fake::FakeDriver::default();
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    let list_neurons_response = gov.list_neurons_by_principal(
+        &ListNeurons {
+            neuron_ids: vec![neuron_id.id],
+            include_neurons_readable_by_caller: true,
+        },
+        &controller,
+    );
+    assert_ne!(list_neurons_response.full_neurons, vec![]);
+    let neuron = list_neurons_response
+        .full_neurons
+        .iter()
+        .find(|neuron| neuron.id == Some(neuron_id))
+        .expect("Expected there to be a neuron in the list_neurons_response");
+
+    assert!(!neuron
+        .followees
+        .contains_key(&(Topic::SnsDecentralizationSale as i32)));
+}
+
+#[test]
+fn test_get_full_neuron_omits_deprecated_topics_from_followees() {
+    let controller = principal(1);
+    let neuron_id = NeuronId { id: 1 };
+    let deprecated_topic = *DEPRECATED_TOPICS.first().unwrap();
+
+    let proto = GovernanceProto {
+        neurons: btreemap! {
+            1 => Neuron {
+                id: Some(neuron_id),
+                followees: hashmap! {
+                    deprecated_topic as i32 => Followees {
+                        followees: vec![NeuronId {id: 2}],
+                    }
+                },
+                controller: Some(controller),
+                ..Default::default()
+            }
+        },
+        ..Default::default()
+    };
+
+    let driver = fake::FakeDriver::default();
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    let neuron = gov
+        .get_full_neuron(&neuron_id, &controller)
+        .expect("Expected to be able to get neuron from get_full_neuron");
+    assert!(!neuron
+        .followees
+        .contains_key(&(Topic::SnsDecentralizationSale as i32)));
+}
+
+#[test]
+fn test_get_neuron_by_subaccount_or_id_omits_deprecated_topics_from_followees() {
+    let controller = principal(1);
+    let neuron_id = NeuronId { id: 1 };
+    let proto = GovernanceProto {
+        neurons: btreemap! {
+            1 => Neuron {
+                id: Some(neuron_id),
+                followees: hashmap! {
+                    Topic::SnsDecentralizationSale as i32 => Followees {
+                        followees: vec![NeuronId {id: 2}],
+                    }
+                },
+                controller: Some(controller),
+                ..Default::default()
+            }
+        },
+        ..Default::default()
+    };
+
+    let driver = fake::FakeDriver::default();
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    let neuron = gov
+        .get_full_neuron_by_id_or_subaccount(
+            &NeuronIdOrSubaccount::NeuronId(neuron_id),
+            &controller,
+        )
+        .expect("Expected to be able to get neuron from get_full_neuron_by_id_or_subaccount");
+    assert!(!neuron
+        .followees
+        .contains_key(&(Topic::SnsDecentralizationSale as i32)));
+}
+
 #[tokio::test]
 async fn test_max_number_of_proposals_with_ballots() {
     let mut fake_driver = fake::FakeDriver::default();
@@ -11515,7 +11640,7 @@ lazy_static! {
     };
 
     static ref SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR: Option<String> = Some(
-        PolynomialMatchingFunction::new(1_000_000 * E8).serialize()
+        PolynomialMatchingFunction::new(1_000_000 * E8).unwrap().serialize()
     );
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
@@ -11534,7 +11659,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            41663623082,
+                            42515867976,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             600_000 * E8,
@@ -11551,7 +11676,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            6943937180,
+                            7085977996,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             100_000 * E8,
@@ -11568,7 +11693,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            20831811541,
+                            21257933988,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             300_000 * E8,
@@ -11604,10 +11729,10 @@ lazy_static! {
             1_000_000 * E8,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            69439371804,
+            70859779960,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
-            69439371804,
+            70859779960,
         ),
     });
 
@@ -11645,7 +11770,7 @@ lazy_static! {
             100000000000000,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            69439371804,
+            70859779960,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
             0,
@@ -11668,7 +11793,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            12144577009,
+                            12805431519,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             60000000000000,
@@ -11685,7 +11810,7 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            6072288505,
+                            6402715760,
                         ),
                         maturity_equivalent_icp_e8s: Some(
                             30000000000000,
@@ -11721,10 +11846,10 @@ lazy_static! {
             100000000000000,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            69439371804,
+            70859779960,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
-            20240961682,
+            21342385865,
         ),
     });
 
@@ -11737,7 +11862,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    41663623082,
+                    42515867976,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,
@@ -11754,7 +11879,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    6943937180,
+                    7085977996,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     10000000000000,
@@ -11771,7 +11896,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    20831811541,
+                    21257933988,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     30000000000000,
@@ -11793,7 +11918,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    29519046073,
+                    29710436457,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     60000000000000,
@@ -11810,7 +11935,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    6943937180,
+                    7085977996,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     10000000000000,
@@ -11827,7 +11952,7 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    14759523036,
+                    14855218228,
                 ),
                 maturity_equivalent_icp_e8s: Some(
                     30000000000000,
@@ -11869,7 +11994,7 @@ lazy_static! {
         // `NeuronsFundParticipation::compute_constraints` in rs/nns/governance/src/neurons_fund.rs
         NeuronsFundParticipationConstraints {
             min_direct_participation_threshold_icp_e8s: Some(36_000 * E8),
-            max_neurons_fund_participation_icp_e8s: Some(69_439_371_804),
+            max_neurons_fund_participation_icp_e8s: Some(70859779960),
             coefficient_intervals: vec![
                 LinearScalingCoefficient {
                     from_direct_participation_icp_e8s: Some(0),

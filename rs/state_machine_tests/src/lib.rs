@@ -1,6 +1,7 @@
 use core::sync::atomic::Ordering;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
@@ -14,15 +15,19 @@ use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
-use ic_execution_environment::ExecutionServices;
+use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
 pub use ic_ic00_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, ECDSAPublicKeyResponse,
     EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply, UpdateSettingsArgs,
 };
+use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
-    execution_environment::{IngressHistoryReader, QueryHandler},
+    consensus::PayloadBuilder as ConsensusPayloadBuilder,
+    consensus_pool::ConsensusTime,
+    execution_environment::{IngressFilter, IngressHistoryReader, QueryHandler},
+    ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
@@ -43,13 +48,14 @@ use ic_protobuf::registry::{
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_client_helpers::subnet::SubnetListRegistry;
+use ic_registry_client_helpers::provisional_whitelist::ProvisionalWhitelistRegistry;
+use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_crypto_node_key, make_ecdsa_signing_subnet_list_key,
     make_node_record_key, make_provisional_whitelist_record_key, make_routing_table_record_key,
     ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, RoutingTable,
@@ -65,14 +71,17 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
+use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
 };
 use ic_test_utilities_registry::{
-    add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
+    add_single_subnet_record, add_subnet_list_record, insert_initial_dkg_transcript,
+    SubnetRecordBuilder,
 };
-use ic_types::batch::{BlockmakerMetrics, QueryStatsPayload, TotalQueryStats};
+use ic_types::batch::{BlockmakerMetrics, QueryStatsPayload, TotalQueryStats, ValidationContext};
 pub use ic_types::canister_http::CanisterHttpRequestContext;
+use ic_types::consensus::block_maker::SubnetRecords;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
 pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
@@ -84,6 +93,7 @@ use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::messages::{CallbackId, Certificate, Response};
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
+use ic_types::xnet::CertifiedStreamSlice;
 use ic_types::{
     batch::{Batch, BatchMessages, XNetPayload},
     consensus::certification::Certification,
@@ -92,28 +102,41 @@ use ic_types::{
         SignedIngress, UserQuery,
     },
     xnet::StreamIndex,
-    CryptoHashOfPartialState, Height, NodeId, NumberOfNodes, Randomness, RegistryVersion,
+    CountBytes, CryptoHashOfPartialState, Height, NodeId, NumberOfNodes, Randomness,
+    RegistryVersion,
 };
 pub use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::MessageId,
+    messages::{HttpRequestError, MessageId},
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
+use ic_xnet_payload_builder::{
+    certified_slice_pool::{certified_slice_count_bytes, CertifiedSliceError},
+    ExpectedIndices, RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
+    XNetSlicePool,
+};
 
 use maplit::btreemap;
+use rand::{rngs::StdRng, SeedableRng};
 use serde::Serialize;
 pub use slog::Level;
+use std::collections::{hash_map::DefaultHasher, HashMap};
+use std::hash::{Hash, Hasher};
 use std::io::stderr;
+use std::ops::RangeInclusive;
 use std::path::Path;
 use std::str::FromStr;
 use std::string::ToString;
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::RwLock;
 use std::time::{Duration, Instant, SystemTime};
 use std::{collections::BTreeMap, convert::TryFrom};
 use std::{fmt, io};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
 
 #[cfg(test)]
 mod tests;
@@ -131,33 +154,59 @@ impl Verifier for FakeVerifier {
     }
 }
 
-/// Constructs the initial version of the registry containing a subnet with the
-/// specified SUBNET_ID, with the nodes with the specified NODE_IDs.
-fn make_nodes_registry(
+/// Constructs the initial version of the registry containing
+/// root subnet ID, routing table, subnet list,
+/// and provisional whitelist.
+fn init_registry(
     nns_subnet_id: SubnetId,
-    subnet_id: SubnetId,
-    subnet_type: SubnetType,
-    mut routing_table: RoutingTable,
-    node_ids: &[NodeId],
-    ecdsa_keys: &[EcdsaKeyId],
-    features: SubnetFeatures,
-) -> (Arc<ProtoRegistryDataProvider>, Arc<FakeRegistryClient>) {
-    let registry_version = RegistryVersion::from(1);
-    let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
+    subnet_list: Vec<SubnetId>,
+    routing_table: RoutingTable,
+    registry_version: RegistryVersion,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+) {
     let root_subnet_id_proto = SubnetIdProto {
         principal_id: Some(PrincipalIdIdProto {
             raw: nns_subnet_id.get_ref().to_vec(),
         }),
     };
-    data_provider
+    registry_data_provider
         .add(
             ROOT_SUBNET_ID_KEY,
             registry_version,
             Some(root_subnet_id_proto),
         )
         .unwrap();
+    let pb_routing_table = PbRoutingTable::from(routing_table.clone());
+    registry_data_provider
+        .add(
+            &make_routing_table_record_key(),
+            registry_version,
+            Some(pb_routing_table),
+        )
+        .unwrap();
+    add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_list);
+    let pb_whitelist = PbProvisionalWhitelist::from(ProvisionalWhitelist::All);
+    registry_data_provider
+        .add(
+            &make_provisional_whitelist_record_key(),
+            registry_version,
+            Some(pb_whitelist),
+        )
+        .unwrap();
+}
 
+/// Adds subnet-related records to registry.
+/// Pre-condition: `init_registry` was called before with `routing_table` containing `subnet_id`.
+fn make_nodes_registry(
+    nns_subnet_id: SubnetId,
+    subnet_id: SubnetId,
+    subnet_type: SubnetType,
+    subnet_size: usize,
+    ecdsa_keys: &[EcdsaKeyId],
+    features: SubnetFeatures,
+    registry_version: RegistryVersion,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+) -> Arc<FakeRegistryClient> {
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
     let subnet_id_proto = SubnetIdProto {
@@ -167,7 +216,7 @@ fn make_nodes_registry(
     };
     for key_id in ecdsa_keys {
         let id = make_ecdsa_signing_subnet_list_key(key_id);
-        data_provider
+        registry_data_provider
             .add(
                 &id.clone(),
                 registry_version,
@@ -178,27 +227,19 @@ fn make_nodes_registry(
             .unwrap();
     }
 
-    if routing_table.is_empty() {
-        routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+    // Every subnet should have unique node IDs so we first compute
+    // a hash of the subnet ID and interpret it as a base value
+    // for node ID generation.
+    let mut node_ids = vec![];
+    let mut s = DefaultHasher::new();
+    subnet_id.hash(&mut s);
+    let node_id_offset = s.finish();
+    for id in 0..subnet_size {
+        let node_id = NodeId::from(PrincipalId::new_node_test_id(node_id_offset + id as u64));
+        node_ids.push(node_id);
     }
-    let pb_routing_table = PbRoutingTable::from(routing_table);
-    data_provider
-        .add(
-            &make_routing_table_record_key(),
-            registry_version,
-            Some(pb_routing_table),
-        )
-        .unwrap();
-    let pb_whitelist = PbProvisionalWhitelist::from(ProvisionalWhitelist::All);
-    data_provider
-        .add(
-            &make_provisional_whitelist_record_key(),
-            registry_version,
-            Some(pb_whitelist),
-        )
-        .unwrap();
 
-    for node_id in node_ids {
+    for node_id in &node_ids {
         let node_record = NodeRecord {
             node_operator_id: vec![0],
             xnet: None,
@@ -210,7 +251,7 @@ fn make_nodes_registry(
             hostos_version_id: None,
             chip_id: None,
         };
-        data_provider
+        registry_data_provider
             .add(
                 &make_node_record_key(*node_id),
                 registry_version,
@@ -219,7 +260,7 @@ fn make_nodes_registry(
             .unwrap();
 
         let node_key = valid_node_signing_public_key();
-        data_provider
+        registry_data_provider
             .add(
                 &make_crypto_node_key(*node_id, KeyPurpose::NodeSigning),
                 registry_version,
@@ -228,9 +269,29 @@ fn make_nodes_registry(
             .unwrap();
     }
 
-    // Set subnetwork list(needed for filling network_topology.nns_subnet_id)
-    let record = SubnetRecordBuilder::from(node_ids)
+    // The following constants were derived from the mainnet config
+    // using `ic-admin --nns-url https://icp0.io get-topology`.
+    // Note: The value of the constant `max_ingress_bytes_per_message`
+    // does not match the corresponding values for the SNS and Bitcoin
+    // subnets on the IC mainnet. This is because the input parameters
+    // to this method do not allow to distinguish those two subnets.
+    let max_ingress_bytes_per_message = match subnet_type {
+        SubnetType::Application => 2 * 1024 * 1024,
+        SubnetType::VerifiedApplication => 2 * 1024 * 1024,
+        SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
+    };
+    let max_ingress_messages_per_block = if subnet_id == nns_subnet_id {
+        400
+    } else {
+        1000
+    };
+    let max_block_payload_size = 4 * 1024 * 1024;
+
+    let record = SubnetRecordBuilder::from(&node_ids)
         .with_subnet_type(subnet_type)
+        .with_max_ingress_bytes_per_message(max_ingress_bytes_per_message)
+        .with_max_ingress_messages_per_block(max_ingress_messages_per_block)
+        .with_max_block_payload_size(max_block_payload_size)
         .with_ecdsa_config(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: ecdsa_keys.to_vec(),
@@ -241,12 +302,24 @@ fn make_nodes_registry(
         .with_features(features.into())
         .build();
 
-    insert_initial_dkg_transcript(registry_version.get(), subnet_id, &record, &data_provider);
-    add_subnet_record(&data_provider, registry_version.get(), subnet_id, record);
+    insert_initial_dkg_transcript(
+        registry_version.get(),
+        subnet_id,
+        &record,
+        &registry_data_provider,
+    );
+    add_single_subnet_record(
+        &registry_data_provider,
+        registry_version.get(),
+        subnet_id,
+        record,
+    );
 
-    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as _));
+    let registry_client = Arc::new(FakeRegistryClient::new(
+        Arc::clone(&registry_data_provider) as _
+    ));
     registry_client.update_to_latest_version();
-    (data_provider, registry_client)
+    registry_client
 }
 
 /// Convert an object into CBOR binary.
@@ -294,6 +367,134 @@ impl StateMachineConfig {
     }
 }
 
+/// Struct mocking consensus time required for instantiating `IngressManager`
+/// in `StateMachine`.
+struct PocketConsensusTime {
+    t: RwLock<Time>,
+}
+
+impl PocketConsensusTime {
+    fn new(t: Time) -> Self {
+        Self { t: RwLock::new(t) }
+    }
+    /// We need to override the consensus time if the time in `StateMachine` changes.
+    fn set(&self, t: Time) {
+        *self.t.write().unwrap() = t;
+    }
+}
+
+impl ConsensusTime for PocketConsensusTime {
+    fn consensus_time(&self) -> Option<Time> {
+        Some(*self.t.read().unwrap())
+    }
+}
+
+/// Struct mocking the pool of received ingress messages required for
+/// instantiating `IngressManager` in `StateMachine`.
+struct PocketIngressPool {
+    ingress_messages: Vec<SignedIngress>,
+}
+
+impl PocketIngressPool {
+    fn new() -> Self {
+        Self {
+            ingress_messages: vec![],
+        }
+    }
+    /// Pushes a received ingress message into the pool.
+    fn push(&mut self, m: SignedIngress) {
+        self.ingress_messages.push(m);
+    }
+}
+
+impl IngressPoolSelect for PocketIngressPool {
+    /// Validates (incl. expiry checks) and selects ingress messages from the pool.
+    fn select_validated<'a>(
+        &self,
+        range: RangeInclusive<Time>,
+        mut f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
+    ) -> Vec<SignedIngress> {
+        let artifacts: Vec<IngressPoolObject> = self
+            .ingress_messages
+            .iter()
+            .filter(|m| range.contains(&m.expiry_time()))
+            .map(|m| m.clone().into())
+            .collect();
+        let mut collected = Vec::new();
+        for artifact in &artifacts {
+            match f(artifact) {
+                SelectResult::Selected(msg) => collected.push(msg),
+                SelectResult::Skip => (),
+                SelectResult::Abort => break,
+            }
+        }
+        collected
+    }
+}
+
+/// Struct mocking the pool of XNet messages required for
+/// instantiating `XNetPayloadBuilderImpl` in `StateMachine`.
+struct PocketXNetSlicePoolImpl {
+    /// Association of subnet IDs to their corresponding `StateMachine`s
+    /// from which the XNet messages are fetched.
+    subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+    /// Subnet ID of the `StateMachine` containing the pool.
+    own_subnet_id: SubnetId,
+}
+
+impl PocketXNetSlicePoolImpl {
+    fn new(
+        subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+        own_subnet_id: SubnetId,
+    ) -> Self {
+        Self {
+            subnets,
+            own_subnet_id,
+        }
+    }
+}
+
+impl XNetSlicePool for PocketXNetSlicePoolImpl {
+    /// Obtains a certified slice of a stream from a `StateMachine`
+    /// corresponding to a given subnet ID.
+    fn take_slice(
+        &self,
+        subnet_id: SubnetId,
+        begin: Option<&ExpectedIndices>,
+        msg_limit: Option<usize>,
+        byte_limit: Option<usize>,
+    ) -> Result<Option<(CertifiedStreamSlice, usize)>, CertifiedSliceError> {
+        let subnets = self.subnets.read().unwrap();
+        let sm = subnets.get(&subnet_id).unwrap();
+        let msg_begin = begin.map(|idx| idx.message_index);
+        // We set `witness_begin` equal to `msg_begin` since all states are certified.
+        let certified_stream = sm.generate_certified_stream_slice(
+            self.own_subnet_id,
+            msg_begin,
+            msg_begin,
+            msg_limit,
+            byte_limit,
+        );
+        Ok(certified_stream
+            .map(|certified_stream| {
+                let num_bytes = certified_slice_count_bytes(&certified_stream).unwrap();
+                (certified_stream, num_bytes)
+            })
+            .ok())
+    }
+
+    /// We do not collect any metrics here.
+    fn observe_pool_size_bytes(&self) {}
+
+    /// We do not cache XNet messages in this mock implementation
+    /// and thus there is no need for garbage collection.
+    fn garbage_collect(&self, _new_stream_positions: BTreeMap<SubnetId, ExpectedIndices>) {}
+
+    /// We do not cache XNet messages in this mock implementation
+    /// and thus there is no need for garbage collection.
+    fn garbage_collect_slice(&self, _subnet_id: SubnetId, _stream_position: ExpectedIndices) {}
+}
+
 /// Represents a replicated state machine detached from the network layer that
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
@@ -304,6 +505,11 @@ pub struct StateMachine {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
+    consensus_time: Arc<PocketConsensusTime>,
+    ingress_pool: Arc<RwLock<PocketIngressPool>>,
+    ingress_manager: Arc<IngressManager>,
+    ingress_filter: Arc<dyn IngressFilter<State = ReplicatedState>>,
+    payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
@@ -314,6 +520,7 @@ pub struct StateMachine {
     nonce: std::sync::atomic::AtomicU64,
     time: std::sync::atomic::AtomicU64,
     ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    replica_logger: ReplicaLogger,
 }
 
 impl Default for StateMachine {
@@ -341,11 +548,17 @@ pub struct StateMachineBuilder {
     subnet_size: usize,
     nns_subnet_id: SubnetId,
     subnet_id: SubnetId,
+    /// The `subnet_list` should contain all subnet IDs with corresponding `SubnetRecord`s available in the registry
+    /// (subnet IDs in the `routing_table` are independent of this `subnet_list`);
+    /// if `subnet_list` is `None` here, then the actual `subnet_list` used when initializing the registry
+    /// consists of a single subnet ID from this `StateMachineBuilder`.
+    subnet_list: Option<Vec<SubnetId>>,
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
 }
 
 impl StateMachineBuilder {
@@ -362,6 +575,7 @@ impl StateMachineBuilder {
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: own_subnet_id,
             subnet_id: own_subnet_id,
+            subnet_list: None,
             routing_table: RoutingTable::new(),
             ecdsa_keys: vec![EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
@@ -372,6 +586,7 @@ impl StateMachineBuilder {
                 ..SubnetFeatures::default()
             },
             runtime: None,
+            registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
         }
     }
 
@@ -448,6 +663,13 @@ impl StateMachineBuilder {
         self
     }
 
+    pub fn with_subnet_list(self, subnet_list: Vec<SubnetId>) -> Self {
+        Self {
+            subnet_list: Some(subnet_list),
+            ..self
+        }
+    }
+
     pub fn with_routing_table(self, routing_table: RoutingTable) -> Self {
         Self {
             routing_table,
@@ -472,6 +694,10 @@ impl StateMachineBuilder {
         Self { ecdsa_keys, ..self }
     }
 
+    pub fn with_ecdsa_keys(self, ecdsa_keys: Vec<EcdsaKeyId>) -> Self {
+        Self { ecdsa_keys, ..self }
+    }
+
     pub fn with_features(self, features: SubnetFeatures) -> Self {
         Self { features, ..self }
     }
@@ -483,7 +709,31 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_registry_data_provider(
+        self,
+        registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    ) -> Self {
+        Self {
+            registry_data_provider,
+            ..self
+        }
+    }
+
     pub fn build(self) -> StateMachine {
+        let mut routing_table = self.routing_table;
+        if routing_table.is_empty() {
+            routing_table_insert_subnet(&mut routing_table, self.subnet_id).unwrap();
+        }
+        let registry_version = INITIAL_REGISTRY_VERSION;
+        if self.registry_data_provider.is_empty() {
+            init_registry(
+                self.nns_subnet_id,
+                self.subnet_list.unwrap_or(vec![self.subnet_id]),
+                routing_table,
+                registry_version,
+                self.registry_data_provider.clone(),
+            );
+        }
         StateMachine::setup_from_dir(
             self.state_dir,
             self.nonce,
@@ -494,7 +744,6 @@ impl StateMachineBuilder {
             self.subnet_size,
             self.nns_subnet_id,
             self.subnet_id,
-            self.routing_table,
             self.use_cost_scaling_flag,
             self.ecdsa_keys,
             self.features,
@@ -504,7 +753,59 @@ impl StateMachineBuilder {
                     .expect("failed to create a tokio runtime")
                     .into()
             }),
+            registry_version,
+            self.registry_data_provider,
         )
+    }
+
+    /// Build a `StateMachine` and register it for multi-subnet testing
+    /// in the provided association of subnet IDs and `StateMachine`s.
+    pub fn build_with_subnets(
+        self,
+        subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+    ) -> Arc<StateMachine> {
+        // Build a `StateMachine` for the subnet with `self.subnet_id`.
+        let subnet_id = self.subnet_id;
+        let sm = Arc::new(self.build());
+
+        // Register this new `StateMachine` in the *shared* association
+        // of subnet IDs and their corresponding `StateMachine`s.
+        subnets.write().unwrap().insert(subnet_id, sm.clone());
+
+        // Create a dummny refill task handle to be used in `XNetPayloadBuilderImpl`.
+        // It is fine that we do not pop any messages from the (bounded) channel
+        // since errors are ignored in `RefillTaskHandle::trigger_refill()`.
+        let (refill_trigger, _refill_receiver) = mpsc::channel(1);
+        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
+
+        // Instantiate a `XNetPayloadBuilderImpl`.
+        // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
+        let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
+        let xnet_slice_pool_impl = Box::new(PocketXNetSlicePoolImpl::new(subnets, subnet_id));
+        let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
+        let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
+            sm.state_manager.clone(),
+            sm.state_manager.clone(),
+            sm.registry_client.clone(),
+            rng,
+            xnet_slice_pool_impl,
+            refill_task_handle,
+            metrics,
+            sm.replica_logger.clone(),
+        );
+
+        // Instantiate a `PayloadBuilderImpl` and put it into `StateMachine`
+        // which contains no `PayloadBuilderImpl` after creation.
+        *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new_for_testing(
+            subnet_id,
+            sm.registry_client.clone(),
+            sm.ingress_manager.clone(),
+            Arc::new(xnet_payload_builder),
+            sm.metrics_registry.clone(),
+            sm.replica_logger.clone(),
+        ));
+
+        sm
     }
 }
 
@@ -528,6 +829,105 @@ impl StateMachine {
         StateMachineBuilder::new().with_config(Some(config)).build()
     }
 
+    /// Assemble a payload for a new round using `PayloadBuilderImpl`
+    /// and execute a round with this payload.
+    /// Note that only ingress messages submitted via `Self::submit_ingress`
+    /// will be considered during payload building.
+    pub fn execute_round(&self) {
+        // Make sure the latest state is certified and fetch it from `StateManager`.
+        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
+            let state_hashes = self.state_manager.list_state_hashes_to_certify();
+            let (height, hash) = state_hashes.last().unwrap();
+            self.state_manager
+                .deliver_state_certification(self.certify_hash(height, hash));
+        }
+        let certified_height = self.state_manager.latest_certified_height();
+        let state = self
+            .state_manager
+            .get_state_at(certified_height)
+            .unwrap()
+            .take();
+
+        // Build a payload for the round using `PayloadBuilderImpl`.
+        let registry_version = self.registry_client.get_latest_version();
+        let validation_context = ValidationContext {
+            time: self.get_time(),
+            registry_version,
+            certified_height,
+        };
+        let subnet_record = self
+            .registry_client
+            .get_subnet_record(self.subnet_id, registry_version)
+            .unwrap()
+            .unwrap();
+        let subnet_records = SubnetRecords {
+            membership_version: subnet_record.clone(),
+            context_version: subnet_record,
+        };
+        let payload_builder = self.payload_builder.read().unwrap();
+        let payload_builder = payload_builder.as_ref().unwrap();
+        let batch_payload = payload_builder.get_payload(
+            certified_height,
+            &[], // Because the latest state is certified, we do not need to provide any `past_payloads`.
+            &validation_context,
+            &subnet_records,
+        );
+
+        // Convert payload produced by `PayloadBuilderImpl` into `PayloadBuilder`
+        // used by the function `Self::execute_payload` of the `StateMachine`.
+        let xnet_payload = batch_payload.xnet.clone();
+        let ingress = &batch_payload.ingress;
+        let ingress_messages = (0..ingress.message_count())
+            .map(|i| ingress.get(i).unwrap().1)
+            .collect();
+        let mut payload = PayloadBuilder::new()
+            .with_ingress_messages(ingress_messages)
+            .with_xnet_payload(xnet_payload);
+
+        // Push responses to ECDSA management canister calls into `PayloadBuilder`.
+        let sign_with_ecdsa_contexts = state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts
+            .clone();
+        for (id, ecdsa_context) in sign_with_ecdsa_contexts {
+            // The chain code is an additional input used during the key derivation process
+            // to ensure deterministic generation of child keys from the master key.
+            // We are using an array with 32 zeros by default.
+            let derivation_path = DerivationPath::new(
+                std::iter::once(ecdsa_context.request.sender.get().as_slice().to_vec())
+                    .chain(ecdsa_context.derivation_path.clone().into_iter())
+                    .map(DerivationIndex)
+                    .collect::<Vec<_>>(),
+            );
+            let signature = sign_prehashed_message_with_derived_key(
+                &self.ecdsa_secret_key,
+                &ecdsa_context.message_hash,
+                derivation_path,
+            );
+
+            let reply = SignWithECDSAReply { signature };
+
+            payload.consensus_responses.push(Response {
+                originator: CanisterId::ic_00(),
+                respondent: CanisterId::ic_00(),
+                originator_reply_callback: id,
+                refund: Cycles::zero(),
+                response_payload: MsgPayload::Data(reply.encode()),
+            });
+        }
+
+        // Finally execute the payload.
+        self.execute_payload(payload);
+    }
+
+    /// Reload registry derived from a *shared* registry data provider
+    /// to reflect changes in that shared registry data provider
+    /// after this `StateMachine` has been built.
+    pub fn reload_registry(&self) {
+        self.registry_client.reload();
+    }
+
     /// Constructs and initializes a new state machine that uses the specified
     /// directory for storing states.
     fn setup_from_dir(
@@ -540,19 +940,15 @@ impl StateMachine {
         subnet_size: usize,
         nns_subnet_id: SubnetId,
         subnet_id: SubnetId,
-        routing_table: RoutingTable,
         use_cost_scaling_flag: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
+        registry_version: RegistryVersion,
+        registry_data_provider: Arc<ProtoRegistryDataProvider>,
     ) -> Self {
         let replica_logger = replica_logger();
 
-        let mut node_ids = vec![];
-        for id in 0..subnet_size {
-            let node_id = NodeId::from(PrincipalId::new_node_test_id(id as u64));
-            node_ids.push(node_id);
-        }
         let metrics_registry = MetricsRegistry::new();
 
         let (subnet_config, mut hypervisor_config) = match config {
@@ -560,14 +956,15 @@ impl StateMachine {
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
 
-        let (registry_data_provider, registry_client) = make_nodes_registry(
+        let registry_client = make_nodes_registry(
             nns_subnet_id,
             subnet_id,
             subnet_type,
-            routing_table,
-            &node_ids,
+            subnet_size,
             &ecdsa_keys,
             features,
+            registry_version,
+            registry_data_provider.clone(),
         );
 
         let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
@@ -576,6 +973,12 @@ impl StateMachine {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
+
+        // We are not interested in ingress signature validation.
+        let malicious_flags = MaliciousFlags {
+            maliciously_disable_ingress_validation: true,
+            ..Default::default()
+        };
 
         let mut cycles_account_manager = CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
@@ -593,7 +996,7 @@ impl StateMachine {
             &metrics_registry,
             &sm_config,
             None,
-            ic_types::malicious_flags::MaliciousFlags::default(),
+            malicious_flags.clone(),
         ));
 
         // NOTE: constructing execution services requires tokio context.
@@ -609,7 +1012,7 @@ impl StateMachine {
                 &metrics_registry,
                 subnet_id,
                 subnet_type,
-                subnet_config.scheduler_config,
+                subnet_config.scheduler_config.clone(),
                 hypervisor_config.clone(),
                 Arc::clone(&cycles_account_manager),
                 Arc::clone(&state_manager) as Arc<_>,
@@ -623,12 +1026,12 @@ impl StateMachine {
             Arc::clone(&execution_services.ingress_history_writer) as _,
             execution_services.scheduler,
             hypervisor_config,
-            cycles_account_manager,
+            cycles_account_manager.clone(),
             subnet_id,
             &metrics_registry,
-            replica_logger,
+            replica_logger.clone(),
             Arc::clone(&registry_client) as _,
-            MaliciousFlags::default(),
+            malicious_flags.clone(),
         );
 
         // fixed seed to keep tests reproducible
@@ -684,14 +1087,38 @@ impl StateMachine {
             },
         );
 
+        let consensus_time = Arc::new(PocketConsensusTime::new(time));
+        let ingress_pool = Arc::new(RwLock::new(PocketIngressPool::new()));
+        // We are not interested in ingress signature validation
+        // and thus use `CryptoReturningOk`.
+        let ingress_verifier = Arc::new(CryptoReturningOk::default());
+        let ingress_manager = Arc::new(IngressManager::new(
+            consensus_time.clone(),
+            Box::new(IngressHistoryReaderImpl::new(state_manager.clone())),
+            ingress_pool.clone(),
+            registry_client.clone(),
+            ingress_verifier.clone(),
+            metrics_registry.clone(),
+            subnet_id,
+            replica_logger.clone(),
+            state_manager.clone(),
+            cycles_account_manager,
+            malicious_flags,
+        ));
+
         Self {
             subnet_id,
             secret_key: secret_key_bytes.get(0).unwrap().clone(),
             public_key,
             ecdsa_secret_key,
             registry_data_provider,
-            registry_client,
+            registry_client: registry_client.clone(),
             state_manager,
+            consensus_time,
+            ingress_pool,
+            ingress_manager: ingress_manager.clone(),
+            ingress_filter: execution_services.sync_ingress_filter,
+            payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             metrics_registry,
@@ -704,6 +1131,7 @@ impl StateMachine {
             nonce: std::sync::atomic::AtomicU64::new(nonce),
             time: std::sync::atomic::AtomicU64::new(time.as_nanos_since_unix_epoch()),
             ecdsa_subnet_public_keys,
+            replica_logger,
         }
     }
 
@@ -767,6 +1195,30 @@ impl StateMachine {
         self.state_manager.get_latest_state().take()
     }
 
+    /// Generates a certified stream slice to a remote subnet.
+    fn generate_certified_stream_slice(
+        &self,
+        remote_subnet_id: SubnetId,
+        witness_begin: Option<StreamIndex>,
+        msg_begin: Option<StreamIndex>,
+        msg_limit: Option<usize>,
+        byte_limit: Option<usize>,
+    ) -> Result<CertifiedStreamSlice, EncodeStreamError> {
+        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
+            let state_hashes = self.state_manager.list_state_hashes_to_certify();
+            let (height, hash) = state_hashes.last().unwrap();
+            self.state_manager
+                .deliver_state_certification(self.certify_hash(height, hash));
+        }
+        self.state_manager.encode_certified_stream_slice(
+            remote_subnet_id,
+            witness_begin,
+            msg_begin,
+            msg_limit,
+            byte_limit,
+        )
+    }
+
     /// Generates a Xnet payload to a remote subnet.
     pub fn generate_xnet_payload(
         &self,
@@ -776,23 +1228,95 @@ impl StateMachine {
         msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> Result<XNetPayload, EncodeStreamError> {
+        self.generate_certified_stream_slice(
+            remote_subnet_id,
+            witness_begin,
+            msg_begin,
+            msg_limit,
+            byte_limit,
+        )
+        .map(|certified_stream| XNetPayload {
+            stream_slices: btreemap! { self.get_subnet_id() => certified_stream },
+        })
+    }
+
+    /// Submit an ingress message into the ingress pool used by `PayloadBuilderImpl`
+    /// in `Self::execute_round`.
+    pub fn submit_ingress_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<MessageId, String> {
+        // Build `SignedIngress` with maximum ingress expiry and unique nonce,
+        // omitting delegations and signatures.
+        let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
+        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
+        let nonce = Some(nonce.to_le_bytes().into());
+        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
+            content: HttpCallContent::Call {
+                update: HttpCanisterUpdate {
+                    canister_id: Blob(canister_id.get().into_vec()),
+                    method_name: method.to_string(),
+                    arg: Blob(payload.clone()),
+                    sender: sender.into(),
+                    ingress_expiry,
+                    nonce: nonce.clone(),
+                },
+            },
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        })
+        .unwrap();
+
+        // Make sure the latest state is certified and fetch it from `StateManager`.
         if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
             let state_hashes = self.state_manager.list_state_hashes_to_certify();
             let (height, hash) = state_hashes.last().unwrap();
             self.state_manager
                 .deliver_state_certification(self.certify_hash(height, hash));
         }
-        self.state_manager
-            .encode_certified_stream_slice(
-                remote_subnet_id,
-                witness_begin,
-                msg_begin,
-                msg_limit,
-                byte_limit,
-            )
-            .map(|certified_stream| XNetPayload {
-                stream_slices: btreemap! { self.get_subnet_id() => certified_stream },
-            })
+        let certified_height = self.state_manager.latest_certified_height();
+        let state = self
+            .state_manager
+            .get_state_at(certified_height)
+            .unwrap()
+            .take();
+
+        // Fetch ingress validation settings from the registry.
+        let registry_version = self.registry_client.get_latest_version();
+        let ingress_registry_settings = self
+            .registry_client
+            .get_ingress_message_settings(self.subnet_id, registry_version)
+            .unwrap()
+            .unwrap();
+        let provisional_whitelist = self
+            .registry_client
+            .get_provisional_whitelist(registry_version)
+            .unwrap()
+            .unwrap();
+
+        // Validate the size of the ingress message.
+        if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
+            return Err(format!(
+                "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
+                msg.id(),
+                msg.count_bytes(),
+                ingress_registry_settings.max_ingress_bytes_per_message
+            ));
+        }
+
+        // Run `IngressFilter` on the ingress message.
+        self.ingress_filter
+            .should_accept_ingress_message(state, &provisional_whitelist, msg.content())
+            .map_err(|e| e.to_string())?;
+
+        // All checks were successful at this point so we can push the ingress message to the ingress pool.
+        let message_id = msg.id();
+        self.ingress_pool.write().unwrap().push(msg);
+        Ok(message_id)
     }
 
     /// Triggers a single round of execution without any new inputs.  The state
@@ -965,17 +1489,26 @@ impl StateMachine {
     /// Sets the time that the state machine will use for executing next
     /// messages.
     pub fn set_time(&self, time: SystemTime) {
-        self.time.store(
-            time.duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64,
-            core::sync::atomic::Ordering::Relaxed,
-        );
+        let t = time
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        self.consensus_time
+            .set(Time::from_nanos_since_unix_epoch(t));
+        self.time.store(t, core::sync::atomic::Ordering::Relaxed);
     }
 
     /// Returns the current state machine time.
     pub fn time(&self) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
+    }
+    pub fn get_time(&self) -> Time {
+        Time::from_nanos_since_unix_epoch(
+            self.time()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        )
     }
 
     /// Advances the state machine time by the given amount.
@@ -1965,6 +2498,19 @@ impl PayloadBuilder {
     pub fn with_nonce(self, nonce: u64) -> Self {
         Self {
             nonce: Some(nonce),
+            ..self
+        }
+    }
+
+    pub fn with_ingress_messages(self, ingress_messages: Vec<SignedIngress>) -> Self {
+        Self {
+            ingress_messages,
+            ..self
+        }
+    }
+    pub fn with_xnet_payload(self, xnet_payload: XNetPayload) -> Self {
+        Self {
+            xnet_payload,
             ..self
         }
     }

@@ -4210,7 +4210,7 @@ async fn test_restore_dapp_controllers_handles_internal_root_failures() {
 #[test]
 fn test_derived_state() {
     let total_nf_maturity = 1_000_000 * E8;
-    let nf_matching_fn = PolynomialMatchingFunction::new(total_nf_maturity);
+    let nf_matching_fn = PolynomialMatchingFunction::new(total_nf_maturity).unwrap();
     println!("{}", nf_matching_fn.dbg_plot());
     let mut swap = Swap {
         init: Some(Init {

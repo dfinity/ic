@@ -2,16 +2,10 @@ use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
 use ic_types::artifact::StateSyncMessage;
-use prometheus::{
-    exponential_buckets, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
-};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use tokio_metrics::TaskMonitor;
 
 use crate::ongoing::DownloadChunkError;
-
-const HANDLER_LABEL: &str = "handler";
-pub(crate) const CHUNK_HANDLER_LABEL: &str = "chunk";
-pub(crate) const ADVERT_HANDLER_LABEL: &str = "advert";
 
 const CHUNK_DOWNLOAD_STATUS_LABEL: &str = "status";
 const CHUNK_DOWNLOAD_STATUS_MORE_NEEDED: &str = "more_needed";
@@ -51,20 +45,12 @@ impl StateSyncManagerMetrics {
 }
 #[derive(Debug, Clone)]
 pub struct StateSyncManagerHandlerMetrics {
-    pub request_duration: HistogramVec,
     pub compression_ratio: Histogram,
 }
 
 impl StateSyncManagerHandlerMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            request_duration: metrics_registry.histogram_vec(
-                "state_sync_manager_request_duration",
-                "State sync manager request handler duration.",
-                // 1ms, 10ms, 100ms, 1s
-                exponential_buckets(0.001, 10.0, 4).unwrap(),
-                &[HANDLER_LABEL],
-            ),
             compression_ratio: metrics_registry.histogram(
                 "state_sync_manager_chunk_compression_ratio",
                 "State sync manager chunk compression ratio.",

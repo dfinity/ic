@@ -89,7 +89,7 @@ impl PartialOrd for NeuronsFundNeuronPortion {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NeuronsFundNeuronPortionError {
     UnspecifiedField(String),
     AmountTooBig {
@@ -150,6 +150,14 @@ impl NeuronsFundNeuronPortionPb {
             controller,
             is_capped,
         })
+    }
+
+    /// Returns a clone of `self` without sensitive data, specifically, `nns_neuron_id`.
+    pub fn anonymized(&self) -> Self {
+        Self {
+            nns_neuron_id: None,
+            ..self.clone()
+        }
     }
 }
 
@@ -322,7 +330,7 @@ impl From<NeuronsFundSnapshot> for NeuronsFundSnapshotPb {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NeuronsFundSnapshotValidationError {
     NeuronsFundNeuronPortionError(usize, NeuronsFundNeuronPortionError),
 }
@@ -356,6 +364,17 @@ impl NeuronsFundSnapshotPb {
             })
             .collect::<Result<BTreeSet<_>, _>>()?;
         Ok(NeuronsFundSnapshot::new(neurons_fund.into_iter()))
+    }
+
+    /// Returns a clone of `self` without sensitive data, specifically, `nns_neuron_id`.
+    pub fn anonymized(&self) -> Self {
+        Self {
+            neurons_fund_neuron_portions: self
+                .neurons_fund_neuron_portions
+                .iter()
+                .map(NeuronsFundNeuronPortionPb::anonymized)
+                .collect(),
+        }
     }
 }
 
@@ -516,7 +535,8 @@ where
             .fold(0_u64, |a, n| a.saturating_add(n))
     }
 
-    /// Create a new Neurons' Fund participation for the given `swap_participation_limits`.
+    /// Create a new Neurons' Fund participation for the given `swap_participation_limits`
+    /// and `ideal_matched_participation_function`.
     #[cfg(test)]
     pub fn new_for_test(
         swap_participation_limits: SwapParticipationLimits,
@@ -778,9 +798,8 @@ impl PolynomialNeuronsFundParticipation {
     ) -> Result<Self, String> {
         let total_maturity_equivalent_icp_e8s =
             Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund);
-        let ideal_matched_participation_function = Box::from(PolynomialMatchingFunction::new(
-            total_maturity_equivalent_icp_e8s,
-        ));
+        let ideal_matched_participation_function =
+            Box::from(PolynomialMatchingFunction::new(total_maturity_equivalent_icp_e8s).unwrap());
         Self::new_impl(
             total_maturity_equivalent_icp_e8s,
             swap_participation_limits.max_direct_participation_icp_e8s, // best case scenario
@@ -825,7 +844,7 @@ impl PolynomialNeuronsFundParticipation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NeuronsFundParticipationValidationError {
     UnspecifiedField(String),
     NeuronsFundSnapshotValidationError(NeuronsFundSnapshotValidationError),
@@ -1044,6 +1063,18 @@ impl NeuronsFundParticipationPb {
             max_neurons_fund_swap_participation_icp_e8s,
             intended_neurons_fund_participation_icp_e8s,
         })
+    }
+
+    /// Returns a clone of `self` without sensitive data, specifically, `nns_neuron_id`.
+    pub fn anonymized(&self) -> Self {
+        let neurons_fund_reserves = self
+            .neurons_fund_reserves
+            .as_ref()
+            .map(NeuronsFundSnapshotPb::anonymized);
+        Self {
+            neurons_fund_reserves,
+            ..self.clone()
+        }
     }
 }
 
@@ -1397,5 +1428,186 @@ mod test_functions_tests {
         let target_y = dec!(0);
         let error = function.invert(target_y).unwrap_err();
         assert_eq!(error, "inverse of function appears to be lower than 0");
+    }
+}
+
+#[cfg(test)]
+mod neurons_fund_anonymization_tests {
+
+    use crate::neurons_fund::*;
+    use crate::pb::v1::{
+        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
+        IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionPb,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb,
+        SwapParticipationLimits as SwapParticipationLimitsPb,
+    };
+    use ic_base_types::PrincipalId;
+    use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
+    use ic_nns_common::pb::v1::NeuronId;
+
+    #[test]
+    fn test_neurons_fund_participation_anonymization() {
+        let id1 = NeuronId { id: 123 };
+        let id2 = NeuronId { id: 456 };
+        let amount_icp_e8s = 100_000_000_000;
+        let maturity_equivalent_icp_e8s = 100_000_000_000;
+        let controller = PrincipalId::default();
+        let is_capped = false;
+        let n1: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id1),
+            amount_icp_e8s: Some(amount_icp_e8s),
+            maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
+            hotkey_principal: Some(controller),
+            is_capped: Some(is_capped),
+        };
+        let n2 = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id2),
+            ..n1
+        };
+        let neurons = vec![n1, n2];
+        let snapshot = NeuronsFundSnapshotPb {
+            neurons_fund_neuron_portions: neurons,
+        };
+        let participation = NeuronsFundParticipationPb {
+            ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionPb {
+                serialized_representation: Some(
+                    PolynomialMatchingFunction::new(1_000_000_000_000_000)
+                        .unwrap()
+                        .serialize(),
+                ),
+            }),
+            neurons_fund_reserves: Some(snapshot.clone()),
+            swap_participation_limits: Some(SwapParticipationLimitsPb {
+                min_direct_participation_icp_e8s: Some(0),
+                max_direct_participation_icp_e8s: Some(u64::MAX),
+                min_participant_icp_e8s: Some(1_000_000_000),
+                max_participant_icp_e8s: Some(10_000_000_000),
+            }),
+            direct_participation_icp_e8s: Some(1_000_000_000_000),
+            total_maturity_equivalent_icp_e8s: Some(1_000_000_000_000_000),
+            max_neurons_fund_swap_participation_icp_e8s: Some(1_000_000_000_000),
+            intended_neurons_fund_participation_icp_e8s: Some(1_000_000_000_000),
+        };
+        let participation_validation_result = participation.validate();
+        assert!(
+            participation_validation_result.is_ok(),
+            "expected Ok result, got {:#?}",
+            participation_validation_result
+        );
+        let anonymized_participation = participation.anonymized();
+        assert_eq!(
+            anonymized_participation.validate().map(|_| ()),
+            Err(
+                NeuronsFundParticipationValidationError::NeuronsFundSnapshotValidationError(
+                    NeuronsFundSnapshotValidationError::NeuronsFundNeuronPortionError(
+                        0,
+                        NeuronsFundNeuronPortionError::UnspecifiedField(
+                            "nns_neuron_id".to_string()
+                        )
+                    )
+                )
+            )
+        );
+        assert_eq!(
+            anonymized_participation,
+            NeuronsFundParticipationPb {
+                neurons_fund_reserves: Some(snapshot.anonymized()),
+                ..participation
+            }
+        );
+    }
+
+    #[test]
+    fn test_neurons_fund_snapshot_anonymization() {
+        let id1 = NeuronId { id: 123 };
+        let id2 = NeuronId { id: 456 };
+        let amount_icp_e8s = 100_000_000_000;
+        let maturity_equivalent_icp_e8s = 100_000_000_000;
+        let controller = PrincipalId::default();
+        let is_capped = false;
+        let n1: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id1),
+            amount_icp_e8s: Some(amount_icp_e8s),
+            maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
+            hotkey_principal: Some(controller),
+            is_capped: Some(is_capped),
+        };
+        let n2 = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id2),
+            ..n1
+        };
+        let neurons = vec![n1, n2];
+        let snapshot = NeuronsFundSnapshotPb {
+            neurons_fund_neuron_portions: neurons.clone(),
+        };
+        assert_eq!(
+            snapshot.validate(),
+            Ok(NeuronsFundSnapshot {
+                neurons: neurons
+                    .iter()
+                    .map(|n| { (n.nns_neuron_id.unwrap(), n.validate().unwrap()) })
+                    .collect()
+            })
+        );
+        let anonymized_snapshot = snapshot.anonymized();
+        assert_eq!(
+            anonymized_snapshot.validate(),
+            Err(
+                NeuronsFundSnapshotValidationError::NeuronsFundNeuronPortionError(
+                    0,
+                    NeuronsFundNeuronPortionError::UnspecifiedField("nns_neuron_id".to_string())
+                )
+            )
+        );
+        assert_eq!(
+            anonymized_snapshot,
+            NeuronsFundSnapshotPb {
+                neurons_fund_neuron_portions: neurons
+                    .into_iter()
+                    .map(|n| { n.anonymized() })
+                    .collect()
+            }
+        );
+    }
+
+    #[test]
+    fn test_neurons_fund_neuron_portion_anonymization() {
+        let id = NeuronId { id: 123 };
+        let amount_icp_e8s = 100_000_000_000;
+        let maturity_equivalent_icp_e8s = 100_000_000_000;
+        let controller = PrincipalId::default();
+        let is_capped = false;
+        let neuron: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id),
+            amount_icp_e8s: Some(amount_icp_e8s),
+            maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
+            hotkey_principal: Some(controller),
+            is_capped: Some(is_capped),
+        };
+        assert_eq!(
+            neuron.validate(),
+            Ok(NeuronsFundNeuronPortion {
+                id,
+                amount_icp_e8s,
+                maturity_equivalent_icp_e8s,
+                controller,
+                is_capped,
+            })
+        );
+        let anonymized_neuron = neuron.anonymized();
+        assert_eq!(
+            anonymized_neuron.validate(),
+            Err(NeuronsFundNeuronPortionError::UnspecifiedField(
+                "nns_neuron_id".to_string()
+            ))
+        );
+        assert_eq!(
+            anonymized_neuron,
+            NeuronsFundNeuronPortionPb {
+                nns_neuron_id: None,
+                ..neuron
+            }
+        );
     }
 }

@@ -49,11 +49,12 @@ use ic_nns_governance::{
             ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
         },
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-        ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceError, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
-        NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
+        ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction,
+        GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+        Governance as GovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
+        ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
+        ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
+        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
         RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
@@ -662,6 +663,19 @@ fn get_proposal_info() {
 #[candid_method(query, rename = "get_proposal_info")]
 fn get_proposal_info_(id: ProposalId) -> Option<ProposalInfo> {
     governance().get_proposal_info(&caller(), id)
+}
+
+#[export_name = "canister_query get_neurons_fund_audit_info"]
+fn get_neurons_fund_audit_info() {
+    debug_log("get_neurons_fund_audit_info");
+    over(candid_one, get_neurons_fund_audit_info_)
+}
+
+#[candid_method(query, rename = "get_neurons_fund_audit_info")]
+fn get_neurons_fund_audit_info_(
+    request: GetNeuronsFundAuditInfoRequest,
+) -> GetNeuronsFundAuditInfoResponse {
+    governance().get_neurons_fund_audit_info(request).into()
 }
 
 #[export_name = "canister_query get_pending_proposals"]
