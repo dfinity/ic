@@ -20,7 +20,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
 };
 use ic_types::{Height, NodeId, RegistryVersion};
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -974,11 +973,11 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
-    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities::MockTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::{EcdsaObject, TranscriptRef};
+    use ic_types::time::UNIX_EPOCH;
     use ic_types::Height;
 
     // Tests the Action logic
@@ -1060,7 +1059,6 @@ mod tests {
     // Tests validation of the received complaints
     #[test]
     fn test_ecdsa_validate_complaints() {
-        let time_source = FastForwardTimeSource::new();
         let (id_1, id_2, id_3) = (
             create_transcript_id_with_height(1, Height::from(200)),
             create_transcript_id_with_height(2, Height::from(20)),
@@ -1074,7 +1072,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaComplaint(complaint),
             peer_id: NODE_3,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // Complaint for a transcript not currently active (dropped)
@@ -1083,7 +1081,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaComplaint(complaint),
             peer_id: NODE_3,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // Complaint for a transcript currently active (accepted)
@@ -1092,7 +1090,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaComplaint(complaint),
             peer_id: NODE_3,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // Only id_3 is active
@@ -1159,7 +1157,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
                 // Set up the ECDSA pool
@@ -1169,7 +1166,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint.clone()),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Validated pool already has complaint from NODE_3 for
@@ -1177,7 +1174,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(30),
@@ -1198,7 +1195,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
                 // Set up the ECDSA pool
@@ -1208,7 +1204,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
@@ -1217,7 +1213,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
@@ -1275,7 +1271,7 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
 
                 ecdsa_pool.apply_changes(
-                    &SysTimeSource::new(),
+                    &MockTimeSource::new(),
                     artifacts
                         .iter()
                         .map(|a| EcdsaChangeAction::AddToValidated(a.clone()))
@@ -1302,7 +1298,7 @@ mod tests {
                 );
 
                 ecdsa_pool.apply_changes(
-                    &SysTimeSource::new(),
+                    &MockTimeSource::new(),
                     artifacts
                         .iter()
                         .map(|a| EcdsaChangeAction::AddToValidated(a.clone()))
@@ -1346,7 +1342,6 @@ mod tests {
     // Tests the validation of received openings
     #[test]
     fn test_ecdsa_validate_openings() {
-        let time_source = FastForwardTimeSource::new();
         let (id_1, id_2, id_3, id_4) = (
             create_transcript_id_with_height(1, Height::from(400)),
             create_transcript_id_with_height(2, Height::from(20)),
@@ -1361,7 +1356,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaOpening(opening),
             peer_id: NODE_4,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // Opening for a transcript not currently active(dropped)
@@ -1370,7 +1365,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaOpening(opening),
             peer_id: NODE_4,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // Opening for a transcript currently active,
@@ -1380,7 +1375,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaOpening(opening),
             peer_id: NODE_4,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
         let complaint = EcdsaMessage::EcdsaComplaint(create_complaint(id_3, NODE_2, NODE_3));
 
@@ -1390,7 +1385,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaOpening(opening),
             peer_id: NODE_4,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         let block_reader = TestEcdsaBlockReader::for_complainer_test(
@@ -1409,7 +1404,7 @@ mod tests {
 
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
                 ecdsa_pool.apply_changes(
-                    &SysTimeSource::new(),
+                    &MockTimeSource::new(),
                     vec![EcdsaChangeAction::AddToValidated(complaint.clone())],
                 );
 
@@ -1431,7 +1426,7 @@ mod tests {
 
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
                 ecdsa_pool.apply_changes(
-                    &SysTimeSource::new(),
+                    &MockTimeSource::new(),
                     vec![EcdsaChangeAction::AddToValidated(complaint.clone())],
                 );
 
@@ -1450,7 +1445,7 @@ mod tests {
 
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
                 ecdsa_pool.apply_changes(
-                    &SysTimeSource::new(),
+                    &MockTimeSource::new(),
                     vec![EcdsaChangeAction::AddToValidated(complaint.clone())],
                 );
 
@@ -1470,7 +1465,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
                 // Set up the ECDSA pool
@@ -1480,14 +1474,14 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening.clone()),
                     peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Validated pool already has it
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(100),
@@ -1508,7 +1502,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
                 // Set up the ECDSA pool
@@ -1518,7 +1511,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
@@ -1527,7 +1520,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Make sure we also have matching complaints
@@ -1536,10 +1529,10 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: message.clone(),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
                 let change_set = vec![EcdsaChangeAction::AddToValidated(message)];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(100),
@@ -1562,7 +1555,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
                     create_transcript_id_with_height(1, Height::from(20)),
                     create_transcript_id_with_height(2, Height::from(30)),
@@ -1574,7 +1566,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
@@ -1583,7 +1575,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Complaint 3: height > current_height (not purged)
@@ -1591,7 +1583,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Only id_1 is active
@@ -1624,7 +1616,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
@@ -1632,14 +1624,14 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
@@ -1660,7 +1652,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
                     create_transcript_id_with_height(1, Height::from(20)),
                     create_transcript_id_with_height(2, Height::from(30)),
@@ -1672,7 +1663,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
@@ -1681,7 +1672,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Complaint 3: height > current_height (not purged)
@@ -1689,7 +1680,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Only id_1 is active
@@ -1722,7 +1713,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
@@ -1730,14 +1721,14 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
@@ -1843,7 +1834,7 @@ mod tests {
                     TranscriptLoadStatus::Complaints(mut complaints) if complaints.len() == 1 => {
                         let complaint = complaints.remove(0);
                         ecdsa_pool.apply_changes(
-                            &SysTimeSource::new(),
+                            &MockTimeSource::new(),
                             vec![EcdsaChangeAction::AddToValidated(
                                 EcdsaMessage::EcdsaComplaint(complaint.clone()),
                             )],
@@ -1869,7 +1860,7 @@ mod tests {
                         .expect("Failed to sign opening content");
                     let opening = EcdsaOpening { content, signature };
                     ecdsa_pool.apply_changes(
-                        &SysTimeSource::new(),
+                        &MockTimeSource::new(),
                         vec![EcdsaChangeAction::AddToValidated(
                             EcdsaMessage::EcdsaOpening(opening),
                         )],

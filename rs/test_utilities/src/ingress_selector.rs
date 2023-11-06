@@ -1,4 +1,3 @@
-use crate::util::FakeQueue;
 use ic_interfaces::{
     ingress_manager::{IngressPayloadValidationError, IngressSelector, IngressSetQuery},
     validation::ValidationResult,
@@ -12,6 +11,41 @@ use ic_types::{
     time::UNIX_EPOCH,
     CountBytes, Height, NumBytes, Time,
 };
+use std::collections::VecDeque;
+use std::sync::Mutex;
+
+// A mock object that wraps a queue
+#[derive(Default)]
+pub struct FakeQueue<T> {
+    pub queue: Mutex<VecDeque<T>>,
+}
+
+impl<T> FakeQueue<T> {
+    pub fn new() -> FakeQueue<T> {
+        FakeQueue {
+            queue: Mutex::new(VecDeque::new()),
+        }
+    }
+
+    pub fn enqueue(&self, elem: T) {
+        let mut q = self.queue.lock().unwrap();
+        q.push_back(elem)
+    }
+
+    pub fn dequeue(&self) -> Option<T> {
+        let mut q = self.queue.lock().unwrap();
+        q.pop_front()
+    }
+
+    pub fn dump(&self) -> VecDeque<T> {
+        self.replace(VecDeque::new())
+    }
+
+    pub fn replace(&self, new_value: VecDeque<T>) -> VecDeque<T> {
+        let mut q = self.queue.lock().unwrap();
+        std::mem::replace(&mut *q, new_value)
+    }
+}
 
 /// A fake `IngressSelector` implementation based on a `FakeQueue` of ingress
 /// message batches.
