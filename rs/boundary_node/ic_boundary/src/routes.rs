@@ -71,6 +71,14 @@ const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-t
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
 #[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
+#[allow(clippy::declare_interior_mutable_const)]
 const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
 // Rust const/static concat is non-existent, so we have to repeat
@@ -626,6 +634,34 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
             HEADER_IC_SUBNET_TYPE,
             HeaderValue::from_str(v.subnet_type.as_ref()).unwrap(),
         );
+    }
+
+    if let Some(ctx) = response.extensions().get::<RequestContext>().cloned() {
+        response.headers_mut().insert(
+            HEADER_IC_REQUEST_TYPE,
+            HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
+        );
+
+        ctx.canister_id.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_CANISTER_ID,
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+            )
+        });
+
+        ctx.sender.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_SENDER,
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+            )
+        });
+
+        ctx.method_name.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_METHOD_NAME,
+                HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
+            )
+        });
     }
 
     response
