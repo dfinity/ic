@@ -17,7 +17,7 @@ rust_library(
 rust_test(
     name = "async_utils_test",
     crate = ":async_utils",
-    deps = all_crate_deps(normal_dev = True)
+    deps = all_crate_deps(normal_dev = True),
 )
 
 rust_doc_test(
