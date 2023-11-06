@@ -105,16 +105,14 @@ fn consensus_produces_expected_batches() {
             vec![(1, SubnetRecordBuilder::from(&[node_test_id(0)]).build())],
         );
         let summary = dkg::make_genesis_summary(&*registry_client, replica_config.subnet_id, None);
-        let consensus_pool = Arc::new(RwLock::new(
-            consensus_pool::ConsensusPoolImpl::new_from_cup_without_bytes(
-                node_id,
-                subnet_id,
-                make_genesis(summary),
-                pool_config.clone(),
-                MetricsRegistry::new(),
-                no_op_logger(),
-            ),
-        ));
+        let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
+            node_id,
+            subnet_id,
+            (&make_genesis(summary)).into(),
+            pool_config.clone(),
+            MetricsRegistry::new(),
+            no_op_logger(),
+        )));
         let consensus_cache = consensus_pool.read().unwrap().get_cache();
         let membership = Membership::new(
             consensus_cache.clone(),
