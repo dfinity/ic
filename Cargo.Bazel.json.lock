@@ -1,5 +1,5 @@
 {
-  "checksum": "8570b907f1b8f73c456421aae337e310d470feab7f77dfac65f4255b43bee333",
+  "checksum": "cb3a452bd689f56cf37db9494f29b99e64bcca4ce950319ab5c80e0068da8afc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -42732,6 +42732,15 @@
               "**/*.rs"
             ]
           }
+        },
+        {
+          "Binary": {
+            "crate_name": "ic-wasm",
+            "crate_root": "src/bin/main.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
         }
       ],
       "library_target_name": "ic_wasm",
@@ -43350,6 +43359,10 @@
           "selects": {}
         },
         "edition": "2021",
+        "rustc_flags": [
+          "-C",
+          "opt-level=3"
+        ],
         "version": "0.8.0"
       },
       "license": "MIT/Apache-2.0"
@@ -47491,6 +47504,12 @@
               "target": "glob"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "NUM_JOBS": "8"
+          },
           "selects": {}
         },
         "links": "rocksdb"
@@ -57334,6 +57353,12 @@
         "version": "0.12.1"
       },
       "build_script_attrs": {
+        "data": {
+          "common": [
+            "@com_google_protobuf//:protoc"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -57348,6 +57373,12 @@
               "target": "sha2"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "PROTOC": "$(execpath @com_google_protobuf//:protoc)"
+          },
           "selects": {}
         }
       },
@@ -63059,6 +63090,12 @@
               "target": "cc"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source"
+          },
           "selects": {}
         },
         "links": "ring-asm"
@@ -82789,7 +82826,9 @@
       "license": "MIT/Apache-2.0"
     }
   },
-  "binary_crates": [],
+  "binary_crates": [
+    "ic-wasm 0.4.0"
+  ],
   "workspace_members": {
     "bazelifier 0.9.0": "rs/bazelifier",
     "boundary-node-control-plane 0.9.0": "rs/boundary_node/control_plane",
