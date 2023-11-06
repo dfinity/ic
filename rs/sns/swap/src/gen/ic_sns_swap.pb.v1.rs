@@ -367,7 +367,6 @@ pub struct Init {
     #[prost(bool, optional, tag = "28")]
     pub should_auto_finalize: ::core::option::Option<bool>,
     /// Constraints for the Neurons' Fund participation in this swap.
-    /// TODO\[NNS1-2570\]: Use this data to compute neurons_fund_participation_icp_e8s.
     #[prost(message, optional, tag = "29")]
     pub neurons_fund_participation_constraints:
         ::core::option::Option<NeuronsFundParticipationConstraints>,
