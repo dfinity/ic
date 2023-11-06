@@ -28,8 +28,8 @@ fn gen_req(canister_id: CanisterId, network: BitcoinNetwork, method: String) -> 
 }
 
 // pass canister id from request to response
-async fn handler(Extension(canister_id): Extension<CanisterId>) -> impl IntoResponse {
-    (Extension(canister_id), "foobaz")
+async fn handler() -> impl IntoResponse {
+    "foobaz"
 }
 
 #[tokio::test]
@@ -75,8 +75,8 @@ async fn test_btc_mw() -> Result<(), Error> {
         "foobar".to_string(),
     );
     let res = app.call(req).await.unwrap();
-    let canister_id = res.extensions().get::<CanisterId>().cloned().unwrap();
-    assert_eq!(canister_id, MANAGEMENT_CANISTER_ID_PRINCIPAL);
+    let canister_id = res.extensions().get::<CanisterId>();
+    assert!(canister_id.is_none());
 
     // Check non-management canister, shouldn't change it
     let canister_id = CanisterId::from_str("sqjm4-qahae-aq").unwrap();
@@ -86,8 +86,8 @@ async fn test_btc_mw() -> Result<(), Error> {
         QueryMethod::BitcoinGetUtxosQuery.to_string(),
     );
     let res = app.call(req).await.unwrap();
-    let canister_id_out = res.extensions().get::<CanisterId>().cloned().unwrap();
-    assert_eq!(canister_id, canister_id_out);
+    let canister_id_out = res.extensions().get::<CanisterId>();
+    assert!(canister_id_out.is_none());
 
     Ok(())
 }
