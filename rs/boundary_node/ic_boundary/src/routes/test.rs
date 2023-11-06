@@ -403,6 +403,42 @@ async fn test_all_call_types() -> Result<(), Error> {
         node.subnet_type.as_ref()
     );
 
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_SENDER)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        sender.to_string(),
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_CANISTER_ID)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        canister_id.to_string(),
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_METHOD_NAME)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "foobar",
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_REQUEST_TYPE)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "query",
+    );
+
     let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);

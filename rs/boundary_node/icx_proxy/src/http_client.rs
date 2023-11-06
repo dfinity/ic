@@ -102,13 +102,25 @@ pub const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet
 pub const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
 #[allow(clippy::declare_interior_mutable_const)]
 pub const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
 
 // Headers to pass from replica to the caller
 #[allow(clippy::declare_interior_mutable_const)]
-pub const HEADERS_PASS_IN: [HeaderName; 3] = [
+pub const HEADERS_PASS_IN: [HeaderName; 7] = [
     HEADER_IC_SUBNET_ID,
     HEADER_IC_NODE_ID,
     HEADER_IC_SUBNET_TYPE,
+    HEADER_IC_CANISTER_ID,
+    HEADER_IC_METHOD_NAME,
+    HEADER_IC_SENDER,
+    HEADER_IC_REQUEST_TYPE,
 ];
 
 // Headers to pass from caller to replica
