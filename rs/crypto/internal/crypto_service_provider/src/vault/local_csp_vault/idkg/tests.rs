@@ -442,6 +442,12 @@ mod idkg_retain_active_keys {
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgMEGaEncryptionKeys))
             .return_const(Ok(()));
         canister_sks
+            .expect_retain_would_modify_keystore()
+            .times(1)
+            .in_sequence(&mut seq)
+            .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgThresholdKeys))
+            .return_const(true);
+        canister_sks
             .expect_retain()
             .times(1)
             .in_sequence(&mut seq)
@@ -477,11 +483,12 @@ mod idkg_retain_active_keys {
             .with(eq(oldest_public_key_proto))
             .return_once(|_| Ok(false));
         canister_sks
-            .expect_retain()
+            .expect_retain_would_modify_keystore()
             .times(1)
             .in_sequence(&mut seq)
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgThresholdKeys))
-            .return_const(Ok(()));
+            .return_const(false);
+        canister_sks.expect_retain().never();
 
         let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(node_sks)
