@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::metrics::ConsensusManagerMetrics;
+use axum::Router;
 use crossbeam_channel::Sender as CrossbeamSender;
 use ic_interfaces::{
     artifact_manager::ArtifactProcessorEvent,
@@ -16,6 +17,7 @@ use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind};
 use ic_types::NodeId;
 use phantom_newtype::AmountOf;
+use receiver::build_axum_router;
 use receiver::ConsensusManagerReceiver;
 use sender::ConsensusManagerSender;
 use serde::{Deserialize, Serialize};
@@ -24,14 +26,92 @@ use tokio::{
     sync::{mpsc::Receiver, watch},
 };
 
-pub use receiver::build_axum_router;
-
 mod metrics;
 mod receiver;
 mod sender;
 
-#[allow(unused)]
-pub fn start_consensus_manager<Artifact, Pool>(
+type StartConsensusManagerFn<'a> =
+    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) + 'a>;
+
+pub struct ConsensusManagerBuilder<'r> {
+    log: ReplicaLogger,
+    metrics_registry: &'r MetricsRegistry,
+    rt_handle: Handle,
+    clients: Vec<StartConsensusManagerFn<'r>>,
+    router: Option<Router>,
+}
+
+impl<'r> ConsensusManagerBuilder<'r> {
+    pub fn new(
+        log: ReplicaLogger,
+        rt_handle: Handle,
+        metrics_registry: &'r MetricsRegistry,
+    ) -> Self {
+        Self {
+            log,
+            metrics_registry,
+            rt_handle,
+            clients: Vec::new(),
+            router: None,
+        }
+    }
+
+    pub fn add_client<Artifact, Pool>(
+        &mut self,
+        adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
+        raw_pool: Arc<RwLock<Pool>>,
+        priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+        sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
+    ) where
+        Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
+        Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
+        <Artifact as ArtifactKind>::Id:
+            Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
+        <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
+        <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
+    {
+        let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone(), raw_pool.clone());
+
+        let log = self.log.clone();
+        let rt_handle = self.rt_handle.clone();
+        let metrics_registry = self.metrics_registry;
+
+        let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
+            start_consensus_manager(
+                log,
+                metrics_registry,
+                rt_handle,
+                adverts_to_send,
+                adverts_from_peers_rx,
+                raw_pool,
+                priority_fn_producer,
+                sender,
+                transport,
+                topology_watcher,
+            )
+        };
+
+        self.router = Some(self.router.take().unwrap_or_default().merge(router));
+
+        self.clients.push(Box::new(builder));
+    }
+
+    pub fn router(&mut self) -> Router {
+        self.router.take().unwrap_or_default()
+    }
+
+    pub fn run(
+        self,
+        transport: Arc<dyn Transport>,
+        topology_watcher: watch::Receiver<SubnetTopology>,
+    ) {
+        for client in self.clients {
+            client(transport.clone(), topology_watcher.clone());
+        }
+    }
+}
+
+fn start_consensus_manager<Artifact, Pool>(
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,

@@ -205,9 +205,11 @@ pub(crate) fn start_connection_manager(
     let topology = watcher.borrow().clone();
 
     let metrics = QuicTransportMetrics::new(metrics_registry);
+
     let router = router
         .map(|r| r.route_layer(from_fn_with_state(metrics.clone(), collect_metrics)))
         .unwrap_or_default();
+
     // We use a random reset key here. The downside of this is that
     // during a crash and restart the peer will not recognize our
     // CONNECTION_RESETS.Not recognizing the reset might lead

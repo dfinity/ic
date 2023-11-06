@@ -59,7 +59,7 @@ pub enum Artifact {
 }
 
 /// Artifact attribute type.
-#[derive(From, TryInto, Clone, Debug, PartialEq, Eq)]
+#[derive(From, TryInto, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[try_into(owned, ref, ref_mut)]
 pub enum ArtifactAttribute {
     ConsensusMessage(ConsensusMessageAttribute),

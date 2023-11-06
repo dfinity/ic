@@ -1114,7 +1114,7 @@ impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
 /// contains only the attributes for each variant. The attributes are the values
 /// that are used in the p2p layer to determine whether an artifact is
 /// interesting to a replica before fetching the full artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConsensusMessageAttribute {
     Finalization(CryptoHashOf<Block>),
     Notarization(CryptoHashOf<Block>),
