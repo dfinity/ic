@@ -1910,6 +1910,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     additional_elements as i64,
                     element_size,
                 )
+                .map(|result| result as i32)
             }
         })
         .unwrap();
