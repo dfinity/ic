@@ -21,8 +21,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInstallMode, CanisterSettingsArgsBuilder, CanisterStatusType, CreateCanisterArgs,
-    EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
+    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder, CanisterStatusType,
+    CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -167,7 +167,7 @@ impl InstallCodeContextBuilder {
         self
     }
 
-    pub fn mode(mut self, mode: CanisterInstallMode) -> Self {
+    pub fn mode(mut self, mode: CanisterInstallModeV2) -> Self {
         self.ctx.mode = mode;
         self
     }
@@ -187,7 +187,7 @@ impl Default for InstallCodeContextBuilder {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
         }
@@ -316,7 +316,7 @@ fn install_code(
         ..EXECUTION_PARAMETERS.clone()
     };
 
-    let args = InstallCodeArgs::new(
+    let args = InstallCodeArgsV2::new(
         context.mode,
         context.canister_id,
         context.wasm_module.as_slice().into(),
@@ -487,7 +487,7 @@ fn upgrade_non_existing_canister_fails() {
             install_code(
                 &canister_manager,
                 InstallCodeContextBuilder::default()
-                    .mode(CanisterInstallMode::Upgrade)
+                    .mode(CanisterInstallModeV2::Upgrade(None))
                     .wasm_module(
                         ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
                     )
@@ -533,7 +533,7 @@ fn upgrade_canister_with_no_wasm_fails() {
             &canister_manager,
             InstallCodeContextBuilder::default()
                 .sender(sender)
-                .mode(CanisterInstallMode::Upgrade)
+                .mode(CanisterInstallModeV2::Upgrade(None))
                 .wasm_module(
                     ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
                 )
@@ -612,7 +612,7 @@ fn can_update_compute_allocation_during_upgrade() {
                 .sender(sender)
                 .canister_id(canister_id1)
                 .compute_allocation(ComputeAllocation::try_from(80).unwrap())
-                .mode(CanisterInstallMode::Upgrade)
+                .mode(CanisterInstallModeV2::Upgrade(None))
                 .build(),
             &mut state,
             &mut round_limits,
@@ -738,7 +738,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                     ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
                 )
                 .compute_allocation(ComputeAllocation::try_from(30).unwrap())
-                .mode(CanisterInstallMode::Upgrade)
+                .mode(CanisterInstallModeV2::Upgrade(None))
                 .build(),
             &mut state,
             &mut round_limits,
@@ -911,7 +911,7 @@ fn can_update_memory_allocation_during_upgrade() {
                 .sender(sender)
                 .canister_id(canister_id)
                 .memory_allocation(final_memory_allocation)
-                .mode(CanisterInstallMode::Upgrade)
+                .mode(CanisterInstallModeV2::Upgrade(None))
                 .build(),
             &mut state,
             &mut round_limits,
@@ -1198,7 +1198,7 @@ fn install_code_with_wrong_controller_fails() {
             .0
             .unwrap();
 
-        for mode in CanisterInstallMode::iter() {
+        for mode in CanisterInstallModeV2::iter() {
             // Try to install_code with canister_test_id 2. Should fail.
             let res = install_code(
                 &canister_manager,
@@ -1395,7 +1395,7 @@ fn reinstall_on_empty_canister_succeeds() {
             InstallCodeContextBuilder::default()
                 .sender(sender)
                 .canister_id(canister_id)
-                .mode(CanisterInstallMode::Reinstall)
+                .mode(CanisterInstallModeV2::Reinstall)
                 .build(),
             &mut state,
             &mut round_limits,
@@ -1603,7 +1603,7 @@ fn reinstall_clears_stable_memory() {
             InstallCodeContextBuilder::default()
                 .sender(sender)
                 .canister_id(canister_id)
-                .mode(CanisterInstallMode::Reinstall)
+                .mode(CanisterInstallModeV2::Reinstall)
                 .build(),
             &mut state,
             &mut round_limits,
@@ -2716,7 +2716,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
             InstallCodeContextBuilder::default()
                 .sender(sender)
                 .canister_id(canister_id)
-                .mode(CanisterInstallMode::Reinstall)
+                .mode(CanisterInstallModeV2::Reinstall)
                 .wasm_module(
                     ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
                 )
@@ -2785,7 +2785,7 @@ fn upgrading_canister_with_not_enough_memory_allocation_fails() {
                         ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec()
                     )
                     .memory_allocation(memory_allocation)
-                    .mode(CanisterInstallMode::Upgrade)
+                    .mode(CanisterInstallModeV2::Upgrade(None))
                     .build(),
                 &mut state,
                 &mut round_limits,
@@ -3013,7 +3013,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3039,7 +3039,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Upgrade,
+                mode: CanisterInstallModeV2::Upgrade(None),
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3158,7 +3158,7 @@ fn failed_install_hooks_consume_instructions() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3276,7 +3276,7 @@ fn install_code_respects_instruction_limit() {
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
-            mode: CanisterInstallMode::Install,
+            mode: CanisterInstallModeV2::Install,
             query_allocation: QueryAllocation::default(),
         },
         &mut state,
@@ -3308,7 +3308,7 @@ fn install_code_respects_instruction_limit() {
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
-            mode: CanisterInstallMode::Install,
+            mode: CanisterInstallModeV2::Install,
             query_allocation: QueryAllocation::default(),
         },
         &mut state,
@@ -3334,7 +3334,7 @@ fn install_code_respects_instruction_limit() {
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
-            mode: CanisterInstallMode::Upgrade,
+            mode: CanisterInstallModeV2::Upgrade(None),
             query_allocation: QueryAllocation::default(),
         },
         &mut state,
@@ -3366,7 +3366,7 @@ fn install_code_respects_instruction_limit() {
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
-            mode: CanisterInstallMode::Upgrade,
+            mode: CanisterInstallModeV2::Upgrade(None),
             query_allocation: QueryAllocation::default(),
         },
         &mut state,
@@ -3420,14 +3420,14 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // 1. INSTALL
     let install_code_context = InstallCodeContextBuilder::default()
-        .mode(CanisterInstallMode::Install)
+        .mode(CanisterInstallModeV2::Install)
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
     let compilation_cost = wasm_compilation_cost(install_code_context.wasm_module.as_slice());
 
     let ctxt = InstallCodeContextBuilder::default()
-        .mode(CanisterInstallMode::Install)
+        .mode(CanisterInstallModeV2::Install)
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
@@ -3469,7 +3469,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     let instructions_before_reinstall = as_num_instructions(round_limits.instructions);
     let ctxt = InstallCodeContextBuilder::default()
-        .mode(CanisterInstallMode::Reinstall)
+        .mode(CanisterInstallModeV2::Reinstall)
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
@@ -3520,7 +3520,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .certified_data = certified_data;
     let instructions_before_upgrade = as_num_instructions(round_limits.instructions);
     let ctxt = InstallCodeContextBuilder::default()
-        .mode(CanisterInstallMode::Upgrade)
+        .mode(CanisterInstallModeV2::Upgrade(None))
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
@@ -3600,7 +3600,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3668,7 +3668,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3710,7 +3710,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3769,7 +3769,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3795,7 +3795,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Upgrade,
+                mode: CanisterInstallModeV2::Upgrade(None),
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3842,7 +3842,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Upgrade,
+                mode: CanisterInstallModeV2::Upgrade(None),
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3947,7 +3947,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -3998,7 +3998,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Install,
+                mode: CanisterInstallModeV2::Install,
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -4034,7 +4034,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                mode: CanisterInstallMode::Upgrade,
+                mode: CanisterInstallModeV2::Upgrade(None),
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
@@ -4306,8 +4306,8 @@ fn test_install_code_rate_limiting_disabled() {
 
 #[test]
 fn install_code_context_conversion_u128() {
-    let install_args = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
+    let install_args = InstallCodeArgsV2 {
+        mode: CanisterInstallModeV2::Install,
         canister_id: PrincipalId::try_from([1, 2, 3].as_ref()).unwrap(),
         wasm_module: vec![],
         arg: vec![],

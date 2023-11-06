@@ -277,13 +277,19 @@ impl<Args: CandidType> From<CandidCallBuilder<Args>> for Call {
 }
 
 #[derive(CandidType, Deserialize)]
+pub struct UpgradeOptions {
+    pub skip_pre_upgrade: Option<bool>,
+    pub keep_main_memory: Option<bool>,
+}
+
+#[derive(CandidType, Deserialize)]
 pub enum InstallMode {
     #[serde(rename = "install")]
     Install,
     #[serde(rename = "reinstall")]
     Reinstall,
     #[serde(rename = "upgrade")]
-    Upgrade,
+    Upgrade(Option<UpgradeOptions>),
 }
 
 #[derive(CandidType)]

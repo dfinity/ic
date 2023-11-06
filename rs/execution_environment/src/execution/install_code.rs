@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::CanisterStateChanges;
-use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode};
+use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
@@ -134,13 +134,13 @@ impl InstallCodeHelper {
         &mut self,
         timestamp_nanos: Time,
         origin: CanisterChangeOrigin,
-        mode: CanisterInstallMode,
+        mode: CanisterInstallModeV2,
         module_hash: WasmHash,
     ) {
         self.canister.system_state.add_canister_change(
             timestamp_nanos,
             origin,
-            CanisterChangeDetails::code_deployment(mode, module_hash.to_slice()),
+            CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice()),
         );
     }
 
@@ -390,12 +390,12 @@ impl InstallCodeHelper {
         )?;
 
         match original.mode {
-            CanisterInstallMode::Install => {
+            CanisterInstallModeV2::Install => {
                 if self.canister.execution_state.is_some() {
                     return Err(CanisterManagerError::CanisterNonEmpty(id));
                 }
             }
-            CanisterInstallMode::Reinstall | CanisterInstallMode::Upgrade => {}
+            CanisterInstallModeV2::Reinstall | CanisterInstallModeV2::Upgrade(..) => {}
         }
 
         if self.canister.scheduler_state.install_code_debit.get() > 0
@@ -684,7 +684,7 @@ impl InstallCodeHelper {
 #[derive(Debug)]
 pub(crate) struct OriginalContext {
     pub execution_parameters: ExecutionParameters,
-    pub mode: CanisterInstallMode,
+    pub mode: CanisterInstallModeV2,
     pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,

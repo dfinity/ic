@@ -13,8 +13,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, CanisterStatusResultV2,
-    CanisterStatusType, InstallCodeArgs, Method as Ic00Method,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
+    CanisterStatusType, InstallCodeArgsV2, Method as Ic00Method,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -134,14 +134,13 @@ impl CanisterMgrConfig {
 #[derive(Clone, Debug)]
 pub struct InstallCodeContext {
     pub origin: CanisterChangeOrigin,
-    pub mode: CanisterInstallMode,
+    pub mode: CanisterInstallModeV2,
     pub canister_id: CanisterId,
     pub wasm_module: CanisterModule,
     pub arg: Vec<u8>,
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
     pub query_allocation: QueryAllocation,
-    pub keep_main_memory: bool,
 }
 
 impl InstallCodeContext {
@@ -215,10 +214,10 @@ impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
     }
 }
 
-impl TryFrom<(CanisterChangeOrigin, InstallCodeArgs)> for InstallCodeContext {
+impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     type Error = InstallCodeContextError;
 
-    fn try_from(input: (CanisterChangeOrigin, InstallCodeArgs)) -> Result<Self, Self::Error> {
+    fn try_from(input: (CanisterChangeOrigin, InstallCodeArgsV2)) -> Result<Self, Self::Error> {
         let (origin, args) = input;
         let canister_id = CanisterId::new(args.canister_id).map_err(|err| {
             InstallCodeContextError::InvalidCanisterId(format!(
@@ -244,7 +243,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgs)> for InstallCodeContext {
             ))?),
             None => None,
         };
-        let keep_main_memory = args.keep_main_memory.unwrap_or(false);
 
         // TODO(EXE-294): Query allocations are not supported and should be deleted.
         let query_allocation = QueryAllocation::default();
@@ -258,7 +256,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgs)> for InstallCodeContext {
             compute_allocation,
             memory_allocation,
             query_allocation,
-            keep_main_memory,
         })
     }
 }
@@ -685,14 +682,14 @@ impl CanisterManager {
     ///
     /// There are three modes of installation that are supported:
     ///
-    /// 1. `CanisterInstallMode::Install`
+    /// 1. `CanisterInstallModeV2::Install`
     ///    Used for installing code on an empty canister.
     ///
-    /// 2. `CanisterInstallMode::Reinstall`
+    /// 2. `CanisterInstallModeV2::Reinstall`
     ///    Used for installing code on a _non-empty_ canister. All existing
     ///    state in the canister is cleared.
     ///
-    /// 3. `CanisterInstallMode::Upgrade`
+    /// 3. `CanisterInstallModeV2::Upgrade`
     ///    Used for upgrading a canister while providing a mechanism to
     ///    preserve its state.
     ///
@@ -778,10 +775,10 @@ impl CanisterManager {
         };
 
         match context.mode {
-            CanisterInstallMode::Install | CanisterInstallMode::Reinstall => {
+            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
                 execute_install(context, canister, original, round.clone(), round_limits)
             }
-            CanisterInstallMode::Upgrade => {
+            CanisterInstallModeV2::Upgrade(..) => {
                 execute_upgrade(context, canister, original, round.clone(), round_limits)
             }
         }

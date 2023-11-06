@@ -13,6 +13,7 @@ use crate::execution::install_code::{
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_ic00_types::CanisterInstallModeV2;
 use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_replicated_state::{
@@ -243,7 +244,14 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         original.compilation_cost_handling,
     );
 
-    let memory_handling = if context.keep_main_memory {
+    let keep_main_memory = match context.mode {
+        CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
+            upgrade_options.keep_main_memory.unwrap_or(false)
+        }
+        _ => false,
+    };
+
+    let memory_handling = if keep_main_memory {
         MemoryHandling::KeepBothMemories
     } else {
         MemoryHandling::KeepOnlyStableMemory

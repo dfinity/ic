@@ -7,7 +7,7 @@ use ic_error_types::UserError;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgs,
+    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgsV2,
     Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SetControllerArgs,
     SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs,
 };
@@ -67,7 +67,7 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::InstallCode) => {
             // Find the destination canister from the payload.
-            let args = InstallCodeArgs::decode(payload)?;
+            let args = InstallCodeArgsV2::decode(payload)?;
             let canister_id = args.get_canister_id();
             network_topology
                 .routing_table

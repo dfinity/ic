@@ -28,7 +28,7 @@ use ic_ic00_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterSettingsArgs, ComputeInitialEcdsaDealingsArgs,
     CreateCanisterArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob,
-    InstallCodeArgs, Method as Ic00Method, Payload as Ic00Payload,
+    InstallCodeArgsV2, Method as Ic00Method, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetControllerArgs,
     SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
@@ -1951,7 +1951,7 @@ impl ExecutionEnvironment {
             state: &mut ReplicatedState,
         ) -> Result<(InstallCodeContext, CanisterState), UserError> {
             let payload = msg.method_payload();
-            let args = InstallCodeArgs::decode(payload)?;
+            let args = InstallCodeArgsV2::decode(payload)?;
             let install_context = InstallCodeContext::try_from((
                 msg.canister_change_origin(args.get_sender_canister_version()),
                 args,

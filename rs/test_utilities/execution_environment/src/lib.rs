@@ -21,7 +21,7 @@ use ic_execution_environment::{
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method, Payload,
+    CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs, InstallCodeArgsV2, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
@@ -1994,7 +1994,7 @@ fn get_canister_id_if_install_code(message: CanisterMessage) -> Option<CanisterI
     if message.method_name() != "install_code" {
         return None;
     }
-    match InstallCodeArgs::decode(message.method_payload()) {
+    match InstallCodeArgsV2::decode(message.method_payload()) {
         Err(_) => None,
         Ok(args) => Some(CanisterId::try_from(args.canister_id).unwrap()),
     }

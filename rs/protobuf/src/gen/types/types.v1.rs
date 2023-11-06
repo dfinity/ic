@@ -1,6 +1,48 @@
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterUpgradeOptions {
+    #[prost(bool, optional, tag = "1")]
+    pub skip_pre_upgrade: ::core::option::Option<bool>,
+    #[prost(bool, optional, tag = "2")]
+    pub keep_main_memory: ::core::option::Option<bool>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterInstallModeV2 {
+    #[prost(
+        oneof = "canister_install_mode_v2::CanisterInstallModeV2",
+        tags = "1, 2"
+    )]
+    pub canister_install_mode_v2:
+        ::core::option::Option<canister_install_mode_v2::CanisterInstallModeV2>,
+}
+/// Nested message and enum types in `CanisterInstallModeV2`.
+pub mod canister_install_mode_v2 {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum CanisterInstallModeV2 {
+        #[prost(enumeration = "super::CanisterInstallMode", tag = "1")]
+        Mode(i32),
+        #[prost(message, tag = "2")]
+        Mode2(super::CanisterUpgradeOptions),
+    }
+}
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum CanisterInstallMode {
     Unspecified = 0,

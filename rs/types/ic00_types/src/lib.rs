@@ -14,7 +14,10 @@ use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
 use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
-use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
+use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
+use ic_protobuf::types::v1::{
+    CanisterInstallMode as CanisterInstallModeProto, CanisterUpgradeOptions,
+};
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
@@ -871,6 +874,63 @@ impl CanisterInstallMode {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, CandidType, Copy, Default)]
+pub struct UpgradeOptions {
+    /// Determine whether the pre-upgrade hook should be skipped during upgrade.
+    pub skip_pre_upgrade: Option<bool>,
+    /// Support for enhanced orthogonal persistence: Retain the main memory on upgrade.
+    pub keep_main_memory: Option<bool>,
+}
+
+/// The mode with which a canister is installed.
+///
+/// This second version of the mode allows someone to specify upgrade options.
+#[derive(
+    Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Hash, CandidType, Copy, Default,
+)]
+pub enum CanisterInstallModeV2 {
+    /// A fresh install of a new canister.
+    #[serde(rename = "install")]
+    #[strum(serialize = "install")]
+    #[default]
+    Install,
+    /// Reinstalling a canister that was already installed.
+    #[serde(rename = "reinstall")]
+    #[strum(serialize = "reinstall")]
+    Reinstall,
+    /// Upgrade an existing canister.
+    #[serde(rename = "upgrade")]
+    #[strum(serialize = "upgrade")]
+    Upgrade(Option<UpgradeOptions>),
+}
+
+impl CanisterInstallModeV2 {
+    pub fn iter() -> Iter<'static, CanisterInstallModeV2> {
+        static MODES: [CanisterInstallModeV2; 7] = [
+            CanisterInstallModeV2::Install,
+            CanisterInstallModeV2::Reinstall,
+            CanisterInstallModeV2::Upgrade(None),
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: None,
+                keep_main_memory: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: None,
+                keep_main_memory: Some(true),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                keep_main_memory: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                keep_main_memory: Some(true),
+            })),
+        ];
+        MODES.iter()
+    }
+}
+
 /// A type to represent an error that can occur when installing a canister.
 #[derive(Debug)]
 pub struct CanisterInstallModeError(pub String);
@@ -919,6 +979,35 @@ impl TryFrom<i32> for CanisterInstallMode {
     }
 }
 
+impl TryFrom<CanisterInstallModeV2Proto> for CanisterInstallModeV2 {
+    type Error = CanisterInstallModeError;
+
+    fn try_from(item: CanisterInstallModeV2Proto) -> Result<Self, Self::Error> {
+        match item.canister_install_mode_v2.unwrap() {
+            ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode(item) => {
+                match CanisterInstallModeProto::from_i32(item) {
+                    Some(CanisterInstallModeProto::Install) => Ok(CanisterInstallModeV2::Install),
+                    Some(CanisterInstallModeProto::Reinstall) => {
+                        Ok(CanisterInstallModeV2::Reinstall)
+                    }
+                    Some(CanisterInstallModeProto::Upgrade) => {
+                        Ok(CanisterInstallModeV2::Upgrade(None))
+                    }
+                    Some(CanisterInstallModeProto::Unspecified) | None => {
+                        Err(CanisterInstallModeError(item.to_string()))
+                    }
+                }
+            }
+
+            ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode2(
+                upgrade_mode,
+            ) => Ok(CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: upgrade_mode.skip_pre_upgrade,
+                keep_main_memory: upgrade_mode.keep_main_memory,
+            }))),
+        }
+    }
+}
 impl From<CanisterInstallMode> for String {
     fn from(mode: CanisterInstallMode) -> Self {
         let res = match mode {
@@ -936,6 +1025,50 @@ impl From<&CanisterInstallMode> for CanisterInstallModeProto {
             CanisterInstallMode::Install => CanisterInstallModeProto::Install,
             CanisterInstallMode::Reinstall => CanisterInstallModeProto::Reinstall,
             CanisterInstallMode::Upgrade => CanisterInstallModeProto::Upgrade,
+        }
+    }
+}
+
+impl From<&CanisterInstallModeV2> for CanisterInstallModeV2Proto {
+    fn from(item: &CanisterInstallModeV2) -> Self {
+        CanisterInstallModeV2Proto {
+            canister_install_mode_v2: Some(match item {
+                CanisterInstallModeV2::Install => {
+                    ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode(
+                        CanisterInstallModeProto::Install.into(),
+                    )
+                }
+                CanisterInstallModeV2::Reinstall => {
+                    ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode(
+                        CanisterInstallModeProto::Reinstall.into(),
+                    )
+                }
+                CanisterInstallModeV2::Upgrade(None) => {
+                    ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode(
+                        CanisterInstallModeProto::Upgrade.into(),
+                    )
+                }
+                CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
+                    ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode2(
+                        CanisterUpgradeOptions {
+                            skip_pre_upgrade: upgrade_options.skip_pre_upgrade,
+                            keep_main_memory: upgrade_options.keep_main_memory,
+                        },
+                    )
+                }
+            }),
+        }
+    }
+}
+
+impl From<CanisterInstallModeV2> for CanisterInstallMode {
+    /// This function is used only in the Canister History to avoid breaking changes.
+    /// The function is lossy, hence it should be avoided when possible.
+    fn from(item: CanisterInstallModeV2) -> Self {
+        match item {
+            CanisterInstallModeV2::Install => CanisterInstallMode::Install,
+            CanisterInstallModeV2::Reinstall => CanisterInstallMode::Reinstall,
+            CanisterInstallModeV2::Upgrade(_) => CanisterInstallMode::Upgrade,
         }
     }
 }
@@ -964,7 +1097,6 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
 ///     query_allocation: opt nat;
-///     keep_main_memory: opt bool;
 /// })`
 #[derive(Clone, CandidType, Deserialize, Debug)]
 pub struct InstallCodeArgs {
@@ -978,7 +1110,6 @@ pub struct InstallCodeArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
-    pub keep_main_memory: Option<bool>,
 }
 
 impl std::fmt::Display for InstallCodeArgs {
@@ -1012,15 +1143,6 @@ impl std::fmt::Display for InstallCodeArgs {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
-        writeln!(f, "}}")?;
-        writeln!(
-            f,
-            "  keep_main_memory: {:?}",
-            &self
-                .keep_main_memory
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1036,7 +1158,6 @@ impl InstallCodeArgs {
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
         query_allocation: Option<u64>,
-        keep_main_memory: Option<bool>,
     ) -> Self {
         Self {
             mode,
@@ -1047,7 +1168,89 @@ impl InstallCodeArgs {
             memory_allocation: memory_allocation.map(candid::Nat::from),
             query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
-            keep_main_memory,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        // Safe as this was converted from CanisterId when Self was constructed.
+        CanisterId::new(self.canister_id).unwrap()
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
+    }
+}
+
+#[derive(Clone, CandidType, Deserialize, Debug)]
+pub struct InstallCodeArgsV2 {
+    pub mode: CanisterInstallModeV2,
+    pub canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    pub wasm_module: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub arg: Vec<u8>,
+    pub compute_allocation: Option<candid::Nat>,
+    pub memory_allocation: Option<candid::Nat>,
+    pub query_allocation: Option<candid::Nat>,
+    pub sender_canister_version: Option<u64>,
+}
+
+impl std::fmt::Display for InstallCodeArgsV2 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "InstallCodeArgsV2 {{")?;
+        writeln!(f, "  mode: {:?}", &self.mode)?;
+        writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
+        writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
+        writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
+        writeln!(
+            f,
+            "  compute_allocation: {:?}",
+            &self
+                .compute_allocation
+                .as_ref()
+                .map(|value| format!("{}", value))
+        )?;
+        writeln!(
+            f,
+            "  memory_allocation: {:?}",
+            &self
+                .memory_allocation
+                .as_ref()
+                .map(|value| format!("{}", value))
+        )?;
+        writeln!(
+            f,
+            "  query_allocation: {:?}",
+            &self
+                .query_allocation
+                .as_ref()
+                .map(|value| format!("{}", value))
+        )?;
+        writeln!(f, "}}")
+    }
+}
+
+impl Payload<'_> for InstallCodeArgsV2 {}
+
+impl InstallCodeArgsV2 {
+    pub fn new(
+        mode: CanisterInstallModeV2,
+        canister_id: CanisterId,
+        wasm_module: Vec<u8>,
+        arg: Vec<u8>,
+        compute_allocation: Option<u64>,
+        memory_allocation: Option<u64>,
+        query_allocation: Option<u64>,
+    ) -> Self {
+        Self {
+            mode,
+            canister_id: canister_id.into(),
+            wasm_module,
+            arg,
+            compute_allocation: compute_allocation.map(candid::Nat::from),
+            memory_allocation: memory_allocation.map(candid::Nat::from),
+            query_allocation: query_allocation.map(candid::Nat::from),
+            sender_canister_version: None,
         }
     }
 
