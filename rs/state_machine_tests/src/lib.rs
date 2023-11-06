@@ -80,7 +80,7 @@ use ic_test_utilities_registry::{
     SubnetRecordBuilder,
 };
 use ic_types::batch::{BlockmakerMetrics, QueryStatsPayload, TotalQueryStats, ValidationContext};
-pub use ic_types::canister_http::CanisterHttpRequestContext;
+pub use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
 use ic_types::consensus::block_maker::SubnetRecords;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
