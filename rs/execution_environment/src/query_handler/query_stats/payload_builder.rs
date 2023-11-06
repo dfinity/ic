@@ -1,8 +1,11 @@
+use super::ENABLE_QUERY_STATS;
 use crossbeam_channel::{Receiver, TryRecvError};
 use ic_base_types::{CanisterId, NodeId};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload},
-    consensus::PayloadValidationError,
+    consensus::{PayloadTransientError, PayloadValidationError},
+    query_stats::QueryStatsTransientValidationError,
+    validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
@@ -52,7 +55,7 @@ pub struct QueryStatsPayloadBuilderImpl {
 impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
     fn build_payload(
         &self,
-        _height: Height,
+        height: Height,
         max_size: NumBytes,
         past_payloads: &[PastPayload],
         context: &ValidationContext,
@@ -74,6 +77,42 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
             }
         }
 
+        match ENABLE_QUERY_STATS {
+            true => self.build_payload_impl(height, max_size, past_payloads, context),
+            false => vec![],
+        }
+    }
+
+    fn validate_payload(
+        &self,
+        height: Height,
+        payload: &[u8],
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Result<(), PayloadValidationError> {
+        // Empty payloads are always valid
+        if payload.is_empty() {
+            return Ok(());
+        }
+
+        // Check whether feature is enabled and reject if it isn't.
+        // NOTE: All payloads that are processed at this point are non-empty
+        if !ENABLE_QUERY_STATS {
+            return transient_error(QueryStatsTransientValidationError::Disabled);
+        }
+
+        self.validate_payload_impl(height, payload, past_payloads, context)
+    }
+}
+
+impl QueryStatsPayloadBuilderImpl {
+    fn build_payload_impl(
+        &self,
+        _height: Height,
+        max_size: NumBytes,
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Vec<u8> {
         let Ok(current_stats) = self.current_stats.read() else {
             return vec![];
         };
@@ -106,7 +145,7 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
         payload.serialize_with_limit(max_size)
     }
 
-    fn validate_payload(
+    fn validate_payload_impl(
         &self,
         _height: Height,
         _payload: &[u8],
@@ -114,13 +153,12 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
         _context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
         // TODO(CON-1142): Check that the payload actually deserializes
-        // TODO(CON-1142): Test that height matches epoch
-        // TODO(CON-1142): Check that payload does not contain previous ids
+        // TODO(CON-1142): Check that nodeid is actually in subnet
+        // (Should this only be done during delivery?)
+        // TODO(CON-1142): Check epoch (strictly higher then epoch in state, lower)
+        // TODO(CON-1142): Check that payload does not contain previous ids (Needed?)
         Ok(())
     }
-}
-
-impl QueryStatsPayloadBuilderImpl {
     fn get_previous_ids(
         &self,
         current_epoch: QueryStatsEpoch,
@@ -188,6 +226,11 @@ impl QueryStatsPayloadBuilderImpl {
     }
 }
 
+fn transient_error(err: QueryStatsTransientValidationError) -> Result<(), PayloadValidationError> {
+    Err(ValidationError::Transient(
+        PayloadTransientError::QueryStatsPayloadValidationError(err),
+    ))
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,9 +417,9 @@ mod tests {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> (QueryStatsPayload, Vec<u8>) {
-        let payload = payload_builder.build_payload(height, max_size, past_payloads, context);
+        let payload = payload_builder.build_payload_impl(height, max_size, past_payloads, context);
         assert!(payload_builder
-            .validate_payload(height, &payload, past_payloads, context)
+            .validate_payload_impl(height, &payload, past_payloads, context)
             .is_ok());
 
         (

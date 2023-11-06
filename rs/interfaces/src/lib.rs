@@ -16,6 +16,7 @@ pub mod execution_environment;
 pub mod ingress_manager;
 pub mod ingress_pool;
 pub mod messaging;
+pub mod query_stats;
 pub mod self_validating_payload;
 pub mod state_sync_client;
 pub mod time_source;

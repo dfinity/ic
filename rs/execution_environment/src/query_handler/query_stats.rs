@@ -10,6 +10,8 @@ use std::{collections::BTreeMap, sync::RwLock};
 mod payload_builder;
 pub use self::payload_builder::{QueryStatsPayloadBuilderImpl, QueryStatsPayloadBuilderParams};
 
+pub const ENABLE_QUERY_STATS: bool = false;
+
 pub fn init_query_stats(
     log: ReplicaLogger,
 ) -> (QueryStatsCollector, QueryStatsPayloadBuilderParams) {
