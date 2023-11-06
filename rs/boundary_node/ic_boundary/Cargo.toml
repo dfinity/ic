@@ -50,6 +50,7 @@ jemallocator = "0.3"
 jemalloc-ctl = "0.3"
 lazy_static = "1.4.0"
 mockall = "0.11.4"
+moka = { version = "0.12", features = ["future"] }
 prometheus = { workspace = true }
 rand = "0.8.4"
 rcgen = "0.10.0"
@@ -68,7 +69,6 @@ serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = "2.5.2"
-stretto = { version = "^0.8", features = ["full"] }
 tempfile = "3.6.0"
 thiserror = "1.0.40"
 tokio = { workspace = true }

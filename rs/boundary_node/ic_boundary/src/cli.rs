@@ -158,7 +158,7 @@ pub struct CacheConfig {
     pub cache_size_bytes: Option<u64>,
     /// Maximum size of a single cached response item in bytes
     #[clap(long, default_value = "65536")]
-    pub cache_max_item_size_bytes: usize,
+    pub cache_max_item_size_bytes: u64,
     /// Time-to-live for cache entries in seconds
     #[clap(long, default_value = "1")]
     pub cache_ttl_seconds: u64,

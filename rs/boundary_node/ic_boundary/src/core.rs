@@ -183,6 +183,18 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
     let configuration_runner = WithThrottle(configuration_runner, ThrottleParams::new(10 * SECOND));
 
+    // Caching
+    let cache = match cli.cache.cache_size_bytes {
+        Some(v) => Some(Arc::new(Cache::new(
+            v,
+            cli.cache.cache_max_item_size_bytes,
+            Duration::from_secs(cli.cache.cache_ttl_seconds),
+            cli.cache.cache_non_anonymous,
+        )?)),
+
+        None => None,
+    };
+
     // Server / API
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
@@ -206,18 +218,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             });
 
             // Add caching layer if configured
-            if let Some(v) = cli.cache.cache_size_bytes {
-                let cache = Cache::new(
-                    v,
-                    cli.cache.cache_max_item_size_bytes,
-                    Duration::from_secs(cli.cache.cache_ttl_seconds),
-                    cli.cache.cache_non_anonymous,
-                )?;
-
-                route = route.layer(middleware::from_fn_with_state(
-                    Arc::new(cache),
-                    cache_middleware,
-                ));
+            if let Some(v) = &cache {
+                route = route.layer(middleware::from_fn_with_state(v.clone(), cache_middleware));
             }
 
             route
@@ -338,7 +340,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         });
 
     let metrics_runner = WithThrottle(
-        MetricsRunner::new(metrics_cache, registry.clone()),
+        MetricsRunner::new(metrics_cache, registry.clone(), cache),
         ThrottleParams::new(10 * SECOND),
     );
 

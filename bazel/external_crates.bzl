@@ -676,6 +676,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 package = "mockall",
                 version = "^0.8.3",
             ),
+            "moka": crate.spec(
+                version = "^0.12",
+                features = [
+                    "future",
+                ],
+            ),
             "native-tls": crate.spec(
                 version = "^0.2.7",
                 features = [
@@ -1105,12 +1111,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "static_assertions": crate.spec(
                 version = "^0.3.4",
-            ),
-            "stretto": crate.spec(
-                version = "^0.8",
-                features = [
-                    "full",
-                ],
             ),
             "strum": crate.spec(
                 version = "^0.24.1",
