@@ -13,7 +13,7 @@ ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
-ic-icos-sev-interfaces = { path = "../ic_os/sev_interfaces" }
+ic-icos-sev = { path = "../ic_os/sev" }
 ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -34,7 +34,6 @@ tower = { workspace = true }
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
 ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
-ic-icos-sev = { path = "../ic_os/sev" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-transport-test-utils = { path = "./test_utils" }
 tower-test = "0.4.0"

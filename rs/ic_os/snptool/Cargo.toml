@@ -3,8 +3,8 @@ name = "snptool"
 version = "0.1.0"
 authors = ["DFINITY"]
 edition = "2021"
-description = "Utility for AMD SEV"
-keywords = ["amd", "sev"]
+description = "Utility for AMD SEV-SNP"
+keywords = ["amd", "sev", "snp"]
 exclude = [ ".gitignore", ".github/*" ]
 
 [[bin]]

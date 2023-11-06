@@ -19,7 +19,6 @@ rust_library(
         "//rs/execution_environment",
         "//rs/https_outcalls/consensus",
         "//rs/ic_os/sev",
-        "//rs/ic_os/sev_interfaces",
         "//rs/ingress_manager",
         "//rs/interfaces",
         "//rs/interfaces/adapter_client",

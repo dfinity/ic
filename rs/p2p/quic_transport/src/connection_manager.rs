@@ -47,7 +47,7 @@ use ic_crypto_tls_interfaces::{
 use ic_crypto_utils_tls::{
     node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
 };
-use ic_icos_sev_interfaces::ValidateAttestedStream;
+use ic_icos_sev::ValidateAttestedStream;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

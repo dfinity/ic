@@ -630,9 +630,9 @@ fn generate_nonce() -> Vec<u8> {
         .to_vec()
 }
 
-/// Get a chip_id from SNP guest firmware by calling the snptool.
-/// If snptool returns the error "unable to open /dev/sev-guest",
-/// it could be that the guest is not SEV-SNP enabled. Return an empty chip_id in that case.
+/// Get a chip_id from SNP guest firmware via SEV library.
+/// If SEV-SNP in not enabled on the guest, return None.
+/// In other cases, return the error and notify the Node Provider.
 fn get_snp_chip_id() -> OrchestratorResult<Option<Vec<u8>>> {
     match get_chip_id() {
         // Chip_id returned successfully

@@ -1,7 +1,6 @@
-use crate::SnpError;
+use crate::{SnpError, ValidateAttestationError, ValidateAttestedStream};
 use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
 use ic_interfaces_registry::RegistryClient;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
