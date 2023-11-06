@@ -176,10 +176,10 @@ impl ConsensusDependencies {
         // let state_manager_arc = Rc::new(state_manager);
         let metrics_registry = MetricsRegistry::new();
 
-        let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new_from_cup_without_bytes(
+        let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
-            cup,
+            (&cup).into(),
             pool_config.clone(),
             metrics_registry.clone(),
             no_op_logger(),

@@ -444,24 +444,6 @@ impl ConsensusPoolImpl {
         }
     }
 
-    pub fn new_from_cup_without_bytes(
-        node_id: NodeId,
-        subnet_id: SubnetId,
-        catch_up_package: CatchUpPackage,
-        config: ArtifactPoolConfig,
-        registry: ic_metrics::MetricsRegistry,
-        log: ReplicaLogger,
-    ) -> ConsensusPoolImpl {
-        Self::new(
-            node_id,
-            subnet_id,
-            (&catch_up_package).into(),
-            config,
-            registry,
-            log,
-        )
-    }
-
     /// Get a copy of ConsensusPoolCache.
     pub fn get_cache(&self) -> Arc<dyn ConsensusPoolCache> {
         Arc::clone(&self.cache) as Arc<_>
@@ -954,12 +936,30 @@ mod tests {
     use prost::Message;
     use std::{collections::HashMap, convert::TryFrom, fs, io::Read, path::Path, sync::RwLock};
 
+    fn new_from_cup_without_bytes(
+        node_id: NodeId,
+        subnet_id: SubnetId,
+        catch_up_package: CatchUpPackage,
+        config: ArtifactPoolConfig,
+        registry: ic_metrics::MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> ConsensusPoolImpl {
+        ConsensusPoolImpl::new(
+            node_id,
+            subnet_id,
+            (&catch_up_package).into(),
+            config,
+            registry,
+            log,
+        )
+    }
+
     #[test]
     fn test_timestamp() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let time_0 = time_source.get_relative_time();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1017,7 +1017,7 @@ mod tests {
     fn test_adverts_are_created_for_aggregates() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1094,7 +1094,7 @@ mod tests {
     fn test_shares_are_not_relayed() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1159,7 +1159,7 @@ mod tests {
     fn test_insert_remove() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1191,7 +1191,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let node = node_test_id(3);
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node,
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1370,7 +1370,7 @@ mod tests {
     fn test_metrics() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1520,7 +1520,7 @@ mod tests {
                 .path()
                 .join(subnet_id.to_string())
                 .join(ic_types::ReplicaVersion::default().to_string());
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1869,7 +1869,7 @@ mod tests {
             let backup_dir = tempfile::Builder::new().tempdir().unwrap();
             let subnet_id = subnet_test_id(0);
             let path = backup_dir.path().join(format!("{:?}", subnet_id));
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),

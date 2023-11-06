@@ -168,13 +168,13 @@ impl Player {
             .join(replica_version.to_string());
         // Extract the genesis CUP and instantiate a new pool.
         let cup_file = backup::cup_file_name(&backup_dir, Height::from(start_height));
-        let initial_cup =
-            backup::read_cup_file(&cup_file).expect("CUP of the starting block should be valid");
+        let initial_cup_proto = backup::read_cup_proto_file(&cup_file)
+            .expect("CUP of the starting block should be valid");
         // This would create a new pool with just the genesis CUP.
-        let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let pool = ConsensusPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
-            initial_cup,
+            initial_cup_proto,
             artifact_pool_config,
             MetricsRegistry::new(),
             log.clone(),
@@ -466,7 +466,7 @@ impl Player {
         let mut invalid_artifacts = Vec::new();
         invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
             consensus_pool,
-            self.get_latest_cup(),
+            self.get_latest_cup_proto(),
             target_height.unwrap(),
         )?);
         if !invalid_artifacts.is_empty() {
