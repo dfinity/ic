@@ -1899,10 +1899,10 @@ build-base-images-ref-update:
     - build-setupos-base-dev
     - build-setupos-base-dev-sev
   extends:
-    - ".build-k8s-legacy"
+    - ".build-k8s"
     - ".rules-build-base-images"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:aae2b03ba3505778f0a7f8deb8279351b964d555b1ca9e9ff5c7643600b08666
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:aae2b03ba3505778f0a7f8deb8279351b964d555b1ca9e9ff5c7643600b08666
   needs:
     - build-guestos-base
     - build-guestos-base-dev
