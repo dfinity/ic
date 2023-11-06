@@ -774,7 +774,7 @@ where
                 .min_direct_participation_icp_e8s,
         );
         let max_neurons_fund_participation_icp_e8s =
-            Some(self.max_neurons_fund_swap_participation_icp_e8s);
+            Some(self.allocated_neurons_fund_participation_icp_e8s);
         let dummy_interval = ValidatedLinearScalingCoefficient {
             from_direct_participation_icp_e8s: 0,
             to_direct_participation_icp_e8s: u64::MAX,
