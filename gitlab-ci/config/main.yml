@@ -313,6 +313,18 @@ bazel-system-test-nightly:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_nightly"
   timeout: 7h 30m
 
+bazel-system-test-nightly-nns:
+  extends:
+    - .bazel-test-all
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "nns-nightly"'
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_nightly_nns"
+  timeout: 60 minutes
+
 bazel-config-check-all-rebuild:
   extends:
     - .bazel-test-all
