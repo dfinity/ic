@@ -13,7 +13,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-candid = "^0.9"
+candid = { workspace = true }
 reqwest = { version = "0.11", features = [
     "blocking",
     "json",
@@ -28,7 +28,6 @@ async-trait = "^0.1.73"
 tracing = "0.1"
 tracing-appender = "^0.2.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
 
 [dev-dependencies]
 flate2 = "1.0.27"
