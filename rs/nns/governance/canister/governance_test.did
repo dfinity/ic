@@ -411,6 +411,7 @@ type NeuronsFundParticipation = record {
   max_neurons_fund_swap_participation_icp_e8s : opt nat64;
   neurons_fund_reserves : opt NeuronsFundSnapshot;
   ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
+  allocated_neurons_fund_participation_icp_e8s : opt nat64;
 };
 type NeuronsFundSnapshot = record {
   neurons_fund_neuron_portions : vec NeuronsFundNeuronPortion;

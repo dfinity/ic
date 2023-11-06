@@ -506,6 +506,11 @@ pub struct NeuronsFundParticipation<F> {
     /// Neurons' Fund neurons, i.e., capping and dropping. To compute the precise Neurons' Fund
     /// participation amount, use `neurons_fund_reserves.total_amount_icp_e8s()`.
     intended_neurons_fund_participation_icp_e8s: u64,
+
+    /// How much from `intended_neurons_fund_participation_icp_e8s` was the Neurons' Fund actually
+    /// able to allocate, given the specific composition of neurons at the time of execution of
+    /// the proposal through which this SNS was created and the participation limits of this SNS.
+    allocated_neurons_fund_participation_icp_e8s: u64,
 }
 
 impl<F> NeuronsFundParticipation<F>
@@ -745,6 +750,8 @@ where
                 },
             ))
         };
+        let allocated_neurons_fund_participation_icp_e8s =
+            neurons_fund_reserves.total_amount_icp_e8s();
         Ok(Self {
             swap_participation_limits,
             ideal_matched_participation_function,
@@ -753,6 +760,7 @@ where
             total_maturity_equivalent_icp_e8s,
             max_neurons_fund_swap_participation_icp_e8s,
             intended_neurons_fund_participation_icp_e8s,
+            allocated_neurons_fund_participation_icp_e8s,
         })
     }
 
@@ -920,6 +928,8 @@ where
             Some(participation.max_neurons_fund_swap_participation_icp_e8s);
         let intended_neurons_fund_participation_icp_e8s =
             Some(participation.intended_neurons_fund_participation_icp_e8s);
+        let allocated_neurons_fund_participation_icp_e8s =
+            Some(participation.allocated_neurons_fund_participation_icp_e8s);
         let neurons_fund_neuron_portions: Vec<NeuronsFundNeuronPortionPb> = participation
             .into_snapshot()
             .neurons()
@@ -943,6 +953,7 @@ where
             total_maturity_equivalent_icp_e8s,
             max_neurons_fund_swap_participation_icp_e8s,
             intended_neurons_fund_participation_icp_e8s,
+            allocated_neurons_fund_participation_icp_e8s,
         }
     }
 }
@@ -1054,6 +1065,13 @@ impl NeuronsFundParticipationPb {
                     "intended_neurons_fund_participation_icp_e8s".to_string(),
                 )
             })?;
+        let allocated_neurons_fund_participation_icp_e8s = self
+            .allocated_neurons_fund_participation_icp_e8s
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "allocated_neurons_fund_participation_icp_e8s".to_string(),
+                )
+            })?;
         Ok(NeuronsFundParticipation {
             swap_participation_limits,
             ideal_matched_participation_function,
@@ -1062,6 +1080,7 @@ impl NeuronsFundParticipationPb {
             total_maturity_equivalent_icp_e8s,
             max_neurons_fund_swap_participation_icp_e8s,
             intended_neurons_fund_participation_icp_e8s,
+            allocated_neurons_fund_participation_icp_e8s,
         })
     }
 
@@ -1488,6 +1507,7 @@ mod neurons_fund_anonymization_tests {
             total_maturity_equivalent_icp_e8s: Some(1_000_000_000_000_000),
             max_neurons_fund_swap_participation_icp_e8s: Some(1_000_000_000_000),
             intended_neurons_fund_participation_icp_e8s: Some(1_000_000_000_000),
+            allocated_neurons_fund_participation_icp_e8s: Some(2 * amount_icp_e8s),
         };
         let participation_validation_result = participation.validate();
         assert!(
