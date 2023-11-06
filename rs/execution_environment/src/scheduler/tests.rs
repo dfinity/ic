@@ -204,6 +204,67 @@ fn ingress_state(env: &StateMachine, message_id: &MessageId) -> IngressState {
 }
 
 #[test]
+fn fix_broken_invariant_test() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    // Create a canister with the same ID as the one with the broken invariant on mainnet.
+    let canister_id: CanisterId = CanisterId::unchecked_from_principal(
+        PrincipalId::from_str("rw3vb-eaaaa-aaaak-aet6a-cai").unwrap(),
+    );
+    test.create_canister_with_id(canister_id);
+
+    fn callback_stats(canister: &CanisterState) -> (usize, usize, usize) {
+        let num_callbacks = canister
+            .system_state
+            .call_context_manager()
+            .map(|ccm| ccm.callbacks().len())
+            .unwrap_or(0);
+        let num_responses = canister.system_state.queues().input_queues_response_count();
+        let num_reservations = canister
+            .system_state
+            .queues()
+            .input_queues_reservation_count();
+        (num_callbacks, num_responses, num_reservations)
+    }
+
+    let destination = CanisterId::from_u64(13);
+
+    // Manually break the invariant.
+    let canister = test.canister_state_mut(canister_id);
+    canister
+        .push_output_request(
+            RequestBuilder::default()
+                .sender(canister_id)
+                .receiver(destination)
+                .build()
+                .into(),
+            mock_time(),
+        )
+        .unwrap();
+    canister
+        .system_state
+        .queues_mut()
+        .pop_canister_output(&destination);
+
+    // Invariant is now broken.
+    assert_eq!(
+        canister.check_invariants(NumBytes::from(u64::MAX)),
+        Err(ic_replicated_state::StateError::InvariantBroken("Canister rw3vb-eaaaa-aaaak-aet6a-cai: Number of callbacks (0) is different than the accumulated number of reservations and responses (1)".to_string()))
+    );
+    // And there's an orphan callback.
+    assert_eq!((0, 0, 1), callback_stats(canister));
+
+    // Execute a round, which should fix the invariant.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Inveriant is re-established.
+    let canister = test.canister_state(canister_id);
+    assert!(canister.check_invariants(NumBytes::from(u64::MAX)).is_ok());
+    // And there's no more orphan callback.
+    assert_eq!((0, 0, 0), callback_stats(canister));
+}
+
+#[test]
 fn can_fully_execute_canisters_with_one_input_message_each() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {

@@ -22,6 +22,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
         execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
+        DEFAULT_QUEUE_CAPACITY,
     },
     page_map::PageAllocatorFileDescriptor,
     testing::ReplicatedStateTesting,
@@ -31,7 +32,9 @@ use ic_system_api::InstructionLimits;
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, StopCanisterContext},
+    messages::{
+        CallbackId, CanisterMessage, Ingress, MessageId, Payload, Response, StopCanisterContext,
+    },
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };
@@ -1248,6 +1251,85 @@ impl SchedulerImpl {
     }
 }
 
+// EXC-1510: Fix broken invariant on canister.
+// This code will be removed once it's deployed to production.
+fn fix_broken_canister_invariant(log: &ReplicaLogger, state: &mut ReplicatedState) {
+    use ic_base_types::PrincipalId;
+    let canister_id: CanisterId = CanisterId::unchecked_from_principal(
+        PrincipalId::from_str("rw3vb-eaaaa-aaaak-aet6a-cai").unwrap(),
+    );
+
+    if let Some(canister) = state.canister_state_mut(&canister_id) {
+        let num_callbacks = canister
+            .system_state
+            .call_context_manager()
+            .map(|ccm| ccm.callbacks().len())
+            .unwrap_or(0);
+        let num_reservations = canister
+            .system_state
+            .queues()
+            .input_queues_reservation_count();
+        // The canister may be handling additional responses at this time. If so, we do
+        // not want to have to guess which queue has the leaked reservation and which
+        // queue has a response (or a valid reservation). We will retry when all other
+        // responses and reservations are gone.
+        let num_responses = canister.system_state.queues().input_queues_response_count();
+        if num_callbacks == 0 && num_responses == 0 && num_reservations == 1 {
+            info!(
+                log,
+                "[EXC-1510] Found canister {} with broken invariant", canister_id
+            );
+
+            let mut peers: Vec<CanisterId> = canister
+                .system_state
+                .queues()
+                .available_output_request_slots()
+                .into_iter()
+                .filter(|(_, v)| *v == DEFAULT_QUEUE_CAPACITY - 1)
+                .map(|(k, _)| k)
+                .collect();
+            if peers.len() != 1 {
+                error!(
+                    log,
+                    "[EXC-1510] Expecting exactly one queue with one reservation, found {}. Aborting.",
+                    peers.len()
+                );
+                return;
+            }
+            assert_eq!(1, peers.len());
+            let peer = peers.pop().unwrap();
+
+            info!(
+                log,
+                "[EXC-1510] Enqueuing dummy response from canister {}", peer
+            );
+
+            use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
+            canister
+                .system_state
+                .queues_mut()
+                .push_input(
+                    Response {
+                        originator: canister_id,
+                        respondent: peer,
+                        originator_reply_callback: CallbackId::new(u64::MAX),
+                        refund: Cycles::zero(),
+                        response_payload: Payload::Data(vec![]),
+                    }
+                    .into(),
+                    InputQueueType::LocalSubnet,
+                )
+                .unwrap();
+
+            info!(
+                log,
+                "[EXC-1510] Canister invariant check after fix: {:?}",
+                canister.check_invariants(NumBytes::from(u64::MAX))
+            );
+        }
+    }
+}
+
 impl Scheduler for SchedulerImpl {
     type State = ReplicatedState;
 
@@ -1290,6 +1372,8 @@ impl Scheduler for SchedulerImpl {
                 &self.metrics,
                 &round_log,
             );
+
+            fix_broken_canister_invariant(&round_log, &mut state);
 
             long_running_canister_ids = state
                 .canister_states
