@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::{
     body::Body, http::Request, middleware, response::IntoResponse, routing::method_routing::post,
-    Router,
+    Extension, Router,
 };
 use candid::Principal;
 use http::header::HeaderValue;
@@ -14,15 +14,17 @@ use crate::routes::ANONYMOUS_PRINCIPAL;
 
 const CANISTER_1: &str = "sqjm4-qahae-aq";
 const CANISTER_2: &str = "sxiki-5ygae-aq";
-const MAX_RESP_SIZE: usize = 1024;
-const MAX_MEM_SIZE: usize = 32768;
+const MAX_RESP_SIZE: u64 = 1024;
+const MAX_MEM_SIZE: u64 = 32768;
+const DEFAULT_SIZE: u64 = 8;
 
 fn gen_request_with_params(
     canister_id: &str,
     nonce: bool,
-    size: usize,
+    size: u64,
     ingress_expiry: u64,
     anonymous: bool,
+    status_code: StatusCode,
 ) -> Request<Body> {
     let mut req = Request::post("/").body(Body::from("foobar")).unwrap();
 
@@ -45,18 +47,21 @@ fn gen_request_with_params(
 
     req.extensions_mut().insert(ctx);
     req.extensions_mut().insert(size);
+    req.extensions_mut().insert(status_code);
 
     req
 }
 
 fn gen_request(canister_id: &str, nonce: bool) -> Request<Body> {
-    gen_request_with_params(canister_id, nonce, 8, 0, true)
+    gen_request_with_params(canister_id, nonce, DEFAULT_SIZE, 0, true, StatusCode::OK)
 }
 
 // Generate a response with a requested size
-async fn handler(request: Request<Body>) -> impl IntoResponse {
-    let size = request.extensions().get::<usize>().cloned().unwrap();
-    "a".repeat(size)
+async fn handler(
+    Extension(size): Extension<u64>,
+    Extension(status_code): Extension<StatusCode>,
+) -> impl IntoResponse {
+    (status_code, "a".repeat(size as usize))
 }
 
 #[tokio::test]
@@ -65,7 +70,7 @@ async fn test_cache() -> Result<(), Error> {
     assert!(Cache::new(1024, 1024, Duration::from_secs(60), false).is_err());
 
     let cache = Cache::new(
-        MAX_MEM_SIZE as u64,
+        MAX_MEM_SIZE,
         MAX_RESP_SIZE,
         Duration::from_secs(3600),
         false,
@@ -80,10 +85,23 @@ async fn test_cache() -> Result<(), Error> {
         ));
 
     // Check non-anonymous
-    let req = gen_request_with_params(CANISTER_1, false, 8, 0, false);
+    let req = gen_request_with_params(CANISTER_1, false, DEFAULT_SIZE, 0, false, StatusCode::OK);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Bypass(CacheBypassReason::NonAnonymous));
+
+    // Check non-2xx
+    let req = gen_request_with_params(
+        CANISTER_1,
+        false,
+        DEFAULT_SIZE,
+        0,
+        true,
+        StatusCode::SERVICE_UNAVAILABLE,
+    );
+    let res = app.call(req).await.unwrap();
+    let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
+    assert_eq!(cs, CacheStatus::Bypass(CacheBypassReason::HTTPError));
 
     // Check cache hits and misses
     let req = gen_request(CANISTER_1, false);
@@ -92,9 +110,17 @@ async fn test_cache() -> Result<(), Error> {
     assert_eq!(cs, CacheStatus::Miss);
 
     let req = gen_request(CANISTER_1, false);
-    let res = app.call(req).await.unwrap();
+    let mut res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Hit);
+
+    // Check if the body from cache is correct
+    let body = hyper::body::to_bytes(res.body_mut())
+        .await
+        .unwrap()
+        .to_vec();
+    let body = String::from_utf8_lossy(&body);
+    assert_eq!("a".repeat(DEFAULT_SIZE as usize), body);
 
     // Try other canister
     let req = gen_request(CANISTER_2, false);
@@ -124,7 +150,7 @@ async fn test_cache() -> Result<(), Error> {
     }
 
     // Check cache flushing
-    cache.clear().await.unwrap();
+    cache.clear().await;
     assert_eq!(cache.len(), 0);
 
     let req = gen_request(CANISTER_1, false);
@@ -138,24 +164,32 @@ async fn test_cache() -> Result<(), Error> {
     assert_eq!(cs, CacheStatus::Miss);
 
     // Check too big requests
-    cache.clear().await.unwrap();
-    let req = gen_request_with_params(CANISTER_1, false, MAX_RESP_SIZE, 0, true);
+    cache.clear().await;
+    let req = gen_request_with_params(CANISTER_1, false, MAX_RESP_SIZE, 0, true, StatusCode::OK);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Miss);
 
-    cache.clear().await.unwrap();
-    let req = gen_request_with_params(CANISTER_1, false, MAX_RESP_SIZE + 1, 0, true);
+    cache.clear().await;
+    let req = gen_request_with_params(
+        CANISTER_1,
+        false,
+        MAX_RESP_SIZE + 1,
+        0,
+        true,
+        StatusCode::OK,
+    );
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Bypass(CacheBypassReason::TooBig));
 
     // Check memory limits
-    cache.clear().await.unwrap();
+    cache.clear().await;
     let max_items = MAX_MEM_SIZE / MAX_RESP_SIZE;
 
     for i in 0..max_items + 1 {
-        let req = gen_request_with_params(CANISTER_1, false, MAX_RESP_SIZE, i as u64, true);
+        let req =
+            gen_request_with_params(CANISTER_1, false, MAX_RESP_SIZE, i, true, StatusCode::OK);
         let res = app.call(req).await.unwrap();
         let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
         assert_eq!(cs, CacheStatus::Miss);
@@ -164,6 +198,5 @@ async fn test_cache() -> Result<(), Error> {
     // Make sure that some of the entries were evicted
     assert!(cache.len() < max_items);
 
-    cache.close().await?;
     Ok(())
 }

@@ -30,7 +30,7 @@ use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
-    cache::CacheStatus,
+    cache::{Cache, CacheStatus},
     core::Run,
     routes::{ErrorCause, RequestContext},
     snapshot::Node,
@@ -71,9 +71,13 @@ impl MetricsCache {
 }
 
 pub struct MetricsRunner {
-    cache: Arc<RwLock<MetricsCache>>,
+    metrics_cache: Arc<RwLock<MetricsCache>>,
     registry: Registry,
     encoder: TextEncoder,
+
+    cache: Option<Arc<Cache>>,
+    cache_items: IntGauge,
+    cache_size: IntGauge,
 
     mem_allocated: IntGauge,
     mem_resident: IntGauge,
@@ -81,7 +85,25 @@ pub struct MetricsRunner {
 
 // Snapshots & encodes the metrics for the handler to export
 impl MetricsRunner {
-    pub fn new(cache: Arc<RwLock<MetricsCache>>, registry: Registry) -> Self {
+    pub fn new(
+        metrics_cache: Arc<RwLock<MetricsCache>>,
+        registry: Registry,
+        cache: Option<Arc<Cache>>,
+    ) -> Self {
+        let cache_items = register_int_gauge_with_registry!(
+            format!("cache_items"),
+            format!("Number of items in the request cache"),
+            registry
+        )
+        .unwrap();
+
+        let cache_size = register_int_gauge_with_registry!(
+            format!("cache_size"),
+            format!("Size of items in the request cache in bytes"),
+            registry
+        )
+        .unwrap();
+
         let mem_allocated = register_int_gauge_with_registry!(
             format!("memory_allocated"),
             format!("Allocated memory in bytes"),
@@ -97,9 +119,12 @@ impl MetricsRunner {
         .unwrap();
 
         Self {
-            cache,
+            metrics_cache,
             registry,
             encoder: TextEncoder::new(),
+            cache,
+            cache_items,
+            cache_size,
             mem_allocated,
             mem_resident,
         }
@@ -116,13 +141,27 @@ impl Run for MetricsRunner {
         self.mem_resident
             .set(stats::resident::read().unwrap() as i64);
 
+        // Gather cache stats if it's enabled, otherwise set to zero
+        let (cache_items, cache_size) = match self.cache.as_ref() {
+            Some(v) => {
+                v.housekeep().await;
+                (v.len(), v.size())
+            }
+
+            None => (0, 0),
+        };
+
+        self.cache_items.set(cache_items as i64);
+        self.cache_size.set(cache_size as i64);
+
         // Get a snapshot of metrics
         let metric_families = self.registry.gather();
 
         // Take a write lock, truncate the vector and encode the metrics into it
-        let mut cache = self.cache.write().await;
-        cache.buffer.clear();
-        self.encoder.encode(&metric_families, &mut cache.buffer)?;
+        let mut metrics_cache = self.metrics_cache.write().await;
+        metrics_cache.buffer.clear();
+        self.encoder
+            .encode(&metric_families, &mut metrics_cache.buffer)?;
 
         Ok(())
     }
@@ -154,13 +193,20 @@ impl<D, E> MetricsBody<D, E> {
             content_length.and_then(|x| x.to_str().ok().and_then(|x| x.parse::<u64>().ok()))
         });
 
-        Self {
+        let mut body = Self {
             inner: Box::pin(body),
             callback: Box::new(callback),
             callback_done: AtomicBool::new(false),
             expected_size,
             bytes_sent: 0,
+        };
+
+        // If the size is known and zero - just execute the callback now, it won't be called anywhere else
+        if expected_size == Some(0) {
+            body.do_callback(Ok(()));
         }
+
+        body
     }
 
     // In certain cases the users of HttpBody trait can cause us to run callbacks more than once
