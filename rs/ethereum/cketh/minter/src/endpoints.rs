@@ -3,7 +3,6 @@ use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use minicbor::{Decode, Encode};
-use serde::Serialize;
 use std::fmt::{Display, Formatter};
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
@@ -24,7 +23,7 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
         }
     }
 }
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthTransaction {
     pub transaction_hash: String,
 }
@@ -42,9 +41,7 @@ pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
-#[derive(
-    CandidType, Debug, Default, Serialize, Deserialize, Clone, Encode, Decode, PartialEq, Eq,
-)]
+#[derive(CandidType, Debug, Default, Deserialize, Clone, Encode, Decode, PartialEq, Eq)]
 #[cbor(index_only)]
 pub enum CandidBlockTag {
     /// The latest mined block.
@@ -71,7 +68,7 @@ impl From<EthWithdrawalRequest> for RetrieveEthRequest {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub enum RetrieveEthStatus {
     NotFound,
     Pending,
@@ -80,7 +77,7 @@ pub enum RetrieveEthStatus {
     TxFinalized(TxFinalizedStatus),
 }
 
-#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub enum TxFinalizedStatus {
     Success(EthTransaction),
     PendingReimbursement(EthTransaction),

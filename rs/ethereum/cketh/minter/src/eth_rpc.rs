@@ -241,7 +241,7 @@ impl std::str::FromStr for BlockSpec {
 }
 
 /// Parameters of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetLogsParam {
     /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.

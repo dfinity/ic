@@ -11,11 +11,10 @@ use ic_crypto_ecdsa_secp256k1::RecoveryId;
 use ic_ic00_types::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
-use serde::{Deserialize, Serialize};
 
 const EIP1559_TX_ID: u8 = 2;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 #[cbor(transparent)]
 pub struct AccessList(#[n(0)] pub Vec<AccessListItem>);
 
@@ -37,11 +36,11 @@ impl rlp::Encodable for AccessList {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 #[cbor(transparent)]
 pub struct StorageKey(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 pub struct AccessListItem {
     /// Accessed address
     #[n(0)]
@@ -65,7 +64,7 @@ impl rlp::Encodable for AccessListItem {
 }
 
 /// <https://eips.ethereum.org/EIPS/eip-1559>
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct Eip1559TransactionRequest {
     #[n(0)]
     pub chain_id: u64,
@@ -95,7 +94,7 @@ impl rlp::Encodable for Eip1559TransactionRequest {
     }
 }
 
-#[derive(Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+#[derive(Default, Clone, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct Eip1559Signature {
     #[n(0)]
     pub signature_y_parity: bool,
@@ -116,7 +115,7 @@ impl rlp::Encodable for Eip1559Signature {
 /// Immutable signed EIP-1559 transaction.
 /// Use `Eip1559TransactionRequest::sign()` to create a newly signed transaction or
 /// `SignedEip1559TransactionRequest::from()` if the signature is already known
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct SignedEip1559TransactionRequest {
     #[n(0)]
     transaction: Eip1559TransactionRequest,
@@ -127,7 +126,7 @@ pub struct SignedEip1559TransactionRequest {
 
 /// Immutable finalized transaction.
 /// Use `SignedEip1559TransactionRequest::try_finalize()` to create a finalized transaction.
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct FinalizedEip1559Transaction {
     #[n(0)]
     transaction: SignedEip1559TransactionRequest,
