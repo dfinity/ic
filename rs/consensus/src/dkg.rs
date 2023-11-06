@@ -1619,7 +1619,6 @@ mod tests {
     use ic_interfaces::{
         artifact_pool::{MutablePool, UnvalidatedArtifact},
         consensus_pool::ConsensusPool,
-        time_source::SysTimeSource,
     };
     use ic_interfaces_registry::RegistryVersionedRecord;
     use ic_logger::replica_logger::no_op_logger;
@@ -1638,6 +1637,7 @@ mod tests {
         state_manager::RefMockStateManager,
         types::ids::{node_test_id, subnet_test_id},
         types::messages::RequestBuilder,
+        MockTimeSource,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
@@ -1698,7 +1698,7 @@ mod tests {
                 dkg_pool
                     .write()
                     .unwrap()
-                    .apply_changes(&SysTimeSource::new(), change_set);
+                    .apply_changes(&MockTimeSource::new(), change_set);
 
                 // Advance the consensus pool for one round and make sure both dealings made it
                 // into the block.
@@ -1730,7 +1730,7 @@ mod tests {
                 // they are still not included.
                 assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 2);
                 dkg_pool.write().unwrap().apply_changes(
-                    &SysTimeSource::new(),
+                    &MockTimeSource::new(),
                     vec![ChangeAction::Purge(block.height)],
                 );
                 // Check that the dkg pool is really empty.
@@ -1741,7 +1741,7 @@ mod tests {
                 dkg_pool
                     .write()
                     .unwrap()
-                    .apply_changes(&SysTimeSource::new(), change_set);
+                    .apply_changes(&MockTimeSource::new(), change_set);
                 // Make sure the new dealings are in the pool.
                 assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 2);
                 // Advance the pool and make sure the dealing are not included.
@@ -1792,7 +1792,7 @@ mod tests {
                 dkg_pool
                     .write()
                     .unwrap()
-                    .apply_changes(&SysTimeSource::new(), change_set);
+                    .apply_changes(&MockTimeSource::new(), change_set);
                 assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 4);
 
                 // Now we create a new block and make sure, the dealings made into the payload.
@@ -2232,7 +2232,7 @@ mod tests {
                 };
 
                 // Apply the changes and make sure, we do not produce any dealings anymore.
-                dkg_pool.apply_changes(&SysTimeSource::new(), change_set);
+                dkg_pool.apply_changes(&MockTimeSource::new(), change_set);
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
 
                 // Mimic consensus progress and make sure we still do not
@@ -2251,7 +2251,7 @@ mod tests {
                         if *purge_height == Height::from(default_interval_length) => {}
                     val => panic!("Unexpected change set: {:?}", val),
                 };
-                dkg_pool.apply_changes(&SysTimeSource::new(), change_set);
+                dkg_pool.apply_changes(&MockTimeSource::new(), change_set);
                 // And then we validate...
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
@@ -2259,7 +2259,7 @@ mod tests {
                     val => panic!("Unexpected change set: {:?}", val),
                 };
                 // Just check again, we do not reproduce a dealing once changes are applied.
-                dkg_pool.apply_changes(&SysTimeSource::new(), change_set);
+                dkg_pool.apply_changes(&MockTimeSource::new(), change_set);
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
             });
         });
@@ -2362,7 +2362,7 @@ mod tests {
                 };
 
                 // Apply the changes and make sure, we do not produce any dealings anymore.
-                dkg_pool.apply_changes(&SysTimeSource::new(), change_set);
+                dkg_pool.apply_changes(&MockTimeSource::new(), change_set);
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
 
                 // Advance _past_ the new summary to make sure the configs for remote
@@ -2376,7 +2376,7 @@ mod tests {
                         if *purge_height == Height::from(dkg_interval_length + 1) => {}
                     val => panic!("Unexpected change set: {:?}", val),
                 };
-                dkg_pool.apply_changes(&SysTimeSource::new(), change_set);
+                dkg_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // And then we validate two local and two remote dealings.
                 let change_set = dkg.on_state_change(&dkg_pool);
@@ -2403,7 +2403,7 @@ mod tests {
                     val => panic!("Unexpected change set: {:?}", val),
                 };
                 // Just check again, we do not reproduce a dealing once changes are applied.
-                dkg_pool.apply_changes(&SysTimeSource::new(), change_set);
+                dkg_pool.apply_changes(&MockTimeSource::new(), change_set);
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
             });
         });
@@ -2597,7 +2597,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Make sure both dealings from replica 1 is successfully validated and apply
             // the changes.
@@ -2608,7 +2608,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Now we try to add another identical dealing from replica 1.
             node_2.dkg_pool.insert(UnvalidatedArtifact {
@@ -2663,7 +2663,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Make sure both dealings from replica 1 is successfully validated and apply
             // the changes.
@@ -2674,7 +2674,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Now we try to add a different dealing but still from replica 1.
             let mut invalid_dealing_message = valid_dealing_message.clone();
@@ -2694,7 +2694,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Now we create a message with an unknown Dkg id and verify
             // that it gets rejected.
@@ -2724,7 +2724,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Now we create a message from a non-dealer and verify it gets marked as
             // invalid.
@@ -2752,7 +2752,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Now we create a message with a wrong replica version and verify
             // that it gets rejected.
@@ -2775,7 +2775,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Now we create a message, which refers a DKG interval above our finalized
             // height and make sure we skip it.
@@ -2847,7 +2847,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Make sure we validate one dealing, and handle another two as invalid.
             node_2.sync_key_manager();
@@ -2893,7 +2893,7 @@ mod tests {
             };
             node_2
                 .dkg_pool
-                .apply_changes(&SysTimeSource::new(), change_set);
+                .apply_changes(&MockTimeSource::new(), change_set);
 
             // Make sure we validate both dealings from replica 1
             let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
@@ -3029,7 +3029,7 @@ mod tests {
                             if *purge_height == Height::from(2 * (dkg_interval_length + 1)) => {}
                         val => panic!("Unexpected change set: {:?}", val),
                     };
-                    dkg_pool_1.apply_changes(&SysTimeSource::new(), change_set);
+                    dkg_pool_1.apply_changes(&MockTimeSource::new(), change_set);
                     sync_dkg_key_manager(&dgk_key_manager_1, &pool_1);
 
                     // The last summary contains two local and two remote configs.
@@ -3079,7 +3079,7 @@ mod tests {
                             if *purge_height == Height::from(2 * (dkg_interval_length + 1)) => {}
                         val => panic!("Unexpected change set: {:?}", val),
                     };
-                    dkg_pool_2.apply_changes(&SysTimeSource::new(), change_set);
+                    dkg_pool_2.apply_changes(&MockTimeSource::new(), change_set);
 
                     assert_eq!(dkg_pool_2.get_unvalidated().count(), 4);
 

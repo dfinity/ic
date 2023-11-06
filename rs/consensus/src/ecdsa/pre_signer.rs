@@ -15,6 +15,7 @@ use ic_types::consensus::ecdsa::{
     dealing_prefix, dealing_support_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaStats,
     IDkgTranscriptParamsRef,
 };
+use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgDealingSupport, IDkgTranscript,
     IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, SignedIDkgDealing,
@@ -23,8 +24,6 @@ use ic_types::crypto::CryptoHashOf;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{Height, NodeId, SubnetId};
-
-use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
 use std::cell::RefCell;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
@@ -1431,9 +1430,6 @@ impl TranscriptState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-    use std::ops::Deref;
-
     use super::*;
     use crate::ecdsa::test_utils::*;
     use assert_matches::assert_matches;
@@ -1442,13 +1438,15 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
-    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities::MockTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::{EcdsaObject, EcdsaStatsNoOp};
     use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash};
+    use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, RegistryVersion};
+    use std::collections::HashSet;
+    use std::ops::Deref;
 
     // Tests the Action logic
     #[test]
@@ -1535,7 +1533,7 @@ mod tests {
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing_2)),
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing_3)),
                 ];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Set up the transcript creation request
                 // The block requests transcripts 1, 4, 5
@@ -1684,7 +1682,6 @@ mod tests {
     // requests, and others dealings are either deferred or dropped.
     #[test]
     fn test_ecdsa_validate_dealings() {
-        let time_source = FastForwardTimeSource::new();
         let (id_2, id_3, id_4, id_5) = (
             // A dealing for a transcript that is requested by finalized block (accepted)
             create_transcript_id_with_height(2, Height::from(100)),
@@ -1706,7 +1703,7 @@ mod tests {
                 artifacts.push(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
                 msg_id
             })
@@ -1831,7 +1828,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id_2 = create_transcript_id_with_height(2, Height::from(100));
 
                 // Set up the ECDSA pool
@@ -1840,7 +1836,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
                 let dealing = create_dealing(id_2, NODE_2);
@@ -1848,7 +1844,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let t2 = create_transcript_param(id_2, &[NODE_2], &[NODE_1]);
@@ -1870,7 +1866,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id_2 = create_transcript_id_with_height(2, Height::from(100));
 
                 // Set up the ECDSA pool
@@ -1881,7 +1876,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100, , internal_dealing_raw = vec[2]}
@@ -1891,7 +1886,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Unvalidated pool has: {transcript 2, dealer = NODE_3, height = 100, , internal_dealing_raw = vec[3]}
@@ -1901,7 +1896,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let t2 = create_transcript_param(id_2, &[NODE_2, NODE_3], &[NODE_1]);
@@ -1931,7 +1926,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id_2 = create_transcript_id_with_height(2, Height::from(100));
 
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
@@ -1940,7 +1934,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // NODE_2 is not in the dealer list
@@ -1969,7 +1963,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
                 let t = create_transcript_param(id, &[NODE_2], &[NODE_1]);
 
                 let block_reader =
@@ -1981,7 +1975,7 @@ mod tests {
                     &id,
                     &NODE_2,
                 ));
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Since we already issued support for the dealing, it should not produce any
                 // more support.
@@ -2009,7 +2003,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
                 // create a transcript with unknown future registry version
                 let rv = RegistryVersion::from(1);
                 let t = create_transcript_param_with_registry_version(id, &[NODE_2], &[NODE_1], rv);
@@ -2044,7 +2038,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing.clone()),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
                 let t = create_transcript_param(id, &[NODE_2], &[NODE_1]);
 
                 let block_reader =
@@ -2074,7 +2068,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
                 let t = create_transcript_param(id, &[NODE_2], &[NODE_3]);
 
                 let block_reader =
@@ -2098,7 +2092,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 let block_reader =
                     TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![]);
@@ -2149,7 +2143,6 @@ mod tests {
     // transcript requests, and others dealings are either deferred or dropped.
     #[test]
     fn test_ecdsa_validate_dealing_support() {
-        let time_source = FastForwardTimeSource::new();
         let (id_2, id_3, id_4, id_5) = (
             create_transcript_id_with_height(2, Height::from(25)),
             create_transcript_id_with_height(3, Height::from(10)),
@@ -2174,14 +2167,14 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaDealingSupport(support.clone()),
             peer_id: NODE_3,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
         support.sig_share.signature = BasicSigOf::new(BasicSig(vec![1]));
         let msg_id_2_dupl = support.message_id();
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaDealingSupport(support),
             peer_id: NODE_3,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // A dealing for a transcript that is requested by finalized block,
@@ -2191,7 +2184,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaDealingSupport(support),
             peer_id: NODE_3,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // A dealing for a transcript that is not requested by finalized block
@@ -2201,7 +2194,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaDealingSupport(support),
             peer_id: NODE_3,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // A dealing for a transcript that references a future block height
@@ -2210,7 +2203,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaDealingSupport(support),
             peer_id: NODE_3,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // Using CryptoReturningOK one of the shares with id_2 should be accepted, the other handled invalid
@@ -2223,7 +2216,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing.clone()),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
                 let change_set = pre_signer.validate_dealing_support(&ecdsa_pool, &block_reader);
@@ -2251,7 +2244,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing.clone()),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
@@ -2274,7 +2267,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing.clone()),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
                 let block_reader = block_reader
@@ -2298,7 +2291,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id = create_transcript_id_with_height(1, Height::from(100));
 
                 // Set up the ECDSA pool
@@ -2307,19 +2299,19 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaDealingSupport(support.clone()),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 // Unvalidated pool has: duplicate of the same support share
                 let msg_id = support.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let t = create_transcript_param(id, &[NODE_2], &[NODE_3]);
@@ -2341,7 +2333,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id = create_transcript_id_with_height(1, Height::from(10));
 
                 // Unvalidated pool has: support {transcript 2, dealer = NODE_2, signer =
@@ -2351,7 +2342,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // NODE_3 is not in the receiver list
@@ -2372,7 +2363,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id = create_transcript_id_with_height(1, Height::from(10));
 
                 // Set up the ECDSA pool
@@ -2382,14 +2372,14 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 support.dealer_id = NODE_3;
                 let msg_id = support.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Set up the transcript creation request
@@ -2411,7 +2401,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id = create_transcript_id_with_height(1, Height::from(10));
 
                 // Set up the ECDSA pool
@@ -2421,14 +2410,14 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
                 let msg_id = support.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Set up the transcript creation request
@@ -2450,7 +2439,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let id = create_transcript_id_with_height(1, Height::from(10));
 
                 // Set up the ECDSA pool
@@ -2460,7 +2448,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
                 support.dealer_id = NODE_4;
@@ -2468,7 +2456,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Set up the transcript creation request
@@ -2490,7 +2478,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
                     create_transcript_id_with_height(1, Height::from(20)),
                     create_transcript_id_with_height(2, Height::from(20)),
@@ -2502,7 +2489,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing_1),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Dealing 2: height <= current_height, !in_progress (purged)
@@ -2511,7 +2498,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing_2),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Dealing 3: height > current_height (not purged)
@@ -2519,7 +2506,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSignedDealing(dealing_3),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
@@ -2565,7 +2552,7 @@ mod tests {
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing_3)),
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing_4)),
                 ];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
                 let t4 = create_transcript_param(id_4, &[NODE_2], &[NODE_4]);
@@ -2586,7 +2573,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
                     create_transcript_id_with_height(1, Height::from(20)),
                     create_transcript_id_with_height(2, Height::from(20)),
@@ -2598,7 +2584,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support_1),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Dealing 2: height <= current_height, !in_progress (purged)
@@ -2607,7 +2593,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support_2),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Dealing 3: height > current_height (not purged)
@@ -2615,7 +2601,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaDealingSupport(support_3),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
@@ -2656,7 +2642,7 @@ mod tests {
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support_2)),
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support_3)),
                 ];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
                 let block_reader =
@@ -2719,7 +2705,7 @@ mod tests {
                         ))
                     })
                     .collect();
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 {
                     let b = EcdsaTranscriptBuilderImpl::new(
@@ -2748,7 +2734,7 @@ mod tests {
                         ))
                     })
                     .collect();
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
 
                 let b = EcdsaTranscriptBuilderImpl::new(
                     &block_reader,
