@@ -1388,6 +1388,11 @@ message NeuronsFundParticipation {
   // the direct participation amount (`direct_participation_icp_e8s`) and matching function
   // (`ideal_matched_participation_function`).
   optional uint64 intended_neurons_fund_participation_icp_e8s = 7;
+
+  // How much from `intended_neurons_fund_participation_icp_e8s` was the Neurons' Fund actually able
+  // to allocate, given the specific composition of neurons at the time of execution of the proposal
+  // through which this SNS was created and the participation limits of this SNS.
+  optional uint64 allocated_neurons_fund_participation_icp_e8s = 8;
 }
 
 // This function is called "ideal" because it serves as the guideline that the Neurons' Fund will

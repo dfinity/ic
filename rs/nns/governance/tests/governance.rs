@@ -11734,6 +11734,9 @@ lazy_static! {
         intended_neurons_fund_participation_icp_e8s: Some(
             70859779960,
         ),
+        allocated_neurons_fund_participation_icp_e8s: Some(
+            70859779960,
+        ),
     });
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION_ABORT: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
@@ -11773,6 +11776,9 @@ lazy_static! {
             70859779960,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
+            0,
+        ),
+        allocated_neurons_fund_participation_icp_e8s: Some(
             0,
         ),
     });
@@ -11850,6 +11856,9 @@ lazy_static! {
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
             21342385865,
+        ),
+        allocated_neurons_fund_participation_icp_e8s: Some(
+            19208147279,
         ),
     });
 

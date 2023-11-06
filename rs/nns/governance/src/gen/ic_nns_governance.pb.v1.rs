@@ -1475,6 +1475,11 @@ pub struct NeuronsFundParticipation {
     /// (`ideal_matched_participation_function`).
     #[prost(uint64, optional, tag = "7")]
     pub intended_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
+    /// How much from `intended_neurons_fund_participation_icp_e8s` was the Neurons' Fund actually able
+    /// to allocate, given the specific composition of neurons at the time of execution of the proposal
+    /// through which this SNS was created and the participation limits of this SNS.
+    #[prost(uint64, optional, tag = "8")]
+    pub allocated_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
 /// This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
 /// try to follow, but may deviate from in order to satisfy SNS-specific participation constraints

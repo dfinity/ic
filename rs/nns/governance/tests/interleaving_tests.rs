@@ -221,6 +221,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
                     intended_neurons_fund_participation_icp_e8s: Some(
                         max_direct_participation_icp_e8s,
                     ),
+                    allocated_neurons_fund_participation_icp_e8s: Some(nf_neuron_maturity),
                 }),
                 final_neurons_fund_participation: None,
                 neurons_fund_refunds: None,
