@@ -1,5 +1,5 @@
 {
-  "checksum": "2e4095a3e5936e93137e6cdf32d19fe3763bd22fd9bdf175bdeb778eb7cbc0cc",
+  "checksum": "466c3848cad7407cab66111f95315e0acfab5535dc31be67389cf2b9de5d0607",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -40464,6 +40464,10 @@
               "target": "maplit"
             },
             {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
               "id": "serde 1.0.190",
               "target": "serde"
             },
@@ -42728,15 +42732,6 @@
               "**/*.rs"
             ]
           }
-        },
-        {
-          "Binary": {
-            "crate_name": "ic-wasm",
-            "crate_root": "src/bin/main.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
         }
       ],
       "library_target_name": "ic_wasm",
@@ -43355,10 +43350,6 @@
           "selects": {}
         },
         "edition": "2021",
-        "rustc_flags": [
-          "-C",
-          "opt-level=3"
-        ],
         "version": "0.8.0"
       },
       "license": "MIT/Apache-2.0"
@@ -43934,6 +43925,10 @@
             {
               "id": "tokio 1.33.0",
               "target": "tokio"
+            },
+            {
+              "id": "tokio-util 0.7.8",
+              "target": "tokio_util"
             },
             {
               "id": "tower 0.4.13",
@@ -47496,12 +47491,6 @@
               "target": "glob"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "NUM_JOBS": "8"
-          },
           "selects": {}
         },
         "links": "rocksdb"
@@ -57345,12 +57334,6 @@
         "version": "0.12.1"
       },
       "build_script_attrs": {
-        "data": {
-          "common": [
-            "@com_google_protobuf//:protoc"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -57365,12 +57348,6 @@
               "target": "sha2"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "PROTOC": "$(execpath @com_google_protobuf//:protoc)"
-          },
           "selects": {}
         }
       },
@@ -63082,12 +63059,6 @@
               "target": "cc"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source"
-          },
           "selects": {}
         },
         "links": "ring-asm"
@@ -82818,9 +82789,7 @@
       "license": "MIT/Apache-2.0"
     }
   },
-  "binary_crates": [
-    "ic-wasm 0.4.0"
-  ],
+  "binary_crates": [],
   "workspace_members": {
     "bazelifier 0.9.0": "rs/bazelifier",
     "boundary-node-control-plane 0.9.0": "rs/boundary_node/control_plane",
