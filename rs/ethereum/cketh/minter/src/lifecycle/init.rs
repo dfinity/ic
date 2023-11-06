@@ -10,9 +10,7 @@ use candid::types::principal::Principal;
 use candid::{CandidType, Deserialize};
 use minicbor::{Decode, Encode};
 
-#[derive(
-    CandidType, serde::Serialize, Deserialize, Clone, Debug, Encode, Decode, PartialEq, Eq,
-)]
+#[derive(CandidType, Deserialize, Clone, Debug, Encode, Decode, PartialEq, Eq)]
 pub struct InitArg {
     #[n(0)]
     pub ethereum_network: EthereumNetwork,

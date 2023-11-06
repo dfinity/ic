@@ -15,13 +15,12 @@ use crate::tx::{
 };
 use candid::Principal;
 use minicbor::{Decode, Encode};
-use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 
 /// Ethereum withdrawal request issued by the user.
-#[derive(Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode)]
 pub struct EthWithdrawalRequest {
     #[n(0)]
     pub withdrawal_amount: Wei,
@@ -35,7 +34,7 @@ pub struct EthWithdrawalRequest {
     pub from_subaccount: Option<Subaccount>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct ReimbursementRequest {
     #[cbor(n(0), with = "crate::cbor::id")]
     pub withdrawal_id: LedgerBurnIndex,
@@ -47,7 +46,7 @@ pub struct ReimbursementRequest {
     pub to_subaccount: Option<Subaccount>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct Reimbursed {
     #[cbor(n(0), with = "crate::cbor::id")]
     pub reimbursed_in_block: LedgerMintIndex,
@@ -57,7 +56,7 @@ pub struct Reimbursed {
     pub reimbursed_amount: Wei,
 }
 
-#[derive(Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode)]
 #[cbor(transparent)]
 pub struct Subaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
 
@@ -101,7 +100,7 @@ impl fmt::Debug for EthWithdrawalRequest {
 ///    The others sent transactions for that nonce were never mined and can be discarded.
 /// 6. If a given transaction fails the minter will reimburse the user who requested the
 ///    withdrawal with the corresponding amount minus fees.
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 // TODO FI-948: limit number of withdrawal_requests and pending transactions nonces
 pub struct EthTransactions {
     pub withdrawal_requests: VecDeque<EthWithdrawalRequest>,

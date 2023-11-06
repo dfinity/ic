@@ -11,14 +11,13 @@ use candid::Principal;
 use hex_literal::hex;
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct ReceivedEthEvent {
     #[n(0)]
     pub transaction_hash: Hash,
@@ -49,9 +48,7 @@ impl fmt::Debug for ReceivedEthEvent {
 
 /// A unique identifier of the event source: the source transaction hash and the log
 /// entry index.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct EventSource {
     #[n(0)]
     pub transaction_hash: Hash,
@@ -132,7 +129,7 @@ pub enum ReceivedEthEventError {
     },
 }
 
-#[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum EventSourceError {
     #[error("failed to decode principal from bytes {invalid_principal}")]
     InvalidPrincipal { invalid_principal: FixedSizeData },
