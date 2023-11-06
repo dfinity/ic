@@ -284,10 +284,17 @@ pub fn add_transport_to_sim<F>(
         let consensus_manager_clone = consensus_manager.clone();
 
         async move {
+            let metrics_registry = &MetricsRegistry::default();
+            let mut consensus_builder = ic_consensus_manager::ConsensusManagerBuilder::new(
+                log.clone(),
+                tokio::runtime::Handle::current(),
+                metrics_registry,
+            );
+
+            let mut router = conn_checker_clone;
             let udp_listener = turmoil::net::UdpSocket::bind(node_addr).await.unwrap();
             let this_ip = turmoil::lookup(peer.to_string());
             let custom_udp = CustomUdp::new(this_ip, udp_listener);
-            let mut router = Router::new().merge(conn_checker_clone.unwrap_or_default());
 
             let state_sync_rx = if let Some(ref state_sync) = state_sync_client_clone {
                 let (state_sync_router, state_sync_rx) = ic_state_sync_manager::build_axum_router(
@@ -295,16 +302,28 @@ pub fn add_transport_to_sim<F>(
                     log.clone(),
                     &MetricsRegistry::default(),
                 );
-                router = router.merge(state_sync_router);
+                router = Some(router.unwrap_or_default().merge(state_sync_router));
                 Some(state_sync_rx)
             } else {
                 None
             };
-            let consensus_rx = if let Some(ref consensus) = consensus_manager_clone {
-                let (consensus_router, consensus_tx) =
-                    ic_consensus_manager::build_axum_router(log.clone(), consensus.clone());
-                router = router.merge(consensus_router);
-                Some(consensus_tx)
+
+            let _artifact_processor_jh = if let Some(consensus) = consensus_manager_clone {
+                let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
+                    start_test_processor(
+                        consensus.clone(),
+                        consensus.clone().read().unwrap().clone(),
+                    );
+                let pfn_producer = Arc::new(consensus.clone().read().unwrap().clone());
+                consensus_builder.add_client(
+                    artifact_manager_event_rx,
+                    consensus,
+                    pfn_producer,
+                    artifact_sender,
+                );
+                router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
+
+                Some(artifact_processor_jh)
             } else {
                 None
             };
@@ -319,8 +338,10 @@ pub fn add_transport_to_sim<F>(
                 peer,
                 topology_watcher_clone.clone(),
                 Either::Right(custom_udp),
-                Some(router),
+                router,
             ));
+
+            consensus_builder.run(transport.clone(), topology_watcher_clone.clone());
 
             if let Some(state_sync_rx) = state_sync_rx {
                 ic_state_sync_manager::start_state_sync_manager(
@@ -332,27 +353,6 @@ pub fn add_transport_to_sim<F>(
                     state_sync_rx,
                 );
             }
-
-            let _artifact_processor_jh = if let Some(consensus_rx) = consensus_rx {
-                let consensus = consensus_manager_clone.clone().unwrap();
-                let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
-                    start_test_processor(consensus.clone(), consensus.read().unwrap().clone());
-                ic_consensus_manager::start_consensus_manager(
-                    log,
-                    &MetricsRegistry::default(),
-                    tokio::runtime::Handle::current(),
-                    artifact_manager_event_rx,
-                    consensus_rx,
-                    consensus.clone(),
-                    Arc::new(consensus.read().unwrap().clone()),
-                    artifact_sender,
-                    transport.clone(),
-                    topology_watcher_clone,
-                );
-                Some(artifact_processor_jh)
-            } else {
-                None
-            };
 
             post_setup_future_clone(peer, transport).await;
             Ok(())

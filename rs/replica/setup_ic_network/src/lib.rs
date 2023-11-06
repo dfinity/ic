@@ -34,7 +34,7 @@ use ic_icos_sev::Sev;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessorEvent, JoinGuard},
-    artifact_pool::UnvalidatedArtifactEvent,
+    artifact_pool::{PriorityFnAndFilterProducer, UnvalidatedArtifactEvent},
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
@@ -75,8 +75,10 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
+use tokio::sync::mpsc::Sender as TokioSender;
 
 const ENABLE_NEW_STATE_SYNC: bool = false;
+const ENABLE_NEW_P2P_CONSENSUS: bool = false;
 
 /// The P2P state sync client.
 pub enum P2PStateSyncClient {
@@ -84,6 +86,18 @@ pub enum P2PStateSyncClient {
     Client(StateSync),
     /// The test client variant.
     TestClient(),
+}
+
+enum P2PSenders {
+    Old(Sender<GossipAdvert>),
+    New {
+        consensus: TokioSender<ArtifactProcessorEvent<ConsensusArtifact>>,
+        certification: TokioSender<ArtifactProcessorEvent<CertificationArtifact>>,
+        dkg: TokioSender<ArtifactProcessorEvent<DkgArtifact>>,
+        ingress: TokioSender<ArtifactProcessorEvent<IngressArtifact>>,
+        ecdsa: TokioSender<ArtifactProcessorEvent<EcdsaArtifact>>,
+        https_outcalls: TokioSender<ArtifactProcessorEvent<CanisterHttpArtifact>>,
+    },
 }
 
 /// The collection of all artifact pools.
@@ -95,13 +109,18 @@ struct ArtifactPools {
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
+struct P2PClientAndPrioFn<Artifact: ArtifactKind + 'static, Pool> {
+    client_handle: ArtifactClientHandle<Artifact>,
+    priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+}
+
 struct P2PClients {
-    consensus: ArtifactClientHandle<ConsensusArtifact>,
-    ingress: ArtifactClientHandle<IngressArtifact>,
-    certification: ArtifactClientHandle<CertificationArtifact>,
-    dkg: ArtifactClientHandle<DkgArtifact>,
-    ecdsa: ArtifactClientHandle<EcdsaArtifact>,
-    https_outcalls: ArtifactClientHandle<CanisterHttpArtifact>,
+    consensus: P2PClientAndPrioFn<ConsensusArtifact, ConsensusPoolImpl>,
+    ingress: P2PClientAndPrioFn<IngressArtifact, IngressPoolImpl>,
+    certification: P2PClientAndPrioFn<CertificationArtifact, CertificationPoolImpl>,
+    dkg: P2PClientAndPrioFn<DkgArtifact, DkgPoolImpl>,
+    ecdsa: P2PClientAndPrioFn<EcdsaArtifact, EcdsaPoolImpl>,
+    https_outcalls: P2PClientAndPrioFn<CanisterHttpArtifact, CanisterHttpPoolImpl>,
 }
 
 pub type CanisterHttpAdapterClient =
@@ -154,66 +173,174 @@ pub fn setup_consensus_and_p2p(
 ) {
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
+
+    let start_consensus = |advert_sender| {
+        start_consensus(
+            log,
+            metrics_registry,
+            node_id,
+            subnet_id,
+            artifact_pool_config,
+            catch_up_package,
+            Arc::clone(&consensus_crypto) as Arc<_>,
+            Arc::clone(&certifier_crypto) as Arc<_>,
+            Arc::clone(&ingress_sig_crypto) as Arc<_>,
+            Arc::clone(&registry_client),
+            state_manager,
+            state_reader,
+            xnet_payload_builder,
+            self_validating_payload_builder,
+            query_stats_payload_builder,
+            message_router,
+            ingress_history_reader,
+            consensus_pool.clone(),
+            malicious_flags,
+            cycles_account_manager,
+            local_store_time_reader,
+            registry_poll_delay_duration_ms,
+            advert_sender,
+            canister_http_adapter_client,
+            time_source.clone(),
+        )
+    };
+
     let (advert_tx, advert_rx) = bounded(MAX_ADVERT_BUFFER);
-
-    let (p2p_clients, mut join_handles, ingress_pool) = start_consensus(
-        log,
-        metrics_registry,
-        node_id,
-        subnet_id,
-        artifact_pool_config,
-        catch_up_package,
-        Arc::clone(&consensus_crypto) as Arc<_>,
-        Arc::clone(&certifier_crypto) as Arc<_>,
-        Arc::clone(&ingress_sig_crypto) as Arc<_>,
-        Arc::clone(&registry_client),
-        state_manager,
-        state_reader,
-        xnet_payload_builder,
-        self_validating_payload_builder,
-        query_stats_payload_builder,
-        message_router,
-        ingress_history_reader,
-        consensus_pool,
-        malicious_flags,
-        cycles_account_manager,
-        local_store_time_reader,
-        registry_poll_delay_duration_ms,
-        advert_tx.clone(),
-        canister_http_adapter_client,
-        time_source.clone(),
-    );
-    let ingress_sender = p2p_clients.ingress.sender.clone();
-    // P2P stack follows
-
     let mut backends: HashMap<ArtifactTag, Box<dyn manager::ArtifactManagerBackend>> =
         HashMap::new();
-    backends.insert(
-        CertificationArtifact::TAG,
-        Box::new(p2p_clients.certification),
-    );
-    backends.insert(ConsensusArtifact::TAG, Box::new(p2p_clients.consensus));
-    backends.insert(DkgArtifact::TAG, Box::new(p2p_clients.dkg));
-    backends.insert(IngressArtifact::TAG, Box::new(p2p_clients.ingress));
-    backends.insert(EcdsaArtifact::TAG, Box::new(p2p_clients.ecdsa));
-    backends.insert(
-        CanisterHttpArtifact::TAG,
-        Box::new(p2p_clients.https_outcalls),
+
+    let mut new_p2p_consensus = ic_consensus_manager::ConsensusManagerBuilder::new(
+        log.clone(),
+        rt_handle.clone(),
+        metrics_registry,
     );
 
+    let mut p2p_router = None;
+
+    let (ingress_sender, mut join_handles, ingress_pool) = if ENABLE_NEW_P2P_CONSENSUS {
+        let (consensus_advert_tx, consensus_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (certification_advert_tx, certification_rx) =
+            tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (dkg_tx, dkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (ingress_tx, ingress_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (ecdsa_tx, ecdsa_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+
+        let advert_tx = P2PSenders::New {
+            consensus: consensus_advert_tx,
+            certification: certification_advert_tx,
+            dkg: dkg_tx,
+            ingress: ingress_tx,
+            ecdsa: ecdsa_tx,
+            https_outcalls: http_outcalls_tx,
+        };
+
+        let (p2p_clients, join_handles, artifact_pools) = start_consensus(advert_tx);
+
+        let ArtifactPools {
+            certification_pool,
+            dkg_pool,
+            ecdsa_pool,
+            canister_http_pool,
+            ingress_pool,
+        } = artifact_pools;
+
+        new_p2p_consensus.add_client(
+            consensus_rx,
+            consensus_pool,
+            p2p_clients.consensus.priority_fn_producer,
+            p2p_clients.consensus.client_handle.sender,
+        );
+
+        new_p2p_consensus.add_client(
+            ingress_rx,
+            ingress_pool.clone(),
+            p2p_clients.ingress.priority_fn_producer,
+            p2p_clients.ingress.client_handle.sender.clone(),
+        );
+
+        new_p2p_consensus.add_client(
+            certification_rx,
+            certification_pool,
+            p2p_clients.certification.priority_fn_producer,
+            p2p_clients.certification.client_handle.sender,
+        );
+
+        new_p2p_consensus.add_client(
+            dkg_rx,
+            dkg_pool,
+            p2p_clients.dkg.priority_fn_producer,
+            p2p_clients.dkg.client_handle.sender,
+        );
+
+        new_p2p_consensus.add_client(
+            ecdsa_rx,
+            ecdsa_pool,
+            p2p_clients.ecdsa.priority_fn_producer,
+            p2p_clients.ecdsa.client_handle.sender,
+        );
+
+        new_p2p_consensus.add_client(
+            http_outcalls_rx,
+            canister_http_pool,
+            p2p_clients.https_outcalls.priority_fn_producer,
+            p2p_clients.https_outcalls.client_handle.sender,
+        );
+
+        p2p_router = Some(
+            new_p2p_consensus
+                .router()
+                .merge(p2p_router.unwrap_or_default()),
+        );
+        (
+            p2p_clients.ingress.client_handle.sender,
+            join_handles,
+            ingress_pool,
+        )
+    } else {
+        let (p2p_clients, join_handles, artifact_pools) =
+            start_consensus(P2PSenders::Old(advert_tx.clone()));
+
+        let ingress_sender = p2p_clients.ingress.client_handle.sender.clone();
+
+        backends.insert(
+            CertificationArtifact::TAG,
+            Box::new(p2p_clients.certification.client_handle),
+        );
+        backends.insert(
+            ConsensusArtifact::TAG,
+            Box::new(p2p_clients.consensus.client_handle),
+        );
+        backends.insert(DkgArtifact::TAG, Box::new(p2p_clients.dkg.client_handle));
+        backends.insert(
+            IngressArtifact::TAG,
+            Box::new(p2p_clients.ingress.client_handle),
+        );
+        backends.insert(
+            EcdsaArtifact::TAG,
+            Box::new(p2p_clients.ecdsa.client_handle),
+        );
+        backends.insert(
+            CanisterHttpArtifact::TAG,
+            Box::new(p2p_clients.https_outcalls.client_handle),
+        );
+
+        (ingress_sender, join_handles, artifact_pools.ingress_pool)
+    };
+
     // StateSync
-    let (state_sync_router, state_sync_client) = match state_sync_client {
+    let state_sync_client = match state_sync_client {
         P2PStateSyncClient::Client(client) if ENABLE_NEW_STATE_SYNC => {
             let state_sync_client = Arc::new(client);
-            let (router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
-                state_sync_client.clone(),
-                log.clone(),
-                metrics_registry,
-            );
-            (
-                Some(router),
-                Some((state_sync_client, state_sync_manager_rx)),
-            )
+            let (state_sync_router, state_sync_manager_rx) =
+                ic_state_sync_manager::build_axum_router(
+                    state_sync_client.clone(),
+                    log.clone(),
+                    metrics_registry,
+                );
+
+            p2p_router = Some(state_sync_router.merge(p2p_router.unwrap_or_default()));
+
+            Some((state_sync_client, state_sync_manager_rx))
         }
         P2PStateSyncClient::Client(client) => {
             let advert_tx = advert_tx.clone();
@@ -236,9 +363,9 @@ pub fn setup_consensus_and_p2p(
                 }),
             );
 
-            (None, None)
+            None
         }
-        P2PStateSyncClient::TestClient() => (None, None),
+        P2PStateSyncClient::TestClient() => None,
     };
 
     let sev_handshake = Arc::new(Sev::new(node_id, registry_client.clone()));
@@ -266,9 +393,9 @@ pub fn setup_consensus_and_p2p(
         registry_client.clone(),
         sev_handshake.clone(),
         node_id,
-        topology_watcher,
+        topology_watcher.clone(),
         Either::<_, DummyUdpSocket>::Left(transport_addr),
-        state_sync_router,
+        p2p_router,
     ));
 
     if let Some((state_sync_client, state_sync_manager_rx)) = state_sync_client {
@@ -276,11 +403,13 @@ pub fn setup_consensus_and_p2p(
             log.clone(),
             metrics_registry,
             rt_handle,
-            quic_transport,
+            quic_transport.clone(),
             state_sync_client,
             state_sync_manager_rx,
         );
     }
+
+    new_p2p_consensus.run(quic_transport, topology_watcher);
 
     // Tcp transport
     let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
@@ -347,14 +476,10 @@ fn start_consensus(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     registry_poll_delay_duration_ms: u64,
-    advert_tx: Sender<GossipAdvert>,
+    advert_tx: P2PSenders,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     time_source: Arc<SysTimeSource>,
-) -> (
-    P2PClients,
-    Vec<Box<dyn JoinGuard>>,
-    Arc<RwLock<IngressPoolImpl>>,
-) {
+) -> (P2PClients, Vec<Box<dyn JoinGuard>>, ArtifactPools) {
     let artifact_pools = init_artifact_pools(
         node_id,
         artifact_pool_config,
@@ -409,117 +534,204 @@ fn start_consensus(
     )));
 
     let consensus_client = {
-        let advert_tx = advert_tx.clone();
-        // Create the consensus client.
-        let (client, jh) = create_consensus_handlers(
-            move |req| {
-                if let ArtifactProcessorEvent::Advert(advert) = req {
-                    let _ = advert_tx.send(advert.into());
-                }
-            },
-            consensus_setup(
-                replica_config.clone(),
-                Arc::clone(&registry_client),
-                Arc::clone(&membership) as Arc<_>,
-                Arc::clone(&consensus_crypto),
-                Arc::clone(&ingress_manager) as Arc<_>,
-                xnet_payload_builder,
-                self_validating_payload_builder,
-                canister_http_payload_builder,
-                Arc::from(query_stats_payload_builder),
-                Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
-                Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
-                Arc::clone(&dkg_key_manager) as Arc<_>,
-                message_router,
-                Arc::clone(&state_manager) as Arc<_>,
-                Arc::clone(&time_source) as Arc<_>,
-                malicious_flags.clone(),
-                metrics_registry.clone(),
-                log.clone(),
-                local_store_time_reader,
-                registry_poll_delay_duration_ms,
-            ),
+        let (consensus_setup, consensus_gossip) = consensus_setup(
+            replica_config.clone(),
+            Arc::clone(&registry_client),
+            Arc::clone(&membership) as Arc<_>,
+            Arc::clone(&consensus_crypto),
+            Arc::clone(&ingress_manager) as Arc<_>,
+            xnet_payload_builder,
+            self_validating_payload_builder,
+            canister_http_payload_builder,
+            Arc::from(query_stats_payload_builder),
+            Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
+            Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
+            Arc::clone(&dkg_key_manager) as Arc<_>,
+            message_router,
+            Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&time_source) as Arc<_>,
-            Arc::clone(&consensus_pool),
+            malicious_flags.clone(),
+            metrics_registry.clone(),
+            log.clone(),
+            local_store_time_reader,
+            registry_poll_delay_duration_ms,
+        );
+
+        let consensus_gossip = Arc::new(consensus_gossip);
+        let time_source = Arc::clone(&time_source) as Arc<_>;
+        let consensus_pool = Arc::clone(&consensus_pool);
+
+        // Create the consensus client.
+        let send_advert: Box<dyn Fn(_) + Send> = match &advert_tx {
+            P2PSenders::New { consensus, .. } => {
+                let advert_tx = consensus.clone();
+                Box::new(move |req| {
+                    advert_tx
+                        .blocking_send(req)
+                        .expect("Channel should not be closed");
+                })
+            }
+
+            P2PSenders::Old(advert_tx) => {
+                let advert_tx = advert_tx.clone();
+
+                Box::new(move |req| {
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
+                        let _ = advert_tx.send(advert.into());
+                    }
+                })
+            }
+        };
+
+        let (client, jh) = create_consensus_handlers(
+            send_advert,
+            consensus_setup,
+            consensus_gossip.clone(),
+            time_source,
+            consensus_pool,
             metrics_registry.clone(),
         );
+
         join_handles.push(jh);
-        client
+        P2PClientAndPrioFn {
+            client_handle: client,
+            priority_fn_producer: consensus_gossip,
+        }
     };
 
     let ingress_client = {
-        let advert_tx = advert_tx.clone();
+        let ingress_prioritizer = Arc::new(IngressPrioritizer::new(time_source.clone()));
+
+        // Create the consensus client.
+        let send_advert: Box<dyn Fn(_) + Send> = match &advert_tx {
+            P2PSenders::New { ingress, .. } => {
+                let advert_tx = ingress.clone();
+                Box::new(move |req| {
+                    advert_tx
+                        .blocking_send(req)
+                        .expect("Channel should not be closed");
+                })
+            }
+
+            P2PSenders::Old(advert_tx) => {
+                let advert_tx = advert_tx.clone();
+
+                Box::new(move |req| {
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
+                        let _ = advert_tx.send(advert.into());
+                    }
+                })
+            }
+        };
         // Create the ingress client.
-        let ingress_prioritizer = IngressPrioritizer::new(time_source.clone());
         let (client, jh) = create_ingress_handlers(
-            move |req| {
-                if let ArtifactProcessorEvent::Advert(advert) = req {
-                    let _ = advert_tx.send(advert.into());
-                }
-            },
+            send_advert,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
-            ingress_prioritizer,
+            ingress_prioritizer.clone(),
             ingress_manager,
             metrics_registry.clone(),
             malicious_flags.clone(),
         );
+
         join_handles.push(jh);
-        client
+        P2PClientAndPrioFn {
+            client_handle: client,
+            priority_fn_producer: ingress_prioritizer,
+        }
     };
 
     let certification_client = {
-        let advert_tx = advert_tx.clone();
+        let send_advert: Box<dyn Fn(_) + Send> = match &advert_tx {
+            P2PSenders::New { certification, .. } => {
+                let advert_tx = certification.clone();
+                Box::new(move |req| {
+                    advert_tx
+                        .blocking_send(req)
+                        .expect("Channel should not be closed");
+                })
+            }
+
+            P2PSenders::Old(advert_tx) => {
+                let advert_tx = advert_tx.clone();
+
+                Box::new(move |req| {
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
+                        let _ = advert_tx.send(advert.into());
+                    }
+                })
+            }
+        };
+        let (certifier, certifier_gossip) = certification_setup(
+            replica_config,
+            Arc::clone(&membership) as Arc<_>,
+            Arc::clone(&certifier_crypto),
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&consensus_pool_cache) as Arc<_>,
+            metrics_registry.clone(),
+            log.clone(),
+        );
+
+        let certifier_gossip = Arc::new(certifier_gossip);
+
         // Create the certification client.
         let (client, jh) = create_certification_handlers(
-            move |req| {
-                if let ArtifactProcessorEvent::Advert(advert) = req {
-                    let _ = advert_tx.send(advert.into());
-                }
-            },
-            certification_setup(
-                replica_config,
-                Arc::clone(&membership) as Arc<_>,
-                Arc::clone(&certifier_crypto),
-                Arc::clone(&state_manager) as Arc<_>,
-                Arc::clone(&consensus_pool_cache) as Arc<_>,
-                metrics_registry.clone(),
-                log.clone(),
-            ),
+            send_advert,
+            certifier,
+            certifier_gossip.clone(),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.certification_pool),
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        client
+        P2PClientAndPrioFn {
+            client_handle: client,
+            priority_fn_producer: certifier_gossip,
+        }
     };
 
     let dkg_client = {
-        let advert_tx = advert_tx.clone();
+        let send_advert: Box<dyn Fn(_) + Send> = match &advert_tx {
+            P2PSenders::New { dkg, .. } => {
+                let advert_tx = dkg.clone();
+                Box::new(move |req| {
+                    advert_tx
+                        .blocking_send(req)
+                        .expect("Channel should not be closed");
+                })
+            }
+            P2PSenders::Old(advert_tx) => {
+                let advert_tx = advert_tx.clone();
+
+                Box::new(move |req| {
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
+                        let _ = advert_tx.send(advert.into());
+                    }
+                })
+            }
+        };
         // Create the DKG client.
+        let dkg_gossip = Arc::new(dkg::DkgGossipImpl {});
         let (client, jh) = create_dkg_handlers(
-            move |req| {
-                if let ArtifactProcessorEvent::Advert(advert) = req {
-                    let _ = advert_tx.send(advert.into());
-                }
-            },
-            (
-                dkg::DkgImpl::new(
-                    node_id,
-                    Arc::clone(&consensus_crypto),
-                    Arc::clone(&consensus_pool_cache),
-                    dkg_key_manager,
-                    metrics_registry.clone(),
-                    log.clone(),
-                ),
-                dkg::DkgGossipImpl {},
+            send_advert,
+            dkg::DkgImpl::new(
+                node_id,
+                Arc::clone(&consensus_crypto),
+                Arc::clone(&consensus_pool_cache),
+                dkg_key_manager,
+                metrics_registry.clone(),
+                log.clone(),
             ),
+            dkg_gossip.clone(),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.dkg_pool),
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        client
+        P2PClientAndPrioFn {
+            client_handle: client,
+            priority_fn_producer: dkg_gossip,
+        }
     };
 
     let ecdsa_client = {
@@ -536,70 +748,107 @@ fn start_consensus(
             finalized.payload.as_ref().is_summary(),
             finalized.payload.as_ref().as_ecdsa().is_some(),
         );
-        let advert_tx = advert_tx.clone();
+
+        let send_advert: Box<dyn Fn(_) + Send> = match &advert_tx {
+            P2PSenders::New { ecdsa, .. } => {
+                let advert_tx = ecdsa.clone();
+                Box::new(move |req| {
+                    advert_tx
+                        .blocking_send(req)
+                        .expect("Channel should not be closed");
+                })
+            }
+            P2PSenders::Old(advert_tx) => {
+                let advert_tx = advert_tx.clone();
+                Box::new(move |req| {
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
+                        let _ = advert_tx.send(advert.into());
+                    }
+                })
+            }
+        };
+
+        let ecdsa_gossip = Arc::new(ecdsa::EcdsaGossipImpl::new(
+            subnet_id,
+            Arc::clone(&consensus_block_cache),
+            metrics_registry.clone(),
+        ));
+
         let (client, jh) = create_ecdsa_handlers(
-            move |req| {
-                if let ArtifactProcessorEvent::Advert(advert) = req {
-                    let _ = advert_tx.send(advert.into());
-                }
-            },
-            (
-                ecdsa::EcdsaImpl::new(
-                    node_id,
-                    subnet_id,
-                    Arc::clone(&consensus_block_cache),
-                    Arc::clone(&consensus_crypto),
-                    metrics_registry.clone(),
-                    log.clone(),
-                    malicious_flags,
-                ),
-                ecdsa::EcdsaGossipImpl::new(
-                    subnet_id,
-                    Arc::clone(&consensus_block_cache),
-                    metrics_registry.clone(),
-                ),
+            send_advert,
+            ecdsa::EcdsaImpl::new(
+                node_id,
+                subnet_id,
+                Arc::clone(&consensus_block_cache),
+                Arc::clone(&consensus_crypto),
+                metrics_registry.clone(),
+                log.clone(),
+                malicious_flags,
             ),
+            ecdsa_gossip.clone(),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ecdsa_pool),
             metrics_registry.clone(),
         );
+
         join_handles.push(jh);
-        client
+        P2PClientAndPrioFn {
+            client_handle: client,
+            priority_fn_producer: ecdsa_gossip,
+        }
     };
 
     let https_outcalls_client = {
-        let advert_tx = advert_tx.clone();
+        let send_advert: Box<dyn Fn(_) + Send> = match &advert_tx {
+            P2PSenders::New { https_outcalls, .. } => {
+                let advert_tx = https_outcalls.clone();
+                Box::new(move |req| {
+                    advert_tx
+                        .blocking_send(req)
+                        .expect("Channel should not be closed");
+                })
+            }
+            P2PSenders::Old(advert_tx) => {
+                let advert_tx = advert_tx.clone();
+                Box::new(move |req| {
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
+                        let _ = advert_tx.send(advert.into());
+                    }
+                })
+            }
+        };
+
+        let canister_http_gossip = Arc::new(CanisterHttpGossipImpl::new(
+            Arc::clone(&consensus_pool_cache),
+            Arc::clone(&state_reader),
+            log.clone(),
+        ));
+
         let (client, jh) = create_https_outcalls_handlers(
-            move |req| {
-                if let ArtifactProcessorEvent::Advert(advert) = req {
-                    let _ = advert_tx.send(advert.into());
-                }
-            },
-            (
-                CanisterHttpPoolManagerImpl::new(
-                    Arc::clone(&state_reader),
-                    Arc::new(Mutex::new(canister_http_adapter_client)),
-                    Arc::clone(&consensus_crypto),
-                    Arc::clone(&membership),
-                    Arc::clone(&consensus_pool_cache),
-                    ReplicaConfig { subnet_id, node_id },
-                    Arc::clone(&registry_client),
-                    metrics_registry.clone(),
-                    log.clone(),
-                ),
-                CanisterHttpGossipImpl::new(
-                    Arc::clone(&consensus_pool_cache),
-                    Arc::clone(&state_reader),
-                    log.clone(),
-                ),
+            send_advert,
+            CanisterHttpPoolManagerImpl::new(
+                Arc::clone(&state_reader),
+                Arc::new(Mutex::new(canister_http_adapter_client)),
+                Arc::clone(&consensus_crypto),
+                Arc::clone(&membership),
+                Arc::clone(&consensus_pool_cache),
+                ReplicaConfig { subnet_id, node_id },
+                Arc::clone(&registry_client),
+                metrics_registry.clone(),
+                log.clone(),
             ),
+            canister_http_gossip.clone(),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.canister_http_pool),
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        client
+        P2PClientAndPrioFn {
+            client_handle: client,
+            priority_fn_producer: canister_http_gossip,
+        }
     };
+
     let p2p_clients = P2PClients {
         consensus: consensus_client,
         certification: certification_client,
@@ -608,7 +857,8 @@ fn start_consensus(
         ecdsa: ecdsa_client,
         https_outcalls: https_outcalls_client,
     };
-    (p2p_clients, join_handles, artifact_pools.ingress_pool)
+
+    (p2p_clients, join_handles, artifact_pools)
 }
 
 fn init_artifact_pools(

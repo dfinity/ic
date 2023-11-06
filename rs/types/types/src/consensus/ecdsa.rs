@@ -1221,7 +1221,7 @@ impl SignedBytesWithoutDomainSeparator for EcdsaOpening {
 /// The final output of the transcript creation sequence
 pub type EcdsaTranscript = IDkgTranscript;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EcdsaMessageAttribute {
     EcdsaSignedDealing(IDkgTranscriptId),
     EcdsaDealingSupport(IDkgTranscriptId),
