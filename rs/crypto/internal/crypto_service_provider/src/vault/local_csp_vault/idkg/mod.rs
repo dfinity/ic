@@ -584,25 +584,45 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         active_key_ids: BTreeSet<KeyId>,
     ) -> Result<(), IDkgRetainKeysError> {
-        self.canister_sks_write_lock()
-            .retain(
-                move |key_id, _| active_key_ids.contains(key_id),
-                IDKG_THRESHOLD_KEYS_SCOPE,
-            )
-            .map_err(|e| match e {
-                SecretKeyStoreWriteError::SerializationError(e) => {
-                    IDkgRetainKeysError::SerializationError {
-                        internal_error: format!("Serialization error while retaining active IDKG canister secret shares: {:?}", e),
-                    }
+        let filter = move |key_id: &KeyId, _: &CspSecretKey| active_key_ids.contains(key_id);
+        if self
+            .canister_sks_read_lock()
+            .retain_would_modify_keystore(filter.clone(), IDKG_THRESHOLD_KEYS_SCOPE)
+        {
+            // The fact that we perform the initial check holding a read lock on the canister SKS,
+            // and then possibly acquire a write lock to actually modify the canister SKS, results
+            // in a potential race condition here. This has two consequences:
+            //  - In case another writer managed to get the write lock after we released the read
+            //    lock and acquired the write lock, and also executed the retain operation with the
+            //    same set of `active_key_ids`, this is fine, since the operation is idempotent.
+            //  - Another potential issue is that a new transcript could have been loaded, and a
+            //    new key added, between the time that retain on the crypto component was called,
+            //    and the time that we actually call retain here. In this case, a newly-created key
+            //    may be deleted. This is currently not an issue given how the crypto component is
+            //    called from consensus, but an approach similar to the one proposed for NI-DKG in
+            //    CRP-1094 (adding the registry version to the keys) could be applied here also.
+            self.canister_sks_write_lock()
+                .retain(
+                    filter,
+                    IDKG_THRESHOLD_KEYS_SCOPE,
+                )
+                .map_err(|e| match e {
+                    SecretKeyStoreWriteError::SerializationError(e) => {
+                        IDkgRetainKeysError::SerializationError {
+                            internal_error: format!("Serialization error while retaining active IDKG canister secret shares: {:?}", e),
+                        }
 
-                }
-                SecretKeyStoreWriteError::TransientError(e) => {
-                    IDkgRetainKeysError::TransientInternalError {
-                        internal_error: format!("IO error while retaining active IDKG canister secret shares: {:?}", e)
                     }
+                    SecretKeyStoreWriteError::TransientError(e) => {
+                        IDkgRetainKeysError::TransientInternalError {
+                            internal_error: format!("IO error while retaining active IDKG canister secret shares: {:?}", e)
+                        }
 
-                }
-            })
+                    }
+                })
+        } else {
+            Ok(())
+        }
     }
 
     fn get_secret_shares(
