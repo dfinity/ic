@@ -130,7 +130,6 @@ members = [
   "rs/ic_os/setupos-inject-configuration",
   "rs/ic_os/partition_tools",
   "rs/ic_os/setupos-disable-checks",
-  "rs/ic_os/sev_interfaces",
   "rs/ic_os/sev",
   "rs/ic_os/snptool",
   "rs/ic_os/vsock/guest",

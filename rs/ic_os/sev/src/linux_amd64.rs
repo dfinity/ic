@@ -11,9 +11,9 @@ References:
 */
 
 use crate::SnpError;
+use crate::{ValidateAttestationError, ValidateAttestedStream};
 use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, node::NodeRegistry};
 use openssl::ecdsa::EcdsaSig;

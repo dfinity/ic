@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/tls",
-    "//rs/ic_os/sev_interfaces",
+    "//rs/ic_os/sev",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -39,7 +39,6 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/ic_os/sev",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",

@@ -17,8 +17,7 @@ use either::Either;
 use futures::{future::BoxFuture, FutureExt};
 use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
-use ic_icos_sev::Sev;
-use ic_icos_sev_interfaces::ValidateAttestedStream;
+use ic_icos_sev::{Sev, ValidateAttestedStream};
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessorEvent, JoinGuard},
     artifact_pool::UnvalidatedArtifactEvent,

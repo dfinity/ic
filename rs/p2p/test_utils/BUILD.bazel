@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces",
     "//rs/ic_os/sev",
-    "//rs/ic_os/sev_interfaces",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
