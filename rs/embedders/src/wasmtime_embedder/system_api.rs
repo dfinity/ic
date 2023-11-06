@@ -409,31 +409,39 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     let mut linker = Linker::new(store.engine());
 
+    let msg_caller_copy_64 = move |log: &ReplicaLogger,
+                                   mut caller: Caller<'_, StoreData<S>>,
+                                   dst: i64,
+                                   offset: i64,
+                                   size: i64| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(MSG_CALLER_COPY, metering_type),
+            size as u64,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::MSG_CALLER_COPY,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, memory| {
+            system_api.ic0_msg_caller_copy_64(dst as u64, offset as u64, size as u64, memory)
+        })?;
+        if feature_flags.write_barrier == FlagStatus::Enabled {
+            mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u32 as usize)
+        } else {
+            Ok(())
+        }
+    };
+
     linker
         .func_wrap("ic0", "msg_caller_copy", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_CALLER_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_CALLER_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_caller_copy(dst as u32, offset as u32, size as u32, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
+                msg_caller_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
             }
         })
         .unwrap();
@@ -441,33 +449,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_caller_copy_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_CALLER_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_CALLER_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_caller_copy_64(
-                        dst as u64,
-                        offset as u64,
-                        size as u64,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u32 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                msg_caller_copy_64(&log, caller, dst, offset, size)
             }
         })
         .unwrap();
@@ -528,31 +511,39 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let msg_arg_data_copy_64 = move |log: &ReplicaLogger,
+                                     mut caller: Caller<'_, StoreData<S>>,
+                                     dst: i64,
+                                     offset: i64,
+                                     size: i64| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(MSG_ARG_DATA_COPY, metering_type),
+            size as u64,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::MSG_ARG_DATA_COPY,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, mem| {
+            system_api.ic0_msg_arg_data_copy_64(dst as u64, offset as u64, size as u64, mem)
+        })?;
+        if feature_flags.write_barrier == FlagStatus::Enabled {
+            mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
+        } else {
+            Ok(())
+        }
+    };
+
     linker
         .func_wrap("ic0", "msg_arg_data_copy", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_ARG_DATA_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_ARG_DATA_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, mem| {
-                    system_api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, mem)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
+                msg_arg_data_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
             }
         })
         .unwrap();
@@ -560,28 +551,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_arg_data_copy_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_ARG_DATA_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_ARG_DATA_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, mem| {
-                    system_api.ic0_msg_arg_data_copy_64(dst as u64, offset as u64, size as u64, mem)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                msg_arg_data_copy_64(&log, caller, dst, offset, size)
             }
         })
         .unwrap();
@@ -614,36 +585,39 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let msg_method_name_copy_64 = move |log: &ReplicaLogger,
+                                        mut caller: Caller<'_, StoreData<S>>,
+                                        dst: i64,
+                                        offset: i64,
+                                        size: i64| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(MSG_METHOD_NAME_COPY, metering_type),
+            size as u64,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, memory| {
+            system_api.ic0_msg_method_name_copy_64(dst as u64, offset as u64, size as u64, memory)
+        })?;
+        if feature_flags.write_barrier == FlagStatus::Enabled {
+            mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
+        } else {
+            Ok(())
+        }
+    };
+
     linker
         .func_wrap("ic0", "msg_method_name_copy", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_METHOD_NAME_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_method_name_copy(
-                        dst as u32,
-                        offset as u32,
-                        size as u32,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
+                msg_method_name_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
             }
         })
         .unwrap();
@@ -651,33 +625,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_method_name_copy_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_METHOD_NAME_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_method_name_copy_64(
-                        dst as u64,
-                        offset as u64,
-                        size as u64,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                msg_method_name_copy_64(&log, caller, dst, offset, size)
             }
         })
         .unwrap();
@@ -705,26 +654,31 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let msg_reply_data_append_64 =
+        move |log: &ReplicaLogger, mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+            charge_for_system_api_call(
+                log,
+                canister_id,
+                &mut caller,
+                system_api::complexity_overhead!(MSG_REPLY_DATA_APPEND, metering_type),
+                size as u64,
+                ExecutionComplexity {
+                    cpu: system_api_complexity::cpu::MSG_REPLY_DATA_APPEND,
+                    ..Default::default()
+                },
+                NumInstructions::from(0),
+                stable_memory_dirty_page_limit,
+            )?;
+            with_memory_and_system_api(&mut caller, |system_api, memory| {
+                system_api.ic0_msg_reply_data_append_64(src as u64, size as u64, memory)
+            })
+        };
+
     linker
         .func_wrap("ic0", "msg_reply_data_append", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_REPLY_DATA_APPEND, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_REPLY_DATA_APPEND,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_reply_data_append(src as u32, size as u32, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
+                msg_reply_data_append_64(&log, caller, src as i64, size as i64)
             }
         })
         .unwrap();
@@ -732,23 +686,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_reply_data_append_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_REPLY_DATA_APPEND, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_REPLY_DATA_APPEND,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_reply_data_append_64(src as u64, size as u64, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+                msg_reply_data_append_64(&log, caller, src, size)
             }
         })
         .unwrap();
@@ -799,26 +738,31 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let msg_reject_64 =
+        move |log: &ReplicaLogger, mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+            charge_for_system_api_call(
+                log,
+                canister_id,
+                &mut caller,
+                system_api::complexity_overhead!(MSG_REJECT, metering_type),
+                size as u64,
+                ExecutionComplexity {
+                    cpu: system_api_complexity::cpu::MSG_REJECT,
+                    ..Default::default()
+                },
+                NumInstructions::from(0),
+                stable_memory_dirty_page_limit,
+            )?;
+            with_memory_and_system_api(&mut caller, |system_api, memory| {
+                system_api.ic0_msg_reject_64(src as u64, size as u64, memory)
+            })
+        };
+
     linker
         .func_wrap("ic0", "msg_reject", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_REJECT, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_REJECT,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_reject(src as u32, size as u32, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
+                msg_reject_64(&log, caller, src as i64, size as i64)
             }
         })
         .unwrap();
@@ -826,23 +770,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_reject_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_REJECT, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_REJECT,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_reject_64(src as u64, size as u64, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+                msg_reject_64(&log, caller, src, size)
             }
         })
         .unwrap();
@@ -875,36 +804,39 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let msg_reject_msg_copy_64 = move |log: &ReplicaLogger,
+                                       mut caller: Caller<'_, StoreData<S>>,
+                                       dst: i64,
+                                       offset: i64,
+                                       size: i64| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(MSG_REJECT_MSG_COPY, metering_type),
+            size as u64,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::MSG_REJECT_MSG_COPY,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, memory| {
+            system_api.ic0_msg_reject_msg_copy_64(dst as u64, offset as u64, size as u64, memory)
+        })?;
+        if feature_flags.write_barrier == FlagStatus::Enabled {
+            mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
+        } else {
+            Ok(())
+        }
+    };
+
     linker
         .func_wrap("ic0", "msg_reject_msg_copy", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_REJECT_MSG_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_REJECT_MSG_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_reject_msg_copy(
-                        dst as u32,
-                        offset as u32,
-                        size as u32,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
+                msg_reject_msg_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
             }
         })
         .unwrap();
@@ -912,33 +844,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_reject_msg_copy_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_REJECT_MSG_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_REJECT_MSG_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_reject_msg_copy_64(
-                        dst as u64,
-                        offset as u64,
-                        size as u64,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                msg_reject_msg_copy_64(&log, caller, dst, offset, size)
             }
         })
         .unwrap();
@@ -971,36 +878,39 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let canister_self_copy_64 = move |log: &ReplicaLogger,
+                                      mut caller: Caller<'_, StoreData<S>>,
+                                      dst: i64,
+                                      offset: i64,
+                                      size: i64| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(CANISTER_SELF_COPY, metering_type),
+            size as u64,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::CANISTER_SELF_COPY,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, memory| {
+            system_api.ic0_canister_self_copy_64(dst as u64, offset as u64, size as u64, memory)
+        })?;
+        if feature_flags.write_barrier == FlagStatus::Enabled {
+            mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
+        } else {
+            Ok(())
+        }
+    };
+
     linker
         .func_wrap("ic0", "canister_self_copy", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CANISTER_SELF_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CANISTER_SELF_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_canister_self_copy(
-                        dst as u32,
-                        offset as u32,
-                        size as u32,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
+                canister_self_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
             }
         })
         .unwrap();
@@ -1008,69 +918,51 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "canister_self_copy_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CANISTER_SELF_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CANISTER_SELF_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_canister_self_copy_64(
-                        dst as u64,
-                        offset as u64,
-                        size as u64,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                canister_self_copy_64(&log, caller, dst, offset, size)
             }
         })
         .unwrap();
 
+    let debug_print_64 = move |log: &ReplicaLogger,
+                               mut caller: Caller<'_, StoreData<S>>,
+                               offset: i64,
+                               length: i64| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(DEBUG_PRINT, metering_type),
+            length as u64,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::DEBUG_PRINT,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        match (
+            caller.data().system_api.subnet_type(),
+            feature_flags.rate_limiting_of_debug_prints,
+        ) {
+            // Debug print is a no-op on non-system subnets with rate limiting.
+            (SubnetType::Application, FlagStatus::Enabled) => Ok(()),
+            (SubnetType::VerifiedApplication, FlagStatus::Enabled) => Ok(()),
+            // If rate limiting is disabled or the subnet is a system subnet, then
+            // debug print produces output.
+            (_, FlagStatus::Disabled) | (SubnetType::System, FlagStatus::Enabled) => {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_debug_print_64(offset as u64, length as u64, memory)
+                })
+            }
+        }
+    };
+
     linker
         .func_wrap("ic0", "debug_print", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, offset: i32, length: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(DEBUG_PRINT, metering_type),
-                    length as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::DEBUG_PRINT,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                match (
-                    caller.data().system_api.subnet_type(),
-                    feature_flags.rate_limiting_of_debug_prints,
-                ) {
-                    // Debug print is a no-op on non-system subnets with rate limiting.
-                    (SubnetType::Application, FlagStatus::Enabled) => Ok(()),
-                    (SubnetType::VerifiedApplication, FlagStatus::Enabled) => Ok(()),
-                    // If rate limiting is disabled or the subnet is a system subnet, then
-                    // debug print produces output.
-                    (_, FlagStatus::Disabled) | (SubnetType::System, FlagStatus::Enabled) => {
-                        with_memory_and_system_api(&mut caller, |system_api, memory| {
-                            system_api.ic0_debug_print(offset as u32, length as u32, memory)
-                        })
-                    }
-                }
+            move |caller: Caller<'_, StoreData<S>>, offset: i32, length: i32| {
+                debug_print_64(&log, caller, offset as i64, length as i64)
             }
         })
         .unwrap();
@@ -1078,59 +970,40 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "debug_print_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, offset: i64, length: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(DEBUG_PRINT, metering_type),
-                    length as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::DEBUG_PRINT,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                match (
-                    caller.data().system_api.subnet_type(),
-                    feature_flags.rate_limiting_of_debug_prints,
-                ) {
-                    // Debug print is a no-op on non-system subnets with rate limiting.
-                    (SubnetType::Application, FlagStatus::Enabled) => Ok(()),
-                    (SubnetType::VerifiedApplication, FlagStatus::Enabled) => Ok(()),
-                    // If rate limiting is disabled or the subnet is a system subnet, then
-                    // debug print produces output.
-                    (_, FlagStatus::Disabled) | (SubnetType::System, FlagStatus::Enabled) => {
-                        with_memory_and_system_api(&mut caller, |system_api, memory| {
-                            system_api.ic0_debug_print_64(offset as u64, length as u64, memory)
-                        })
-                    }
-                }
+            move |caller: Caller<'_, StoreData<S>>, offset: i64, length: i64| {
+                debug_print_64(&log, caller, offset, length)
             }
         })
         .unwrap();
 
+    let trap_64 = move |log: &ReplicaLogger,
+                        mut caller: Caller<'_, StoreData<S>>,
+                        offset: i64,
+                        length: i64|
+          -> Result<(), _> {
+        charge_for_system_api_call(
+            &log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(TRAP, metering_type),
+            length as u64,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::TRAP,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, memory| {
+            system_api.ic0_trap_64(offset as u64, length as u64, memory)
+        })
+    };
+
     linker
         .func_wrap("ic0", "trap", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, offset: i32, length: i32| -> Result<(), _> {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(TRAP, metering_type),
-                    length as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::TRAP,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_trap(offset as u32, length as u32, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, offset: i32, length: i32| -> Result<(), _> {
+                trap_64(&log, caller, offset as i64, length as i64)
             }
         })
         .unwrap();
@@ -1138,31 +1011,54 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "trap_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, offset: i64, length: i64| -> Result<(), _> {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(TRAP, metering_type),
-                    length as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::TRAP,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_trap_64(offset as u64, length as u64, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, offset: i64, length: i64| -> Result<(), _> {
+                trap_64(&log, caller, offset, length)
             }
         })
         .unwrap();
 
+    let call_new_64 = move |log: &ReplicaLogger,
+                            mut caller: Caller<'_, StoreData<S>>,
+                            callee_src: i64,
+                            callee_size: i64,
+                            name_src: i64,
+                            name_len: i64,
+                            reply_fun: i32,
+                            reply_env: i32,
+                            reject_fun: i32,
+                            reject_env: i32| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(CALL_NEW, metering_type),
+            (callee_size as u64).saturating_add(name_len as u64),
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::CALL_NEW,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, memory| {
+            system_api.ic0_call_new_64(
+                callee_src as u64,
+                callee_size as u64,
+                name_src as u64,
+                name_len as u64,
+                reply_fun as u32,
+                reply_env as u32,
+                reject_fun as u32,
+                reject_env as u32,
+                memory,
+            )
+        })
+    };
+
     linker
         .func_wrap("ic0", "call_new", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>,
+            move |caller: Caller<'_, StoreData<S>>,
                   callee_src: i32,
                   callee_size: i32,
                   name_src: i32,
@@ -1171,32 +1067,18 @@ pub(crate) fn syscalls<S: SystemApi>(
                   reply_env: i32,
                   reject_fun: i32,
                   reject_env: i32| {
-                charge_for_system_api_call(
+                call_new_64(
                     &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CALL_NEW, metering_type),
-                    (callee_size as u64).saturating_add(name_len as u64),
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CALL_NEW,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_call_new(
-                        callee_src as u32,
-                        callee_size as u32,
-                        name_src as u32,
-                        name_len as u32,
-                        reply_fun as u32,
-                        reply_env as u32,
-                        reject_fun as u32,
-                        reject_env as u32,
-                        memory,
-                    )
-                })
+                    caller,
+                    callee_src as i64,
+                    callee_size as i64,
+                    name_src as i64,
+                    name_len as i64,
+                    reply_fun,
+                    reply_env,
+                    reject_fun,
+                    reject_env,
+                )
             }
         })
         .unwrap();
@@ -1204,7 +1086,7 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "call_new_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>,
+            move |caller: Caller<'_, StoreData<S>>,
                   callee_src: i64,
                   callee_size: i64,
                   name_src: i64,
@@ -1213,56 +1095,47 @@ pub(crate) fn syscalls<S: SystemApi>(
                   reply_env: i32,
                   reject_fun: i32,
                   reject_env: i32| {
-                charge_for_system_api_call(
+                call_new_64(
                     &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CALL_NEW, metering_type),
-                    (callee_size as u64).saturating_add(name_len as u64),
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CALL_NEW,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_call_new_64(
-                        callee_src as u64,
-                        callee_size as u64,
-                        name_src as u64,
-                        name_len as u64,
-                        reply_fun as u32,
-                        reply_env as u32,
-                        reject_fun as u32,
-                        reject_env as u32,
-                        memory,
-                    )
-                })
+                    caller,
+                    callee_src,
+                    callee_size,
+                    name_src,
+                    name_len,
+                    reply_fun,
+                    reply_env,
+                    reject_fun,
+                    reject_env,
+                )
             }
         })
         .unwrap();
 
+    let data_append_64 =
+        move |log: &ReplicaLogger, mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+            charge_for_system_api_call(
+                log,
+                canister_id,
+                &mut caller,
+                system_api::complexity_overhead!(CALL_DATA_APPEND, metering_type),
+                size as u64,
+                ExecutionComplexity {
+                    cpu: system_api_complexity::cpu::CALL_DATA_APPEND,
+                    ..Default::default()
+                },
+                NumInstructions::from(0),
+                stable_memory_dirty_page_limit,
+            )?;
+            with_memory_and_system_api(&mut caller, |system_api, memory| {
+                system_api.ic0_call_data_append_64(src as u64, size as u64, memory)
+            })
+        };
+
     linker
         .func_wrap("ic0", "call_data_append", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CALL_DATA_APPEND, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CALL_DATA_APPEND,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_call_data_append(src as u32, size as u32, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
+                data_append_64(&log, caller, src as i64, size as i64)
             }
         })
         .unwrap();
@@ -1270,23 +1143,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "call_data_append_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CALL_DATA_APPEND, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CALL_DATA_APPEND,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_call_data_append_64(src as u64, size as u64, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+                data_append_64(&log, caller, src, size)
             }
         })
         .unwrap();
@@ -1753,31 +1611,36 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let canister_cycle_balance128_64 =
+        move |log: &ReplicaLogger, mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+            charge_for_system_api_call(
+                log,
+                canister_id,
+                &mut caller,
+                system_api::complexity_overhead!(CANISTER_CYCLE_BALANCE128, metering_type),
+                0,
+                ExecutionComplexity {
+                    cpu: system_api_complexity::cpu::CANISTER_CYCLE_BALANCE128,
+                    ..Default::default()
+                },
+                NumInstructions::from(0),
+                stable_memory_dirty_page_limit,
+            )?;
+            with_memory_and_system_api(&mut caller, |system_api, memory| {
+                system_api.ic0_canister_cycle_balance128_64(dst, memory)
+            })?;
+            if feature_flags.write_barrier == FlagStatus::Enabled {
+                mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+            } else {
+                Ok(())
+            }
+        };
+
     linker
         .func_wrap("ic0", "canister_cycle_balance128", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CANISTER_CYCLE_BALANCE128, metering_type),
-                    0,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CANISTER_CYCLE_BALANCE128,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_canister_cycle_balance128(dst, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: u32| {
+                canister_cycle_balance128_64(&log, caller, dst as u64)
             }
         })
         .unwrap();
@@ -1785,28 +1648,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "canister_cycle_balance128_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CANISTER_CYCLE_BALANCE128, metering_type),
-                    0,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CANISTER_CYCLE_BALANCE128,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_canister_cycle_balance128_64(dst, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: u64| {
+                canister_cycle_balance128_64(&log, caller, dst)
             }
         })
         .unwrap();
@@ -1839,31 +1682,36 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let msg_cycles_available128_64 =
+        move |log: &ReplicaLogger, mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+            charge_for_system_api_call(
+                log,
+                canister_id,
+                &mut caller,
+                system_api::complexity_overhead!(MSG_CYCLES_AVAILABLE128, metering_type),
+                0,
+                ExecutionComplexity {
+                    cpu: system_api_complexity::cpu::MSG_CYCLES_AVAILABLE128,
+                    ..Default::default()
+                },
+                NumInstructions::from(0),
+                stable_memory_dirty_page_limit,
+            )?;
+            with_memory_and_system_api(&mut caller, |system_api, memory| {
+                system_api.ic0_msg_cycles_available128_64(dst, memory)
+            })?;
+            if feature_flags.write_barrier == FlagStatus::Enabled {
+                mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+            } else {
+                Ok(())
+            }
+        };
+
     linker
         .func_wrap("ic0", "msg_cycles_available128", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_CYCLES_AVAILABLE128, metering_type),
-                    0,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_CYCLES_AVAILABLE128,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_cycles_available128(dst, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: u32| {
+                msg_cycles_available128_64(&log, caller, dst as u64)
             }
         })
         .unwrap();
@@ -1871,28 +1719,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_cycles_available128_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_CYCLES_AVAILABLE128, metering_type),
-                    0,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_CYCLES_AVAILABLE128,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_cycles_available128_64(dst, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: u64| {
+                msg_cycles_available128_64(&log, caller, dst)
             }
         })
         .unwrap();
@@ -1925,31 +1753,36 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let msg_cycles_refunded128_64 =
+        move |log: &ReplicaLogger, mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+            charge_for_system_api_call(
+                log,
+                canister_id,
+                &mut caller,
+                system_api::complexity_overhead!(MSG_CYCLES_REFUNDED128, metering_type),
+                0,
+                ExecutionComplexity {
+                    cpu: system_api_complexity::cpu::MSG_CYCLES_REFUNDED128,
+                    ..Default::default()
+                },
+                NumInstructions::from(0),
+                stable_memory_dirty_page_limit,
+            )?;
+            with_memory_and_system_api(&mut caller, |system_api, memory| {
+                system_api.ic0_msg_cycles_refunded128_64(dst, memory)
+            })?;
+            if feature_flags.write_barrier == FlagStatus::Enabled {
+                mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+            } else {
+                Ok(())
+            }
+        };
+
     linker
         .func_wrap("ic0", "msg_cycles_refunded128", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_CYCLES_REFUNDED128, metering_type),
-                    0,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_CYCLES_REFUNDED128,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_cycles_refunded128(dst, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: u32| {
+                msg_cycles_refunded128_64(&log, caller, dst as u64)
             }
         })
         .unwrap();
@@ -1957,28 +1790,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_cycles_refunded128_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_CYCLES_REFUNDED128, metering_type),
-                    0,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_CYCLES_REFUNDED128,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_cycles_refunded128_64(dst, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: u64| {
+                msg_cycles_refunded128_64(&log, caller, dst)
             }
         })
         .unwrap();
@@ -2006,38 +1819,43 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let msg_cycles_accept128_64 = move |log: &ReplicaLogger,
+                                        mut caller: Caller<'_, StoreData<S>>,
+                                        amount_high: i64,
+                                        amount_low: i64,
+                                        dst: u64| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(MSG_CYCLES_ACCEPT128, metering_type),
+            0,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::MSG_CYCLES_ACCEPT128,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, memory| {
+            system_api.ic0_msg_cycles_accept128_64(
+                Cycles::from_parts(amount_high as u64, amount_low as u64),
+                dst,
+                memory,
+            )
+        })?;
+        if feature_flags.write_barrier == FlagStatus::Enabled {
+            mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+        } else {
+            Ok(())
+        }
+    };
+
     linker
         .func_wrap("ic0", "msg_cycles_accept128", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>,
-                  amount_high: i64,
-                  amount_low: i64,
-                  dst: u32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_CYCLES_ACCEPT128, metering_type),
-                    0,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_CYCLES_ACCEPT128,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_cycles_accept128(
-                        Cycles::from_parts(amount_high as u64, amount_low as u64),
-                        dst,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, amount_high: i64, amount_low: i64, dst: u32| {
+                msg_cycles_accept128_64(&log, caller, amount_high, amount_low, dst as u64)
             }
         })
         .unwrap();
@@ -2045,35 +1863,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "msg_cycles_accept128_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>,
-                  amount_high: i64,
-                  amount_low: i64,
-                  dst: u64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(MSG_CYCLES_ACCEPT128, metering_type),
-                    0,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::MSG_CYCLES_ACCEPT128,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_msg_cycles_accept128_64(
-                        Cycles::from_parts(amount_high as u64, amount_low as u64),
-                        dst,
-                        memory,
-                    )
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, amount_high: i64, amount_low: i64, dst: u64| {
+                msg_cycles_accept128_64(&log, caller, amount_high, amount_low, dst)
             }
         })
         .unwrap();
@@ -2092,40 +1883,49 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let update_available_memory_64 = move |mut caller: Caller<'_, StoreData<S>>,
+                                           native_memory_grow_res: i64,
+                                           additional_elements: i64,
+                                           element_size: i32| {
+        with_system_api(&mut caller, |s| {
+            s.update_available_memory(
+                native_memory_grow_res,
+                additional_elements as u64,
+                element_size as u32 as u64,
+            )
+        })
+        .map(|()| native_memory_grow_res)
+        .map_err(|e| process_err(&mut caller, e))
+    };
+
     linker
         .func_wrap("__", "update_available_memory", {
-            move |mut caller: Caller<'_, StoreData<S>>,
+            move |caller: Caller<'_, StoreData<S>>,
                   native_memory_grow_res: i32,
                   additional_elements: i32,
                   element_size: i32| {
-                with_system_api(&mut caller, |s| {
-                    s.update_available_memory(
-                        native_memory_grow_res as i64,
-                        additional_elements as u32 as u64,
-                        element_size as u32 as u64,
-                    )
-                })
-                .map(|()| native_memory_grow_res)
-                .map_err(|e| process_err(&mut caller, e))
+                update_available_memory_64(
+                    caller,
+                    native_memory_grow_res as i64,
+                    additional_elements as i64,
+                    element_size,
+                )
             }
         })
         .unwrap();
 
     linker
         .func_wrap("__", "update_available_memory_64", {
-            move |mut caller: Caller<'_, StoreData<S>>,
+            move |caller: Caller<'_, StoreData<S>>,
                   native_memory_grow_res: i64,
                   additional_elements: i64,
                   element_size: i32| {
-                with_system_api(&mut caller, |s| {
-                    s.update_available_memory(
-                        native_memory_grow_res,
-                        additional_elements as u64,
-                        element_size as u32 as u64,
-                    )
-                })
-                .map(|()| native_memory_grow_res)
-                .map_err(|e| process_err(&mut caller, e))
+                update_available_memory_64(
+                    caller,
+                    native_memory_grow_res,
+                    additional_elements,
+                    element_size,
+                )
             }
         })
         .unwrap();
@@ -2190,26 +1990,31 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let certified_data_set_64 =
+        move |log: &ReplicaLogger, mut caller: Caller<'_, StoreData<S>>, src: u64, size: u64| {
+            charge_for_system_api_call(
+                log,
+                canister_id,
+                &mut caller,
+                system_api::complexity_overhead!(CERTIFIED_DATA_SET, metering_type),
+                size,
+                ExecutionComplexity {
+                    cpu: system_api_complexity::cpu::CERTIFIED_DATA_SET,
+                    ..Default::default()
+                },
+                NumInstructions::from(0),
+                stable_memory_dirty_page_limit,
+            )?;
+            with_memory_and_system_api(&mut caller, |system_api, memory| {
+                system_api.ic0_certified_data_set_64(src, size, memory)
+            })
+        };
+
     linker
         .func_wrap("ic0", "certified_data_set", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: u32, size: u32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CERTIFIED_DATA_SET, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CERTIFIED_DATA_SET,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_certified_data_set(src, size, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: u32, size: u32| {
+                certified_data_set_64(&log, caller, src as u64, size as u64)
             }
         })
         .unwrap();
@@ -2217,23 +2022,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "certified_data_set_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: u64, size: u64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(CERTIFIED_DATA_SET, metering_type),
-                    size,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CERTIFIED_DATA_SET,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_certified_data_set_64(src, size, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: u64, size: u64| {
+                certified_data_set_64(&log, caller, src, size)
             }
         })
         .unwrap();
@@ -2284,26 +2074,31 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let is_controller_64 =
+        move |log: &ReplicaLogger, mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+            charge_for_system_api_call(
+                log,
+                canister_id,
+                &mut caller,
+                system_api::complexity_overhead!(IS_CONTROLLER, metering_type),
+                size as u64,
+                ExecutionComplexity {
+                    cpu: system_api_complexity::cpu::IS_CONTROLLER,
+                    ..Default::default()
+                },
+                NumInstructions::from(0),
+                stable_memory_dirty_page_limit,
+            )?;
+            with_memory_and_system_api(&mut caller, |system_api, memory| {
+                system_api.ic0_is_controller_64(src as u64, size as u64, memory)
+            })
+        };
+
     linker
         .func_wrap("ic0", "is_controller", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(IS_CONTROLLER, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::IS_CONTROLLER,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_is_controller(src as u32, size as u32, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
+                is_controller_64(&log, caller, src as i64, size as i64)
             }
         })
         .unwrap();
@@ -2311,23 +2106,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("ic0", "is_controller_64", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(IS_CONTROLLER, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::IS_CONTROLLER,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_is_controller_64(src as u64, size as u64, memory)
-                })
+            move |caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+                is_controller_64(&log, caller, src, size)
             }
         })
         .unwrap();
