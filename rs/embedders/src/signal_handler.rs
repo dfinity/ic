@@ -74,6 +74,17 @@ pub(crate) fn sigsegv_memory_tracker_handler(
 
         let mut memory_tracker = memory_tracker.lock().unwrap();
 
+        // Limiting the number of page accesses in 64-bit main memory support.
+        // This is done by interrupting the wasmtime engine in a controlled way by using the epoch mechanism.
+        if memory_tracker.num_accessed_pages() as u64 > MAIN_MEMORY_PAGE_ACCESS_LIMIT {
+            let module = cache
+                .downcast::<HypervisorResult<wasmtime::Module>>()
+                .unwrap()
+                .as_ref()
+                .unwrap();
+            module.engine().increment_epoch();
+        }
+
         // We handle SIGSEGV from the Wasm module heap ourselves.
         if memory_tracker.area().is_within(si_addr) {
             // Returns true if the signal has been handled by our handler which indicates
@@ -85,17 +96,6 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         {
             let delta = heap_size - memory_tracker.area().size();
             memory_tracker.expand(delta);
-
-            // Limiting the number of page accesses in 64-bit main memory support.
-            // This is done by interrupting the wasmtime engine in a controlled way by using the epoch mechanism.
-            if memory_tracker.num_accessed_pages() as u64 > MAIN_MEMORY_PAGE_ACCESS_LIMIT {
-                let module = cache
-                    .downcast::<HypervisorResult<wasmtime::Module>>()
-                    .unwrap()
-                    .as_ref()
-                    .unwrap();
-                module.engine().increment_epoch();
-            }
             true
         } else {
             false
