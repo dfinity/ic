@@ -9,8 +9,9 @@ use ic_icrc_rosetta::{
         storage::types::RosettaBlock,
         types::{
             AccountIdentifier, Amount, ApproveMetadata, Block, BlockIdentifier, BlockResponse,
-            Currency, NetworkIdentifier, Object, Operation, OperationIdentifier, OperationType,
-            PartialBlockIdentifier, Transaction, TransactionIdentifier,
+            BlockTransactionResponse, Currency, NetworkIdentifier, Object, Operation,
+            OperationIdentifier, OperationType, PartialBlockIdentifier, Transaction,
+            TransactionIdentifier,
         },
     },
     Metadata,
@@ -288,15 +289,11 @@ async fn create_blocks(
     get_blocks_response.blocks
 }
 
-fn create_expected_rosetta_responses(
-    blocks: Vec<Value>,
+fn expected_operations(
     icrc_ledger_canister_id: CanisterId,
     Metadata { decimals, symbol }: Metadata,
-) -> Vec<BlockResponse> {
-    // map the blocks to the expected operations to create the expected /block
-    // responses
-    let mut responses = vec![];
-    let expected_operations = vec![
+) -> Vec<Vec<Operation>> {
+    vec![
         vec![Operation {
             operation_identifier: OperationIdentifier { index: 0 },
             account: AccountIdentifier {
@@ -445,7 +442,18 @@ fn create_expected_rosetta_responses(
                 metadata: None,
             },
         ],
-    ];
+    ]
+}
+
+fn create_expected_rosetta_responses(
+    blocks: Vec<Value>,
+    icrc_ledger_canister_id: CanisterId,
+    metadata: Metadata,
+) -> Vec<BlockResponse> {
+    // map the blocks to the expected operations to create the expected /block
+    // responses
+    let mut responses = vec![];
+    let expected_operations = expected_operations(icrc_ledger_canister_id, metadata);
 
     for (index, (block, operations)) in blocks
         .into_iter()
@@ -566,6 +574,126 @@ async fn test_block() {
             .await
             .expect("Failed to find block in Rosetta");
 
+        assert_eq!(received_block_response, expected_response);
+    }
+}
+
+fn create_expected_block_hashes_and_block_transaction_responses(
+    blocks: Vec<Value>,
+    icrc_ledger_canister_id: CanisterId,
+    metadata: Metadata,
+) -> Vec<(String, BlockTransactionResponse)> {
+    // map the blocks to the expected operations to create the expected /block
+    // responses
+    let mut responses = vec![];
+    let expected_operations = expected_operations(icrc_ledger_canister_id, metadata);
+
+    for (index, (block, operations)) in blocks
+        .into_iter()
+        .zip(expected_operations.into_iter())
+        .enumerate()
+    {
+        let block = RosettaBlock::from_generic_block(block, index as u64).unwrap();
+        let block_hash = hex::encode(&block.block_hash);
+        let transaction_hash = block.get_transaction().unwrap().hash().to_string();
+        let mut metadata = Object::new();
+        if index == 0 {
+            metadata.insert(
+                "created_at_time".to_string(),
+                serde_json::Value::Number(Number::from(block.timestamp)),
+            );
+        }
+
+        responses.push((
+            block_hash,
+            BlockTransactionResponse {
+                transaction: Transaction {
+                    transaction_identifier: TransactionIdentifier {
+                        hash: transaction_hash,
+                    },
+                    operations,
+                    metadata: if !metadata.is_empty() {
+                        Some(metadata)
+                    } else {
+                        None
+                    },
+                },
+            },
+        ));
+    }
+
+    responses
+}
+
+#[tokio::test]
+async fn test_block_transaction() {
+    let replica_context = local_replica::start_new_local_replica().await;
+    let replica_url = format!("http://localhost:{}", replica_context.port);
+
+    // Deploy an ICRC-1 ledger canister
+    let init_args = local_replica::icrc_ledger_default_args_builder(&replica_context)
+        .await
+        .with_feature_flags(ic_icrc1_ledger::FeatureFlags { icrc2: true })
+        .build();
+    let metadata = Metadata {
+        decimals: init_args.decimals.unwrap_or(DEFAULT_DECIMAL_PLACES),
+        symbol: init_args.token_symbol.clone(),
+    };
+
+    let icrc_ledger_canister_id =
+        local_replica::deploy_icrc_ledger_with_custom_args(&replica_context, init_args).await;
+    let ledger_id = Principal::from(icrc_ledger_canister_id);
+
+    let ic_agent = local_replica::get_testing_agent(&replica_context).await;
+
+    // Create a testing agent
+    let icrc_agent = Icrc1Agent {
+        agent: ic_agent,
+        ledger_canister_id: icrc_ledger_canister_id.into(),
+    };
+
+    // Create the blocks and expected rosetta responses.
+    let blocks = create_blocks(icrc_agent, icrc_ledger_canister_id).await;
+    let expected_responses = create_expected_block_hashes_and_block_transaction_responses(
+        blocks,
+        icrc_ledger_canister_id,
+        metadata,
+    );
+
+    let rosetta_context = start_rosetta(
+        &rosetta_bin(),
+        RosettaOptions {
+            ledger_id,
+            network_url: Some(replica_url),
+            offline: false,
+            ..RosettaOptions::default()
+        },
+    )
+    .await;
+
+    let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
+        .expect("Unable to parse url");
+    let network_identifier =
+        NetworkIdentifier::for_ledger_id(CanisterId::try_from(ledger_id.as_slice()).unwrap());
+
+    for (index, (expected_block_hash, expected_response)) in
+        expected_responses.into_iter().enumerate()
+    {
+        let block_identifier = BlockIdentifier {
+            index: index as u64,
+            hash: expected_block_hash,
+        };
+
+        let transaction_identifier = expected_response.transaction.transaction_identifier.clone();
+
+        let received_block_response: BlockTransactionResponse = client
+            .block_transaction(
+                network_identifier.clone(),
+                block_identifier,
+                transaction_identifier,
+            )
+            .await
+            .expect("Failed to find block transaction in Rosetta");
         assert_eq!(received_block_response, expected_response);
     }
 }
