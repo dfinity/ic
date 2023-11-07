@@ -176,6 +176,34 @@ wait_for_nns_canister_has_file_contents() {
     return 1
 }
 
+wait_for_nns_canister_has_new_code() {
+    local NETWORK=$1
+    local CANISTER_NAME=$2
+
+    ORIGINAL_WASM_HASH="$(nns_canister_hash ic "${CANISTER_NAME}")"
+
+    echo "The original WASM hash is ${ORIGINAL_WASM_HASH}."
+    echo "We will now poll until it changes. Please, stand by..."
+    echo
+
+    for i in {1..100}; do
+        sleep 6
+        LATEST_WASM_HASH="$(nns_canister_hash ic "${CANISTER_NAME}")"
+
+        if [[ "${LATEST_WASM_HASH}" != "${ORIGINAL_WASM_HASH}" ]]; then
+            echo
+            echo "The WASM hash for ${CANISTER_NAME} has changed to ${LATEST_WASM_HASH}."
+            return
+        fi
+
+        echo "No change yet..."
+    done
+
+    echo
+    echo "Giving up. The canister's WASM hash has not changed after 10 minutes."
+    return 1
+}
+
 reset_nns_canister_version_to_mainnet() {
     local NNS_URL=$1
     local NEURON_ID=$2
