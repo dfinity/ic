@@ -387,6 +387,11 @@ impl NeuronStore {
         }
 
         self.add_neuron_to_indexes(&neuron);
+
+        if is_copy_inactive_neurons_to_stable_memory_enabled() {
+            maybe_add_to_stable_neuron_store(neuron.clone(), self.clock.now());
+        }
+
         self.heap_neurons.insert(neuron_id.id, neuron);
 
         Ok(neuron_id)
@@ -423,6 +428,10 @@ impl NeuronStore {
     /// Remove a Neuron by id
     pub fn remove_neuron(&mut self, neuron_id: &NeuronId) {
         let removed_neuron = self.heap_neurons.remove(&neuron_id.id);
+
+        if is_copy_inactive_neurons_to_stable_memory_enabled() {
+            delete_from_stable_neuron_store(*neuron_id);
+        }
 
         let removed_neuron = match removed_neuron {
             Some(removed_neuron) => removed_neuron,
@@ -1010,6 +1019,29 @@ pub struct NeuronIndexesLens {
     pub principal: usize,
     pub following: usize,
     pub known_neuron: usize,
+}
+
+fn maybe_add_to_stable_neuron_store(neuron: Neuron, now: u64) {
+    if !neuron.is_inactive(now) {
+        return;
+    }
+    let insert_result =
+        with_stable_neuron_store_mut(|stable_neuron_store| stable_neuron_store.create(neuron));
+    if let Err(err) = insert_result {
+        // TODO(NNS1-2493): Increment some error metric.
+        println!(
+            "{}ERROR: Failed to add inactive Neuron in stable_neuron_store: {}",
+            LOG_PREFIX, err,
+        );
+    }
+}
+
+fn delete_from_stable_neuron_store(neuron_id: NeuronId) {
+    // Since the neuron can go from active to inactive through the passage of time, when it's
+    // inactive now, it can also not exist in stable neuron store as it was active the last time.
+    // Therefore we have to ignore the result.
+    let _ignore_result =
+        with_stable_neuron_store_mut(|stable_neuron_store| stable_neuron_store.delete(neuron_id));
 }
 
 fn write_through_to_stable_neuron_store(neuron: &Neuron, now: u64) {

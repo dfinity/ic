@@ -589,6 +589,105 @@ fn test_heap_range_with_begin_and_limit() {
 }
 
 #[test]
+fn test_add_inactive_neuron() {
+    // Step 1.1: set up 1 active neuron and 1 inactive neuron.
+    let active_neuron = Neuron {
+        cached_neuron_stake_e8s: 1,
+        ..simple_neuron(1)
+    };
+    let inactive_neuron = Neuron {
+        cached_neuron_stake_e8s: 0,
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
+        ..simple_neuron(2)
+    };
+
+    // Step 1.2: create neuron store with no neurons.
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+
+    // Step 2: add both neurons into neuron store.
+    neuron_store.add_neuron(active_neuron.clone()).unwrap();
+    neuron_store.add_neuron(inactive_neuron.clone()).unwrap();
+
+    // Step 3.1: verify that the active neuron is not in the stable neuron store.
+    let active_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
+        stable_neuron_store.read(active_neuron.id.unwrap())
+    });
+    match active_neuron_read_result {
+        Ok(_) => panic!("Active neuron appeared in stable neuron store"),
+        Err(error) => {
+            let GovernanceError {
+                error_type,
+                error_message,
+            } = &error;
+
+            let error_type = ErrorType::from_i32(*error_type);
+            assert_eq!(error_type, Some(ErrorType::NotFound), "{:#?}", error);
+
+            let error_message = error_message.to_lowercase();
+            assert!(error_message.contains("unable"), "{:#?}", error);
+            assert!(error_message.contains("find"), "{:#?}", error);
+        }
+    }
+
+    // Step 3.2: verify that inactive neuron can be read from stable neuron store and it's equal to
+    // the one we added.
+    let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
+        stable_neuron_store.read(inactive_neuron.id.unwrap())
+    });
+    assert_eq!(inactive_neuron_read_result, Ok(inactive_neuron.clone()));
+
+    // Step 3.3: verify that the inactive neuron can also be read from neuron store.
+    let inactive_neuron_in_neuron_store =
+        neuron_store.with_neuron(&inactive_neuron.id.unwrap(), |neuron| neuron.clone());
+    assert_eq!(inactive_neuron_in_neuron_store, Ok(inactive_neuron.clone()));
+}
+
+#[test]
+fn test_remove_inactive_neuron() {
+    // Step 1.1: set up 1 active neuron and 1 inactive neuron.
+    let inactive_neuron = Neuron {
+        cached_neuron_stake_e8s: 0,
+        // We require a neuron to have at least 6 months dissolve delay, in order to be inactive.
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
+        ..simple_neuron(2)
+    };
+
+    // Step 1.2: create neuron store with no neurons.
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+
+    // Step 1.3: add the inactive neuron into neuron store and verifies it's in the stable neuron store.
+    neuron_store.add_neuron(inactive_neuron.clone()).unwrap();
+    let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
+        stable_neuron_store.read(inactive_neuron.id.unwrap())
+    });
+    assert_eq!(inactive_neuron_read_result, Ok(inactive_neuron.clone()));
+
+    // Step 2: remove the neuron from neuron store.
+    neuron_store.remove_neuron(&inactive_neuron.id.unwrap());
+
+    // Step 3: verify that inactive neuron cannot be read from stable neuron store anymore.
+    let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
+        stable_neuron_store.read(inactive_neuron.id.unwrap())
+    });
+    match inactive_neuron_read_result {
+        Ok(_) => panic!("Inactive neuron failed to be removed from stable neuron store"),
+        Err(error) => {
+            let GovernanceError {
+                error_type,
+                error_message,
+            } = &error;
+
+            let error_type = ErrorType::from_i32(*error_type);
+            assert_eq!(error_type, Some(ErrorType::NotFound), "{:#?}", error);
+
+            let error_message = error_message.to_lowercase();
+            assert!(error_message.contains("unable"), "{:#?}", error);
+            assert!(error_message.contains("find"), "{:#?}", error);
+        }
+    }
+}
+
+#[test]
 fn test_with_neuron_mut_inactive_neuron() {
     // Step 1: Prepare the world.
     let now = u64::MAX;
