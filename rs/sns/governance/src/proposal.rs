@@ -2714,4 +2714,22 @@ Version {
         .unwrap();
         assert!(render.contains(&format!("Set fee collector account: {new_fee_collector}")));
     }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters() {
+        let new_fee = 751;
+        let new_fee_collector = Account {
+            owner: candid::Principal::from_slice(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+            subaccount: None,
+        };
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            transfer_fee: Some(new_fee),
+            set_fee_collector: Some(new_fee_collector.into()),
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n# Set fee collector account: {} \n", new_fee, new_fee_collector)
+        );
+    }
 }
