@@ -1,3 +1,12 @@
+use std::{
+    collections::HashMap,
+    fmt,
+    net::IpAddr,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -11,7 +20,6 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::RegistryVersion;
-use std::{collections::HashMap, fmt, net::IpAddr, str::FromStr, sync::Arc};
 use tracing::info;
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
@@ -89,7 +97,10 @@ pub struct RegistrySnapshot {
 pub struct Runner {
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     registry_client: Arc<dyn RegistryClient>,
-    registry_version: Option<RegistryVersion>,
+    registry_version_available: Option<RegistryVersion>,
+    registry_version_published: Option<RegistryVersion>,
+    last_version_change: Instant,
+    min_version_age: Duration,
     persister: Option<SnapshotPersister>,
 }
 
@@ -97,11 +108,15 @@ impl Runner {
     pub fn new(
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
         registry_client: Arc<dyn RegistryClient>,
+        min_version_age: Duration,
     ) -> Self {
         Self {
             published_registry_snapshot,
             registry_client,
-            registry_version: None,
+            registry_version_published: None,
+            registry_version_available: None,
+            last_version_change: Instant::now(),
+            min_version_age,
             persister: None,
         }
     }
@@ -239,28 +254,49 @@ impl Run for Runner {
         // Fetch latest available registry version
         let version = self.registry_client.get_latest_version();
 
+        if self.registry_version_available != Some(version) {
+            self.registry_version_available = Some(version);
+            self.last_version_change = Instant::now();
+        }
+
+        // If we have just started and have no snapshot published then we
+        // need to make sure that the registry client has caught up with
+        // the latest version before going online.
+        if self.published_registry_snapshot.load().is_none() {
+            // We check that the versions stop progressing for some period of time
+            // and only then allow the initial publishing.
+            if self.last_version_change.elapsed() < self.min_version_age {
+                info!(
+                    action = "snapshot",
+                    "Snapshot {version} is not old enough, not publishing"
+                );
+                return Ok(());
+            }
+        }
+
         // Check if we already have this version published
-        if self.registry_version == Some(version) {
+        if self.registry_version_published == Some(version) {
             return Ok(());
         }
 
         // Otherwise create a snapshot & publish it
-        let rt = self.get_snapshot(version)?;
+        let snapshot = self.get_snapshot(version)?;
 
         self.published_registry_snapshot
-            .store(Some(Arc::new(rt.clone())));
+            .store(Some(Arc::new(snapshot.clone())));
 
         info!(
-            version_old = self.registry_version.map(|x| x.get()),
+            action = "snapshot",
+            version_old = self.registry_version_published.map(|x| x.get()),
             version_new = version.get(),
             "New registry snapshot published",
         );
 
-        self.registry_version = Some(version);
+        self.registry_version_published = Some(version);
 
         // Persist the firewall rules if configured
         if let Some(v) = &self.persister {
-            v.persist(rt).await?;
+            v.persist(snapshot).await?;
         }
 
         Ok(())

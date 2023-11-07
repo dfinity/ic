@@ -345,8 +345,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     // Snapshots
-    let mut snapshot_runner =
-        SnapshotRunner::new(Arc::clone(&registry_snapshot), registry_client.clone());
+    let mut snapshot_runner = SnapshotRunner::new(
+        Arc::clone(&registry_snapshot),
+        registry_client.clone(),
+        Duration::from_secs(cli.registry.min_version_age),
+    );
 
     if let Some(v) = &cli.firewall.nftables_system_replicas_path {
         let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
@@ -362,7 +365,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         snapshot_runner,
         MetricParams::new(&registry, "run_snapshot"),
     );
-    let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(10 * SECOND));
+    let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
 
     // Checks
     let persister = WithMetricsPersist(

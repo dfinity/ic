@@ -56,6 +56,10 @@ pub struct RegistryConfig {
     /// Whether to disable internal registry replicator
     #[clap(long, default_value = "false")]
     pub disable_registry_replicator: bool,
+
+    /// Minimum snapshot version age to be useful for initial publishing, in seconds
+    #[clap(long, default_value = "15")]
+    pub min_version_age: u64,
 }
 
 #[derive(Args)]

@@ -562,7 +562,11 @@ pub async fn preprocess_request(
 
     // Inject context into the response for access by other middleware
     response.extensions_mut().insert(ctx);
-    response.extensions_mut().insert(canister_id);
+
+    // Inject canister_id if it's not there already (could be overriden by other middleware)
+    if response.extensions().get::<CanisterId>().is_none() {
+        response.extensions_mut().insert(canister_id);
+    }
 
     Ok(response)
 }
