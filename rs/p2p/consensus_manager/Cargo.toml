@@ -34,4 +34,5 @@ tokio = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
+mockall = "0.11.4"
 turmoil = "0.5"

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = [
     "//rs/p2p:__subpackages__",
@@ -32,6 +32,7 @@ DEV_DEPENDENCIES = [
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
+    "@crate_index//:mockall",
     "@crate_index//:turmoil",
 ]
 
@@ -41,6 +42,14 @@ rust_library(
     crate_name = "ic_consensus_manager",
     version = "0.8.0",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "consensus_manager_test",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_consensus_manager",
+    version = "0.8.0",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite(
