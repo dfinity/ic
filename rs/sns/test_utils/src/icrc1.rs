@@ -29,10 +29,3 @@ pub async fn transfer<'a>(
         Err(e) => Err(format!("{:?}", e)),
     }
 }
-
-pub async fn fee<'a>(canister: &Canister<'a>) -> Result<u64, String> {
-    canister
-        .query_("icrc1_fee", candid_one, ())
-        .await
-        .map(|n: Nat| n.0.to_u64().unwrap())
-}

@@ -1,315 +1,296 @@
+use candid::Encode;
 use candid::{Nat, Principal};
-use canister_test::{Canister, Runtime};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    sns_wasm::{add_wasm_via_proposal, build_ledger_sns_wasm},
+    state_test_helpers::{
+        icrc1_balance, icrc1_fee, icrc1_transfer, query, setup_nns_canisters,
+        sns_claim_staked_neuron, sns_make_proposal, sns_stake_neuron,
+        sns_wait_for_proposal_execution,
+    },
+};
+use ic_state_machine_tests::StateMachine;
+
 use ic_sns_governance::{
     pb::v1::{
-        proposal::Action, ManageLedgerParameters, NervousSystemParameters, NeuronId,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalId,
+        proposal::Action, ManageLedgerParameters, NervousSystemParameters, NeuronPermissionList,
+        NeuronPermissionType, Proposal, ProposalId,
     },
-    types::{DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS},
+    types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_test_utils::{
-    icrc1,
-    itest_helpers::{
-        compile_rust_canister, install_rust_canister_with_memory_allocation,
-        local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, LEDGER_BINARY_NAME,
-        SNS_WASM_BINARY_NAME,
-    },
-    SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
-};
-use ic_sns_wasm::{
-    init::SnsWasmCanisterInitPayload,
-    pb::v1::{add_wasm_response, AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsWasm},
+    itest_helpers::SnsTestsInitPayloadBuilder, state_test_helpers::setup_sns_canisters,
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 
 #[test]
 fn test_manage_ledger_parameters_change_transfer_fee() {
-    local_test_on_sns_subnet(|runtime| async move {
-        // set sns
-        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+    let state_machine = StateMachine::new();
 
-        let system_params = NervousSystemParameters {
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
-            }),
-            ..NervousSystemParameters::with_default_values()
-        };
+    let user = PrincipalId::new_user_test_id(1000);
+    let user_account = Account {
+        owner: user.0,
+        subaccount: None,
+    };
 
-        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(
-                user.get_principal_id().0.into(),
-                Tokens::from_tokens(1000).unwrap(),
-            )
-            .with_nervous_system_parameters(system_params)
-            .build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
 
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+    let system_params = NervousSystemParameters {
+        neuron_claimer_permissions: Some(NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        }),
+        ..NervousSystemParameters::with_default_values()
+    };
 
-        // set up sns-wasm canister
-        set_up_sns_wasm_canister_for_manage_ledger_parameters_proposals(&runtime).await;
+    let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+        .with_ledger_account(user_account, Tokens::new(10001, 0).unwrap())
+        .with_nervous_system_parameters(system_params)
+        .build();
 
-        // create neuron
-        let neuron_id: NeuronId = sns_canisters
-            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
-            .await;
-        let subaccount = neuron_id
-            .subaccount()
-            .expect("Error creating the subaccount");
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+    let sns_canisters = setup_sns_canisters(&state_machine, sns_init_payload);
 
-        // change ledger transfer_fee with the ManageLedgerParameters proposal
-        let new_fee = 34;
+    add_wasm_via_proposal(&state_machine, build_ledger_sns_wasm());
 
-        let proposal_id: ProposalId = sns_canisters
-            .make_proposal(
-                &user,
-                &subaccount,
-                Proposal {
-                    title: "ManageLedgerParameters".to_string(),
-                    action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
-                        transfer_fee: Some(new_fee),
-                        ..Default::default()
-                    })),
-                    ..Default::default()
-                },
-            )
-            .await
-            .unwrap();
+    let neuron_nonce = 0;
+    sns_stake_neuron(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        sns_canisters.ledger_canister_id,
+        user,
+        Tokens::new(5005, 0).unwrap(),
+        neuron_nonce,
+    );
+    let neuron = sns_claim_staked_neuron(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        user,
+        neuron_nonce,
+        Some(100_000_000), // dissolve delay
+    );
 
-        let pd = sns_canisters
-            .await_proposal_execution_or_failure(&proposal_id)
-            .await;
-        println!("change ledger fee proposal data: {:?}", pd);
+    assert!(icrc1_fee(&state_machine, sns_canisters.ledger_canister_id) == DEFAULT_TRANSFER_FEE);
 
-        // check that the fee on the ledger has changed.
-        assert!(icrc1::fee(&sns_canisters.ledger).await.unwrap() != DEFAULT_TRANSFER_FEE.get_e8s());
-        assert!(icrc1::fee(&sns_canisters.ledger).await.unwrap() == new_fee);
+    // change ledger transfer_fee with the ManageLedgerParameters proposal
+    let new_fee = 34;
 
-        // try making transfers using the new fee and the old fee.
-        icrc1::transfer(
-            &sns_canisters.ledger,
-            &user,
-            TransferArg {
-                amount: Nat::from(5),
-                fee: Some(Nat::from(new_fee)),
-                from_subaccount: None,
-                to: Account {
-                    owner: Principal::management_canister(),
-                    subaccount: None,
-                },
-                memo: None,
-                created_at_time: None,
+    let change_ledger_transfer_fee_proposal_id = sns_make_proposal(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        user,
+        neuron.clone(),
+        Proposal {
+            title: "Change ledger transfer fee".to_string(),
+            action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                transfer_fee: Some(new_fee),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    sns_wait_for_proposal_execution(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        change_ledger_transfer_fee_proposal_id,
+    );
+
+    // check that the fee on the ledger has changed.
+    let ledger_fee_after_proposal = icrc1_fee(&state_machine, sns_canisters.ledger_canister_id);
+
+    assert!(ledger_fee_after_proposal != DEFAULT_TRANSFER_FEE);
+    assert!(ledger_fee_after_proposal.get_e8s() == new_fee);
+
+    // try making transfers using the new fee and the old fee.
+    icrc1_transfer(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        user,
+        TransferArg {
+            amount: Nat::from(5),
+            fee: Some(Nat::from(new_fee)),
+            from_subaccount: None,
+            to: Account {
+                owner: Principal::management_canister(),
+                subaccount: None,
             },
-        )
-        .await
-        .expect("This transfer with the new fee must succeed");
+            memo: None,
+            created_at_time: None,
+        },
+    )
+    .expect("This transfer with the new fee must succeed");
 
-        icrc1::transfer(
-            &sns_canisters.ledger,
-            &user,
-            TransferArg {
-                amount: Nat::from(5),
-                fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
-                from_subaccount: None,
-                to: Account {
-                    owner: Principal::management_canister(),
-                    subaccount: None,
-                },
-                memo: None,
-                created_at_time: None,
+    icrc1_transfer(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        user,
+        TransferArg {
+            amount: Nat::from(5),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
+            from_subaccount: None,
+            to: Account {
+                owner: Principal::management_canister(),
+                subaccount: None,
             },
+            memo: None,
+            created_at_time: None,
+        },
+    )
+    .expect_err("This transfer with the old fee must fail.");
+
+    let nervous_system_parameters_with_new_fee: NervousSystemParameters = {
+        let nervous_system_parameters_raw = query(
+            &state_machine,
+            sns_canisters.governance_canister_id,
+            "get_nervous_system_parameters",
+            Encode!().unwrap(),
         )
-        .await
-        .expect_err("This transfer with the old fee must fail.");
+        .unwrap();
 
-        let nervous_system_parameters_with_new_fee: NervousSystemParameters = sns_canisters
-            .governance
-            .query_("get_nervous_system_parameters", dfn_candid::candid_one, ())
-            .await
-            .unwrap();
+        candid::decode_one(&nervous_system_parameters_raw).unwrap()
+    };
 
-        assert_eq!(
-            nervous_system_parameters_with_new_fee.transaction_fee_e8s,
-            Some(new_fee)
-        );
-
-        Ok(())
-    })
+    assert_eq!(
+        nervous_system_parameters_with_new_fee.transaction_fee_e8s,
+        Some(new_fee)
+    );
 }
 
 #[test]
 fn test_manage_ledger_parameters_change_fee_collector() {
-    local_test_on_sns_subnet(|runtime| async move {
-        // set sns
-        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+    let state_machine = StateMachine::new();
 
-        let system_params = NervousSystemParameters {
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
-            }),
-            ..NervousSystemParameters::with_default_values()
-        };
+    let user = PrincipalId::new_user_test_id(1000);
+    let user_account = Account {
+        owner: user.0,
+        subaccount: None,
+    };
 
-        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(
-                user.get_principal_id().0.into(),
-                Tokens::from_tokens(1000).unwrap(),
-            )
-            .with_nervous_system_parameters(system_params)
-            .build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
 
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+    let system_params = NervousSystemParameters {
+        neuron_claimer_permissions: Some(NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        }),
+        ..NervousSystemParameters::with_default_values()
+    };
 
-        // set up sns-wasm canister
-        set_up_sns_wasm_canister_for_manage_ledger_parameters_proposals(&runtime).await;
+    let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+        .with_ledger_account(user_account, Tokens::new(10001, 0).unwrap())
+        .with_nervous_system_parameters(system_params)
+        .build();
 
-        // create neuron
-        let neuron_id: NeuronId = sns_canisters
-            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
-            .await;
-        let subaccount = neuron_id
-            .subaccount()
-            .expect("Error creating the subaccount");
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+    let sns_canisters = setup_sns_canisters(&state_machine, sns_init_payload);
 
-        // choose a new fee_collector
-        let new_fee_collector = Account {
-            owner: Sender::from_keypair(&TEST_USER2_KEYPAIR)
-                .get_principal_id()
-                .0,
-            subaccount: None,
-        };
-        // check that a transfer does not send the fee to the new_fee_collector before the proposal
-        icrc1::transfer(
-            &sns_canisters.ledger,
-            &user,
-            TransferArg {
-                amount: Nat::from(5),
-                fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
-                from_subaccount: None,
-                to: Account {
-                    owner: Principal::management_canister(),
-                    subaccount: None,
-                },
-                memo: None,
-                created_at_time: None,
+    add_wasm_via_proposal(&state_machine, build_ledger_sns_wasm());
+
+    let neuron_nonce = 0;
+    sns_stake_neuron(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        sns_canisters.ledger_canister_id,
+        user,
+        Tokens::new(5005, 0).unwrap(),
+        neuron_nonce,
+    );
+    let neuron = sns_claim_staked_neuron(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        user,
+        neuron_nonce,
+        Some(100_000_000), // dissolve delay
+    );
+
+    // choose a new fee_collector
+    let new_fee_collector = Account {
+        owner: Sender::from_keypair(&TEST_USER1_KEYPAIR)
+            .get_principal_id()
+            .0,
+        subaccount: None,
+    };
+
+    // check that a transfer does not send the fee to the new_fee_collector before the proposal
+    icrc1_transfer(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        user,
+        TransferArg {
+            amount: Nat::from(5),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
+            from_subaccount: None,
+            to: Account {
+                owner: Principal::management_canister(),
+                subaccount: None,
             },
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            icrc1::balance_of(&sns_canisters.ledger, new_fee_collector,)
-                .await
-                .unwrap(),
-            0
-        );
-
-        // change the sns-ledger's fee_collector with the ManageLedgerParameters proposal
-        let proposal_id: ProposalId = sns_canisters
-            .make_proposal(
-                &user,
-                &subaccount,
-                Proposal {
-                    title: "ManageLedgerParameters".to_string(),
-                    action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
-                        set_fee_collector: Some(new_fee_collector.into()),
-                        ..Default::default()
-                    })),
-                    ..Default::default()
-                },
-            )
-            .await
-            .unwrap();
-
-        let pd = sns_canisters
-            .await_proposal_execution_or_failure(&proposal_id)
-            .await;
-        println!("change fee collector proposal data: {:?}", pd);
-        // check that a transfer does send the fee to the new fee_collector now.
-        icrc1::transfer(
-            &sns_canisters.ledger,
-            &user,
-            TransferArg {
-                amount: Nat::from(5),
-                fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
-                from_subaccount: None,
-                to: Account {
-                    owner: Principal::management_canister(),
-                    subaccount: None,
-                },
-                memo: None,
-                created_at_time: None,
-            },
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            icrc1::balance_of(&sns_canisters.ledger, new_fee_collector,)
-                .await
-                .unwrap(),
-            DEFAULT_TRANSFER_FEE.get_e8s()
-        );
-
-        Ok(())
-    })
-}
-
-async fn set_up_sns_wasm_canister_for_manage_ledger_parameters_proposals(
-    runtime: &Runtime,
-) -> Canister<'_> {
-    let mut sns_wasm_canister = runtime
-        .create_canister_with_specified_id(
-            Some(100_000_000_000_000),
-            Some(SNS_WASM_CANISTER_ID.get()),
-        )
-        .await
-        .unwrap();
-
-    install_rust_canister_with_memory_allocation(
-        &mut sns_wasm_canister,
-        SNS_WASM_BINARY_NAME,
-        &[],
-        Some(
-            candid::encode_one(SnsWasmCanisterInitPayload {
-                sns_subnet_ids: vec![PrincipalId::default().into()],
-                access_controls_enabled: false,
-                allowed_principals: vec![],
-            })
-            .unwrap(),
-        ),
-        SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+            memo: None,
+            created_at_time: None,
+        },
     )
-    .await;
+    .unwrap();
 
-    let ledger_wasm = compile_rust_canister(LEDGER_BINARY_NAME, &[]).await;
-    let ledger_wasm_hash = ledger_wasm.sha256_hash().to_vec();
-    let add_wasm_response: AddWasmResponse = sns_wasm_canister
-        .update_(
-            "add_wasm",
-            dfn_candid::candid_one,
-            AddWasmRequest {
-                hash: ledger_wasm_hash.clone(),
-                wasm: Some(SnsWasm {
-                    wasm: ledger_wasm.bytes(),
-                    canister_type: SnsCanisterType::Ledger.into(),
-                }),
+    assert_eq!(
+        icrc1_balance(
+            &state_machine,
+            sns_canisters.ledger_canister_id,
+            new_fee_collector
+        ),
+        Tokens::ZERO,
+    );
+
+    // change the sns-ledger's fee_collector with the ManageLedgerParameters proposal
+    let change_fee_collector_proposal_id: ProposalId = sns_make_proposal(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        user,
+        neuron.clone(),
+        Proposal {
+            title: "ManageLedgerParameters".to_string(),
+            action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                set_fee_collector: Some(new_fee_collector.into()),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    sns_wait_for_proposal_execution(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        change_fee_collector_proposal_id,
+    );
+
+    // check that a transfer does send the fee to the new fee_collector now.
+    icrc1_transfer(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        user,
+        TransferArg {
+            amount: Nat::from(5),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
+            from_subaccount: None,
+            to: Account {
+                owner: Principal::management_canister(),
+                subaccount: None,
             },
-        )
-        .await
-        .unwrap();
-    match add_wasm_response.result.unwrap() {
-        add_wasm_response::Result::Hash(b) => {
-            assert_eq!(ledger_wasm_hash, b);
-        }
-        add_wasm_response::Result::Error(e) => {
-            panic!("Error calling add_wasm on the sns-wasm-canister. {:?}", e);
-        }
-    }
+            memo: None,
+            created_at_time: None,
+        },
+    )
+    .unwrap();
 
-    sns_wasm_canister
+    assert_eq!(
+        icrc1_balance(
+            &state_machine,
+            sns_canisters.ledger_canister_id,
+            new_fee_collector
+        ),
+        DEFAULT_TRANSFER_FEE
+    );
 }
