@@ -48,7 +48,7 @@ echo
 NEW_COMMIT=$(git rev-parse --short=9 HEAD)
 CACHE_DIR="${CACHE_DIR:-${HOME}/.cache/${0##*/}/new-${NEW_COMMIT}/old-${OLD_BRANCH}-${OLD_COMMIT}}"
 OLD_REPO_DIR="${OLD_REPO_DIR:-${CACHE_DIR}/ic}"
-OLD_REPORT="${OLD_REPORT:-${OLD_REPO_DIR}/rs/execution_environment/benches/SYSTEM_API.md}"
+OLD_REPORT="${OLD_REPORT:-${OLD_REPO_DIR}/rs/execution_environment/benches/system_api/SYSTEM_API.md}"
 
 mkdir -p "${CACHE_DIR}"
 
