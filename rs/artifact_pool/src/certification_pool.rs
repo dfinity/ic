@@ -407,10 +407,11 @@ impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
 mod tests {
     use super::*;
     use ic_interfaces::certification::CertificationPool;
-    use ic_interfaces::time_source::SysTimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::consensus::fake::{Fake, FakeSigner};
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities::MockTimeSource;
+    use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         consensus::certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
@@ -479,7 +480,7 @@ mod tests {
         UnvalidatedArtifact::<CertificationMessage> {
             message,
             peer_id: node_test_id(0),
-            timestamp: SysTimeSource::new().get_relative_time(),
+            timestamp: UNIX_EPOCH,
         }
     }
 
@@ -552,7 +553,7 @@ mod tests {
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
             let result = pool.apply_changes(
-                &SysTimeSource::new(),
+                &MockTimeSource::new(),
                 vec![
                     ChangeAction::AddToValidated(share_msg.clone()),
                     ChangeAction::AddToValidated(cert_msg.clone()),
@@ -586,7 +587,7 @@ mod tests {
             pool.insert(to_unvalidated(share_msg.clone()));
             pool.insert(to_unvalidated(cert_msg.clone()));
             let result = pool.apply_changes(
-                &SysTimeSource::new(),
+                &MockTimeSource::new(),
                 vec![
                     ChangeAction::MoveToValidated(share_msg.clone()),
                     ChangeAction::MoveToValidated(cert_msg.clone()),
@@ -632,7 +633,7 @@ mod tests {
             pool.insert(to_unvalidated(share_msg.clone()));
             pool.insert(to_unvalidated(cert_msg.clone()));
             pool.apply_changes(
-                &SysTimeSource::new(),
+                &MockTimeSource::new(),
                 vec![
                     ChangeAction::MoveToValidated(share_msg),
                     ChangeAction::MoveToValidated(cert_msg),
@@ -657,7 +658,7 @@ mod tests {
             );
 
             let result = pool.apply_changes(
-                &SysTimeSource::new(),
+                &MockTimeSource::new(),
                 vec![ChangeAction::RemoveAllBelow(Height::from(11))],
             );
             let mut back_off_factor = 1;
@@ -708,7 +709,7 @@ mod tests {
                 1
             );
             let result = pool.apply_changes(
-                &SysTimeSource::new(),
+                &MockTimeSource::new(),
                 vec![ChangeAction::HandleInvalid(
                     share_msg,
                     "Testing the removal of invalid artifacts".to_string(),
@@ -722,7 +723,7 @@ mod tests {
                 0
             );
 
-            let result = pool.apply_changes(&SysTimeSource::new(), vec![]);
+            let result = pool.apply_changes(&MockTimeSource::new(), vec![]);
             assert!(!result.poll_immediately);
         });
     }
@@ -757,7 +758,7 @@ mod tests {
                 }
             }
 
-            pool.apply_changes(&SysTimeSource::new(), messages);
+            pool.apply_changes(&MockTimeSource::new(), messages);
 
             let get_signer = |m: &CertificationMessage| match m {
                 CertificationMessage::CertificationShare(x) => x.signed.signature.signer,

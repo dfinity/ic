@@ -184,12 +184,12 @@ impl DkgPool for DkgPoolImpl {
 mod test {
     use super::*;
     use ic_interfaces::dkg::DkgPool;
-    use ic_interfaces::time_source::SysTimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         consensus::fake::FakeSigner,
         mock_time,
         types::ids::{node_test_id, subnet_test_id},
+        MockTimeSource,
     };
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -237,7 +237,7 @@ mod test {
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         // add two validated messages, one for every DKG instance
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             [
                 make_message(current_dkg_id_start_height, node_test_id(0)),
                 make_message(last_dkg_id_start_height, node_test_id(0)),
@@ -268,7 +268,7 @@ mod test {
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![ChangeAction::Purge(current_dkg_id_start_height)],
         );
         assert_eq!(result.purged.len(), 1);
@@ -279,7 +279,7 @@ mod test {
 
         // purge the highest height and make sure everything is gone
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![ChangeAction::Purge(current_dkg_id_start_height.increment())],
         );
         assert_eq!(result.purged.len(), 1);

@@ -183,9 +183,10 @@ impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
 
 #[cfg(test)]
 mod tests {
-    use ic_interfaces::time_source::SysTimeSource;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{consensus::fake::FakeSigner, mock_time, types::ids::node_test_id};
+    use ic_test_utilities::{
+        consensus::fake::FakeSigner, mock_time, types::ids::node_test_id, MockTimeSource,
+    };
     use ic_types::{
         canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
         crypto::{CryptoHash, Signed},
@@ -251,7 +252,7 @@ mod tests {
         let content_hash = ic_types::crypto::crypto_hash(&response);
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![
                 CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
                 CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
@@ -270,7 +271,7 @@ mod tests {
         );
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![
                 CanisterHttpChangeAction::RemoveValidated(id.clone()),
                 CanisterHttpChangeAction::RemoveContent(content_hash.clone()),
@@ -298,7 +299,7 @@ mod tests {
         pool.insert(to_unvalidated(share1.clone()));
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![
                 CanisterHttpChangeAction::MoveToValidated(share2.clone()),
                 CanisterHttpChangeAction::MoveToValidated(share1.clone()),
@@ -322,7 +323,7 @@ mod tests {
         assert!(pool.contains(&id));
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![CanisterHttpChangeAction::RemoveUnvalidated(id.clone())],
         );
 
@@ -342,7 +343,7 @@ mod tests {
         assert!(pool.contains(&id));
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![CanisterHttpChangeAction::HandleInvalid(
                 id.clone(),
                 "TEST REASON".to_string(),
