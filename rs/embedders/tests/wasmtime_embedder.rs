@@ -59,6 +59,75 @@ mod test {
     }
 
     #[test]
+    fn execute_wasm_with_64bit_main_memory() {
+        let wat = r#"
+            (module
+                (import "ic0" "call_new_64"
+                    (func $ic0_call_new_64
+                        (param $callee_src i64)
+                        (param $callee_size i64)
+                        (param $name_src i64)
+                        (param $name_size i64)
+                        (param $reply_fun i32)
+                        (param $reply_env i32)
+                        (param $reject_fun i32)
+                        (param $reject_env i32)
+                    )
+                )
+                (import "ic0" "call_perform"
+                    (func $ic0_call_perform (result i32)))
+                (func (export "canister_update test")
+                    i64.const 0
+                    i64.const 0
+                    i64.const 0
+                    i64.const 0
+                    i32.const 0
+                    i32.const 0
+                    i32.const 0
+                    i32.const 0
+                    call $ic0_call_new_64
+                    call $ic0_call_perform
+                    drop
+                )
+                (func $start
+                    i64.const 1
+                    memory.grow
+                    drop
+                    block
+                        i64.const 2097152
+                        i64.load
+                        i64.const 578437695752307201
+                        i64.eq
+                        br_if 0
+                        unreachable
+                    end
+                    i64.const 2097160
+                    i64.const 2097152
+                    i64.const 8
+                    memory.copy
+                )
+                (start $start)
+                (memory i64 160)
+                (data (i64.const 2097152) "\01\02\03\04\05\06\07\08")
+            )
+        "#;
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(wat)
+            .with_api_type(ic_system_api::ApiType::update(
+                mock_time(),
+                vec![],
+                Cycles::zero(),
+                PrincipalId::new_user_test_id(0),
+                0.into(),
+            ))
+            .build();
+        instance
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+            .unwrap();
+    }
+
+    #[test]
     fn correctly_count_instructions() {
         let data_size = 1024;
         let mut instance = WasmtimeInstanceBuilder::new()
