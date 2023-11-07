@@ -20,6 +20,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
+ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libc = "0.2.91"
 libflate = "1.1.2"

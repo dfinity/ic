@@ -9,8 +9,6 @@
 
 /// Conversion from [`wasmparser`] to internal types.
 pub(super) mod parser_to_internal {
-    use crate::wasm_utils::wasm_transform;
-
     pub(crate) fn const_expr(
         const_expr: wasmparser::ConstExpr,
     ) -> Result<Vec<wasmparser::Operator>, wasmparser::BinaryReaderError> {
@@ -20,11 +18,9 @@ pub(super) mod parser_to_internal {
             .collect::<Result<_, _>>()
     }
 
-    fn data_kind(
-        kind: wasmparser::DataKind,
-    ) -> Result<wasm_transform::DataSegmentKind, wasm_transform::Error> {
+    fn data_kind(kind: wasmparser::DataKind) -> Result<crate::DataSegmentKind, crate::Error> {
         Ok(match kind {
-            wasmparser::DataKind::Passive => wasm_transform::DataSegmentKind::Passive,
+            wasmparser::DataKind::Passive => crate::DataSegmentKind::Passive,
             wasmparser::DataKind::Active {
                 memory_index,
                 offset_expr,
@@ -34,20 +30,18 @@ pub(super) mod parser_to_internal {
                     .into_iter()
                     .collect::<Result<_, _>>()?;
                 match ops.as_slice() {
-                    [_, wasmparser::Operator::End] => wasm_transform::DataSegmentKind::Active {
+                    [_, wasmparser::Operator::End] => crate::DataSegmentKind::Active {
                         memory_index,
                         offset_expr: ops[0].clone(),
                     },
-                    _ => return Err(wasm_transform::Error::InvalidConstExpr),
+                    _ => return Err(crate::Error::InvalidConstExpr),
                 }
             }
         })
     }
 
-    pub(crate) fn data_segment(
-        data: wasmparser::Data,
-    ) -> Result<wasm_transform::DataSegment, wasm_transform::Error> {
-        Ok(wasm_transform::DataSegment {
+    pub(crate) fn data_segment(data: wasmparser::Data) -> Result<crate::DataSegment, crate::Error> {
+        Ok(crate::DataSegment {
             kind: data_kind(data.kind)?,
             data: data.data,
         })
@@ -55,14 +49,14 @@ pub(super) mod parser_to_internal {
 
     pub(crate) fn element_kind(
         kind: wasmparser::ElementKind,
-    ) -> Result<wasm_transform::ElementKind, wasmparser::BinaryReaderError> {
+    ) -> Result<crate::ElementKind, wasmparser::BinaryReaderError> {
         match kind {
-            wasmparser::ElementKind::Passive => Ok(wasm_transform::ElementKind::Passive),
-            wasmparser::ElementKind::Declared => Ok(wasm_transform::ElementKind::Declared),
+            wasmparser::ElementKind::Passive => Ok(crate::ElementKind::Passive),
+            wasmparser::ElementKind::Declared => Ok(crate::ElementKind::Declared),
             wasmparser::ElementKind::Active {
                 table_index,
                 offset_expr,
-            } => Ok(wasm_transform::ElementKind::Active {
+            } => Ok(crate::ElementKind::Active {
                 table_index,
                 offset_expr: const_expr(offset_expr)?,
             }),
@@ -71,18 +65,18 @@ pub(super) mod parser_to_internal {
 
     pub(crate) fn element_items(
         items: wasmparser::ElementItems,
-    ) -> Result<wasm_transform::ElementItems, wasmparser::BinaryReaderError> {
+    ) -> Result<crate::ElementItems, wasmparser::BinaryReaderError> {
         match items {
             wasmparser::ElementItems::Functions(reader) => {
                 let functions = reader.into_iter().collect::<Result<Vec<_>, _>>()?;
-                Ok(wasm_transform::ElementItems::Functions(functions))
+                Ok(crate::ElementItems::Functions(functions))
             }
             wasmparser::ElementItems::Expressions(ref_type, reader) => {
                 let exprs = reader
                     .into_iter()
                     .map(|expr| const_expr(expr?))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(wasm_transform::ElementItems::ConstExprs {
+                Ok(crate::ElementItems::ConstExprs {
                     ty: ref_type,
                     exprs,
                 })
@@ -92,8 +86,8 @@ pub(super) mod parser_to_internal {
 
     pub(crate) fn global(
         global: wasmparser::Global,
-    ) -> Result<wasm_transform::Global, wasmparser::BinaryReaderError> {
-        Ok(wasm_transform::Global {
+    ) -> Result<crate::Global, wasmparser::BinaryReaderError> {
+        Ok(crate::Global {
             ty: global.ty,
             init_expr: const_expr(global.init_expr)?,
         })
@@ -102,8 +96,6 @@ pub(super) mod parser_to_internal {
 
 /// Conversion from internal to [`wasm_encoder`] types.
 pub(super) mod internal_to_encoder {
-    use crate::wasm_utils::wasm_transform;
-
     pub(crate) fn block_type(ty: &wasmparser::BlockType) -> wasm_encoder::BlockType {
         match ty {
             wasmparser::BlockType::Empty => wasm_encoder::BlockType::Empty,
@@ -238,7 +230,7 @@ pub(super) mod internal_to_encoder {
 
     pub(crate) fn const_expr(
         expr: &[wasmparser::Operator],
-    ) -> Result<wasm_encoder::ConstExpr, wasm_transform::Error> {
+    ) -> Result<wasm_encoder::ConstExpr, crate::Error> {
         use wasm_encoder::Encode;
 
         match expr.last() {
@@ -249,7 +241,7 @@ pub(super) mod internal_to_encoder {
                 }
                 Ok(wasm_encoder::ConstExpr::raw(bytes))
             }
-            _ => Err(wasm_transform::Error::MissingConstEnd),
+            _ => Err(crate::Error::MissingConstEnd),
         }
     }
 
@@ -286,12 +278,12 @@ pub(super) mod internal_to_encoder {
     impl<'a> ExactSizeIterator for DerefBytesIterator<'a> {}
 
     pub(crate) fn data_segment<'a>(
-        segment: wasm_transform::DataSegment<'a>,
+        segment: crate::DataSegment<'a>,
         temp_const_expr: &'a mut wasm_encoder::ConstExpr,
-    ) -> Result<wasm_encoder::DataSegment<'a, DerefBytesIterator<'a>>, wasm_transform::Error> {
+    ) -> Result<wasm_encoder::DataSegment<'a, DerefBytesIterator<'a>>, crate::Error> {
         let mode = match segment.kind {
-            wasm_transform::DataSegmentKind::Passive => wasm_encoder::DataSegmentMode::Passive,
-            wasm_transform::DataSegmentKind::Active {
+            crate::DataSegmentKind::Passive => wasm_encoder::DataSegmentMode::Passive,
+            crate::DataSegmentKind::Active {
                 memory_index,
                 offset_expr,
             } => {
@@ -328,14 +320,12 @@ pub(super) mod internal_to_encoder {
     }
 
     pub(crate) fn element_items<'a>(
-        element_items: &'a wasm_transform::ElementItems<'a>,
+        element_items: &'a crate::ElementItems<'a>,
         temp_const_exprs: &'a mut Vec<wasm_encoder::ConstExpr>,
-    ) -> Result<wasm_encoder::Elements<'a>, wasm_transform::Error> {
+    ) -> Result<wasm_encoder::Elements<'a>, crate::Error> {
         match element_items {
-            wasm_transform::ElementItems::Functions(funcs) => {
-                Ok(wasm_encoder::Elements::Functions(funcs))
-            }
-            wasm_transform::ElementItems::ConstExprs { ty, exprs } => {
+            crate::ElementItems::Functions(funcs) => Ok(wasm_encoder::Elements::Functions(funcs)),
+            crate::ElementItems::ConstExprs { ty, exprs } => {
                 for e in exprs {
                     temp_const_exprs.push(const_expr(e)?);
                 }

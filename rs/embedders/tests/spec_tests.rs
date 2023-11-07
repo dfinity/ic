@@ -1,6 +1,5 @@
 use std::{ffi::OsString, fmt::Write, fs, path::PathBuf};
 
-use ic_embedders::wasm_utils::wasm_transform;
 use wasmtime::{
     Config, Engine, Global, GlobalType, Instance, Linker, Memory, MemoryType, Mutability, Store,
     Table, TableType, Val, ValType,
@@ -460,7 +459,7 @@ fn parse_and_encode(
             location(wat, text, path)
         )
     })?;
-    let module = wasm_transform::Module::parse(&wasm, enable_multi_memory)
+    let module = ic_wasm_transform::Module::parse(&wasm, enable_multi_memory)
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))?;
     module
         .encode()
