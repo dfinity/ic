@@ -431,7 +431,7 @@ pub(crate) fn syscalls<S: SystemApi>(
             system_api.ic0_msg_caller_copy_64(dst as u64, offset as u64, size as u64, memory)
         })?;
         if feature_flags.write_barrier == FlagStatus::Enabled {
-            mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u32 as usize)
+            mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
         } else {
             Ok(())
         }
@@ -441,7 +441,13 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_caller_copy", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                msg_caller_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
+                msg_caller_copy_64(
+                    &log,
+                    caller,
+                    dst as u32 as i64,
+                    offset as u32 as i64,
+                    size as u32 as i64,
+                )
             }
         })
         .unwrap();
@@ -543,7 +549,13 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_arg_data_copy", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                msg_arg_data_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
+                msg_arg_data_copy_64(
+                    &log,
+                    caller,
+                    dst as u32 as i64,
+                    offset as u32 as i64,
+                    size as u32 as i64,
+                )
             }
         })
         .unwrap();
@@ -617,7 +629,13 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_method_name_copy", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                msg_method_name_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
+                msg_method_name_copy_64(
+                    &log,
+                    caller,
+                    dst as u32 as i64,
+                    offset as u32 as i64,
+                    size as u32 as i64,
+                )
             }
         })
         .unwrap();
@@ -678,7 +696,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_reply_data_append", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
-                msg_reply_data_append_64(&log, caller, src as i64, size as i64)
+                msg_reply_data_append_64(&log, caller, src as u32 as i64, size as u32 as i64)
             }
         })
         .unwrap();
@@ -762,7 +780,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_reject", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
-                msg_reject_64(&log, caller, src as i64, size as i64)
+                msg_reject_64(&log, caller, src as u32 as i64, size as u32 as i64)
             }
         })
         .unwrap();
@@ -836,7 +854,13 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "msg_reject_msg_copy", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                msg_reject_msg_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
+                msg_reject_msg_copy_64(
+                    &log,
+                    caller,
+                    dst as u32 as i64,
+                    offset as u32 as i64,
+                    size as u32 as i64,
+                )
             }
         })
         .unwrap();
@@ -910,7 +934,13 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "canister_self_copy", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                canister_self_copy_64(&log, caller, dst as i64, offset as i64, size as i64)
+                canister_self_copy_64(
+                    &log,
+                    caller,
+                    dst as u32 as i64,
+                    offset as u32 as i64,
+                    size as u32 as i64,
+                )
             }
         })
         .unwrap();
@@ -962,7 +992,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "debug_print", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, offset: i32, length: i32| {
-                debug_print_64(&log, caller, offset as i64, length as i64)
+                debug_print_64(&log, caller, offset as u32 as i64, length as u32 as i64)
             }
         })
         .unwrap();
@@ -1003,7 +1033,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "trap", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, offset: i32, length: i32| -> Result<(), _> {
-                trap_64(&log, caller, offset as i64, length as i64)
+                trap_64(&log, caller, offset as u32 as i64, length as u32 as i64)
             }
         })
         .unwrap();
@@ -1070,10 +1100,10 @@ pub(crate) fn syscalls<S: SystemApi>(
                 call_new_64(
                     &log,
                     caller,
-                    callee_src as i64,
-                    callee_size as i64,
-                    name_src as i64,
-                    name_len as i64,
+                    callee_src as u32 as i64,
+                    callee_size as u32 as i64,
+                    name_src as u32 as i64,
+                    name_len as u32 as i64,
                     reply_fun,
                     reply_env,
                     reject_fun,
@@ -1135,7 +1165,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "call_data_append", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
-                data_append_64(&log, caller, src as i64, size as i64)
+                data_append_64(&log, caller, src as u32 as i64, size as u32 as i64)
             }
         })
         .unwrap();
@@ -1308,7 +1338,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api::complexity_overhead!(STABLE_READ, metering_type),
-                    size as u64,
+                    size as u32 as u64,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_READ,
                         ..Default::default()
@@ -1342,7 +1372,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api::complexity_overhead!(STABLE_WRITE, metering_type),
-                    size as u64,
+                    size as u32 as u64,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_WRITE,
                         stable_dirty_pages,
@@ -1451,7 +1481,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     system_api.ic0_stable64_read(dst as u64, offset as u64, size as u64, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
                 } else {
                     Ok(())
                 }
@@ -1907,7 +1937,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                 update_available_memory_64(
                     caller,
                     native_memory_grow_res as i64,
-                    additional_elements as i64,
+                    additional_elements as u32 as i64,
                     element_size,
                 )
                 .map(|result| result as i32)
@@ -2099,7 +2129,7 @@ pub(crate) fn syscalls<S: SystemApi>(
         .func_wrap("ic0", "is_controller", {
             let log = log.clone();
             move |caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
-                is_controller_64(&log, caller, src as i64, size as i64)
+                is_controller_64(&log, caller, src as u32 as i64, size as u32 as i64)
             }
         })
         .unwrap();
@@ -2113,59 +2143,47 @@ pub(crate) fn syscalls<S: SystemApi>(
         })
         .unwrap();
 
+    let data_certificate_copy_64 = move |log: &ReplicaLogger,
+                                         mut caller: Caller<'_, StoreData<S>>,
+                                         dst: u64,
+                                         offset: u64,
+                                         size: u64| {
+        charge_for_system_api_call(
+            log,
+            canister_id,
+            &mut caller,
+            system_api::complexity_overhead!(DATA_CERTIFICATE_COPY, metering_type),
+            size,
+            ExecutionComplexity {
+                cpu: system_api_complexity::cpu::DATA_CERTIFICATE_COPY,
+                ..Default::default()
+            },
+            NumInstructions::from(0),
+            stable_memory_dirty_page_limit,
+        )?;
+        with_memory_and_system_api(&mut caller, |system_api, memory| {
+            system_api.ic0_data_certificate_copy_64(dst, offset, size, memory)
+        })?;
+        if feature_flags.write_barrier == FlagStatus::Enabled {
+            mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+        } else {
+            Ok(())
+        }
+    };
+
     linker
         .func_wrap("ic0", "data_certificate_copy", {
             let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u32, offset: u32, size: u32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(DATA_CERTIFICATE_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::DATA_CERTIFICATE_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_data_certificate_copy(dst, offset, size, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: u32, offset: u32, size: u32| {
+                data_certificate_copy_64(&log, caller, dst as u64, offset as u64, size as u64)
             }
         })
         .unwrap();
 
     linker
         .func_wrap("ic0", "data_certificate_copy_64", {
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u64, offset: u64, size: u64| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api::complexity_overhead!(DATA_CERTIFICATE_COPY, metering_type),
-                    size as u64,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::DATA_CERTIFICATE_COPY,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_data_certificate_copy_64(dst, offset, size, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
-                } else {
-                    Ok(())
-                }
+            move |caller: Caller<'_, StoreData<S>>, dst: u64, offset: u64, size: u64| {
+                data_certificate_copy_64(&log, caller, dst, offset, size)
             }
         })
         .unwrap();
