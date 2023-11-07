@@ -524,15 +524,15 @@ new_git_repository(
 http_file(
     name = "mainnet_nns_registry_canister",
     downloaded_file_path = "registry-canister.wasm.gz",
-    sha256 = "9bc9448335cb3d459199bd2f8254a79bd6ca30922ede1d07d1ac2cc45c2acff6",
-    url = "https://download.dfinity.systems/ic/8b60ab1c8c5a6e4cf29d6413debe190e6cd8a6af/canisters/registry-canister.wasm.gz",
+    sha256 = "07cb794acb1454525b1686c1d0ba4c1f68dacd700db932f300b9fb2536bff970",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/registry-canister.wasm.gz",
 )
 
 http_file(
     name = "mainnet_nns_governance_canister",
     downloaded_file_path = "governance-canister.wasm.gz",
-    sha256 = "4dd34e7277e2d53fd653e4a6189597bf9fcfb3383d8fd9113ffdaeb9548cf8da",
-    url = "https://download.dfinity.systems/ic/8b60ab1c8c5a6e4cf29d6413debe190e6cd8a6af/canisters/governance-canister.wasm.gz",
+    sha256 = "59744b5a9833c747d324316f7b5fc62f725e6eba48e9733da3d26e4b811a7aaa",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/governance-canister.wasm.gz",
 )
 
 http_file(
@@ -584,8 +584,8 @@ http_file(
 http_file(
     name = "mainnet_nns_sns-wasm-canister",
     downloaded_file_path = "sns-wasm-canister.wasm.gz",
-    sha256 = "727238fdf0081b271f24952a058e9796a68f39d93dbb1269137c16e121cb1549",
-    url = "https://download.dfinity.systems/ic/9bb8f35cccd013b38657c67964c39d48fac6353f/canisters/sns-wasm-canister.wasm.gz",
+    sha256 = "c07b57fac0037ae5e2e979e4217e88e05bd039e4be9f52a5a1b38582edc04b21",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/sns-wasm-canister.wasm.gz",
 )
 
 # Deployed SNS canisters
