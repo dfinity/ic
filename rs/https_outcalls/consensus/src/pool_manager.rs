@@ -400,12 +400,12 @@ pub mod test {
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_consensus_utils::crypto::SignVerify;
     use ic_interfaces::artifact_pool::MutablePool;
-    use ic_interfaces::time_source::SysTimeSource;
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities::MockTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{
         crypto::{CryptoHash, CryptoHashOf},
@@ -516,7 +516,7 @@ pub mod test {
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
                 canister_http_pool.apply_changes(
-                    &SysTimeSource::new(),
+                    &MockTimeSource::new(),
                     vec![CanisterHttpChangeAction::AddToValidated(share, content)],
                 );
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
@@ -695,7 +695,7 @@ pub mod test {
                 };
 
                 canister_http_pool.apply_changes(
-                    &SysTimeSource::new(),
+                    &MockTimeSource::new(),
                     vec![CanisterHttpChangeAction::AddToValidated(share, content)],
                 );
 

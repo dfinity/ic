@@ -503,10 +503,10 @@ mod tests {
     use super::*;
     use ic_constants::MAX_INGRESS_TTL;
     use ic_interfaces::artifact_pool::MutablePool;
-    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+    use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::{
         mock_time, types::ids::node_test_id, types::messages::SignedIngressBuilder,
-        FastForwardTimeSource,
+        FastForwardTimeSource, MockTimeSource,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use rand::Rng;
@@ -708,7 +708,7 @@ mod tests {
                     )),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(&MockTimeSource::new(), changeset);
 
                 // Check moved message is returned as an advert
                 assert!(result.purged.is_empty());
@@ -773,7 +773,7 @@ mod tests {
                     )));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(&MockTimeSource::new(), changeset);
                 assert!(result.purged.is_empty());
                 // adverts are only created for own node id
                 assert_eq!(result.adverts.len(), initial_count / nodes);
@@ -782,7 +782,7 @@ mod tests {
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(&MockTimeSource::new(), changeset);
                 assert!(result.adverts.is_empty());
                 assert_eq!(result.purged.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
