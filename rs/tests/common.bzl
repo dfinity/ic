@@ -361,6 +361,23 @@ XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-cani
 
 STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync_test_canister"]
 
+IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
+                                       NNS_CANISTER_RUNTIME_DEPS + \
+                                       BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + \
+                                       MAINNET_REVISION_RUNTIME_DEPS + \
+                                       GRAFANA_RUNTIME_DEPS + [
+    "//rs/sns/cli:sns",
+    "//rs/tests:recovery/binaries",
+    "//rs/tests/nns:secret_key.pem",
+    "@dfx",
+    "@idl2json",
+    "@sns_quill//:sns-quill",
+    "@candid//:didc",
+    # TODO: remove once the mainnet ic-recovery contains the commits we need.
+    "//rs/recovery:ic-recovery",
+    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+]
+
 def _symlink_dir(ctx):
     dirname = ctx.attr.name
     lns = []
