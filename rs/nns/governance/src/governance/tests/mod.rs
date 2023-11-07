@@ -2147,8 +2147,15 @@ const NOW_TIMESTAMP_SECONDS: u64 = 111_222_333_444_555;
 lazy_static! {
     static ref ORIGINAL_HEAP_NEURONS: BTreeMap<u64, Neuron> = {
         fn new_neuron(id: u64, maturity_e8s_equivalent: u64) -> Neuron {
+            // Make sure different neurons have different accounts.
+            let mut account = vec![0; 32];
+            for (destination, data) in account.iter_mut().zip(id.to_le_bytes().iter().cycle()) {
+                *destination = *data;
+            }
+
             Neuron {
                 id: Some(NeuronId { id }),
+                account,
                 maturity_e8s_equivalent,
 
                 // Reached the dissolved state a "long" time ago, compared to NOW_TIMESTAMP_SECONDS.
@@ -2193,7 +2200,11 @@ fn copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(
         neurons: ORIGINAL_HEAP_NEURONS.clone(),
         ..Default::default()
     };
-    let mut governance = Governance::new(
+    // Only when restoring from the internal state the neurons in the proto mean 'heap neurons',
+    // while when initializing governance given the init payload, it will try to initalize
+    // Governance by putting the 'initial neurons' into its appropriate place (inactive neurons goes
+    // to stable neuron store), therefore it wouldn't be the case we try to test here.
+    let mut governance = Governance::new_restored(
         governance_proto,
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
