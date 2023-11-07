@@ -57,7 +57,7 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-state-machine-client = "3.0"
 ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
-rand = "0.8"
+rand = "0.8.4"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -74,7 +74,7 @@ maplit = "1.0.2"
 
 [dev-dependencies]
 proptest = "1.0"
+ic-base-types = { path = "../types/base_types" }
 ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
 ic-test-utilities = { path = "../test_utilities" }
-ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
