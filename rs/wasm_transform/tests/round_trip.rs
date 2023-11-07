@@ -27,27 +27,17 @@ macro_rules! make_round_trip_tests {
     };
 }
 
-/// Might as well run the round trip test on the files we use to test
-/// instrumentation.
-mod instrument_round_trip {
+mod round_trip {
     make_round_trip_tests!(
-        "instrumentation-test-data",
-        app,
-        app2,
-        basic_import_call,
-        basic_import,
-        basic,
-        control_flow,
-        element,
-        export_mutable_globals,
-        fac,
-        fizzbuzz,
-        memory_fill,
-        memory_grow,
-        nested_ifs,
-        recursive,
-        simple_loop,
-        start,
-        zero_cost_ops
+        "round-trip-test-data",
+        import_func,
+        data_section,
+        func,
+        func_locals,
+        table,
+        table_init,
+        globals,
+        exports,
+        start
     );
 }

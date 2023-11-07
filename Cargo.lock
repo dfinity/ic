@@ -7258,6 +7258,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
+ "ic-wasm-transform",
  "ic-wasm-types",
  "insta",
  "lazy_static",
@@ -11403,6 +11404,16 @@ dependencies = [
  "subtle",
  "wasm-bindgen",
  "zeroize",
+]
+
+[[package]]
+name = "ic-wasm-transform"
+version = "0.9.0"
+dependencies = [
+ "wasm-encoder 0.31.1",
+ "wasmparser 0.109.0",
+ "wasmprinter",
+ "wat",
 ]
 
 [[package]]

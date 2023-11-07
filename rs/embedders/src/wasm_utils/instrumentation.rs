@@ -123,11 +123,11 @@ use ic_types::{NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
-use crate::wasm_utils::wasm_transform::{self, Global, Module};
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
 };
+use ic_wasm_transform::{self, Global, Module};
 use wasmparser::{
     BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator,
     StructuralType, SubType, TypeRef, ValType,
@@ -517,12 +517,12 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 
     for (_, elem_items) in &mut module.elements {
         match elem_items {
-            wasm_transform::ElementItems::Functions(fun_items) => {
+            ic_wasm_transform::ElementItems::Functions(fun_items) => {
                 for idx in fun_items {
                     *idx = f(*idx);
                 }
             }
-            wasm_transform::ElementItems::ConstExprs { ty: _, exprs } => {
+            ic_wasm_transform::ElementItems::ConstExprs { ty: _, exprs } => {
                 for ops in exprs {
                     mutate_instructions(&f, ops)
                 }
@@ -536,8 +536,8 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 
     for data_segment in &mut module.data {
         match &mut data_segment.kind {
-            wasm_transform::DataSegmentKind::Passive => {}
-            wasm_transform::DataSegmentKind::Active {
+            ic_wasm_transform::DataSegmentKind::Passive => {}
+            ic_wasm_transform::DataSegmentKind::Active {
                 memory_index: _,
                 offset_expr,
             } => {
@@ -942,7 +942,7 @@ fn export_additional_symbols<'a>(
         End,
     ];
 
-    let func_body = wasm_transform::Body {
+    let func_body = ic_wasm_transform::Body {
         locals: vec![(1, ValType::I64)],
         instructions,
     };
@@ -1030,7 +1030,7 @@ fn export_additional_symbols<'a>(
             I32Sub,
             End,
         ];
-        let func_body = wasm_transform::Body {
+        let func_body = ic_wasm_transform::Body {
             locals: vec![(4, ValType::I32)],
             instructions,
         };
@@ -1321,7 +1321,7 @@ fn write_barrier_instructions<'a>(
     }
 }
 
-fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType) {
+fn inject_mem_barrier(func_body: &mut ic_wasm_transform::Body, func_type: &FuncType) {
     use Operator::*;
     let mut val_i32_needed = false;
     let mut val_i64_needed = false;
@@ -1457,7 +1457,7 @@ fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType
 // `table.grow` instruction to make sure that there's enough available memory
 // left to support the requested extra memory. If no `memory.grow` or
 // `table.grow` instructions are present then the code remains unchanged.
-fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_type: &FuncType) {
+fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_type: &FuncType) {
     // This is an overestimation of table element size computed based on the
     // existing canister limits.
     const TABLE_ELEMENT_SIZE: u32 = 1024;
@@ -1636,13 +1636,13 @@ fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
 // Looks for the data section and if it is present, converts it to a vector of
 // tuples (heap offset, bytes) and then deletes the section.
 fn get_data(
-    data_section: &mut Vec<wasm_transform::DataSegment>,
+    data_section: &mut Vec<ic_wasm_transform::DataSegment>,
 ) -> Result<Segments, WasmInstrumentationError> {
     let res = data_section
         .iter()
         .map(|segment| {
             let offset = match &segment.kind {
-                wasm_transform::DataSegmentKind::Active {
+                ic_wasm_transform::DataSegmentKind::Active {
                     memory_index: _,
                     offset_expr,
                 } => match offset_expr {

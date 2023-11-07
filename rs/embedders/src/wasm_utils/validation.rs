@@ -1,13 +1,14 @@
 //! This module is responsible for validating the wasm binaries that are
 //! installed on the Internet Computer.
 
-use super::{wasm_transform::Body, Complexity, WasmImportsDetails, WasmValidationDetails};
+use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
 use ic_types::{NumBytes, NumInstructions};
+use ic_wasm_transform::{Body, DataSegment, DataSegmentKind, Module};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::{
     cmp,
@@ -18,9 +19,8 @@ use wasmtime::Config;
 use crate::wasm_utils::instrumentation::{
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
 };
-use crate::{
-    wasm_utils::wasm_transform::{DataSegment, DataSegmentKind, Module},
-    wasmtime_embedder::{STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME},
+use crate::wasmtime_embedder::{
+    STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
 use wasmparser::{ExternalKind, FuncType, Operator, StructuralType, TypeRef, ValType};
 

@@ -23,7 +23,6 @@ pub mod decoding;
 pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
-pub mod wasm_transform;
 
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct WasmImportsDetails {
