@@ -103,16 +103,18 @@ impl fmt::Debug for EthWithdrawalRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 // TODO FI-948: limit number of withdrawal_requests and pending transactions nonces
 pub struct EthTransactions {
-    pub withdrawal_requests: VecDeque<EthWithdrawalRequest>,
-    pub created_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
-    pub sent_tx:
+    pub(in crate::state) withdrawal_requests: VecDeque<EthWithdrawalRequest>,
+    pub(in crate::state) created_tx:
+        MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
+    pub(in crate::state) sent_tx:
         MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedEip1559TransactionRequest>>,
-    pub finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
-    pub next_nonce: TransactionNonce,
+    pub(in crate::state) finalized_tx:
+        MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
+    pub(in crate::state) next_nonce: TransactionNonce,
 
-    pub maybe_reimburse: BTreeMap<LedgerBurnIndex, EthWithdrawalRequest>,
-    pub reimbursement_requests: BTreeMap<LedgerBurnIndex, ReimbursementRequest>,
-    pub reimbursed: BTreeMap<LedgerBurnIndex, Reimbursed>,
+    pub(in crate::state) maybe_reimburse: BTreeMap<LedgerBurnIndex, EthWithdrawalRequest>,
+    pub(in crate::state) reimbursement_requests: BTreeMap<LedgerBurnIndex, ReimbursementRequest>,
+    pub(in crate::state) reimbursed: BTreeMap<LedgerBurnIndex, Reimbursed>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

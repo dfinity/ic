@@ -6,7 +6,7 @@ mod retrieve_eth_guard {
     use crate::guard::{retrieve_eth_guard, GuardError, MAX_CONCURRENT, MAX_PENDING};
     use crate::numeric::{LedgerBurnIndex, Wei};
     use crate::state::mutate_state;
-    use crate::transactions::EthWithdrawalRequest;
+    use crate::state::transactions::EthWithdrawalRequest;
     use candid::Principal;
 
     #[test]

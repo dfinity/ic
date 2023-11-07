@@ -5,7 +5,6 @@ use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
 use crate::numeric::{BlockNumber, LedgerMintIndex, TransactionNonce, Wei};
-use crate::transactions::EthTransactions;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -13,9 +12,11 @@ use ic_crypto_ecdsa_secp256k1::PublicKey;
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 use strum_macros::EnumIter;
+use transactions::EthTransactions;
 
 pub mod audit;
 pub mod event;
+pub mod transactions;
 
 #[cfg(test)]
 mod tests;

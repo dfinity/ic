@@ -10,8 +10,8 @@ use ic_cketh_minter::numeric::{
     WeiPerGas,
 };
 use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
+use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Subaccount};
 use ic_cketh_minter::state::State;
-use ic_cketh_minter::transactions::{EthWithdrawalRequest, Subaccount};
 use ic_cketh_minter::tx::{
     Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
 };
@@ -427,7 +427,7 @@ fn should_display_etherscan_links_according_to_chosen_network() {
 
 #[test]
 fn should_display_reimbursed_requests() {
-    use ic_cketh_minter::transactions::Reimbursed;
+    use ic_cketh_minter::state::transactions::Reimbursed;
 
     DashboardAssert::assert_that(initial_dashboard())
         .has_no_elements_matching("#reimbursed-transactions");

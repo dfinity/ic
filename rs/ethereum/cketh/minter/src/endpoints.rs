@@ -1,4 +1,4 @@
-use crate::transactions::EthWithdrawalRequest;
+use crate::state::transactions::EthWithdrawalRequest;
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;

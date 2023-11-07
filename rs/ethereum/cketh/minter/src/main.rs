@@ -16,9 +16,8 @@ use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
+use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Reimbursed};
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
-use ic_cketh_minter::transactions::EthWithdrawalRequest;
-use ic_cketh_minter::transactions::Reimbursed;
 use ic_cketh_minter::tx::estimate_transaction_price;
 use ic_cketh_minter::withdraw::{
     eth_fee_history, process_reimbursement, process_retrieve_eth_requests,
