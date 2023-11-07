@@ -6,8 +6,9 @@ use crate::pb::v1::{
     NeuronsFundParticipationConstraints as NeuronsFundParticipationConstraintsPb,
 };
 use ic_neurons_fund::{
-    DeserializableFunction, IdealMatchingFunction, ValidatedLinearScalingCoefficient,
-    ValidatedNeuronsFundParticipationConstraints, MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
+    DeserializableFunction, IdealMatchingFunction, PolynomialMatchingFunction,
+    ValidatedLinearScalingCoefficient, ValidatedNeuronsFundParticipationConstraints,
+    MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
     MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES,
 };
 
@@ -232,7 +233,12 @@ impl TryFrom<&LinearScalingCoefficientPb> for ValidatedLinearScalingCoefficient 
 #[derive(Debug)]
 pub enum IdealMatchedParticipationFunctionValidationError {
     TooManyBytes(usize),
-    DeserializationError(String),
+    DeserializationError {
+        /// Value that could not be deserialized.
+        input: String,
+        /// Why deserialization did not work.
+        err: String,
+    },
 }
 
 impl ToString for IdealMatchedParticipationFunctionValidationError {
@@ -245,8 +251,11 @@ impl ToString for IdealMatchedParticipationFunctionValidationError {
                     num_bytes, MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES,
                 )
             }
-            Self::DeserializationError(error) => {
-                format!("{prefix} cannot deserialize: {}", error)
+            Self::DeserializationError { input, err } => {
+                format!(
+                    "{prefix} deserialization failed: {}; input: `{}`.",
+                    err, input
+                )
             }
         }
     }
@@ -281,6 +290,15 @@ impl ToString for NeuronsFundParticipationConstraintsValidationError {
 impl From<NeuronsFundParticipationConstraintsValidationError> for Result<(), String> {
     fn from(value: NeuronsFundParticipationConstraintsValidationError) -> Self {
         Err(value.to_string())
+    }
+}
+
+impl NeuronsFundParticipationConstraintsPb {
+    /// Make the validation function available to crates that do not import
+    /// `ValidatedNeuronsFundParticipationConstraints` directly, e.g., `rs/sns/init`.
+    pub fn validate(&self) -> Result<(), NeuronsFundParticipationConstraintsValidationError> {
+        ValidatedNeuronsFundParticipationConstraints::<PolynomialMatchingFunction>::try_from(self)
+            .map(|_| ())
     }
 }
 
@@ -389,9 +407,12 @@ where
         }
 
         let ideal_matched_participation_function =
-            F::from_repr(matching_function_serialized_representation).map_err(|e| {
+            F::from_repr(matching_function_serialized_representation).map_err(|err| {
                 Self::Error::IdealMatchedParticipationFunctionValidationError(
-                    IdealMatchedParticipationFunctionValidationError::DeserializationError(e),
+                    IdealMatchedParticipationFunctionValidationError::DeserializationError {
+                        input: matching_function_serialized_representation.clone(),
+                        err,
+                    },
                 )
             })?;
 
@@ -611,9 +632,12 @@ where
         }
 
         let ideal_matched_participation_function =
-            F::from_repr(&matching_function_serialized_representation).map_err(|e| {
+            F::from_repr(&matching_function_serialized_representation).map_err(|err| {
                 Self::Error::IdealMatchedParticipationFunctionValidationError(
-                    IdealMatchedParticipationFunctionValidationError::DeserializationError(e),
+                    IdealMatchedParticipationFunctionValidationError::DeserializationError {
+                        input: matching_function_serialized_representation.clone(),
+                        err,
+                    },
                 )
             })?;
 

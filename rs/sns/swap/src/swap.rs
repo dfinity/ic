@@ -3008,7 +3008,7 @@ impl Swap {
                     log!(
                         ERROR,
                         "Inconsistent Swap Init: cf_participants has {} elements (starting with \
-                        with {:?}) while neurons_fund_participation is set.",
+                        {:?}) while neurons_fund_participation is set.",
                         self.cf_participants.len(),
                         self.cf_participants[0],
                     );
