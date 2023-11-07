@@ -122,6 +122,7 @@ NNS-url to use for syncing the registry version.
     #[clap(
         long = "start-without-ic",
         default_value = "false",
+        action,
         help = r#"
 Start the discovery without default IC target.
 "#
