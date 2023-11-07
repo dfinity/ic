@@ -5821,6 +5821,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-types",
  "ic-types-test-utils",
+ "mockall 0.11.4",
  "phantom_newtype",
  "prometheus",
  "rand 0.8.5",
