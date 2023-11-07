@@ -20,7 +20,8 @@ build --incompatible_strict_action_env # use an environment with a static value 
 
 # default to optimized and unstripped binaries.
 build --compilation_mode=opt
-build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
+# -Clink-args=-gz is to produce compressed debug sections in DWARF format, if that is supported.
+build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on,-Clink-args=-gz
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
