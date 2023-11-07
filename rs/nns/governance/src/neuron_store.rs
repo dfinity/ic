@@ -493,6 +493,10 @@ impl NeuronStore {
         &self.heap_neurons
     }
 
+    fn heap_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
+        self.heap_neurons.values()
+    }
+
     /// Returns Neurons in heap starting with the first one whose ID is >= begin.
     ///
     /// The len of the result is at most limit. It is also maximal; that is, if the return value has
@@ -514,8 +518,7 @@ impl NeuronStore {
         filter: impl Fn(&Neuron) -> bool,
         f: impl FnMut(&Neuron) -> R,
     ) -> Vec<R> {
-        self.heap_neurons
-            .values()
+        self.heap_neurons_iter()
             .filter(|n| filter(n))
             .map(f)
             .collect()
@@ -591,19 +594,14 @@ impl NeuronStore {
             .collect()
     }
 
-    /// Execute a function against each voting eligible neuron
-    pub fn map_voting_eligible_neurons<R>(
-        &self,
-        now_seconds: u64,
-        mut f: impl FnMut(&Neuron) -> R,
-    ) -> Vec<R> {
-        let filter = |n: &Neuron| {
-            n.dissolve_delay_seconds(now_seconds) >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        };
-
+    /// Returns an iterator of all voting-eligible neurons
+    pub fn voting_eligible_neurons(&self, now_seconds: u64) -> impl Iterator<Item = &Neuron> {
         // This should be safe to do without with_neuron because
         // all voting_eligible neurons should be in the heap
-        self.map_heap_neurons_filtered(filter, |neuron| f(neuron))
+        self.heap_neurons_iter().filter(move |&neuron| {
+            neuron.dissolve_delay_seconds(now_seconds)
+                >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        })
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,
