@@ -1,7 +1,7 @@
 pub use super::event::{Event, EventType};
 use super::State;
+use crate::state::transactions::Reimbursed;
 use crate::storage::{record_event, with_event_iter};
-use crate::transactions::Reimbursed;
 
 /// Updates the state to reflect the given state transition.
 // public because it's used in tests since process_event

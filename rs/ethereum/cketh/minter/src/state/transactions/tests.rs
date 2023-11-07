@@ -3,7 +3,9 @@ use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
-use crate::transactions::{create_transaction, EthTransactions, EthWithdrawalRequest, Subaccount};
+use crate::state::transactions::{
+    create_transaction, EthTransactions, EthWithdrawalRequest, Subaccount,
+};
 use crate::tx::{
     AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
     TransactionPrice,
@@ -16,12 +18,12 @@ const DEFAULT_RECIPIENT_ADDRESS: &str = "0xb44B5e756A894775FC32EDdf3314Bb1B1944d
 
 mod eth_transactions {
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-    use crate::transactions::tests::withdrawal_request_with_index;
-    use crate::transactions::{EthTransactions, TransactionStatus};
+    use crate::state::transactions::tests::withdrawal_request_with_index;
+    use crate::state::transactions::{EthTransactions, TransactionStatus};
 
     mod record_withdrawal_request {
         use super::*;
-        use crate::transactions::tests::{
+        use crate::state::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
             expect_panic_with_message, transaction_price, transaction_receipt,
         };
@@ -81,11 +83,11 @@ mod eth_transactions {
 
     mod withdrawal_requests_batch {
         use super::*;
-        use crate::transactions::tests::{
+        use crate::state::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, transaction_price,
         };
-        use crate::transactions::EthWithdrawalRequest;
+        use crate::state::transactions::EthWithdrawalRequest;
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
         use proptest::proptest;
         use rand::Rng;
@@ -222,8 +224,8 @@ mod eth_transactions {
 
     mod reschedule_withdrawal_request {
         use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-        use crate::transactions::tests::eth_transactions::withdrawal_request_with_index;
-        use crate::transactions::EthTransactions;
+        use crate::state::transactions::tests::eth_transactions::withdrawal_request_with_index;
+        use crate::state::transactions::EthTransactions;
 
         #[test]
         fn should_reschedule_withdrawal_request() {
@@ -280,11 +282,11 @@ mod eth_transactions {
         use crate::address::Address;
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-        use crate::transactions::tests::{
+        use crate::state::transactions::tests::{
             create_and_record_transaction, expect_panic_with_message, transaction_price,
             withdrawal_request_with_index,
         };
-        use crate::transactions::{create_transaction, EthTransactions};
+        use crate::state::transactions::{create_transaction, EthTransactions};
         use crate::tx::Eip1559TransactionRequest;
         use proptest::prelude::any;
         use proptest::{prop_assert_ne, proptest};
@@ -437,12 +439,12 @@ mod eth_transactions {
     mod record_signed_transaction {
         use super::super::arbitrary::arb_signed_eip_1559_transaction_request_with_nonce;
         use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-        use crate::transactions::tests::{
+        use crate::state::transactions::tests::{
             create_and_record_transaction, create_and_record_withdrawal_request,
             expect_panic_with_message, sign_transaction, signed_transaction_with_nonce,
             transaction_price,
         };
-        use crate::transactions::EthTransactions;
+        use crate::state::transactions::EthTransactions;
         use proptest::{prop_assume, proptest};
 
         #[test]
@@ -525,11 +527,11 @@ mod eth_transactions {
         use crate::numeric::{
             GasAmount, LedgerBurnIndex, TransactionCount, TransactionNonce, Wei, WeiPerGas,
         };
-        use crate::transactions::tests::{
+        use crate::state::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, transaction_price, withdrawal_request_with_index,
         };
-        use crate::transactions::EthTransactions;
+        use crate::state::transactions::EthTransactions;
         use crate::tx::{Eip1559TransactionRequest, TransactionPrice};
 
         #[test]
@@ -748,12 +750,12 @@ mod eth_transactions {
         use crate::numeric::{
             GasAmount, LedgerBurnIndex, TransactionCount, TransactionNonce, Wei, WeiPerGas,
         };
-        use crate::transactions::tests::{
+        use crate::state::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, expect_panic_with_message, sign_transaction,
             transaction_price,
         };
-        use crate::transactions::{equal_ignoring_fee_and_amount, EthTransactions};
+        use crate::state::transactions::{equal_ignoring_fee_and_amount, EthTransactions};
         use crate::tx::{Eip1559TransactionRequest, TransactionPrice};
         use proptest::{prop_assume, proptest};
         use std::iter;
@@ -936,13 +938,13 @@ mod eth_transactions {
 
     mod transactions_to_send_batch {
         use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce};
-        use crate::transactions::tests::arbitrary::arb_checked_amount_of;
-        use crate::transactions::tests::{
+        use crate::state::transactions::tests::arbitrary::arb_checked_amount_of;
+        use crate::state::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, resubmit_transaction_with_bumped_price,
             transaction_price,
         };
-        use crate::transactions::EthTransactions;
+        use crate::state::transactions::EthTransactions;
         use proptest::proptest;
 
         proptest! {
@@ -1037,10 +1039,10 @@ mod eth_transactions {
             create_and_record_withdrawal_request, transaction_price,
         };
         use crate::numeric::{TransactionCount, TransactionNonce};
-        use crate::transactions::tests::{
+        use crate::state::transactions::tests::{
             create_and_record_signed_transaction, resubmit_transaction_with_bumped_price,
         };
-        use crate::transactions::{EthTransactions, LedgerBurnIndex};
+        use crate::state::transactions::{EthTransactions, LedgerBurnIndex};
         use crate::tx::SignedEip1559TransactionRequest;
         use proptest::proptest;
         use std::collections::BTreeMap;
@@ -1141,15 +1143,14 @@ mod eth_transactions {
 
     mod record_finalized_transaction {
         use crate::map::MultiKeyMap;
-        use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-        use crate::transactions::tests::{
+        use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
+        use crate::state::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, dummy_signature, expect_panic_with_message,
             transaction_price, transaction_receipt, withdrawal_request_with_index,
             DEFAULT_RECIPIENT_ADDRESS, DEFAULT_WITHDRAWAL_AMOUNT,
         };
-        use crate::transactions::Wei;
-        use crate::transactions::{
+        use crate::state::transactions::{
             Address, EthTransactions, EthWithdrawalRequest, ReimbursementRequest, Subaccount,
             TransactionStatus,
         };
@@ -1221,11 +1222,11 @@ mod eth_transactions {
                     destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
                     ledger_burn_index,
                     from: candid::Principal::from_str(
-                        crate::transactions::tests::DEFAULT_PRINCIPAL,
+                        crate::state::transactions::tests::DEFAULT_PRINCIPAL,
                     )
                     .unwrap(),
                     from_subaccount: Some(Subaccount(
-                        crate::transactions::tests::DEFAULT_SUBACCOUNT
+                        crate::state::transactions::tests::DEFAULT_SUBACCOUNT
                     )),
                 }
             );
@@ -1240,8 +1241,8 @@ mod eth_transactions {
 
         #[test]
         fn should_record_finalized_transaction_and_reimburse() {
-            use crate::transactions::Subaccount;
-            use crate::transactions::Wei;
+            use crate::numeric::Wei;
+            use crate::state::transactions::Subaccount;
 
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let ledger_burn_index = LedgerBurnIndex::new(15);
@@ -1261,16 +1262,16 @@ mod eth_transactions {
                 maybe_reimburse_request,
                 &EthWithdrawalRequest {
                     withdrawal_amount: Wei::new(
-                        crate::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT
+                        crate::state::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT
                     ),
                     destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
                     ledger_burn_index,
                     from: candid::Principal::from_str(
-                        crate::transactions::tests::DEFAULT_PRINCIPAL,
+                        crate::state::transactions::tests::DEFAULT_PRINCIPAL,
                     )
                     .unwrap(),
                     from_subaccount: Some(Subaccount(
-                        crate::transactions::tests::DEFAULT_SUBACCOUNT
+                        crate::state::transactions::tests::DEFAULT_SUBACCOUNT
                     )),
                 }
             );
@@ -1294,11 +1295,15 @@ mod eth_transactions {
                 reimbursement_request,
                 &ReimbursementRequest {
                     withdrawal_id: ledger_burn_index,
-                    to: candid::Principal::from_str(crate::transactions::tests::DEFAULT_PRINCIPAL,)
-                        .unwrap(),
-                    to_subaccount: Some(Subaccount(crate::transactions::tests::DEFAULT_SUBACCOUNT)),
+                    to: candid::Principal::from_str(
+                        crate::state::transactions::tests::DEFAULT_PRINCIPAL,
+                    )
+                    .unwrap(),
+                    to_subaccount: Some(Subaccount(
+                        crate::state::transactions::tests::DEFAULT_SUBACCOUNT
+                    )),
                     reimbursed_amount: Wei::new(
-                        crate::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT
+                        crate::state::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT
                     )
                     .checked_sub(effective_fee_paid)
                     .unwrap(),
@@ -1370,15 +1375,13 @@ mod eth_transactions {
 
     mod transaction_status {
         use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
-        use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-        use crate::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT;
-        use crate::transactions::tests::{
+        use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
+        use crate::state::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT;
+        use crate::state::transactions::tests::{
             create_and_record_transaction, sign_transaction, transaction_price,
             transaction_receipt, withdrawal_request_with_index,
         };
-        use crate::transactions::LedgerMintIndex;
-        use crate::transactions::Wei;
-        use crate::transactions::{EthTransactions, TransactionStatus};
+        use crate::state::transactions::{EthTransactions, TransactionStatus};
 
         #[test]
         fn should_withdrawal_flow_succeed_with_correct_status() {
@@ -1484,7 +1487,7 @@ mod eth_transactions {
 
 mod eth_withdrawal_request {
     use crate::numeric::LedgerBurnIndex;
-    use crate::transactions::tests::withdrawal_request_with_index;
+    use crate::state::transactions::tests::withdrawal_request_with_index;
 
     #[test]
     fn should_have_readable_debug_representation() {
@@ -1497,8 +1500,10 @@ mod eth_withdrawal_request {
 mod create_transaction {
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
-    use crate::transactions::tests::{transaction_price, withdrawal_request_with_index};
-    use crate::transactions::{create_transaction, CreateTransactionError, EthWithdrawalRequest};
+    use crate::state::transactions::tests::{transaction_price, withdrawal_request_with_index};
+    use crate::state::transactions::{
+        create_transaction, CreateTransactionError, EthWithdrawalRequest,
+    };
     use crate::tx::{AccessList, Eip1559TransactionRequest};
     use proptest::prelude::any;
     use proptest::{prop_assert_eq, proptest};
@@ -1576,8 +1581,8 @@ mod withdrawal_flow {
         arb_checked_amount_of, arb_non_overflowing_transaction_price, arb_withdrawal_request,
     };
     use crate::numeric::TransactionNonce;
-    use crate::transactions::tests::sign_transaction;
-    use crate::transactions::{create_transaction, EthTransactions, EthereumNetwork};
+    use crate::state::transactions::tests::sign_transaction;
+    use crate::state::transactions::{create_transaction, EthTransactions, EthereumNetwork};
     use proptest::proptest;
     use std::cell::RefCell;
 
@@ -1624,7 +1629,7 @@ pub mod arbitrary {
     use crate::address::Address;
     use crate::checked_amount::CheckedAmountOf;
     use crate::numeric::{GasAmount, TransactionNonce, WeiPerGas};
-    use crate::transactions::{EthWithdrawalRequest, Subaccount};
+    use crate::state::transactions::{EthWithdrawalRequest, Subaccount};
     use crate::tx::{
         AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest,
         SignedEip1559TransactionRequest, StorageKey, TransactionPrice,

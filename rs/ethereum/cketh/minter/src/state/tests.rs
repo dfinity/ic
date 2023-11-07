@@ -548,10 +548,10 @@ proptest! {
 fn state_equivalence() {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::map::MultiKeyMap;
-    use crate::state::MintedEvent;
-    use crate::transactions::{
+    use crate::state::transactions::{
         EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
     };
+    use crate::state::MintedEvent;
     use crate::tx::{Eip1559Signature, Eip1559TransactionRequest};
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
     use maplit::btreemap;

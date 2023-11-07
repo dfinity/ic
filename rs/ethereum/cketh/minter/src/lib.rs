@@ -17,7 +17,6 @@ pub mod numeric;
 mod serde_data;
 pub mod state;
 pub mod storage;
-pub mod transactions;
 pub mod tx;
 pub mod withdraw;
 
