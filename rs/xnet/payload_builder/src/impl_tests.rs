@@ -4,11 +4,11 @@ use super::test_fixtures::*;
 use super::*;
 use assert_matches::assert_matches;
 use ic_interfaces_certified_stream_store::DecodeStreamError;
+use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::ReplicatedStateTesting;
 use ic_test_utilities::{
-    certified_stream_store::MockCertifiedStreamStore,
     crypto::fake_tls_handshake::FakeTlsHandshake,
     state_manager::FakeStateManager,
     types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_42, SUBNET_5},

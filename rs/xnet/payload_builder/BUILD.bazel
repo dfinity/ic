@@ -41,6 +41,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
+    "//rs/interfaces/certified_stream_store/mocks",
     "//rs/interfaces/state_manager/mocks",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",

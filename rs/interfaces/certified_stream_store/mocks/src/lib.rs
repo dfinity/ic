@@ -10,7 +10,7 @@ use mockall::*;
 mock! {
     pub CertifiedStreamStore {}
 
-    trait CertifiedStreamStore {
+    impl CertifiedStreamStore for CertifiedStreamStore {
         fn encode_certified_stream_slice(
             &self,
             remote_subnet: SubnetId,

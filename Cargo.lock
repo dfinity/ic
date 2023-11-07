@@ -8093,6 +8093,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-interfaces-certified-stream-store-mocks"
+version = "0.9.0"
+dependencies = [
+ "ic-interfaces-certified-stream-store",
+ "ic-types",
+ "mockall 0.11.4",
+]
+
+[[package]]
 name = "ic-interfaces-registry"
 version = "0.9.0"
 dependencies = [
@@ -11479,6 +11488,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
+ "ic-interfaces-certified-stream-store-mocks",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
