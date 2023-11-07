@@ -83,6 +83,7 @@ fn test_wasmtime_system_api() {
             num_instructions_global: None,
         },
     );
+    store.set_epoch_deadline(1);
 
     let wat = r#"
     (module
