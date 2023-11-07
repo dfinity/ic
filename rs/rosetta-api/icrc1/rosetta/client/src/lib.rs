@@ -1,6 +1,7 @@
 use ic_icrc_rosetta::common::types::{
-    BlockRequest, BlockResponse, MetadataRequest, NetworkIdentifier, NetworkListResponse,
-    NetworkRequest, NetworkStatusResponse, PartialBlockIdentifier,
+    BlockIdentifier, BlockRequest, BlockResponse, BlockTransactionRequest,
+    BlockTransactionResponse, MetadataRequest, NetworkIdentifier, NetworkListResponse,
+    NetworkRequest, NetworkStatusResponse, PartialBlockIdentifier, TransactionIdentifier,
 };
 use reqwest::{Client, Url};
 use url::ParseError;
@@ -74,6 +75,25 @@ impl RosettaClient {
             .json(&BlockRequest {
                 network_identifier: network_identifier.clone(),
                 block_identifier: block_identifier.clone(),
+            })
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    pub async fn block_transaction(
+        &self,
+        network_identifier: NetworkIdentifier,
+        block_identifier: BlockIdentifier,
+        transaction_identifier: TransactionIdentifier,
+    ) -> reqwest::Result<BlockTransactionResponse> {
+        self.http_client
+            .post(self.url("/block/transaction"))
+            .json(&BlockTransactionRequest {
+                network_identifier,
+                block_identifier,
+                transaction_identifier,
             })
             .send()
             .await?
