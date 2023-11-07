@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use anyhow::{anyhow, Result};
 use k8s_openapi::api::core::v1::Namespace;
-use kube::api::{DeleteParams, ListParams, ObjectList, ObjectMeta, Patch, PatchParams, PostParams};
-use kube::{Api, ResourceExt};
+use kube::api::{DeleteParams, ListParams, ObjectList, ObjectMeta, PostParams};
+use kube::Api;
 use tracing::*;
 
 pub async fn create_namespace(

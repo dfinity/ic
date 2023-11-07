@@ -619,18 +619,18 @@ dependencies = [
 [[package]]
 name = "build-info"
 version = "0.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "242c6293ad5acf5d9adb75231c1bd0c9cb0aecb64dd40e6579e36e0da7260f9b"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
+ "build-info-common",
  "build-info-proc",
+ "lazy_static",
  "proc-macro-hack",
 ]
 
 [[package]]
 name = "build-info-build"
 version = "0.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ebfef0dcb94d65cc2cd98ce285de89ed40c9a1d2bb10175f548867d0e26cda0"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -649,8 +649,7 @@ dependencies = [
 [[package]]
 name = "build-info-common"
 version = "0.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db629469a6955021b15eb99cf5983ae8dcf9d0432ba2a8295715efee232da912"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "chrono",
  "derive_more 0.99.17",
@@ -661,15 +660,13 @@ dependencies = [
 [[package]]
 name = "build-info-proc"
 version = "0.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0965fa7159aa2cee4c5428ccec2d09dabb6ac5db2fe80d81cb8a158f5c47b335"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
  "bincode",
  "build-info-common",
  "chrono",
- "format-buf",
  "num-bigint",
  "num-traits",
  "proc-macro-error",
@@ -933,7 +930,7 @@ version = "3.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae6371b8bdc8b7d3959e9cf7b22d4435ef3e79e138688421ec654acf8c81b008"
 dependencies = [
- "heck 0.4.1",
+ "heck",
  "proc-macro-error",
  "proc-macro2",
  "quote",
@@ -946,7 +943,7 @@ version = "4.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54a9bb5758fc5dfe728d1019941681eccaf0cf8a4189b692a0ee2f2ecf90a050"
 dependencies = [
- "heck 0.4.1",
+ "heck",
  "proc-macro2",
  "quote",
  "syn 2.0.28",
@@ -1299,7 +1296,7 @@ dependencies = [
 [[package]]
 name = "derive_more"
 version = "0.99.8-alpha.0"
-source = "git+https://github.com/dfinity-lab/derive_more?branch=master#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
+source = "git+https://github.com/dfinity-lab/derive_more?rev=9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1321,7 +1318,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_candid"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "dfn_core",
@@ -1332,7 +1329,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "on_wire",
@@ -1340,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_protobuf"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "dfn_core",
  "ic-base-types",
@@ -1582,7 +1579,7 @@ checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 
 [[package]]
 name = "fe-derive"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "num-bigint-dig",
@@ -1684,12 +1681,6 @@ checksum = "a62bc1cf6f830c2ec14a513a9fb124d0a213a629668a4186f329db21fe045652"
 dependencies = [
  "percent-encoding",
 ]
-
-[[package]]
-name = "format-buf"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7aea5a5909a74969507051a3b17adc84737e31a5f910559892aedce026f4d53"
 
 [[package]]
 name = "fragile"
@@ -1948,15 +1939,6 @@ dependencies = [
 
 [[package]]
 name = "heck"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d621efb26863f0e9924c6ac577e8275e5e6b77455db64ffa6c65c904e9e132c"
-dependencies = [
- "unicode-segmentation",
-]
-
-[[package]]
-name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
@@ -2145,7 +2127,7 @@ dependencies = [
 
 [[package]]
 name = "ic-adapter-metrics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-adapter-metrics-service",
  "ic-async-utils",
@@ -2186,12 +2168,12 @@ dependencies = [
 
 [[package]]
 name = "ic-async-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-stream",
  "byte-unit",
  "bytes",
- "derive_more 0.99.17",
+ "derive_more 0.99.8-alpha.0",
  "futures",
  "futures-util",
  "hyper",
@@ -2204,7 +2186,7 @@ dependencies = [
 
 [[package]]
 name = "ic-base-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base32",
  "byte-unit",
@@ -2218,8 +2200,8 @@ dependencies = [
  "phantom_newtype",
  "prost",
  "serde",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -2234,7 +2216,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-types-internal"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-btc-interface",
@@ -2253,7 +2235,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canisters-http-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "serde",
@@ -2289,7 +2271,7 @@ dependencies = [
 
 [[package]]
 name = "ic-certification"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-tree-hash",
@@ -2303,7 +2285,7 @@ dependencies = [
 
 [[package]]
 name = "ic-config"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "ic-base-types",
@@ -2320,18 +2302,18 @@ dependencies = [
 
 [[package]]
 name = "ic-constants"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "ic-context-logger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "slog",
 ]
 
 [[package]]
 name = "ic-crypto"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "bincode",
@@ -2371,9 +2353,10 @@ dependencies = [
  "ic-types",
  "parking_lot",
  "serde",
+ "serde_bytes",
  "slog",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
  "tempfile",
  "tokio",
  "tokio-rustls",
@@ -2381,7 +2364,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-ecdsa-secp256k1"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "k256",
  "lazy_static",
@@ -2394,7 +2377,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-ecdsa-secp256r1"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-getrandom-for-wasm",
  "lazy_static",
@@ -2409,7 +2392,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-getrandom-for-wasm"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "getrandom 0.2.10",
 ]
@@ -2423,7 +2406,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-interfaces-sig-verification"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-types",
 ]
@@ -2443,7 +2426,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-der-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-types",
@@ -2453,7 +2436,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-ecdsa-secp256k1"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "ic-crypto-ecdsa-secp256k1",
@@ -2469,7 +2452,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-ecdsa-secp256r1"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "ic-crypto-ecdsa-secp256r1",
@@ -2487,7 +2470,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-ed25519"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "curve25519-dalek",
@@ -2508,7 +2491,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-iccsa"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
@@ -2526,7 +2509,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-rsa-pkcs1"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -2543,7 +2526,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-bls12-381-type"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-getrandom-for-wasm",
@@ -2561,7 +2544,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-csp"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
@@ -2601,11 +2584,12 @@ dependencies = [
  "rand_chacha",
  "rcgen 0.10.0",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "simple_asn1",
  "slog",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
  "stubborn-io",
  "tarpc",
  "tempfile",
@@ -2620,25 +2604,25 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-hmac"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-sha2",
 ]
 
 [[package]]
 name = "ic-crypto-internal-logmon"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "convert_case 0.6.0",
  "ic-metrics",
  "prometheus",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
 name = "ic-crypto-internal-multi-sig-bls12381"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
@@ -2656,7 +2640,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-seed"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-sha2",
@@ -2669,24 +2653,24 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-sha2"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "sha2 0.10.7",
 ]
 
 [[package]]
 name = "ic-crypto-internal-test-vectors"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
 name = "ic-crypto-internal-threshold-sig-bls12381"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "cached",
@@ -2705,21 +2689,21 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum_macros 0.23.1",
+ "strum_macros",
  "subtle",
  "zeroize",
 ]
 
 [[package]]
 name = "ic-crypto-internal-threshold-sig-bls12381-der"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "simple_asn1",
 ]
 
 [[package]]
 name = "ic-crypto-internal-threshold-sig-ecdsa"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "fe-derive",
  "hex",
@@ -2739,15 +2723,15 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
  "subtle",
  "zeroize",
 ]
 
 [[package]]
 name = "ic-crypto-internal-tls"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-secrets-containers",
@@ -2761,7 +2745,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "arrayvec 0.5.2",
  "hex",
@@ -2769,8 +2753,8 @@ dependencies = [
  "phantom_newtype",
  "serde",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
  "thiserror",
  "zeroize",
 ]
@@ -2796,7 +2780,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-node-key-validation"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-base-types",
@@ -2813,7 +2797,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-secrets-containers"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "serde",
  "zeroize",
@@ -2821,14 +2805,14 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-sha2"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-sha2",
 ]
 
 [[package]]
 name = "ic-crypto-standalone-sig-verifier"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-internal-basic-sig-cose",
@@ -2845,7 +2829,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-temp-crypto"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "ic-base-types",
@@ -2875,7 +2859,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-temp-crypto-vault"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-logmon",
@@ -2886,7 +2870,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-ni-dkg"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-csp",
@@ -2908,7 +2892,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-reproducible-rng"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "rand",
  "rand_chacha",
@@ -2916,7 +2900,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tls-cert-validation"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-base-types",
@@ -2930,7 +2914,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tls-interfaces"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "ic-crypto-sha2",
@@ -2944,7 +2928,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tree-hash"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-crypto-internal-types",
@@ -2957,7 +2941,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-basic-sig"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "ed25519-consensus",
@@ -2971,7 +2955,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-threshold-sig"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "ic-crypto-internal-threshold-sig-bls12381",
@@ -2981,7 +2965,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-threshold-sig-der"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "ic-crypto-internal-threshold-sig-bls12381-der",
@@ -2991,7 +2975,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-time"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-interfaces",
  "ic-logger",
@@ -3001,7 +2985,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-tls"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-crypto-tls-interfaces",
@@ -3011,23 +2995,23 @@ dependencies = [
 
 [[package]]
 name = "ic-error-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils",
  "serde",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
 name = "ic-http-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "flate2",
  "hex",
  "http",
  "hyper",
- "hyper-tls",
+ "hyper-rustls",
  "ic-crypto-sha2",
  "ic-logger",
  "slog",
@@ -3037,7 +3021,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ic00-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-base-types",
@@ -3049,13 +3033,13 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
 name = "ic-icrc1"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -3076,7 +3060,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "derive_more 0.99.8-alpha.0",
@@ -3103,7 +3087,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-registry"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-types",
  "prost",
@@ -3112,7 +3096,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-state-manager"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-tree-hash",
  "ic-types",
@@ -3122,7 +3106,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ledger-canister-core"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -3139,7 +3123,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ledger-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ledger-hash-of",
@@ -3159,7 +3143,7 @@ dependencies = [
 
 [[package]]
 name = "ic-logger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "chrono",
  "ic-config",
@@ -3175,7 +3159,7 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "futures",
  "ic-adapter-metrics",
@@ -3197,7 +3181,7 @@ checksum = "7cb321e571828d64d62319deeaaec4c8e68cdf93144dd6fe248e7a51ab2d3b5d"
 
 [[package]]
 name = "ic-nervous-system-common"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3234,7 +3218,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-runtime"
-version = "0.0.1"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -3246,7 +3230,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-common"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "comparable",
@@ -3270,15 +3254,14 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-constants"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "lazy_static",
 ]
 
 [[package]]
 name = "ic-prep"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -3323,7 +3306,7 @@ dependencies = [
 
 [[package]]
 name = "ic-protobuf"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "candid",
@@ -3337,7 +3320,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-client"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "crossbeam-channel",
  "ic-interfaces-registry",
@@ -3352,7 +3335,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-client-fake"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-interfaces-registry",
  "ic-types",
@@ -3360,7 +3343,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-client-helpers"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-ic00-types",
@@ -3378,14 +3361,14 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-common-proto"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "prost",
 ]
 
 [[package]]
 name = "ic-registry-keys"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-base-types",
@@ -3396,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-local-store"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-interfaces-registry",
  "ic-registry-common-proto",
@@ -3407,7 +3390,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-proto-data-provider"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bytes",
  "ic-interfaces-registry",
@@ -3420,7 +3403,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-provisional-whitelist"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-protobuf",
@@ -3428,7 +3411,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-routing-table"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-base-types",
@@ -3438,7 +3421,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-subnet-features"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ic00-types",
@@ -3448,18 +3431,18 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-subnet-type"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-protobuf",
  "serde",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
 name = "ic-registry-transport"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bytes",
  "candid",
@@ -3477,7 +3460,7 @@ checksum = "95dce29e3ceb0e6da3e78b305d95365530f2efd2146ca18590c0ef3aa6038568"
 
 [[package]]
 name = "ic-sys"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-sha2",
@@ -3490,7 +3473,7 @@ dependencies = [
 
 [[package]]
 name = "ic-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "bincode",
@@ -3517,15 +3500,15 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "serde_with",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum",
+ "strum_macros",
  "thiserror",
  "thousands",
 ]
 
 [[package]]
 name = "ic-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "cvt",
  "hex",
@@ -3541,7 +3524,7 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-sha2",
  "ic-protobuf",
@@ -3574,7 +3557,7 @@ dependencies = [
 
 [[package]]
 name = "icp-ledger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "comparable",
@@ -3597,8 +3580,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.24.1",
- "strum_macros 0.24.3",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -4366,7 +4349,7 @@ dependencies = [
 
 [[package]]
 name = "on_wire"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "once_cell"
@@ -4611,7 +4594,7 @@ dependencies = [
 
 [[package]]
 name = "phantom_newtype"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "serde",
@@ -4919,7 +4902,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "119533552c9a7ffacc21e099c24a0ac8bb19c2a2a3f363de84cd9b844feab270"
 dependencies = [
  "bytes",
- "heck 0.4.1",
+ "heck",
  "itertools",
  "lazy_static",
  "log",
@@ -5583,9 +5566,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.104"
+version = "1.0.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "076066c5f1078eac5b722a31827a8832fe108bed65dfa75e233c89f8206e976c"
+checksum = "3d1c7e3eac408d115102c4c24ad393e0821bb3a5df4d506a80f85f7a742a526b"
 dependencies = [
  "indexmap 2.0.0",
  "itoa",
@@ -5887,27 +5870,11 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "strum"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cae14b91c7d11c9a851d3fbc80a963198998c2a64eec840477fa92d8ce9b70bb"
-
-[[package]]
-name = "strum"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
-
-[[package]]
-name = "strum_macros"
-version = "0.23.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bb0dc7ee9c15cea6199cde9a127fa16a4c5819af85395457ad72d68edc85a38"
 dependencies = [
- "heck 0.3.3",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 1.0.109",
+ "strum_macros",
 ]
 
 [[package]]
@@ -5916,7 +5883,7 @@ version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
 dependencies = [
- "heck 0.4.1",
+ "heck",
  "proc-macro2",
  "quote",
  "rustversion",
@@ -6524,7 +6491,7 @@ dependencies = [
 
 [[package]]
 name = "tree-deserializer"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-tree-hash",
  "leb128",

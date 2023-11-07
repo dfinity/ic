@@ -2,10 +2,9 @@ use std::collections::BTreeMap;
 
 use anyhow::{anyhow, Result};
 use k8s_openapi::api::core::v1::{
-    Container, PersistentVolumeClaim, PersistentVolumeClaimVolumeSource, Pod, PodSpec, Volume,
-    VolumeDevice, VolumeMount,
+    Container, PersistentVolumeClaimVolumeSource, Pod, PodSpec, Volume, VolumeMount,
 };
-use kube::api::{DeleteParams, ListParams, ObjectList, ObjectMeta, Patch, PatchParams, PostParams};
+use kube::api::{DeleteParams, ListParams, ObjectList, ObjectMeta, PostParams};
 use kube::Api;
 use tracing::*;
 

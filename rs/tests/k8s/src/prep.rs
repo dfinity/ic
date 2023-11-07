@@ -39,7 +39,7 @@ pub(crate) fn generate_config(
 
     let tempdir = tempdir()?;
     let out_dir = Path::new("out");
-    std::fs::create_dir(&out_dir);
+    std::fs::create_dir(out_dir)?;
 
     let nns_nodes: BTreeMap<u64, _> = nns_nodes
         .iter()
@@ -50,7 +50,7 @@ pub(crate) fn generate_config(
             p2p_addr: SocketAddr::new(v, 4100),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: Vec::new(),
+            chip_id: Vec::new().into(),
         })
         .enumerate()
         .map(|(k, v)| {
@@ -71,7 +71,7 @@ pub(crate) fn generate_config(
             p2p_addr: SocketAddr::new(v, 4100),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: Vec::new(),
+            chip_id: Vec::new().into(),
         })
         .enumerate()
         .map(|(k, v)| (k + nns_nodes.len(), v))
@@ -186,12 +186,12 @@ pub(crate) fn generate_config(
                 .arg("--elasticsearch_hosts")
                 .arg("elasticsearch.testnet.dfinity.network:443")
                 .arg("--accounts_ssh_authorized_keys")
-                .arg(&SSH_AUTHORIZED_KEYS_PATH)
+                .arg(SSH_AUTHORIZED_KEYS_PATH)
                 .status()?;
         }
     }
 
-    build_init_package(&local_store, &version, &out_dir);
+    build_init_package(&local_store, &version, out_dir)?;
 
     Ok(())
 }

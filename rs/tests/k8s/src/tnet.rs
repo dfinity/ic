@@ -1,18 +1,16 @@
 use std::collections::{BTreeMap, HashSet};
 use std::env::var;
 use std::net::Ipv6Addr;
-use std::process::Command;
 
 use anyhow::{anyhow, Result};
 use cidr::Ipv6Cidr;
-use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::api::core::v1::{
-    Event, Namespace, PersistentVolumeClaim, Pod, TypedLocalObjectReference,
+    Namespace, PersistentVolumeClaim, Pod, TypedLocalObjectReference,
 };
 use kube::ResourceExt;
 use kube::{
     api::{Api, DynamicObject, GroupVersionKind},
-    Client, Config,
+    Client,
 };
 use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
@@ -23,7 +21,6 @@ use tracing::*;
 
 use crate::datavolume::*;
 use crate::event::*;
-use crate::job::*;
 use crate::namespace::*;
 use crate::persistentvolumeclaim::*;
 use crate::pod::*;
@@ -43,19 +40,16 @@ static BUCKET: Lazy<String> = Lazy::new(|| {
 
 pub struct K8sClient {
     pub(crate) client: Client,
-    pub(crate) api_ns: Api<Namespace>,
     pub(crate) api_dv: Api<DynamicObject>,
     pub(crate) api_vm: Api<DynamicObject>,
     pub(crate) api_vmi: Api<DynamicObject>,
     pub(crate) api_pvc: Api<PersistentVolumeClaim>,
     pub(crate) api_pod: Api<Pod>,
-    pub(crate) api_job: Api<Job>,
 }
 
 impl K8sClient {
     pub async fn new(client: Client, namespace: &str) -> Result<Self> {
         let api_pod: Api<Pod> = Api::namespaced(client.clone(), namespace);
-        let api_job: Api<Job> = Api::namespaced(client.clone(), namespace);
         let api_pvc: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), namespace);
 
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
@@ -70,17 +64,13 @@ impl K8sClient {
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
         let api_vmi = Api::<DynamicObject>::namespaced_with(client.clone(), namespace, &ar);
 
-        let api_ns = Api::all(client.clone());
-
         Ok(Self {
             client,
-            api_ns,
             api_dv,
             api_vm,
             api_vmi,
             api_pvc,
             api_pod,
-            api_job,
         })
     }
 }
@@ -244,7 +234,6 @@ impl TNet {
             "{}/{}/{}/tnet-{}",
             *CONFIG_URL, *BUCKET, self.version, index
         ));
-        let ipv6 = format!("{}:{:x}::/80", *TNET_IPV6, index);
         self.ipv6_net = Some(format!("{}:{:x}::/80", *TNET_IPV6, index).parse().unwrap());
 
         let mut count = 0;
@@ -311,7 +300,7 @@ impl TNet {
 
         let mut ns_idx = 0;
         let mut ns_name = "".to_string();
-        for _ in (0..10) {
+        for _ in 0..10 {
             ns_idx = generate_random_index();
             ns_name = format!("tnet-{}", ns_idx);
             let labels = Some(BTreeMap::from([
@@ -468,7 +457,7 @@ impl TNet {
     }
 
     pub async fn create_local(&mut self) -> Result<&Self> {
-        let ns_name = self.allocate_namespace().await?;
+        self.allocate_namespace().await?;
         let k8s_client = &self.k8s.as_ref().unwrap();
 
         // generate and upload node config images
@@ -482,11 +471,11 @@ impl TNet {
 
         // create virtual machines
         for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-            prepare_host_vm(&self.k8s.as_ref().unwrap(), &node, &self).await?;
+            prepare_host_vm(self.k8s.as_ref().unwrap(), node, self).await?;
         }
 
         for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-            create_host_vm(&self.k8s.as_ref().unwrap(), &node, &self).await?;
+            create_host_vm(self.k8s.as_ref().unwrap(), node, self).await?;
         }
 
         let config_url = format!("{}/init.tar", self.config_url.clone().unwrap());
@@ -562,7 +551,7 @@ mod tests {
         let tnet = TNet::new("testnet");
         assert_eq!(tnet.name, "testnet");
         assert_eq!(tnet.version, "");
-        assert_eq!(tnet.use_zero_version, false);
+        assert!(!tnet.use_zero_version);
         assert_eq!(tnet.image_url, "");
         assert_eq!(tnet.ipv6_net, None);
         assert_eq!(tnet.config_url, None);
@@ -572,7 +561,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tnet_version() {
-        let mut tnet = TNet::new("testnet").version("1.0.0");
+        let tnet = TNet::new("testnet").version("1.0.0");
         assert_eq!(tnet.version, "1.0.0");
         assert_eq!(
             tnet.image_url,
@@ -582,7 +571,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tnet_topology() {
-        let mut tnet = TNet::new("testnet").topology(2, 3);
+        let tnet = TNet::new("testnet").topology(2, 3);
         assert_eq!(tnet.nns_nodes.len(), 2);
         assert_eq!(tnet.app_nodes.len(), 3);
     }
