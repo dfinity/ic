@@ -115,13 +115,65 @@ impl rlp::Encodable for Eip1559Signature {
 /// Immutable signed EIP-1559 transaction.
 /// Use `Eip1559TransactionRequest::sign()` to create a newly signed transaction or
 /// `SignedEip1559TransactionRequest::from()` if the signature is already known
-#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SignedEip1559TransactionRequest {
+    inner: InnerSignedTransactionRequest,
+    /// Hash of the signed transaction. Since computation of the hash is an expensive operation,
+    /// which involves RLP encoding and Keccak256, the value is computed once upon instantiation
+    /// and memoized. It is safe to memoize the hash because the transaction is immutable.
+    /// Note: Serialization should ignore this field and deserialization should call
+    /// the constructor to create the correct value.
+    memoized_hash: Hash,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
+struct InnerSignedTransactionRequest {
     #[n(0)]
     transaction: Eip1559TransactionRequest,
     #[n(1)]
     signature: Eip1559Signature,
-    // TODO FI-984: transaction hash should be computed only once
+}
+
+impl rlp::Encodable for InnerSignedTransactionRequest {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_unbounded_list();
+        self.transaction.rlp_inner(s);
+        s.append(&self.signature);
+        //ignore memoized_hash
+        s.finalize_unbounded_list();
+    }
+}
+
+impl InnerSignedTransactionRequest {
+    /// An EIP-1559 transaction is encoded as follows
+    /// 0x02 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list, signature_y_parity, signature_r, signature_s]),
+    /// where `||` denotes string concatenation.
+    pub fn raw_bytes(&self) -> Vec<u8> {
+        use rlp::Encodable;
+        let mut rlp = self.rlp_bytes().to_vec();
+        rlp.insert(0, self.transaction.transaction_type());
+        rlp
+    }
+}
+
+impl<C> minicbor::Encode<C> for SignedEip1559TransactionRequest {
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        e: &mut minicbor::Encoder<W>,
+        ctx: &mut C,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
+        e.encode_with(&self.inner, ctx)?;
+        Ok(())
+    }
+}
+
+impl<'b, C> minicbor::Decode<'b, C> for SignedEip1559TransactionRequest {
+    fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
+        d.decode_with(ctx)
+            .map(|inner: InnerSignedTransactionRequest| {
+                Self::new(inner.transaction, inner.signature)
+            })
+    }
 }
 
 /// Immutable finalized transaction.
@@ -165,48 +217,44 @@ impl FinalizedEip1559Transaction {
 
 impl From<(Eip1559TransactionRequest, Eip1559Signature)> for SignedEip1559TransactionRequest {
     fn from((transaction, signature): (Eip1559TransactionRequest, Eip1559Signature)) -> Self {
-        Self {
-            transaction,
-            signature,
-        }
+        Self::new(transaction, signature)
     }
 }
 
 impl rlp::Encodable for SignedEip1559TransactionRequest {
     fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_unbounded_list();
-        self.transaction.rlp_inner(s);
-        s.append(&self.signature);
-        s.finalize_unbounded_list();
+        s.append(&self.inner);
     }
 }
 
 impl SignedEip1559TransactionRequest {
-    /// An EIP-1559 transaction is encoded as follows
-    /// 0x02 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list, signature_y_parity, signature_r, signature_s]),
-    /// where `||` denotes string concatenation.
-    pub fn raw_bytes(&self) -> Vec<u8> {
-        use rlp::Encodable;
-        let mut rlp = self.rlp_bytes().to_vec();
-        rlp.insert(0, self.transaction.transaction_type());
-        rlp
+    pub fn new(transaction: Eip1559TransactionRequest, signature: Eip1559Signature) -> Self {
+        let inner = InnerSignedTransactionRequest {
+            transaction,
+            signature,
+        };
+        let hash = Hash(ic_crypto_sha3::Keccak256::hash(inner.raw_bytes()));
+        Self {
+            inner,
+            memoized_hash: hash,
+        }
     }
 
     pub fn raw_transaction_hex(&self) -> String {
-        format!("0x{}", hex::encode(self.raw_bytes()))
+        format!("0x{}", hex::encode(self.inner.raw_bytes()))
     }
 
     /// If included in a block, this hash value is used as reference to this transaction.
     pub fn hash(&self) -> Hash {
-        Hash(ic_crypto_sha3::Keccak256::hash(self.raw_bytes()))
+        self.memoized_hash
     }
 
     pub fn transaction(&self) -> &Eip1559TransactionRequest {
-        &self.transaction
+        &self.inner.transaction
     }
 
     pub fn nonce(&self) -> TransactionNonce {
-        self.transaction.nonce
+        self.transaction().nonce
     }
 
     pub fn try_finalize(
@@ -220,16 +268,18 @@ impl SignedEip1559TransactionRequest {
                 receipt.transaction_hash
             ));
         }
-        if self.transaction.max_fee_per_gas < receipt.effective_gas_price {
+        if self.transaction().max_fee_per_gas < receipt.effective_gas_price {
             return Err(format!(
                 "transaction max_fee_per_gas {} is smaller than effective_gas_price {}",
-                self.transaction.max_fee_per_gas, receipt.effective_gas_price
+                self.transaction().max_fee_per_gas,
+                receipt.effective_gas_price
             ));
         }
-        if self.transaction.gas_limit < receipt.gas_used {
+        if self.transaction().gas_limit < receipt.gas_used {
             return Err(format!(
                 "transaction gas limit {} is smaller than gas used {}",
-                self.transaction.gas_limit, receipt.gas_used
+                self.transaction().gas_limit,
+                receipt.gas_used
             ));
         }
         Ok(FinalizedEip1559Transaction {
@@ -303,10 +353,7 @@ impl Eip1559TransactionRequest {
             s,
         };
 
-        Ok(SignedEip1559TransactionRequest {
-            transaction: self,
-            signature: sig,
-        })
+        Ok(SignedEip1559TransactionRequest::new(self, sig))
     }
 }
 
