@@ -1,4 +1,3 @@
-#![allow(warnings)]
 pub mod datavolume;
 pub mod event;
 pub mod job;

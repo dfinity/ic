@@ -1,10 +1,10 @@
 use anyhow::Result;
 use async_std::io;
-use futures::{pin_mut, Stream, StreamExt, TryStreamExt};
+use futures::{pin_mut, TryStreamExt};
 use k8s_openapi::api::core::v1::Event;
 use kube::{
-    runtime::{metadata_watcher, watcher, WatchStreamExt},
-    Api, Client, Config,
+    runtime::{watcher, WatchStreamExt},
+    Api, Client,
 };
 use std::time::Duration;
 use tracing::*;

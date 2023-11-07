@@ -7,7 +7,7 @@ use kube::Api;
 use tracing::*;
 
 use crate::event::*;
-use crate::pod::{get_pod, get_pods};
+use crate::pod::get_pods;
 use crate::tnet::K8sClient;
 use crate::tnet::{TNet, TNode};
 
@@ -229,17 +229,13 @@ pub async fn prepare_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) 
 pub async fn create_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) -> Result<()> {
     let vm_name: String = node.name.as_ref().unwrap().to_string();
     let vmi_name: String = format!("{}-disk-setup", &node.name.as_ref().unwrap());
-    let namespace: String = tnet.namespace.as_ref().unwrap().to_string();
-    let ipv6_addr: String = node.ipv6_addr.unwrap().to_string();
-    let url_image: String = tnet.image_url.clone();
-    let url_config: String = node.config_url.as_ref().unwrap().to_string();
 
     wait_for_event(
         k8s_client.client.clone(),
         "Signaled Deletion",
         "VirtualMachineInstance",
         &vmi_name,
-        &tnet.namespace.as_ref().unwrap(),
+        tnet.namespace.as_ref().unwrap(),
         600,
     )
     .await
@@ -274,7 +270,7 @@ pub async fn create_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) -
     let yaml = VM_HOST_DISK_TEMPLATE
         .replace("{nodename}", nodename)
         .replace("{name}", &vm_name)
-        .replace("{tnet}", &tnet.namespace.as_ref().unwrap())
+        .replace("{tnet}", tnet.namespace.as_ref().unwrap())
         .replace("{ipv6}", &node.ipv6_addr.as_ref().unwrap().to_string());
     let data: serde_json::Value = serde_yaml::from_str(&yaml)?;
     let response = &k8s_client
