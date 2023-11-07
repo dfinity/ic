@@ -1,6 +1,6 @@
-use std::{fmt, path::PathBuf, str::FromStr, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use downloader_loop::run_downloader_loop;
 use futures_util::FutureExt;
 use humantime::parse_duration;
@@ -84,15 +84,7 @@ Service Discovery url to use for syncing the targets.
     )]
     pub sd_url: Url,
 
-    #[clap(
-        long = "generator",
-        help = r#"
-Specify the generator to use for generating the config files.
-Currently supported values:
-- 1. log -> will generate vector config
-- 2. metric -> will generate prometheus config
-    "#
-    )]
+    #[clap(subcommand)]
     generator: Generator,
 
     #[clap(
@@ -123,34 +115,64 @@ Custom port for boundary nodes
     bn_source_port: Option<u64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Subcommand, Clone, Debug)]
 pub enum Generator {
-    Log,
+    #[clap(about = "Generate a vector config for a log source")]
+    Log(log_subtype::LogSubtype),
+    #[clap(about = "Generate a vector config for a metric source")]
     Metric,
 }
 
-impl FromStr for Generator {
-    type Err = GeneratorParserError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "log" => Ok(Generator::Log),
-            "metric" => Ok(Generator::Metric),
-            _ => Err(GeneratorParserError {
-                input: s.to_string(),
-            }),
-        }
+pub mod log_subtype {
+    use super::*;
+    #[derive(Parser, Clone, Debug)]
+    pub struct LogSubtype {
+        #[clap(
+            long = "port",
+            help = "Custom port for standard nodes",
+            default_value = "19531"
+        )]
+        pub port: u64,
+        #[clap(
+            long = "boundary-nodes-port",
+            help = "Custom port for boundary nodes",
+            default_value = "19531"
+        )]
+        pub bn_port: u64,
+        #[clap(subcommand)]
+        pub subcommands: Subtype,
     }
-}
 
-#[derive(Debug)]
-pub struct GeneratorParserError {
-    input: String,
-}
-impl std::error::Error for GeneratorParserError {}
+    #[derive(Subcommand, Clone, Debug)]
+    pub enum Subtype {
+        #[clap(about = "Generate a vector config for a systemd-journal-gatewayd source")]
+        SystemdJournalGatewayd {
+            #[clap(long = "batch-size", help = "Custom batch size", default_value = "32")]
+            batch_size: u64,
+        },
+        #[clap(about = "Generate a vector config for a exec and journald source")]
+        ExecAndJournald {
+            #[clap(long = "script-path", help = "Path for the script folder")]
+            script_path: String,
 
-impl fmt::Display for GeneratorParserError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Could not parse {} into a generator type", self.input)
+            #[clap(long = "journals-folder", help = "Path to the root journals folder")]
+            journals_folder: String,
+
+            #[clap(
+                long = "worker-cursor-folder",
+                help = "Path for the root worker cursors folder"
+            )]
+            worker_cursor_folder: String,
+
+            #[clap(long = "data-folder", help = "Path for the data folder")]
+            data_folder: String,
+
+            #[clap(
+                long = "restart-on-exit",
+                help = "Restart on respawn",
+                default_value = "true"
+            )]
+            restart_on_exit: bool,
+        },
     }
 }

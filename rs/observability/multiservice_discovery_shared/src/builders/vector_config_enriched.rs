@@ -41,12 +41,15 @@ impl VectorConfigEnriched {
 
     pub fn add_target_group(
         &mut self,
-        key: String,
-        source: Box<dyn VectorSource>,
-        transform: Box<dyn VectorTransform>,
+        sources: HashMap<String, Box<dyn VectorSource>>,
+        transforms: HashMap<String, Box<dyn VectorTransform>>,
     ) {
-        self.sources.insert(key.clone() + "-source", source);
-        self.transforms.insert(key + "-transform", transform);
+        for (key, source) in sources {
+            self.sources.insert(key.clone(), source);
+        }
+        for (key, transform) in transforms {
+            self.transforms.insert(key.clone(), transform);
+        }
     }
 }
 

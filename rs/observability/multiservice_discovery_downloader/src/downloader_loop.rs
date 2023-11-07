@@ -1,4 +1,5 @@
 use crossbeam_channel::Receiver;
+use multiservice_discovery_shared::builders::script_log_config_structure::ScriptLogConfigBuilderImpl;
 use multiservice_discovery_shared::filters::ic_name_regex_filter::IcNameRegexFilter;
 use multiservice_discovery_shared::filters::node_regex_id_filter::NodeIDRegexFilter;
 use multiservice_discovery_shared::filters::{TargetGroupFilter, TargetGroupFilterList};
@@ -16,6 +17,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use crate::log_subtype::Subtype;
 use crate::CliArgs;
 
 pub async fn run_downloader_loop(logger: Logger, cli: CliArgs, stop_signal: Receiver<()>) {
@@ -108,7 +110,7 @@ pub async fn run_downloader_loop(logger: Logger, cli: CliArgs, stop_signal: Rece
 
 fn generate_config(cli: &CliArgs, targets: Vec<TargetDto>, logger: Logger) {
     let jobs = match cli.generator {
-        crate::Generator::Log => vec![
+        crate::Generator::Log(_) => vec![
             JobType::NodeExporter(NodeOS::Guest),
             JobType::NodeExporter(NodeOS::Host),
         ],
@@ -136,11 +138,29 @@ fn generate_config(cli: &CliArgs, targets: Vec<TargetDto>, logger: Logger) {
             })
             .collect();
 
-        let config = match cli.generator {
-            crate::Generator::Log => {
-                VectorConfigBuilderImpl::new(32, 19531, cli.bn_source_port.unwrap_or(19531))
-                    .build(targets_with_job)
-            }
+        let config = match &cli.generator {
+            crate::Generator::Log(subtype) => match &subtype.subcommands {
+                Subtype::SystemdJournalGatewayd { batch_size } => {
+                    VectorConfigBuilderImpl::new(*batch_size, subtype.port, subtype.bn_port)
+                        .build(targets_with_job)
+                }
+                Subtype::ExecAndJournald {
+                    script_path,
+                    journals_folder,
+                    worker_cursor_folder,
+                    data_folder,
+                    restart_on_exit,
+                } => ScriptLogConfigBuilderImpl {
+                    script_path: script_path.to_string(),
+                    journals_folder: journals_folder.to_string(),
+                    worker_cursor_folder: worker_cursor_folder.to_string(),
+                    data_folder: data_folder.to_string(),
+                    port: subtype.port,
+                    bn_port: subtype.bn_port,
+                    restart_on_exit: *restart_on_exit,
+                }
+                .build(targets_with_job),
+            },
             crate::Generator::Metric => PrometheusConfigBuilder {}.build(targets_with_job),
         };
 
