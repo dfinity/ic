@@ -20,9 +20,10 @@ use ic_execution_environment::{
     InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs, InstallCodeArgsV2, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs,
+    InstallCodeArgsV2, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    UpdateSettingsArgs, UpgradeOptions,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
@@ -530,6 +531,12 @@ impl ExecutionTest {
         self.subnet_message(Method::InstallCode, args.encode())
     }
 
+    /// Sends an `install_code` message with `InstallCodeArgsV2` to the IC management canister.
+    /// Consider using higher-level helpers like `canister_from_wat()`.
+    pub fn install_code_v2(&mut self, args: InstallCodeArgsV2) -> Result<WasmResult, UserError> {
+        self.subnet_message(Method::InstallCode, args.encode())
+    }
+
     /// Sends an `install_code` message to the IC management canister with DTS.
     /// Similar to `subnet_message()`but does not check the ingress status of
     /// the response as the subnet message execution may not finish immediately.
@@ -690,6 +697,27 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
+        Ok(())
+    }
+
+    /// Installs the given canister with the given Wasm binary.
+    pub fn upgrade_canister_v2(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+        upgrade_options: UpgradeOptions,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Upgrade(Some(upgrade_options)),
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        let result = self.install_code_v2(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }

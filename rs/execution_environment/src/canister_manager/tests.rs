@@ -23,6 +23,7 @@ use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder, CanisterStatusType,
     CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload, UpdateSettingsArgs,
+    UpgradeOptions,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -4219,6 +4220,101 @@ fn test_upgrade_preserves_stable_memory() {
     let result = test.ingress(canister_id, "query", query);
     let reply = get_reply(result);
     assert_eq!(reply, data);
+}
+
+#[test]
+fn test_enhanced_orthogonal_persistence_upgrade_preserves_main_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+        (module
+            (func $start
+                call $initialize
+                call $check
+            )
+            (func $initialize
+                global.get 0
+                i32.const 1234
+                i32.store
+                global.get 1
+                i32.const 5678
+                i32.store
+            )
+            (func $check_word (param i32) (param i32)
+                block
+                    local.get 0
+                    i32.load
+                    local.get 1
+                    i32.eq
+                    br_if 0
+                    unreachable
+                end
+            )
+            (func $check
+                global.get 0
+                i32.const 1234
+                call $check_word
+                global.get 1
+                i32.const 5678
+                call $check_word
+                ;; check Wasm data segment
+                i32.const 2097156
+                i32.const 67305985 ;; "\01\02\03\04"
+                call $check_word
+            )
+            (start $start)
+            (memory 160)
+            (global (mut i32) (i32.const 8500000))
+            (global (mut i32) (i32.const 9000000))
+            (data (i32.const 2097156) "\01\02\03\04")
+        )
+        "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+        (module
+            (func $check_word (param i32) (param i32)
+                block
+                    local.get 0
+                    i32.load
+                    local.get 1
+                    i32.eq
+                    br_if 0
+                    unreachable
+                end
+            )
+            (func $check
+                global.get 0
+                i32.const 1234
+                call $check_word
+                global.get 1
+                i32.const 5678
+                call $check_word
+                ;; check Wasm data segment
+                i32.const 2097156
+                i32.const 134678021 ;; "\05\06\07\08"
+                call $check_word
+            )
+            (start $check)
+            (memory 160)
+            (global (mut i32) (i32.const 8500000))
+            (global (mut i32) (i32.const 9000000))
+            (data (i32.const 2097156) "\05\06\07\08")
+        )
+        "#;
+
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    test.upgrade_canister_v2(
+        canister_id,
+        version2_wasm,
+        UpgradeOptions {
+            skip_pre_upgrade: None,
+            keep_main_memory: Some(true),
+        },
+    )
+    .unwrap();
 }
 
 fn create_canisters(test: &mut ExecutionTest, canisters: usize) {
