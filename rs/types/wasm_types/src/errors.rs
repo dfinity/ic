@@ -36,6 +36,8 @@ pub enum WasmValidationError {
     InvalidDataSection(String),
     /// Module contains an invalid custom section
     InvalidCustomSection(String),
+    /// Module contains an invalid global section
+    InvalidGlobalSection(String),
     /// Module contains too many globals.
     TooManyGlobals { defined: usize, allowed: usize },
     /// Module contains too many functions.
@@ -86,6 +88,9 @@ impl std::fmt::Display for WasmValidationError {
             }
             Self::InvalidCustomSection(err) => {
                 write!(f, "Wasm module has an invalid custom section. {}", err)
+            },
+            Self::InvalidGlobalSection(err) => {
+                write!(f, "Wasm module has an invalid global section. {}", err)
             }
             Self::TooManyGlobals { defined, allowed } => write!(
                 f,
