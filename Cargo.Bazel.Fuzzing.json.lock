@@ -1,5 +1,5 @@
 {
-  "checksum": "4194aca10d3fe7ff5ed260166eeeecaab834e9bbb03cc53b8b1611b4026b3bee",
+  "checksum": "58c6963ffa07554e9669dddeafb6666416087b260d5de58eeb68815d07a15003",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13598,6 +13598,10 @@
               "target": "idna"
             },
             {
+              "id": "indexmap 2.1.0",
+              "target": "indexmap"
+            },
+            {
               "id": "indicatif 0.17.7",
               "target": "indicatif"
             },
@@ -19430,7 +19434,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             }
           ],
@@ -23978,13 +23982,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "indexmap 2.0.2": {
+    "indexmap 2.1.0": {
       "name": "indexmap",
-      "version": "2.0.2",
+      "version": "2.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/indexmap/2.0.2/download",
-          "sha256": "8adf3ddd720272c6ea8bf59463c04e0f93d0bbf7c5439b691bca2987e0270897"
+          "url": "https://crates.io/api/v1/crates/indexmap/2.1.0/download",
+          "sha256": "d530e1a18b1cb4c484e6e34556a0d948706958449fca0cab753d649f2bce3d1f"
         }
       },
       "targets": [
@@ -24029,7 +24033,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.2"
+        "version": "2.1.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -24197,7 +24201,7 @@
               "target": "ahash"
             },
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -32558,7 +32562,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -35495,7 +35499,7 @@
               "target": "fixedbitset"
             },
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             }
           ],
@@ -52303,7 +52307,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56685,7 +56689,7 @@
               "target": "flagset"
             },
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56791,7 +56795,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56834,7 +56838,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56877,7 +56881,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -57050,7 +57054,7 @@
               "target": "fxprof_processed_profile"
             },
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -57414,7 +57418,7 @@
               "target": "gimli"
             },
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -57727,7 +57731,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "indexmap 2.0.2",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
