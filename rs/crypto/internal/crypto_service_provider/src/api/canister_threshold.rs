@@ -170,7 +170,6 @@ pub trait CspIDkgProtocol {
 /// generation.
 pub trait CspThresholdEcdsaSigner {
     /// Generate a signature share.
-    #[allow(clippy::too_many_arguments)]
     fn ecdsa_sign_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
