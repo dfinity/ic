@@ -328,9 +328,20 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             .maximum_direct_participation_icp
             .and_then(|tokens| tokens.e8s);
 
-        let neurons_fund_investment_icp_e8s = swap_parameters
-            .neurons_fund_investment_icp
-            .and_then(|tokens| tokens.e8s);
+        let neurons_fund_investment_icp_e8s = if IS_MATCHED_FUNDING_ENABLED {
+            if let Some(neurons_fund_investment_icp) = swap_parameters.neurons_fund_investment_icp {
+                defects.push(format!(
+                    "neurons_fund_investment_icp ({:?}) is deprecated; please \
+                        set neurons_fund_participation instead.",
+                    neurons_fund_investment_icp,
+                ));
+            }
+            None
+        } else {
+            swap_parameters
+                .neurons_fund_investment_icp
+                .and_then(|tokens| tokens.e8s)
+        };
 
         let min_icp_e8s = swap_parameters.minimum_icp.and_then(|tokens| tokens.e8s);
 

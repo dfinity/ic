@@ -190,8 +190,9 @@ pub(crate) struct Swap {
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     duration: nervous_system_pb::Duration,
 
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    neurons_fund_investment_icp: nervous_system_pb::Tokens,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    neurons_fund_investment_icp: Option<nervous_system_pb::Tokens>,
 
     #[serde(default)]
     neurons_fund_participation: Option<bool>,
@@ -767,9 +768,9 @@ impl Swap {
         let maximum_icp = *maximum_icp;
 
         let minimum_direct_participation_icp = minimum_direct_participation_icp
-            .or_else(|| minimum_icp?.checked_sub(neurons_fund_investment_icp));
+            .or_else(|| minimum_icp?.checked_sub(&neurons_fund_investment_icp.unwrap_or_default()));
         let maximum_direct_participation_icp = maximum_direct_participation_icp
-            .or_else(|| maximum_icp?.checked_sub(neurons_fund_investment_icp));
+            .or_else(|| maximum_icp?.checked_sub(&neurons_fund_investment_icp.unwrap_or_default()));
 
         let maximum_participant_icp = Some(*maximum_participant_icp);
         let minimum_participant_icp = Some(*minimum_participant_icp);
@@ -786,8 +787,6 @@ impl Swap {
 
         let start_time = *start_time;
         let duration = Some(*duration);
-
-        let neurons_fund_investment_icp = Some(*neurons_fund_investment_icp);
 
         let neurons_fund_participation = *neurons_fund_participation;
 
@@ -811,7 +810,7 @@ impl Swap {
             start_time,
             duration,
 
-            neurons_fund_investment_icp,
+            neurons_fund_investment_icp: *neurons_fund_investment_icp,
             neurons_fund_participation,
         }
     }
