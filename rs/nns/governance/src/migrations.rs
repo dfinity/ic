@@ -21,12 +21,9 @@ impl Migration {
 }
 
 pub(crate) fn maybe_run_migrations(
-    mut migrations: Migrations,
-    neuron_store: &mut NeuronStore,
+    migrations: Migrations,
+    _neuron_store: &mut NeuronStore,
 ) -> Migrations {
-    if crate::neuron_stable_indexes_building_is_enabled() {
-        migrations.neuron_indexes_migration =
-            Some(neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes());
-    }
+    // TODO: move inactive neuron migration here.
     migrations
 }
