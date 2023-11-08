@@ -5,7 +5,7 @@ use crate::address::Address;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
-use crate::lifecycle::EthereumNetwork;
+use crate::lifecycle::EvmNetwork;
 use crate::map::MultiKeyMap;
 use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei};
 use crate::tx::{
@@ -529,7 +529,7 @@ pub fn create_transaction(
     withdrawal_request: &EthWithdrawalRequest,
     nonce: TransactionNonce,
     transaction_price: TransactionPrice,
-    ethereum_network: EthereumNetwork,
+    ethereum_network: EvmNetwork,
 ) -> Result<Eip1559TransactionRequest, CreateTransactionError> {
     let max_transaction_fee = transaction_price.max_transaction_fee();
     let tx_amount = match withdrawal_request

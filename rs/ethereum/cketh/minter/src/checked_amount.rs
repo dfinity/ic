@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use candid::CandidType;
 use minicbor;
 use rlp::RlpStream;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -9,6 +10,8 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::ops::Rem;
+
+use crate::eth_rpc::into_nat;
 
 /// `CheckedAmountOf<Unit>` provides a type-safe way to keep an amount of some `Unit`.
 /// In contrast to `AmountOf<Unit>`, all operations are checked and do not overflow.
@@ -38,6 +41,19 @@ use std::ops::Rem;
 /// assert_eq!(three_apples.checked_div_ceil(2_u8), Some(Apples::TWO));
 /// ```
 pub struct CheckedAmountOf<Unit>(ethnum::u256, PhantomData<Unit>);
+
+impl<Unit> CandidType for CheckedAmountOf<Unit> {
+    fn _ty() -> candid::types::Type {
+        candid::Nat::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        serializer.serialize_nat(&into_nat(self.0))
+    }
+}
 
 impl<Unit> CheckedAmountOf<Unit> {
     pub const ZERO: Self = Self(ethnum::u256::ZERO, PhantomData);

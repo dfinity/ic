@@ -1,3 +1,4 @@
+use candid::CandidType;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -10,7 +11,18 @@ mod tests;
 
 /// An Ethereum account address.
 #[derive(
-    Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
+    Clone,
+    Copy,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    CandidType,
 )]
 #[serde(transparent)]
 #[cbor(transparent)]

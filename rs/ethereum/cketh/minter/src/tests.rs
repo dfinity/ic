@@ -50,6 +50,7 @@ fn deserialize_json_reply() {
 
 mod eth_get_logs {
     use crate::address::Address;
+    use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::ReceivedEthEvent;
     use crate::eth_rpc::{FixedSizeData, LogEntry};
     use crate::numeric::{BlockNumber, LogIndex, Wei};
@@ -90,7 +91,7 @@ mod eth_get_logs {
                 data: Data(hex::decode("00000000000000000000000055654e7405fcb336386ea8f36954a211b2cda764000000000000000000000000000000000000000000000000002386f26fc100000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000003f62327071372d71677a7a692d74623564622d72357363692d637736736c2d6e646f756c2d666f7435742d347a7732702d657a6677692d74616a32792d76716500").unwrap()),
                 block_number: Some(BlockNumber::new(0x3aa4f4)),
                 transaction_hash: Some(hash_from_hex("5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154")),
-                transaction_index: Some(Quantity::new(0x06)),
+                transaction_index: Some(CheckedAmountOf::new(0x06)),
                 block_hash: Some(hash_from_hex("908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2")),
                 log_index: Some(LogIndex::from(0x08_u8)),
                 removed: false,

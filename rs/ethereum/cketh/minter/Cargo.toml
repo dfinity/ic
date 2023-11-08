@@ -13,6 +13,7 @@ path = "bin/principal_to_hex.rs"
 
 [dependencies]
 askama = "0.11"
+async-trait = "0.1"
 candid = { workspace = true }
 ciborium = { workspace = true }
 ethnum = { workspace = true }

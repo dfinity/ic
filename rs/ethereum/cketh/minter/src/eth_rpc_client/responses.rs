@@ -1,5 +1,6 @@
 use crate::eth_rpc::{Hash, HttpResponsePayload, Quantity, ResponseTransform};
 use crate::numeric::{BlockNumber, Wei};
+use candid::CandidType;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -38,7 +39,7 @@ impl HttpResponsePayload for TransactionReceipt {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Encode, Decode, CandidType)]
 #[serde(try_from = "ethnum::u256", into = "ethnum::u256")]
 pub enum TransactionStatus {
     /// Transaction was mined and executed successfully.

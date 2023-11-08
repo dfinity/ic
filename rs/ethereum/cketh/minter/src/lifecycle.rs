@@ -34,28 +34,28 @@ pub enum MinterArg {
     Decode,
 )]
 #[cbor(index_only)]
-pub enum EthereumNetwork {
+pub enum EvmNetwork {
     #[n(1)]
-    Mainnet,
+    Ethereum,
     #[n(11155111)]
     #[default]
     Sepolia,
 }
 
-impl EthereumNetwork {
+impl EvmNetwork {
     pub fn chain_id(&self) -> u64 {
         match self {
-            EthereumNetwork::Mainnet => 1,
-            EthereumNetwork::Sepolia => 11155111,
+            EvmNetwork::Ethereum => 1,
+            EvmNetwork::Sepolia => 11155111,
         }
     }
 }
 
-impl Display for EthereumNetwork {
+impl Display for EvmNetwork {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            EthereumNetwork::Mainnet => write!(f, "Ethereum Mainnet"),
-            EthereumNetwork::Sepolia => write!(f, "Ethereum Testnet Sepolia"),
+            EvmNetwork::Ethereum => write!(f, "Ethereum Mainnet"),
+            EvmNetwork::Sepolia => write!(f, "Ethereum Testnet Sepolia"),
         }
     }
 }

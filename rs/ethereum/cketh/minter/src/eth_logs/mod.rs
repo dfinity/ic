@@ -3,7 +3,7 @@ mod tests;
 
 use crate::address::Address;
 use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
-use crate::eth_rpc_client::EthRpcClient;
+use crate::eth_rpc_client::{DefaultTransport, EthRpcClient};
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LogIndex, Wei};
 use crate::state::read_state;
@@ -88,7 +88,7 @@ pub async fn last_received_eth_events(
         ));
     }
 
-    let result: Vec<LogEntry> = read_state(EthRpcClient::from_state)
+    let result: Vec<LogEntry> = read_state(EthRpcClient::<DefaultTransport>::from_state)
         .eth_get_logs(GetLogsParam {
             from_block: from.into(),
             to_block: to.into(),

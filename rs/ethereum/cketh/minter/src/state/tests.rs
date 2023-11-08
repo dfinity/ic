@@ -5,7 +5,7 @@ use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::Hash;
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
-use crate::lifecycle::EthereumNetwork;
+use crate::lifecycle::EvmNetwork;
 use crate::numeric::wei_from_milli_ether;
 use crate::state::event::{Event, EventType};
 use crate::state::State;
@@ -361,7 +361,7 @@ prop_compose! {
         ecdsa_key_name in "[a-z_]*",
     ) -> InitArg {
         InitArg {
-            ethereum_network: EthereumNetwork::Sepolia,
+            ethereum_network: EvmNetwork::Sepolia,
             ecdsa_key_name,
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
             ledger_id,

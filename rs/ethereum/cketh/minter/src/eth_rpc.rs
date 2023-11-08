@@ -2,8 +2,11 @@
 //! interface.
 
 use crate::address::Address;
+use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::CandidBlockTag;
+use crate::eth_rpc_client::providers::RpcApi;
 use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_client::RpcTransport;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei};
@@ -21,6 +24,7 @@ use minicbor::{Decode, Encode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
+use thiserror::Error;
 
 #[cfg(test)]
 mod tests;
@@ -45,7 +49,7 @@ pub fn into_nat(quantity: Quantity) -> candid::Nat {
     candid::Nat::from(BigUint::from_bytes_be(&quantity.to_be_bytes()))
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, CandidType)]
 #[serde(transparent)]
 pub struct Data(#[serde(with = "crate::serde_data")] pub Vec<u8>);
 
@@ -55,7 +59,7 @@ impl AsRef<[u8]> for Data {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash, CandidType)]
 #[serde(transparent)]
 pub struct FixedSizeData(#[serde(with = "crate::serde_data")] pub [u8; 32]);
 
@@ -103,7 +107,7 @@ impl UpperHex for FixedSizeData {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, CandidType)]
 pub enum SendRawTransactionResult {
     Ok,
     InsufficientFunds,
@@ -118,7 +122,18 @@ impl HttpResponsePayload for SendRawTransactionResult {
 }
 
 #[derive(
-    Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd, Encode, Decode,
+    Clone,
+    Copy,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    Eq,
+    Hash,
+    Ord,
+    PartialOrd,
+    Encode,
+    Decode,
+    CandidType,
 )]
 #[serde(transparent)]
 #[cbor(transparent)]
@@ -170,7 +185,7 @@ impl HttpResponsePayload for Hash {}
 
 /// Block tags.
 /// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
-#[derive(Debug, Default, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
 #[serde(rename_all = "lowercase")]
 pub enum BlockTag {
     /// The latest mined block.
@@ -197,7 +212,7 @@ impl From<CandidBlockTag> for BlockTag {
 }
 
 /// The block specification indicating which block to query.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
 #[serde(untagged)]
 pub enum BlockSpec {
     /// Query the block with the specified index.
@@ -231,7 +246,7 @@ impl std::str::FromStr for BlockSpec {
 }
 
 /// Parameters of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
 #[serde(rename_all = "camelCase")]
 pub struct GetLogsParam {
     /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
@@ -264,7 +279,7 @@ pub struct GetLogsParam {
 //    "removed": false
 //  }
 // ```
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, CandidType)]
 #[serde(rename_all = "camelCase")]
 pub struct LogEntry {
     /// The address from which this log originated.
@@ -283,7 +298,7 @@ pub struct LogEntry {
     pub transaction_hash: Option<Hash>,
     // Integer of the transactions position within the block the log was created from.
     // None if the log is pending.
-    pub transaction_index: Option<Quantity>,
+    pub transaction_index: Option<CheckedAmountOf<()>>,
     /// 32 Bytes - hash of the block in which this log appeared.
     /// None if the block is pending.
     pub block_hash: Option<Hash>,
@@ -345,7 +360,7 @@ impl From<FeeHistoryParams> for (Quantity, BlockSpec, Vec<u8>) {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, CandidType)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeHistory {
     /// Lowest number block of the returned range.
@@ -356,6 +371,7 @@ pub struct FeeHistory {
     /// Zeroes are returned for pre-EIP-1559 blocks.
     pub base_fee_per_gas: Vec<Wei>,
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
+    #[serde(default)]
     pub reward: Vec<Vec<Wei>>,
 }
 
@@ -373,7 +389,7 @@ impl From<BlockNumber> for BlockSpec {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
 #[serde(rename_all = "camelCase")]
 pub struct Block {
     ///The block number. `None` when its pending block.
@@ -421,6 +437,15 @@ impl<T> JsonRpcResult<T> {
             Self::Error { code, message } => panic!(
                 "expected JSON RPC call to succeed, got an error: error_code = {code}, message = {message}"
             ),
+        }
+    }
+}
+
+impl<T> From<JsonRpcResult<T>> for Result<T, RpcError> {
+    fn from(result: JsonRpcResult<T>) -> Self {
+        match result {
+            JsonRpcResult::Result(r) => Ok(r),
+            JsonRpcResult::Error { code, message } => Err(JsonRpcError { code, message }.into()),
         }
     }
 }
@@ -489,9 +514,60 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     args.response
 }
 
-#[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub enum RpcError {
+    // #[error("RPC provider error")]
+    ProviderError(/* #[source] */ ProviderError),
+    // #[error("HTTPS outcall error")]
+    HttpOutcallError(/* #[source] */ HttpOutcallError),
+    // #[error("JSON-RPC error")]
+    JsonRpcError(/* #[source] */ JsonRpcError),
+    // #[error("data format error")]
+    DataFormatError(/* #[source] */ DataFormatError),
+}
+
+impl From<ProviderError> for RpcError {
+    fn from(err: ProviderError) -> Self {
+        RpcError::ProviderError(err)
+    }
+}
+
+impl From<HttpOutcallError> for RpcError {
+    fn from(err: HttpOutcallError) -> Self {
+        RpcError::HttpOutcallError(err)
+    }
+}
+
+impl From<JsonRpcError> for RpcError {
+    fn from(err: JsonRpcError) -> Self {
+        RpcError::JsonRpcError(err)
+    }
+}
+
+impl From<DataFormatError> for RpcError {
+    fn from(err: DataFormatError) -> Self {
+        RpcError::DataFormatError(err)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub enum ProviderError {
+    // #[error("no permission")]
+    NoPermission,
+    // #[error("too few cycles (expected {expected}, received {received})")]
+    TooFewCycles { expected: u128, received: u128 },
+    // #[error("service URL parse error: {0}")]
+    ServiceUrlParseError(String),
+    // #[error("service host not allowed: {0}")]
+    ServiceHostNotAllowed(String),
+    // #[error("provider not found")]
+    ProviderNotFound,
+}
+
+#[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
 pub enum HttpOutcallError {
     /// Error from the IC system API.
+    // #[error("IC system error code {}: {message}", *.code as i32)]
     IcError {
         code: RejectionCode,
         message: String,
@@ -499,6 +575,7 @@ pub enum HttpOutcallError {
     /// Response is not a valid JSON-RPC response,
     /// which means that the response was not successful (status other than 2xx)
     /// or that the response body could not be deserialized into a JSON-RPC response.
+    // #[error("invalid JSON-RPC response {status}: {})", .parsing_error.as_deref().unwrap_or(.body))]
     InvalidHttpJsonRpcResponse {
         status: u16,
         body: String,
@@ -508,14 +585,29 @@ pub enum HttpOutcallError {
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
+#[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
+pub enum DataFormatError {
+    // #[error("invalid hex data: {0}")]
+    InvalidHex(String),
+}
+
 pub fn are_errors_consistent<T: PartialEq>(
-    left: &HttpOutcallResult<JsonRpcResult<T>>,
-    right: &HttpOutcallResult<JsonRpcResult<T>>,
+    left: &Result<T, RpcError>,
+    right: &Result<T, RpcError>,
 ) -> bool {
     match (left, right) {
-        (Ok(JsonRpcResult::Result(_)), _) | (_, Ok(JsonRpcResult::Result(_))) => true,
+        (Ok(_), _) | (_, Ok(_)) => true,
         _ => left == right,
     }
+}
+
+#[derive(
+    Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Serialize, Deserialize, Error,
+)]
+#[error("code {code}: {message}")]
+pub struct JsonRpcError {
+    pub code: i64,
+    pub message: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -557,13 +649,14 @@ impl<T: HttpResponsePayload> HttpResponsePayload for Option<T> {}
 impl HttpResponsePayload for TransactionCount {}
 
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
-pub async fn call<I, O>(
-    url: impl Into<String>,
+pub async fn call<T, I, O>(
+    api: RpcApi,
     method: impl Into<String>,
     params: I,
     mut response_size_estimate: ResponseSizeEstimate,
-) -> HttpOutcallResult<JsonRpcResult<O>>
+) -> Result<O, RpcError>
 where
+    T: RpcTransport,
     I: Serialize,
     O: DeserializeOwned + HttpResponsePayload,
 {
@@ -574,7 +667,12 @@ where
         method: eth_method.clone(),
         id: 1,
     };
-    let url = url.into();
+    let url = api.url;
+    let mut headers = vec![HttpHeader {
+        name: "Content-Type".to_string(),
+        value: "application/json".to_string(),
+    }];
+    headers.extend(api.headers);
 
     loop {
         rpc_request.id = mutate_state(State::next_request_id);
@@ -599,10 +697,7 @@ where
             url: url.clone(),
             max_response_bytes: Some(effective_size_estimate),
             method: HttpMethod::POST,
-            headers: vec![HttpHeader {
-                name: "Content-Type".to_string(),
-                value: "application/json".to_string(),
-            }],
+            headers: headers.clone(),
             body: Some(payload.as_bytes().to_vec()),
             transform: Some(TransformContext::from_name(
                 "cleanup_response".to_owned(),
@@ -615,8 +710,19 @@ where
         let base_cycles = 400_000_000u128 + 100_000u128 * (2 * effective_size_estimate as u128);
 
         const BASE_SUBNET_SIZE: u128 = 13;
-        const SUBNET_SIZE: u128 = 34;
-        let cycles = base_cycles * SUBNET_SIZE / BASE_SUBNET_SIZE;
+        // const SUBNET_SIZE: u128 = 34;
+        let subnet_size = T::get_subnet_size() as u128;
+        let cycles = base_cycles * subnet_size / BASE_SUBNET_SIZE;
+
+        let cycles_available = ic_cdk::api::call::msg_cycles_available128();
+        if cycles_available < cycles {
+            return Err(ProviderError::TooFewCycles {
+                expected: cycles,
+                received: cycles_available,
+            }
+            .into());
+        }
+        ic_cdk::api::call::msg_cycles_accept128(cycles);
 
         let response: HttpResponse = match call_with_payment128(
             Principal::management_canister(),
@@ -632,13 +738,13 @@ where
             {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
-                    return Err(HttpOutcallError::IcError { code, message });
+                    return Err(HttpOutcallError::IcError { code, message }.into());
                 }
                 log!(DEBUG, "The {eth_method} response didn't fit into {response_size_estimate} bytes, retrying with {new_estimate}");
                 response_size_estimate = new_estimate;
                 continue;
             }
-            Err((code, message)) => return Err(HttpOutcallError::IcError { code, message }),
+            Err((code, message)) => return Err(HttpOutcallError::IcError { code, message }.into()),
         };
 
         log!(
@@ -658,7 +764,8 @@ where
                 status: http_status_code,
                 body: String::from_utf8_lossy(&response.body).to_string(),
                 parsing_error: None,
-            });
+            }
+            .into());
         }
 
         let reply: JsonRpcReply<O> = serde_json::from_slice(&response.body).map_err(|e| {
@@ -669,7 +776,7 @@ where
             }
         })?;
 
-        return Ok(reply.result);
+        return reply.result.into();
     }
 }
 

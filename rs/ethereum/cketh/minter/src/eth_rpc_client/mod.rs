@@ -1,47 +1,91 @@
-use crate::eth_rpc;
+use crate::eth_rpc::{self, JsonRpcError, RpcError};
 use crate::eth_rpc::{
     are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam, Hash,
-    HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult, LogEntry,
-    ResponseSizeEstimate, SendRawTransactionResult,
+    HttpResponsePayload, LogEntry, ResponseSizeEstimate, SendRawTransactionResult,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
-use crate::lifecycle::EthereumNetwork;
+use crate::lifecycle::EvmNetwork;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::TransactionCount;
 use crate::state::State;
+use async_trait::async_trait;
+use candid::CandidType;
 use ic_canister_log::log;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 
-mod providers;
+pub mod providers;
 pub mod requests;
 pub mod responses;
 
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EthRpcClient {
-    chain: EthereumNetwork,
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+pub trait RpcTransport: Debug {
+    // TODO: remove after refactoring to `call_json_rpc()`
+    fn get_subnet_size() -> u32;
+
+    async fn call_json_rpc<T: DeserializeOwned>(
+        service: RpcNodeProvider,
+        json: &str,
+        max_response_bytes: u64,
+    ) -> Result<T, RpcError>;
 }
 
-impl EthRpcClient {
-    const fn new(chain: EthereumNetwork) -> Self {
-        Self { chain }
+// Placeholder during refactoring
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DefaultTransport;
+
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+impl RpcTransport for DefaultTransport {
+    fn get_subnet_size() -> u32 {
+        unimplemented!()
+    }
+
+    async fn call_json_rpc<T: DeserializeOwned>(
+        _service: RpcNodeProvider,
+        _json: &str,
+        _max_response_bytes: u64,
+    ) -> Result<T, RpcError> {
+        unimplemented!()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EthRpcClient<T: RpcTransport> {
+    chain: EvmNetwork,
+    providers: Option<Vec<RpcNodeProvider>>,
+    phantom: PhantomData<T>,
+}
+
+impl<T: RpcTransport> EthRpcClient<T> {
+    pub const fn new(chain: EvmNetwork, providers: Option<Vec<RpcNodeProvider>>) -> Self {
+        Self {
+            chain,
+            providers,
+            phantom: PhantomData,
+        }
     }
 
     pub const fn from_state(state: &State) -> Self {
-        Self::new(state.ethereum_network())
+        Self::new(state.ethereum_network(), None)
     }
 
     fn providers(&self) -> &[RpcNodeProvider] {
-        match self.chain {
-            EthereumNetwork::Mainnet => &MAINNET_PROVIDERS,
-            EthereumNetwork::Sepolia => &SEPOLIA_PROVIDERS,
+        match self.providers {
+            Some(ref providers) => providers,
+            None => match self.chain {
+                EvmNetwork::Ethereum => MAINNET_PROVIDERS,
+                EvmNetwork::Sepolia => SEPOLIA_PROVIDERS,
+            },
         }
     }
 
@@ -55,33 +99,33 @@ impl EthRpcClient {
         method: impl Into<String> + Clone,
         params: I,
         response_size_estimate: ResponseSizeEstimate,
-    ) -> HttpOutcallResult<JsonRpcResult<O>>
+    ) -> Result<O, RpcError>
     where
         I: Serialize + Clone,
         O: DeserializeOwned + HttpResponsePayload + Debug,
     {
-        let mut last_result: Option<HttpOutcallResult<JsonRpcResult<O>>> = None;
+        let mut last_result: Option<Result<O, RpcError>> = None;
         for provider in self.providers() {
             log!(
                 DEBUG,
                 "[sequential_call_until_ok]: calling provider: {:?}",
                 provider
             );
-            let result = eth_rpc::call(
-                provider.url().to_string(),
+            let result = eth_rpc::call::<T, _, _>(
+                provider.api::<T>(),
                 method.clone(),
                 params.clone(),
                 response_size_estimate,
             )
             .await;
             match result {
-                Ok(JsonRpcResult::Result(value)) => return Ok(JsonRpcResult::Result(value)),
-                Ok(json_rpc_error @ JsonRpcResult::Error { .. }) => {
+                Ok(value) => return Ok(value),
+                Err(RpcError::JsonRpcError(json_rpc_error @ JsonRpcError { .. })) => {
                     log!(
                         INFO,
                         "Provider {provider:?} returned JSON-RPC error {json_rpc_error:?}",
                     );
-                    last_result = Some(Ok(json_rpc_error));
+                    last_result = Some(Err(json_rpc_error.into()));
                 }
                 Err(e) => {
                     log!(INFO, "Querying provider {provider:?} returned error {e:?}");
@@ -112,8 +156,8 @@ impl EthRpcClient {
             let mut fut = Vec::with_capacity(providers.len());
             for provider in providers {
                 log!(DEBUG, "[parallel_call]: will call provider: {:?}", provider);
-                fut.push(eth_rpc::call(
-                    provider.url().to_string(),
+                fut.push(eth_rpc::call::<T, _, _>(
+                    provider.api::<T>(),
                     method.clone(),
                     params.clone(),
                     response_size_estimate,
@@ -168,10 +212,7 @@ impl EthRpcClient {
         results.reduce_with_equality()
     }
 
-    pub async fn eth_fee_history(
-        &self,
-        params: FeeHistoryParams,
-    ) -> HttpOutcallResult<JsonRpcResult<FeeHistory>> {
+    pub async fn eth_fee_history(&self, params: FeeHistoryParams) -> Result<FeeHistory, RpcError> {
         // A typical response is slightly above 300 bytes.
         self.sequential_call_until_ok("eth_feeHistory", params, ResponseSizeEstimate::new(512))
             .await
@@ -180,7 +221,7 @@ impl EthRpcClient {
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
-    ) -> HttpOutcallResult<JsonRpcResult<SendRawTransactionResult>> {
+    ) -> Result<SendRawTransactionResult, RpcError> {
         // A successful reply is under 256 bytes, but we expect most calls to end with an error
         // since we submit the same transaction from multiple nodes.
         self.sequential_call_until_ok(
@@ -194,27 +235,27 @@ impl EthRpcClient {
     pub async fn eth_get_transaction_count(
         &self,
         params: GetTransactionCountParams,
-    ) -> MultiCallResults<TransactionCount> {
-        self.parallel_call(
-            "eth_getTransactionCount",
-            params,
-            ResponseSizeEstimate::new(50),
-        )
-        .await
+    ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
+        let results = self
+            .parallel_call(
+                "eth_getTransactionCount",
+                params,
+                ResponseSizeEstimate::new(50),
+            )
+            .await;
+        results.reduce_with_equality()
     }
 }
 
 /// Aggregates responses of different providers to the same query.
 /// Guaranteed to be non-empty.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType)]
 pub struct MultiCallResults<T> {
-    results: BTreeMap<RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>>,
+    pub results: BTreeMap<RpcNodeProvider, Result<T, RpcError>>,
 }
 
 impl<T> MultiCallResults<T> {
-    fn from_non_empty_iter<
-        I: IntoIterator<Item = (RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>)>,
-    >(
+    fn from_non_empty_iter<I: IntoIterator<Item = (RpcNodeProvider, Result<T, RpcError>)>>(
         iter: I,
     ) -> Self {
         let results = BTreeMap::from_iter(iter);
@@ -232,10 +273,10 @@ impl<T: PartialEq> MultiCallResults<T> {
     /// * MultiCallError::InconsistentResults if there are different errors.
     fn all_ok(self) -> Result<BTreeMap<RpcNodeProvider, T>, MultiCallError<T>> {
         let mut results = BTreeMap::new();
-        let mut first_error: Option<(RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>)> = None;
+        let mut first_error: Option<(RpcNodeProvider, Result<T, RpcError>)> = None;
         for (provider, result) in self.results.into_iter() {
             match result {
-                Ok(JsonRpcResult::Result(value)) => {
+                Ok(value) => {
                     results.insert(provider, value);
                 }
                 _ => match first_error {
@@ -258,21 +299,20 @@ impl<T: PartialEq> MultiCallResults<T> {
         }
         match first_error {
             None => Ok(results),
-            Some((_provider, Ok(JsonRpcResult::Error { code, message }))) => {
-                Err(MultiCallError::ConsistentJsonRpcError { code, message })
-            }
-            Some((_provider, Err(error))) => Err(MultiCallError::ConsistentHttpOutcallError(error)),
-            Some((_, Ok(JsonRpcResult::Result(_)))) => {
+            Some((_provider, Err(RpcError::JsonRpcError(JsonRpcError { code, message })))) => Err(
+                MultiCallError::ConsistentError(JsonRpcError { code, message }.into()),
+            ),
+            Some((_provider, Err(error))) => Err(MultiCallError::ConsistentError(error)),
+            Some((_, Ok(_))) => {
                 panic!("BUG: first_error should be an error type")
             }
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, CandidType)]
 pub enum MultiCallError<T> {
-    ConsistentHttpOutcallError(HttpOutcallError),
-    ConsistentJsonRpcError { code: i64, message: String },
+    ConsistentError(RpcError),
     InconsistentResults(MultiCallResults<T>),
 }
 
@@ -290,7 +330,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
             let error = MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
                 inconsistent_results
                     .into_iter()
-                    .map(|(provider, result)| (provider, Ok(JsonRpcResult::Result(result)))),
+                    .map(|(provider, result)| (provider, Ok(result))),
             ));
             log!(
                 INFO,

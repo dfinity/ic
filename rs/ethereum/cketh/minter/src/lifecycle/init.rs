@@ -1,7 +1,7 @@
 use crate::address::Address;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc::BlockTag;
-use crate::lifecycle::EthereumNetwork;
+use crate::lifecycle::EvmNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::{InvalidStateError, State};
 use crate::transactions::EthTransactions;
@@ -15,7 +15,7 @@ use minicbor::{Decode, Encode};
 )]
 pub struct InitArg {
     #[n(0)]
-    pub ethereum_network: EthereumNetwork,
+    pub ethereum_network: EvmNetwork,
     #[n(1)]
     pub ecdsa_key_name: String,
     #[n(2)]
