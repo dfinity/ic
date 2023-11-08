@@ -27,9 +27,11 @@ lazy_static! {
             },
             1 => Followees {
                 followees: vec![
-                    // Not sorted, to make sure we preserve order.
+                    // Not sorted and has duplicates, to make sure we preserve order and
+                    // multiplicity.
                     NeuronId { id: 211 },
                     NeuronId { id: 212 },
+                    NeuronId { id: 210 },
                     NeuronId { id: 210 },
                 ],
             },
@@ -408,16 +410,16 @@ fn test_store_simplest_nontrivial_case() {
     fn assert_no_zombie_references_in<Key, Value, Memory>(
         map_name: &str,
         map: &StableBTreeMap<Key, Value, Memory>,
-        key_to_neuron_id: impl Fn(Key) -> NeuronId,
+        key_value_to_neuron_id: impl Fn(Key, Value) -> NeuronId,
         bad_neuron_id: NeuronId,
     ) where
         Key: BoundedStorable + Ord + Copy + std::fmt::Debug,
-        Value: BoundedStorable + std::fmt::Debug,
+        Value: BoundedStorable + Clone + std::fmt::Debug,
         Memory: ic_stable_structures::Memory,
     {
         for (key, value) in map.iter() {
             assert_ne!(
-                key_to_neuron_id(key),
+                key_value_to_neuron_id(key, value.clone()),
                 bad_neuron_id,
                 "{} {:?}: {:#?}",
                 map_name,
@@ -435,34 +437,32 @@ fn test_store_simplest_nontrivial_case() {
     assert_no_zombie_references_in(
         "hot_keys",
         &store.hot_keys_map,
-        |key| NeuronId { id: key.0 },
+        |key, _| NeuronId { id: key.0 },
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "recent_ballots",
         &store.recent_ballots_map,
-        |key| NeuronId { id: key.0 },
+        |key, _| NeuronId { id: key.0 },
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "followees",
         &store.followees_map,
-        |key: FolloweesKey| NeuronId {
-            id: key.followee_id,
-        },
+        |_, followee_id| NeuronId { id: followee_id },
         original_neuron_id,
     );
 
     assert_no_zombie_references_in(
         "known_neuron_data",
         &store.known_neuron_data_map,
-        |key| NeuronId { id: key },
+        |key, _| NeuronId { id: key },
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "transfer",
         &store.transfer_map,
-        |key| NeuronId { id: key },
+        |key, _| NeuronId { id: key },
         original_neuron_id,
     );
 }
