@@ -1,6 +1,6 @@
 use std::{
     error::Error as StdError,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{Ipv6Addr, SocketAddr},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -305,23 +305,21 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let routers_http = routers_https;
 
     // HTTP
-    let srvs_http = [Ipv4Addr::UNSPECIFIED.into(), Ipv6Addr::UNSPECIFIED.into()]
-        .into_iter()
-        .map(|ip| {
-            Server::bind(SocketAddr::new(ip, cli.listen.http_port))
-                .acceptor(DefaultAcceptor)
-                .serve(routers_http.clone().into_make_service()) // TODO change back to routers_http - for now routing http==https
-        });
+    let srvs_http = Server::bind(SocketAddr::new(
+        Ipv6Addr::UNSPECIFIED.into(),
+        cli.listen.http_port,
+    ))
+    .acceptor(DefaultAcceptor)
+    .serve(routers_http.clone().into_make_service()); // TODO change back to routers_http - for now routing http==https
 
     // HTTPS
     #[cfg(feature = "tls")]
-    let srvs_https = [Ipv4Addr::UNSPECIFIED.into(), Ipv6Addr::UNSPECIFIED.into()]
-        .into_iter()
-        .map(|ip| {
-            Server::bind(SocketAddr::new(ip, cli.listen.https_port))
-                .acceptor(tls_acceptor.clone())
-                .serve(routers_https.clone().into_make_service())
-        });
+    let srvs_https = Server::bind(SocketAddr::new(
+        Ipv6Addr::UNSPECIFIED.into(),
+        cli.listen.https_port,
+    ))
+    .acceptor(tls_acceptor.clone())
+    .serve(routers_https.clone().into_make_service());
 
     // Metrics
     let metrics_cache = Arc::new(RwLock::new(MetricsCache::new(METRICS_CACHE_CAPACITY)));
@@ -439,14 +437,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         }
 
         // Servers
-        srvs_http.for_each(|srv| {
-            s.spawn(srv.map_err(|err| anyhow!("failed to start http server: {:?}", err)))
-        });
+        s.spawn(srvs_http.map_err(|err| anyhow!("failed to start http server: {:?}", err)));
 
         #[cfg(feature = "tls")]
-        srvs_https.for_each(|srv| {
-            s.spawn(srv.map_err(|err| anyhow!("failed to start https server: {:?}", err)))
-        });
+        s.spawn(srvs_https.map_err(|err| anyhow!("failed to start https server: {:?}", err)));
 
         // Runners
         runners.into_iter().for_each(|mut r| {
