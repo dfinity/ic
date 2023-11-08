@@ -1487,15 +1487,7 @@ pub fn make_registry_cup_from_cup_contents(
     let ecdsa_summary =
         match bootstrap_ecdsa_summary(&cup_contents, subnet_id, registry_version, registry, logger)
         {
-            Ok(Some(summary)) => {
-                info!(
-                    logger,
-                    "Making CUP with ecdsa_summary with key_id {}", summary.key_transcript.key_id
-                );
-
-                Some(summary)
-            }
-            Ok(None) => None,
+            Ok(summary) => summary,
             Err(err) => {
                 warn!(
                     logger,
