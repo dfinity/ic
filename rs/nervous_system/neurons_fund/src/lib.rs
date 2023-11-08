@@ -907,7 +907,7 @@ where
                 .apply(direct_participation_icp_e8s)?;
 
             // Convert to Decimal
-            let intercept_icp_e8s = rescale_to_icp(*intercept_icp_e8s);
+            let intercept_icp = rescale_to_icp(*intercept_icp_e8s);
             let slope_numerator = u64_to_dec(*slope_numerator);
             let slope_denominator = u64_to_dec(*slope_denominator);
 
@@ -931,17 +931,16 @@ where
             //     via the `(slope_numerator / slope_denominator)` factor.
             // (2) Some Neurons' fund neurons being too big to fully participate (at this direct
             //     participation amount, `direct_participation_icp_e8s`). This is taken into account
-            //     via the `intercept_icp_e8s` component.
+            //     via the `intercept_icp` component.
             // (3) The computed overall participation amount (unexpectedly) exceeded `hard_cap`; so
             //     we enforce the limited at `hard_cap`.
-            let effective_icp = hard_cap.min(intercept_icp_e8s.saturating_add(
+            let effective_icp = hard_cap.min(intercept_icp.saturating_add(
                 // `slope_denominator`` cannot be zero as it has been validated.
                 // See `LinearScalingCoefficientValidationError::DenominatorIsZero`.
                 // `slope_numerator / slope_denominator` is between 0.0 and 1.0.
                 // See `LinearScalingCoefficientValidationError::NumeratorGreaterThanDenominator`.
                 (slope_numerator / slope_denominator) * ideal_icp,
             ));
-
             return rescale_to_icp_e8s(effective_icp);
         }
 
