@@ -140,6 +140,10 @@
                         <th>Next nonce</th>
                         <td>{{ next_transaction_nonce }}</td>
                     </tr>
+                    <tr id="minimum-withdrawal-amount">
+                        <th>Minimum withdrawal amount (Wei)</th>
+                        <td>{{ minimum_withdrawal_amount }}</td>
+                    </tr>
                     <tr id="eth-balance">
                         <th>Total ETH managed (Wei)</th>
                         <td>{{ eth_balance.eth_balance() }}</td>
@@ -174,6 +178,10 @@
                     <tr id="last-synced-block-number">
                         <th>Last synced block number</th>
                         <td>{% call etherscan_block_link(last_synced_block) %}</td>
+                    </tr>
+                    <tr id="first-synced-block-number">
+                        <th>First synced block number</th>
+                        <td>{% call etherscan_block_link(first_synced_block) %}</td>
                     </tr>
                 </tbody>
             </table>

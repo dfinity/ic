@@ -26,6 +26,7 @@ fn should_display_metadata() {
             .expect("BUG: invalid principal"),
         ecdsa_key_name: "key_1".to_string(),
         next_transaction_nonce: TransactionNonce::from(42_u8),
+        minimum_withdrawal_amount: Wei::from(10_000_000_000_000_000_u64),
         ..initial_dashboard()
     };
 
@@ -36,6 +37,7 @@ fn should_display_metadata() {
         .has_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
         .has_tecdsa_key_name("key_1")
         .has_next_transaction_nonce("42")
+        .has_minimum_withdrawal_amount("10_000_000_000_000_000")
         .has_eth_balance("0")
         .has_total_effective_tx_fees("0")
         .has_total_unspent_tx_fees("0");
@@ -50,7 +52,8 @@ fn should_display_block_sync() {
     };
     DashboardAssert::assert_that(dashboard)
         .has_no_elements_matching("#last-observed-block-number")
-        .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270");
+        .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207");
 
     let dashboard = DashboardTemplate {
         last_observed_block: Some(BlockNumber::from(4552271_u32)),
@@ -59,7 +62,8 @@ fn should_display_block_sync() {
     };
     DashboardAssert::assert_that(dashboard)
         .has_last_observed_block_href("https://sepolia.etherscan.io/block/4552271")
-        .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270");
+        .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207");
 }
 
 #[test]
@@ -708,6 +712,14 @@ mod assertions {
             )
         }
 
+        pub fn has_first_synced_block_href(&self, expected_href: &str) -> &Self {
+            self.has_href_value(
+                "#first-synced-block-number > td > a",
+                expected_href,
+                "wrong first synced block href",
+            )
+        }
+
         pub fn has_last_synced_block_href(&self, expected_href: &str) -> &Self {
             self.has_href_value(
                 "#last-synced-block-number > td > a",
@@ -780,6 +792,14 @@ mod assertions {
                 "#next-transaction-nonce > td",
                 expected_value,
                 "wrong next transaction nonce",
+            )
+        }
+
+        pub fn has_minimum_withdrawal_amount(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#minimum-withdrawal-amount > td",
+                expected_value,
+                "wrong minimum withdrawal amount",
             )
         }
 

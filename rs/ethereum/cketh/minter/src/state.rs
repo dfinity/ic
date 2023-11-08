@@ -47,6 +47,7 @@ pub struct State {
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
+    pub first_scraped_block_number: BlockNumber,
     pub last_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEthEvent>,
@@ -286,6 +287,10 @@ impl State {
         ensure_eq!(
             self.minimum_withdrawal_amount,
             other.minimum_withdrawal_amount
+        );
+        ensure_eq!(
+            self.first_scraped_block_number,
+            other.first_scraped_block_number
         );
         ensure_eq!(
             self.last_scraped_block_number,

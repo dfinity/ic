@@ -61,6 +61,14 @@ impl TryFrom<InitArg> for State {
             BlockNumber::try_from(last_scraped_block_number).map_err(|e| {
                 InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {}", e))
             })?;
+        let first_scraped_block_number =
+            last_scraped_block_number
+                .checked_increment()
+                .ok_or_else(|| {
+                    InvalidStateError::InvalidLastScrapedBlockNumber(
+                        "ERROR: last_scraped_block_number is at maximum value".to_string(),
+                    )
+                })?;
         let state = Self {
             ethereum_network,
             ecdsa_key_name,
@@ -70,6 +78,7 @@ impl TryFrom<InitArg> for State {
             ledger_id,
             minimum_withdrawal_amount,
             ethereum_block_height: BlockTag::from(ethereum_block_height),
+            first_scraped_block_number,
             last_scraped_block_number,
             last_observed_block_number: None,
             events_to_mint: Default::default(),
