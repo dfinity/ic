@@ -41,6 +41,8 @@ thread_local! {
         retrieve_eth_principals: BTreeSet::new(),
         active_tasks: HashSet::new(),
         http_request_counter: 0,
+        eth_balance:EthBalance::default(),
+        first_scraped_block_number: 0_u128.into(),
     }));
 }
 
