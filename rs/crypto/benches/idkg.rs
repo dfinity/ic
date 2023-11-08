@@ -85,7 +85,7 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
             bench_retain_active_transcripts(group, &test_case, 1, vault_type, rng);
 
             // The following benchmarks are not affected by the choice of the
-            // vault, wo benchmark them only once with the default vault type.
+            // vault, we benchmark them only once with the default vault type.
             if vault_type == VaultType::default() {
                 IDkgMode::iter().for_each(|mode| {
                     bench_verify_dealing_public(group, &test_case, &mode, vault_type, rng)
