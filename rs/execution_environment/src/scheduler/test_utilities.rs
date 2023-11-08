@@ -23,8 +23,8 @@ use ic_ic00_types::{
     CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload, IC_00,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionRoundType, HypervisorError, HypervisorResult,
-    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
+    ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
+    RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -543,9 +543,6 @@ impl SchedulerTest {
             instructions: as_round_instructions(
                 self.scheduler.config.max_instructions_per_round / 16,
             ),
-            execution_complexity: ExecutionComplexity::with_cpu(
-                self.scheduler.config.max_instructions_per_round / 16,
-            ),
             subnet_available_memory: self.scheduler.exec_env.subnet_available_memory(&state),
             compute_allocation_used,
         };
@@ -894,8 +891,6 @@ pub(crate) struct TestMessage {
     canister: Option<CanisterId>,
     // The number of instructions that execution of this message will use.
     instructions: NumInstructions,
-    // The execution complexity of the message.
-    execution_complexity: ExecutionComplexity,
     // The number of 4KiB pages that execution of this message will writes to.
     dirty_pages: usize,
     // The outgoing calls that will be produced by execution of this message.
@@ -906,13 +901,6 @@ impl TestMessage {
     pub fn dirty_pages(self, dirty_pages: usize) -> TestMessage {
         Self {
             dirty_pages,
-            ..self
-        }
-    }
-
-    pub fn execution_complexity(self, execution_complexity: ExecutionComplexity) -> TestMessage {
-        Self {
-            execution_complexity,
             ..self
         }
     }
@@ -953,7 +941,6 @@ pub(crate) fn ingress(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -964,7 +951,6 @@ pub(crate) fn other_side(callee: CanisterId, instructions: u64) -> TestMessage {
     TestMessage {
         canister: Some(callee),
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -976,7 +962,6 @@ pub(crate) fn on_response(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -988,7 +973,6 @@ pub(crate) fn instructions(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -1102,7 +1086,6 @@ impl TestWasmExecutorCore {
             paused.instructions_executed += slice_limit;
             let slice = SliceExecutionOutput {
                 executed_instructions: slice_limit,
-                execution_complexity: ExecutionComplexity::default(),
             };
             self.schedule.push((self.round, canister_id, slice_limit));
             return WasmExecutionResult::Paused(slice, paused);
@@ -1113,7 +1096,6 @@ impl TestWasmExecutorCore {
         if paused.message.instructions > message_limit {
             let slice = SliceExecutionOutput {
                 executed_instructions: instructions_to_execute,
-                execution_complexity: ExecutionComplexity::default(),
             };
             let output = WasmExecutionOutput {
                 wasm_result: Err(HypervisorError::InstructionLimitExceeded),
@@ -1158,7 +1140,6 @@ impl TestWasmExecutorCore {
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,
-            execution_complexity: message.execution_complexity,
         };
         let output = WasmExecutionOutput {
             wasm_result: Ok(None),

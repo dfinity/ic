@@ -39,8 +39,7 @@ use ic_ic00_types::{
     UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
-    SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
@@ -69,8 +68,7 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, CpuComplexity, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId,
-    Time,
+    CanisterId, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -212,9 +210,6 @@ pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     pub instructions: RoundInstructions,
 
-    /// Keeps track of remaining execution complexities.
-    pub execution_complexity: ExecutionComplexity,
-
     /// Keeps track of the available storage memory. It decreases if
     /// - Wasm execution grows the Wasm/stable memory.
     /// - Wasm execution pushes a new request to the output queue.
@@ -229,7 +224,6 @@ impl RoundLimits {
     /// Returns true if any of the round limits is reached.
     pub fn reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
-            || self.execution_complexity.cpu <= CpuComplexity::from(0)
     }
 }
 
@@ -1816,7 +1810,6 @@ impl ExecutionEnvironment {
         );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_query),
-            execution_complexity: ExecutionComplexity::with_cpu(max_instructions_per_query),
             subnet_available_memory,
             // Ignore compute allocation
             compute_allocation_used: 0,

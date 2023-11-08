@@ -13,9 +13,7 @@ use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
-use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionRoundType, RegistryExecutionSettings,
-};
+use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, Scheduler};
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -768,7 +766,6 @@ impl SchedulerImpl {
         // Distribute subnet available memory equally between the threads.
         let round_limits_per_thread = RoundLimits {
             instructions: round_limits.instructions,
-            execution_complexity: round_limits.execution_complexity.clone(),
             subnet_available_memory: (round_limits.subnet_available_memory
                 / self.config.scheduler_cores as i64),
             compute_allocation_used: round_limits.compute_allocation_used,
@@ -791,7 +788,6 @@ impl SchedulerImpl {
                 let deterministic_time_slicing = self.deterministic_time_slicing;
                 let round_limits = RoundLimits {
                     instructions: round_limits.instructions,
-                    execution_complexity: round_limits.execution_complexity.clone(),
                     subnet_available_memory: round_limits_per_thread.subnet_available_memory,
                     compute_allocation_used: round_limits.compute_allocation_used,
                 };
@@ -821,7 +817,6 @@ impl SchedulerImpl {
         let mut ingress_results = Vec::new();
         let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
-        let mut max_execution_complexity_per_thread = ExecutionComplexity::default();
         let mut heap_delta = NumBytes::from(0);
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
@@ -832,11 +827,6 @@ impl SchedulerImpl {
             total_instructions_executed += instructions_executed;
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
-
-            let execution_complexity = &round_limits_per_thread.execution_complexity
-                - &result.round_limits.execution_complexity;
-            max_execution_complexity_per_thread =
-                max_execution_complexity_per_thread.max(execution_complexity);
 
             self.metrics.compute_utilization_per_core.observe(
                 instructions_executed.get() as f64
@@ -856,8 +846,6 @@ impl SchedulerImpl {
         // Since there are multiple threads, we update the global limit using
         // the thread that executed the most instructions.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
-        round_limits.execution_complexity =
-            &round_limits.execution_complexity - &max_execution_complexity_per_thread;
 
         self.metrics
             .instructions_consumed_per_round
@@ -1459,9 +1447,6 @@ impl Scheduler for SchedulerImpl {
                 instructions: as_round_instructions(
                     self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
                 ),
-                execution_complexity: ExecutionComplexity::with_cpu(
-                    self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
-                ),
                 subnet_available_memory: self.exec_env.subnet_available_memory(&state),
                 compute_allocation_used: state.total_compute_allocation(),
             }
@@ -1526,7 +1511,6 @@ impl Scheduler for SchedulerImpl {
             // messages that do not consume instructions. To allow that, we set
             // the number available instructions to 1 if it is not positive.
             round_limits.instructions = round_limits.instructions.max(RoundInstructions::from(1));
-            round_limits.execution_complexity.cpu = round_limits.instructions.get().into();
 
             state = self.drain_subnet_queues(
                 state,
@@ -1559,7 +1543,6 @@ impl Scheduler for SchedulerImpl {
                 as_round_instructions(self.config.max_instructions_per_round)
                     - as_round_instructions(max_instructions_per_slice)
                     + RoundInstructions::from(1);
-            round_limits.execution_complexity.cpu = round_limits.instructions.get().into();
         }
 
         // Scheduling.

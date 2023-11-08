@@ -16,7 +16,7 @@ use ic_types::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, HttpQueryResponse,
         MessageId, SignedIngressContent, UserQuery,
     },
-    CpuComplexity, Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -82,73 +82,6 @@ pub enum PerformanceCounterType {
     // The number of WebAssembly instructions the canister has executed since
     // the creation of the current call context.
     CallContextInstructions(i64),
-}
-
-/// Tracks the execution complexity.
-///
-/// Each execution has an associated complexity, i.e. how much CPU, memory,
-/// disk or network bandwidth it takes.
-///
-/// For now, the complexity counters do not translate into Cycles, but they are rather
-/// used to prevent too complex messages to slow down the whole subnet.
-///
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct ExecutionComplexity {
-    /// Accumulated CPU complexity, in instructions.
-    pub cpu: CpuComplexity,
-}
-
-impl ExecutionComplexity {
-    /// Execution complexity with maximum values.
-    pub const MAX: Self = Self {
-        cpu: CpuComplexity::new(i64::MAX),
-    };
-
-    /// Creates execution complexity with a specified CPU complexity.
-    pub fn with_cpu(cpu: NumInstructions) -> Self {
-        Self {
-            cpu: (cpu.get() as i64).into(),
-        }
-    }
-
-    /// Returns true if the CPU complexity reached the specified
-    /// instructions limit.
-    pub fn cpu_reached(&self, limit: NumInstructions) -> bool {
-        self.cpu.get() >= limit.get() as i64
-    }
-
-    /// Returns the maximum of each complexity.
-    pub fn max(&self, rhs: Self) -> Self {
-        Self {
-            cpu: self.cpu.max(rhs.cpu),
-        }
-    }
-}
-
-impl ops::Add for &ExecutionComplexity {
-    type Output = ExecutionComplexity;
-
-    fn add(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
-        ExecutionComplexity {
-            cpu: self.cpu + rhs.cpu,
-        }
-    }
-}
-
-impl ops::Sub for &ExecutionComplexity {
-    type Output = ExecutionComplexity;
-
-    fn sub(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
-        ExecutionComplexity {
-            cpu: self.cpu - rhs.cpu,
-        }
-    }
-}
-
-impl fmt::Display for ExecutionComplexity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{ cpu = {} }}", self.cpu,)
-    }
 }
 
 /// Tracks the available memory on a subnet. The main idea is to separately track
@@ -428,11 +361,7 @@ pub trait OutOfInstructionsHandler {
     // If it is impossible to recover from the out-of-instructions error then
     // the function returns `Err(HypervisorError::InstructionLimitExceeded)`.
     // Otherwise, the function returns a new positive instruction counter.
-    fn out_of_instructions(
-        &self,
-        instruction_counter: i64,
-        execution_complexity: ExecutionComplexity,
-    ) -> HypervisorResult<i64>;
+    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -470,12 +399,6 @@ pub enum StableGrowOutcome {
 
 /// A trait for providing all necessary imports to a Wasm module.
 pub trait SystemApi {
-    /// Stores the complexity accumulated during the message execution.
-    fn set_execution_complexity(&mut self, complexity: ExecutionComplexity);
-
-    /// Returns the accumulated execution complexity.
-    fn execution_complexity(&self) -> &ExecutionComplexity;
-
     /// Stores the execution error, so that the user can evaluate it later.
     fn set_execution_error(&mut self, error: HypervisorError);
 

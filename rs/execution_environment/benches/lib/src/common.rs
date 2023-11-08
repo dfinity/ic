@@ -14,7 +14,7 @@ use ic_execution_environment::{
     IngressHistoryWriterImpl, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -88,7 +88,6 @@ where
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
         compute_allocation_used: 0,
     };

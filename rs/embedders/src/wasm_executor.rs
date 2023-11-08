@@ -19,8 +19,8 @@ use crate::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, HypervisorError, HypervisorResult, InstanceStats,
-    OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
+    SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -105,8 +105,6 @@ impl WasmExecutorMetrics {
 pub struct SliceExecutionOutput {
     /// The number of instructions executed by the slice.
     pub executed_instructions: NumInstructions,
-    /// The complexity observed in the slice.
-    pub execution_complexity: ExecutionComplexity,
 }
 
 /// Represents a paused WebAssembly execution that can be resumed or aborted.
@@ -448,7 +446,6 @@ pub fn wasm_execution_error(
     WasmExecutionResult::Finished(
         SliceExecutionOutput {
             executed_instructions: NumInstructions::from(0),
-            execution_complexity: ExecutionComplexity::default(),
         },
         WasmExecutionOutput {
             wasm_result: Err(err),
@@ -612,7 +609,6 @@ pub fn process(
             return (
                 SliceExecutionOutput {
                     executed_instructions: NumInstructions::from(0),
-                    execution_complexity: ExecutionComplexity::default(),
                 },
                 WasmExecutionOutput {
                     wasm_result: Err(err),
@@ -668,7 +664,6 @@ pub fn process(
 
     let mut allocated_bytes = NumBytes::from(0);
     let mut allocated_message_bytes = NumBytes::from(0);
-    let mut execution_complexity = ExecutionComplexity::default();
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -706,7 +701,6 @@ pub fn process(
                     let sys_api = instance.store_data().system_api().unwrap();
                     allocated_bytes = sys_api.get_allocated_bytes();
                     allocated_message_bytes = sys_api.get_allocated_message_bytes();
-                    execution_complexity = sys_api.execution_complexity().clone();
 
                     Some(WasmStateChanges::new(
                         wasm_memory_delta,
@@ -723,7 +717,6 @@ pub fn process(
     (
         SliceExecutionOutput {
             executed_instructions: slice_instructions_executed,
-            execution_complexity,
         },
         WasmExecutionOutput {
             wasm_result,
