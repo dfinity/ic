@@ -35,7 +35,10 @@ fn should_display_metadata() {
         .has_contract_address("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34")
         .has_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
         .has_tecdsa_key_name("key_1")
-        .has_next_transaction_nonce("42");
+        .has_next_transaction_nonce("42")
+        .has_eth_balance("0")
+        .has_total_effective_tx_fees("0")
+        .has_total_unspent_tx_fees("0");
 }
 
 #[test]
@@ -82,6 +85,9 @@ fn should_display_events_to_mint_sorted_by_decreasing_block_number() {
     };
 
     DashboardAssert::assert_that(dashboard)
+        .has_eth_balance("20_000_000_000_000_000")
+        .has_total_effective_tx_fees("0")
+        .has_total_unspent_tx_fees("0")
         .has_events_to_mint(
             1,
             &vec![
@@ -204,6 +210,9 @@ fn should_display_rejected_deposits() {
     };
 
     DashboardAssert::assert_that(dashboard)
+        .has_eth_balance("0")
+        .has_total_effective_tx_fees("0")
+        .has_total_unspent_tx_fees("0")
         .has_rejected_deposits(
             1,
             &vec![
@@ -315,8 +324,8 @@ fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() 
             &vec![
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_099_999_999_979_000",
-                "Sent(0xbc13db18c10a03d92e187580a6c93478f22c76cf79b35fca492f9720ab7710ec)",
+                "1_058_000_000_000_000",
+                "Sent(0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e)",
             ],
         )
         .has_pending_transactions(
@@ -324,7 +333,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() 
             &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_099_999_999_979_000",
+                "1_058_000_000_000_000",
                 "Created",
             ],
         );
@@ -337,6 +346,15 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
 
     let dashboard = {
         let mut state = initial_state();
+        let deposit = received_eth_event();
+        apply_state_transition(&mut state, &EventType::AcceptedDeposit(deposit.clone()));
+        apply_state_transition(
+            &mut state,
+            &EventType::MintedCkEth {
+                event_source: deposit.source(),
+                mint_block_index: LedgerMintIndex::new(42),
+            },
+        );
         for (req, tx, signed_tx, receipt) in vec![
             withdrawal_flow(
                 LedgerBurnIndex::new(15),
@@ -378,15 +396,18 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
     };
 
     DashboardAssert::assert_that(dashboard)
+        .has_eth_balance("8_900_000_000_000_000")
+        .has_total_effective_tx_fees("42_000_000_000_000")
+        .has_total_unspent_tx_fees("21_000_000_000_000")
         .has_finalized_transactions(
             1,
             &vec![
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_099_999_999_979_000",
-                "21_000",
+                "1_058_000_000_000_000",
+                "21_000_000_000_000",
                 "4190269",
-                "0xbc13db18c10a03d92e187580a6c93478f22c76cf79b35fca492f9720ab7710ec",
+                "0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e",
                 "Failure",
             ],
         )
@@ -395,10 +416,10 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
             &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_099_999_999_979_000",
-                "21_000",
+                "1_058_000_000_000_000",
+                "21_000_000_000_000",
                 "4190269",
-                "0x0a691dc3335c49c443a2e503f4ae903855873f279a0d14357ba3bf2c3e4d15b7",
+                "0xdea6b45f0978fea7f38fe6957db7ee11dd0e351a6f24fe54598d8aec9c8a1527",
                 "Success",
             ],
         );
@@ -437,6 +458,15 @@ fn should_display_reimbursed_requests() {
 
     let dashboard = {
         let mut state = initial_state();
+        let deposit = received_eth_event();
+        apply_state_transition(&mut state, &EventType::AcceptedDeposit(deposit.clone()));
+        apply_state_transition(
+            &mut state,
+            &EventType::MintedCkEth {
+                event_source: deposit.source(),
+                mint_block_index: LedgerMintIndex::new(42),
+            },
+        );
 
         for (req, tx, signed_tx, receipt) in vec![
             withdrawal_flow(
@@ -499,10 +529,10 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "17",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_099_999_999_979_000",
-                "21_000",
+                "1_058_000_000_000_000",
+                "21_000_000_000_000",
                 "4190269",
-                "0x08f2a390f1872d7bc71881f36d847066f794bedb4938f5802d8ec13669bb0740",
+                "0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762",
                 "Failure",
             ],
         )
@@ -511,10 +541,10 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_099_999_999_979_000",
-                "21_000",
+                "1_058_000_000_000_000",
+                "21_000_000_000_000",
                 "4190269",
-                "0xbc13db18c10a03d92e187580a6c93478f22c76cf79b35fca492f9720ab7710ec",
+                "0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e",
                 "Failure",
             ],
         )
@@ -523,15 +553,15 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_099_999_999_979_000",
-                "21_000",
+                "1_058_000_000_000_000",
+                "21_000_000_000_000",
                 "4190269",
-                "0x0a691dc3335c49c443a2e503f4ae903855873f279a0d14357ba3bf2c3e4d15b7",
+                "0xdea6b45f0978fea7f38fe6957db7ee11dd0e351a6f24fe54598d8aec9c8a1527",
                 "Success",
             ],
         )
-        .has_reimbursed_transactions(1, &vec!["17", "123", "1_099_999_999_979_000"])
-        .has_reimbursed_transactions(2, &vec!["16", "123", "1_099_999_999_979_000"]);
+        .has_reimbursed_transactions(1, &vec!["17", "123", "1_079_000_000_000_000"])
+        .has_reimbursed_transactions(2, &vec!["16", "123", "1_079_000_000_000_000"]);
 }
 
 fn initial_dashboard() -> DashboardTemplate {
@@ -598,8 +628,8 @@ fn withdrawal_flow(
 ) {
     let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
     let fee = TransactionPrice {
-        max_priority_fee_per_gas: WeiPerGas::ONE,
-        max_fee_per_gas: WeiPerGas::ONE,
+        max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+        max_fee_per_gas: WeiPerGas::from(2_000_000_000_u64),
         gas_limit: GasAmount::from(21_000_u32),
     };
     let max_fee = fee.max_transaction_fee();
@@ -628,7 +658,11 @@ fn withdrawal_flow(
             .parse()
             .unwrap(),
         block_number: BlockNumber::new(4190269),
-        effective_gas_price: signed_tx.transaction().max_fee_per_gas,
+        effective_gas_price: signed_tx
+            .transaction()
+            .max_fee_per_gas
+            .checked_div_ceil(2_u8)
+            .unwrap(),
         gas_used: signed_tx.transaction().gas_limit,
         status: tx_status,
         transaction_hash: signed_tx.hash(),
@@ -746,6 +780,26 @@ mod assertions {
                 "#next-transaction-nonce > td",
                 expected_value,
                 "wrong next transaction nonce",
+            )
+        }
+
+        pub fn has_eth_balance(&self, expected_value: &str) -> &Self {
+            self.has_string_value("#eth-balance > td", expected_value, "wrong ETH balance")
+        }
+
+        pub fn has_total_effective_tx_fees(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#total-effective-tx-fees > td",
+                expected_value,
+                "wrong total effective transaction fees",
+            )
+        }
+
+        pub fn has_total_unspent_tx_fees(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#total-unspent-tx-fees > td",
+                expected_value,
+                "wrong total unspent transaction fees",
             )
         }
 

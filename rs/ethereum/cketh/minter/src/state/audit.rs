@@ -17,7 +17,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 .expect("applying upgrade event should succeed");
         }
         EventType::AcceptedDeposit(eth_event) => {
-            state.record_event_to_mint(eth_event.clone());
+            state.record_event_to_mint(eth_event);
         }
         EventType::InvalidDeposit {
             event_source,
@@ -67,9 +67,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             withdrawal_id,
             transaction_receipt,
         } => {
-            state
-                .eth_transactions
-                .record_finalized_transaction(*withdrawal_id, transaction_receipt.clone());
+            state.record_finalized_transaction(withdrawal_id, transaction_receipt);
         }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
             withdrawal_id,

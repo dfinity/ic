@@ -203,11 +203,16 @@ impl FinalizedEip1559Transaction {
         &self.receipt.transaction_hash
     }
 
+    pub fn transaction(&self) -> &Eip1559TransactionRequest {
+        self.transaction.transaction()
+    }
+
+    pub fn transaction_price(&self) -> TransactionPrice {
+        self.transaction.transaction().transaction_price()
+    }
+
     pub fn effective_transaction_fee(&self) -> Wei {
-        self.receipt
-            .effective_gas_price
-            .transaction_cost(self.receipt.gas_used)
-            .expect("ERROR: overflow during transaction fee calculation")
+        self.receipt.effective_transaction_fee()
     }
 
     pub fn transaction_status(&self) -> &TransactionStatus {
