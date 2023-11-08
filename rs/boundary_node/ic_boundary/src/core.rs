@@ -338,7 +338,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         });
 
     let metrics_runner = WithThrottle(
-        MetricsRunner::new(metrics_cache, registry.clone(), cache),
+        MetricsRunner::new(
+            metrics_cache,
+            registry.clone(),
+            cache,
+            Arc::clone(&registry_snapshot),
+        ),
         ThrottleParams::new(10 * SECOND),
     );
 
