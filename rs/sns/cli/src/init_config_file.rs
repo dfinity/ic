@@ -1,4 +1,4 @@
-use crate::unit_helpers;
+use crate::{generate_sns_init_payload, unit_helpers};
 use clap::Parser;
 use ic_nervous_system_proto::pb::v1::Countries;
 use ic_sns_governance::{
@@ -373,6 +373,7 @@ impl SnsCliInitConfig {
 
     /// A SnsCliInitConfig is valid if it can convert to an SnsInitPayload and have the generated
     /// struct pass its validation.
+    #[cfg(test)]
     fn validate(&self) -> Result<(), String> {
         let sns_init_payload = SnsInitPayload::try_from(self.clone())?;
         sns_init_payload.validate_legacy_init()?;
@@ -1010,27 +1011,9 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 }
 
 fn validate(init_config_file: PathBuf) {
-    let file = File::open(&init_config_file).unwrap_or_else(|_| {
-        eprintln!(
-            "Couldn't open {} for validation",
-            init_config_file.to_str().unwrap()
-        );
+    if let Err(err) = generate_sns_init_payload(&init_config_file) {
+        eprintln!("{}", err);
         std::process::exit(1);
-    });
-    let sns_cli_init_config: SnsCliInitConfig = serde_yaml::from_reader(file).unwrap_or_else(|e| {
-        eprintln!(
-            "Couldn't parse {} for validation: {}",
-            init_config_file.to_str().unwrap(),
-            e
-        );
-        std::process::exit(1);
-    });
-    match sns_cli_init_config.validate() {
-        Ok(_) => println!("No errors found {}", init_config_file.to_str().unwrap()),
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
     }
 }
 
