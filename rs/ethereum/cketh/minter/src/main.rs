@@ -472,6 +472,22 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .value(&[("status", "accepted")], s.minted_events.len() as f64)?
                 .value(&[("status", "rejected")], s.invalid_events.len() as f64)?;
 
+                w.encode_gauge(
+                    "cketh_minter_eth_balance",
+                    s.eth_balance.eth_balance().as_f64(),
+                    "Known amount of ETH on the minter's address",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_total_effective_tx_fees",
+                    s.eth_balance.total_effective_tx_fees().as_f64(),
+                    "Total amount of fees across all finalized transactions ckETH -> ETH",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_total_unspent_tx_fees",
+                    s.eth_balance.total_unspent_tx_fees().as_f64(),
+                    "Total amount of unspent fees across all finalized transaction ckETH -> ETH",
+                )?;
+
                 Ok(())
             })
         }

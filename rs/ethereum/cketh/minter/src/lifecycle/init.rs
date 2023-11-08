@@ -76,6 +76,7 @@ impl TryFrom<InitArg> for State {
             minted_events: Default::default(),
             ecdsa_public_key: None,
             invalid_events: Default::default(),
+            eth_balance: Default::default(),
             active_tasks: Default::default(),
             http_request_counter: 0,
         };

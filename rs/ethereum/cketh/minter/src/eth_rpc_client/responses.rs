@@ -1,5 +1,5 @@
 use crate::eth_rpc::{Hash, HttpResponsePayload, ResponseTransform};
-use crate::numeric::{BlockNumber, GasAmount, WeiPerGas};
+use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -30,6 +30,14 @@ pub struct TransactionReceipt {
     /// The hash of the transaction
     #[n(5)]
     pub transaction_hash: Hash,
+}
+
+impl TransactionReceipt {
+    pub fn effective_transaction_fee(&self) -> Wei {
+        self.effective_gas_price
+            .transaction_cost(self.gas_used)
+            .expect("ERROR: overflow during transaction fee calculation")
+    }
 }
 
 impl HttpResponsePayload for TransactionReceipt {
