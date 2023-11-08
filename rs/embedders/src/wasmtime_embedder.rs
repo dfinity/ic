@@ -13,8 +13,8 @@ use std::{
 
 use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, OptLevel,
-    Store, Val, ValType,
+    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store, Val,
+    ValType,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
@@ -31,7 +31,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions, NumPages, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, NumInstructions, NumPages,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
@@ -41,7 +41,9 @@ use crate::wasm_utils::instrumentation::{
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     INSTRUCTIONS_COUNTER_GLOBAL_NAME,
 };
-use crate::{serialized_module::SerializedModuleBytes, wasm_utils::validation::ensure_determinism};
+use crate::{
+    serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
+};
 
 use super::InstanceRunResult;
 
@@ -161,15 +163,6 @@ struct WasmMemoryInfo {
     dirty_page_tracking: DirtyPageTracking,
 }
 
-/// Explicitly disable Wasm features which aren't handled in validation and
-/// instrumentation.
-fn disable_unused_features(config: &mut wasmtime::Config) {
-    config.wasm_function_references(false);
-    config.wasm_relaxed_simd(false);
-    // The signal handler uses Posix signals, not Mach ports on MacOS.
-    config.macos_use_mach_ports(false);
-}
-
 pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
     config: EmbeddersConfig,
@@ -193,11 +186,12 @@ impl WasmtimeEmbedder {
     /// contains all the wasmtime configuration used to actually run the
     /// canisters __except__ the `host_memory`.
     #[doc(hidden)]
-    pub fn initial_wasmtime_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
-        let mut config = wasmtime::Config::default();
-        config.cranelift_opt_level(OptLevel::None);
-        ensure_determinism(&mut config);
-        disable_unused_features(&mut config);
+    pub fn wasmtime_execution_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
+        let mut config = wasmtime_validation_config(embedder_config);
+
+        // Wasmtime features that differ between Wasm validation and execution.
+        // Currently these are multi-memories and the 64-bit memory needed for
+        // the Wasm-native stable memory implementation.
         if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled
             || embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled
         {
@@ -207,27 +201,10 @@ impl WasmtimeEmbedder {
             config.wasm_memory64(true);
         }
         config
-            // The maximum size in bytes where a linear memory is considered
-            // static. Setting this to maximum Wasm memory size will guarantee
-            // the memory is always static.
-            //
-            // If there is a change in the size of the largest memories we
-            // expect to see then the changes will likely need to be coordinated
-            // with a change in how we create the memories in the implementation
-            // of `wasmtime::MemoryCreator`.
-            .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
-            .max_wasm_stack(embedder_config.max_wasm_stack_size)
-            // Disabling the address map saves about 20% of compile code size.
-            .generate_address_map(false)
-            // Disable Wasm backtraces since we don't use them and don't have
-            // address maps.
-            .wasm_backtrace(false);
-
-        config
     }
 
     fn create_engine(&self) -> HypervisorResult<Engine> {
-        let mut config = Self::initial_wasmtime_config(&self.config);
+        let mut config = Self::wasmtime_execution_config(&self.config);
         let mem_creator = Arc::new(WasmtimeMemoryCreator::new(Arc::clone(
             &self.created_memories,
         )));

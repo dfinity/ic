@@ -36,7 +36,7 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 #[test]
 fn test_wasmtime_system_api() {
-    let engine = Engine::new(&WasmtimeEmbedder::initial_wasmtime_config(
+    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(
         &EmbeddersConfig::default(),
     ))
     .expect("Failed to initialize Wasmtime engine");

@@ -98,7 +98,7 @@ pub type ModuleRegistry = HashMap<String, (Instance, HashMap<String, usize>)>;
 #[allow(clippy::new_without_default)]
 impl WasmtimeSimple {
     pub fn new() -> Self {
-        let engine = Engine::new(&WasmtimeEmbedder::initial_wasmtime_config(
+        let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(
             &EmbeddersConfig::default(),
         ))
         .expect("Failed to initialize Wasmtime engine");
