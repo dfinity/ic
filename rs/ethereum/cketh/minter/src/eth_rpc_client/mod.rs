@@ -1,7 +1,6 @@
-use crate::eth_rpc::{self, JsonRpcError, RpcError};
 use crate::eth_rpc::{
     self, are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam,
-    Hash, HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcError, JsonRpcResult, LogEntry,
+    Hash, HttpOutcallError, HttpResponsePayload, JsonRpcError, JsonRpcResult, LogEntry,
     ResponseSizeEstimate, RpcError, SendRawTransactionResult,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};

@@ -1,6 +1,6 @@
-use crate::eth_rpc::JsonRpcResult;
 use crate::eth_rpc::{
-    BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity, SendRawTransactionResult,
+    BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, HttpOutcallError, Quantity, RpcError,
+    SendRawTransactionResult,
 };
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
@@ -309,15 +309,15 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     for (signed_tx, result) in zip(transactions_to_send, results) {
         log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
         match result {
-            Ok(JsonRpcResult::Result(tx_result)) if tx_result == SendRawTransactionResult::Ok || tx_result == SendRawTransactionResult::NonceTooLow => {
+            Ok(SendRawTransactionResult::Ok | SendRawTransactionResult::NonceTooLow) => {
                 // In case of resubmission we may hit the case of SendRawTransactionResult::NonceTooLow
                 // if the stuck transaction was mined in the meantime.
                 // It will be cleaned-up once the transaction is finalized.
             }
-            Ok(JsonRpcResult::Result(tx_result)) => log!(INFO,
+            Ok(tx_result) => log!(INFO,
                 "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
             ),
-            Ok(JsonRpcResult::Error { code, message }) => log!(INFO,
+            Err(RpcError::HttpOutcallError(HttpOutcallError::IcError { code, message })) => log!(INFO,
                 "Failed to send transaction {signed_tx:?}: {message} (error code = {code}). Will retry later.",
             ),
             Err(e) => {

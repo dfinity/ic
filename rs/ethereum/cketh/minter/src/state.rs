@@ -246,7 +246,7 @@ impl State {
         }
     }
 
-    pub const fn ethereum_network(&self) -> EthereumNetwork {
+    pub const fn ethereum_network(&self) -> EvmNetwork {
         self.ethereum_network
     }
 

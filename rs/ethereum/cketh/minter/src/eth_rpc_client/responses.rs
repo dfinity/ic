@@ -1,5 +1,6 @@
 use crate::eth_rpc::{Hash, HttpResponsePayload, ResponseTransform};
 use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
+use candid::CandidType;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
