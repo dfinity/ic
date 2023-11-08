@@ -38,7 +38,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         mpsc::{sync_channel, Receiver, SyncSender},
-        RwLock,
+        Arc, RwLock,
     },
     thread::{self, JoinHandle},
     time::Duration,
@@ -241,6 +241,7 @@ pub(super) struct Backup {
     purge_interval: Duration,
     metrics: Metrics,
     log: ReplicaLogger,
+    time_source: Arc<dyn TimeSource>,
 }
 
 impl Backup {
@@ -253,6 +254,7 @@ impl Backup {
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
         age: Box<dyn BackupAge>,
+        time_source: Arc<dyn TimeSource>,
     ) -> Self {
         let metrics = Metrics::new(&metrics_registry);
         let (backup_queue, backup_thread) =
@@ -274,6 +276,7 @@ impl Backup {
             purge_interval,
             metrics,
             log,
+            time_source,
         };
 
         // Due to the fact that the backup is synced to the disk completely
@@ -299,6 +302,7 @@ impl Backup {
         purge_interval: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
+        time_source: Arc<dyn TimeSource>,
     ) -> Self {
         Self::new_with_age_func(
             pool,
@@ -309,12 +313,13 @@ impl Backup {
             metrics_registry,
             log,
             Box::new(FileSystemAge {}),
+            time_source,
         )
     }
 
     // Filters the new artifacts and asynchronously writes the relevant artifacts
     // to the disk.
-    pub fn store(&self, time_source: &dyn TimeSource, artifacts: Vec<ConsensusMessage>) {
+    pub fn store(&self, artifacts: Vec<ConsensusMessage>) {
         // If the queue is full, we will block here.
         if self
             .backup_queue
@@ -333,7 +338,8 @@ impl Backup {
         // purging has not finished yet, which is not expected with sufficiently
         // large PURGE_INTERVAL.
         let time_of_last_purge = *self.time_of_last_purge.read().unwrap();
-        if time_source.get_relative_time() >= time_of_last_purge + self.purge_interval {
+        let time_now = self.time_source.get_relative_time();
+        if time_now >= time_of_last_purge + self.purge_interval {
             if self.purging_queue.send(PurgingRequest::Purge).is_err() {
                 error!(
                     self.log,
@@ -343,7 +349,7 @@ impl Backup {
             }
 
             // Set the time to current
-            *self.time_of_last_purge.write().unwrap() = time_source.get_relative_time();
+            *self.time_of_last_purge.write().unwrap() = time_now;
         }
     }
 

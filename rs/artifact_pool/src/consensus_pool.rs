@@ -15,7 +15,7 @@ use ic_interfaces::{
         ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    time_source::TimeSource,
+    time_source::{RealClock, TimeSource},
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::linear_buckets;
@@ -388,6 +388,7 @@ impl ConsensusPoolImpl {
                 Duration::from_secs(config.purging_interval_secs),
                 registry,
                 log,
+                Arc::new(RealClock),
             )
         });
 
@@ -510,7 +511,6 @@ impl ConsensusPoolImpl {
         &self,
         backup: &Backup,
         latest_finalization_height: Height,
-        time_source: &dyn TimeSource,
         mut artifacts_for_backup: Vec<ConsensusMessage>,
     ) {
         // Find the highest finalization among the new artifacts
@@ -561,7 +561,7 @@ impl ConsensusPoolImpl {
             }
         }
 
-        backup.store(time_source, artifacts_for_backup);
+        backup.store(artifacts_for_backup);
     }
 }
 
@@ -681,12 +681,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         let purged = self.apply_changes_validated(validated_ops);
 
         if let Some(backup) = &self.backup {
-            self.backup_artifacts(
-                backup,
-                latest_finalization_height,
-                time_source,
-                artifacts_for_backup,
-            );
+            self.backup_artifacts(backup, latest_finalization_height, artifacts_for_backup);
         }
 
         if !updates.is_empty() {
@@ -1540,6 +1535,7 @@ mod tests {
                 purging_interval,
                 MetricsRegistry::new(),
                 no_op_logger(),
+                time_source.clone(),
             ));
 
             // All tests in this group work on artifacts inside the same group, so we extend
@@ -1907,6 +1903,7 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
                 Box::new(FakeAge { map: map.clone() }),
+                time_source.clone(),
             ));
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
