@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::Error;
+use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::Body,
@@ -21,9 +22,10 @@ use http_body::Body as HttpBody;
 use ic_types::{messages::ReplicaHealthStatus, CanisterId};
 use jemalloc_ctl::{epoch, stats};
 use prometheus::{
-    register_histogram_vec_with_registry, register_int_counter_vec_with_registry,
-    register_int_gauge_vec_with_registry, register_int_gauge_with_registry, Encoder, HistogramOpts,
-    HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry, TextEncoder,
+    proto::MetricFamily, register_histogram_vec_with_registry,
+    register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
+    IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
@@ -33,7 +35,7 @@ use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
     routes::{ErrorCause, RequestContext},
-    snapshot::Node,
+    snapshot::{Node, RegistrySnapshot},
 };
 
 const KB: f64 = 1024.0;
@@ -47,11 +49,14 @@ pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] =
 // https://prometheus.io/docs/instrumenting/exposition_formats/#basic-info
 const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 
+const NODE_ID_LABEL: &str = "node_id";
+const SUBNET_ID_LABEL: &str = "subnet_id";
+
 const LABELS_HTTP: &[&str] = &[
     "request_type",
     "status_code",
-    "subnet_id",
-    "node_id",
+    SUBNET_ID_LABEL,
+    NODE_ID_LABEL,
     "error_cause",
     "cache_status",
     "cache_bypass",
@@ -70,6 +75,52 @@ impl MetricsCache {
     }
 }
 
+// Iterates over given metric families and removes metrics that have
+// node_id/subnet_id labels and where the corresponding nodes are
+// not present in the registry snapshot
+fn remove_stale_nodes(
+    snapshot: Arc<RegistrySnapshot>,
+    mut mfs: Vec<MetricFamily>,
+) -> Vec<MetricFamily> {
+    for mf in mfs.iter_mut() {
+        // Iterate over the metrics in the metric family
+        let metrics = mf
+            .take_metric()
+            .into_iter()
+            .filter(|v| {
+                // See if this metric has node_id/subnet_id labels
+                let node_id = v
+                    .get_label()
+                    .iter()
+                    .find(|&v| v.get_name() == NODE_ID_LABEL)
+                    .map(|x| x.get_value());
+
+                let subnet_id = v
+                    .get_label()
+                    .iter()
+                    .find(|&v| v.get_name() == SUBNET_ID_LABEL)
+                    .map(|x| x.get_value());
+
+                // Check if we got both node_id and subnet_id labels
+                match (node_id, subnet_id) {
+                    (Some(node_id), Some(subnet_id)) => snapshot
+                        .nodes
+                        .get(node_id) // Check if the node_id is in the snapshot
+                        .map(|x| x.subnet_id.to_string() == subnet_id) // Check if its subnet_id matches, otherwise the metrics needs to be removed
+                        .unwrap_or(false),
+
+                    // Otherwise just pass this metric through
+                    _ => true,
+                }
+            })
+            .collect();
+
+        mf.set_metric(metrics);
+    }
+
+    mfs
+}
+
 pub struct MetricsRunner {
     metrics_cache: Arc<RwLock<MetricsCache>>,
     registry: Registry,
@@ -81,6 +132,8 @@ pub struct MetricsRunner {
 
     mem_allocated: IntGauge,
     mem_resident: IntGauge,
+
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 // Snapshots & encodes the metrics for the handler to export
@@ -89,6 +142,7 @@ impl MetricsRunner {
         metrics_cache: Arc<RwLock<MetricsCache>>,
         registry: Registry,
         cache: Option<Arc<Cache>>,
+        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     ) -> Self {
         let cache_items = register_int_gauge_with_registry!(
             format!("cache_items"),
@@ -127,6 +181,7 @@ impl MetricsRunner {
             cache_size,
             mem_allocated,
             mem_resident,
+            published_registry_snapshot,
         }
     }
 }
@@ -155,7 +210,12 @@ impl Run for MetricsRunner {
         self.cache_size.set(cache_size as i64);
 
         // Get a snapshot of metrics
-        let metric_families = self.registry.gather();
+        let mut metric_families = self.registry.gather();
+
+        // If we have a published snapshot - use it to remove the metrics not present anymore
+        if let Some(snapshot) = self.published_registry_snapshot.load_full() {
+            metric_families = remove_stale_nodes(snapshot, metric_families);
+        }
 
         // Take a write lock, truncate the vector and encode the metrics into it
         let mut metrics_cache = self.metrics_cache.write().await;
@@ -392,7 +452,7 @@ impl MetricParamsCheck {
         );
         opts.buckets = HTTP_DURATION_BUCKETS.to_vec();
 
-        let labels = &["status", "node_id", "subnet_id", "addr"];
+        let labels = &["status", NODE_ID_LABEL, SUBNET_ID_LABEL, "addr"];
 
         Self {
             counter: register_int_counter_vec_with_registry!(
@@ -646,3 +706,6 @@ pub async fn metrics_handler(
         cache.read().await.buffer.clone(),
     )
 }
+
+#[cfg(test)]
+pub mod test;

@@ -289,7 +289,9 @@ impl Run for Runner {
             action = "snapshot",
             version_old = self.registry_version_published.map(|x| x.get()),
             version_new = version.get(),
-            "New registry snapshot published",
+            nodes = snapshot.nodes.len(),
+            subnets = snapshot.subnets.len(),
+            "New registry snapshot published"
         );
 
         self.registry_version_published = Some(version);

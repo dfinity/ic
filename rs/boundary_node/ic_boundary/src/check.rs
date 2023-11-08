@@ -419,4 +419,4 @@ impl<T: Check> Check for WithMetricsCheck<T> {
 }
 
 #[cfg(test)]
-mod test;
+pub mod test;
