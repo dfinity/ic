@@ -1004,7 +1004,15 @@ impl CyclesAccountManager {
     /// tests.
     #[doc(hidden)]
     pub fn convert_instructions_to_cycles(&self, num_instructions: NumInstructions) -> Cycles {
-        self.config.ten_update_instructions_execution_fee * (num_instructions.get() / 10)
+        let fee = self.config.ten_update_instructions_execution_fee;
+        match fee.checked_mul(num_instructions.get()) {
+            Some(value) => value / 10_u64,
+            // The multiplication should never overflow, as the maximum number of instructions
+            // is bounded by its type, i.e. `u64::MAX`, which is way lower than `u128::MAX``.
+            None => fee
+                .checked_mul(num_instructions.get() / 10)
+                .expect("Cycle amount should fit into u128"),
+        }
     }
 
     /// Returns the cost of executing a message with the given number of
@@ -1238,5 +1246,34 @@ mod tests {
 
         // Check that the balance is updated properly.
         assert_eq!(balance + amount_to_burn, initial_balance)
+    }
+
+    #[test]
+    fn test_convert_instructions_to_cycles() {
+        let subnet_size = 13;
+        let cycles_account_manager = create_cycles_account_manager(subnet_size);
+
+        // Everything up to `u128::MAX / 4` should be converted as normal:
+        // `(ten_update_instructions_execution_fee * num_instructions) / 10`
+
+        // `(4 * 0) / 10 == 0`
+        assert_eq!(
+            cycles_account_manager.convert_instructions_to_cycles(0.into()),
+            0_u64.into()
+        );
+
+        // `(4 * 9) / 10 == 3`
+        assert_eq!(
+            cycles_account_manager.convert_instructions_to_cycles(9.into()),
+            ((4 * 9_u64) / 10).into()
+        );
+
+        // As the maximum number of instructions is bounded by its type, i.e. `u64::MAX`,
+        // the normal conversion is applied for the whole instructions range.
+        // `convert_instructions_to_cycles(u64::MAX) == (4 * u64::MAX) / 10`
+        let u64_max_cycles = cycles_account_manager.convert_instructions_to_cycles(u64::MAX.into());
+        assert_eq!(u64_max_cycles, ((4 * u128::from(u64::MAX)) / 10).into());
+        // `convert_instructions_to_cycles(u64::MAX) != 4 * (u64::MAX / 10)`
+        assert_ne!(u64_max_cycles, (4 * (u128::from(u64::MAX) / 10)).into());
     }
 }
