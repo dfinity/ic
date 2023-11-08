@@ -109,7 +109,7 @@ dfx canister --network ic call ledger icrc2_approve "(record { spender = record 
 The specified amount for the withdrawal must not be greater than the approved amount.
 
 ```shell
-dfx canister --network ic call minter withdraw_eth '(SMALL_AMOUNT_WEI, "YOUR_ETH_ADDRESS")'
+dfx canister --network ic call minter withdraw_eth  "(record {amount = SMALL_AMOUNT_WEI; recipient = \"YOUR_ETH_ADDRESS\"})"
 ```
 
 Example: if you want to withdraw 0.15 ETH (150_000_000_000_000_000 Wei) to 0xAB586458E47f3e9D350e476fB7E294a57825A3f4:
