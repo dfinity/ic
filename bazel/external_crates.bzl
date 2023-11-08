@@ -173,7 +173,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^1.2.1",
             ),
             "bindgen": crate.spec(
-                version = "^0.59.0",
+                version = "^0.65.1",
                 default_features = False,
                 features = ["runtime"],
             ),
