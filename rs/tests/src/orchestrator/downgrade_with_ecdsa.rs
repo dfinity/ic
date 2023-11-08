@@ -153,6 +153,7 @@ fn downgrade(
         &subnet_node.get_public_url(),
         subnet_node.effective_canister_id(),
         msg,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,
@@ -182,6 +183,7 @@ fn downgrade(
         &faulty_node.get_public_url(),
         faulty_node.effective_canister_id(),
         msg_2,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,
