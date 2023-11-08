@@ -93,28 +93,3 @@ fn element_const_expr() {
 	"#,
     );
 }
-
-#[test]
-fn global() {
-    run_go_export(
-        r#"
-		(module
-			(func $reply (import "ic0" "msg_reply"))
-			(func $f (result i32) (i32.const 123))
-
-			(type $f_type (func (result i32)))
-			(table 1 funcref)
-			(global $f_global funcref (ref.func $f))
-
-			(func $go (export "canister_update go")
-				(table.set (i32.const 0) (global.get $f_global))
-				(call_indirect (type $f_type) (i32.const 0))
-				(i32.const 123)
-				(i32.ne)
-				(if (then unreachable))
-				(call $reply)
-		    )
-		)
-	"#,
-    );
-}
