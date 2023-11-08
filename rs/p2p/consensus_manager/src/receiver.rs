@@ -419,15 +419,13 @@ where
                             break;
                         }
 
-                        rpc_response = transport.rpc(&peer, request) => {
-                            if let Ok(response) = rpc_response {
-                                if let StatusCode::OK = response.status() {
-                                    if let Ok(message) =
-                                        bincode::deserialize::<Artifact::Message>(response.body())
-                                    {
-                                        result = DownloadResult::Completed(message, peer);
-                                        break;
-                                    }
+                        Ok(response) = transport.rpc(&peer, request) => {
+                            if let StatusCode::OK = response.status() {
+                                if let Ok(message) =
+                                    bincode::deserialize::<Artifact::Message>(response.body())
+                                {
+                                    result = DownloadResult::Completed(message, peer);
+                                    break;
                                 }
                             }
                             metrics.download_task_artifact_download_errors_total.inc();
