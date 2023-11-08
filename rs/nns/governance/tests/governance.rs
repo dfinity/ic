@@ -55,8 +55,7 @@ use ic_nns_governance::{
     pb::v1::{
         add_or_remove_node_provider::Change,
         governance::{
-            migration::MigrationStatus, GovernanceCachedMetrics, GovernanceCachedMetricsChange,
-            MigrationDesc, MigrationsDesc,
+            GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationDesc, MigrationsDesc,
         },
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
@@ -337,13 +336,7 @@ fn test_single_neuron_proposal_new() {
                             None,
                             Some(
                                 MigrationsDesc {
-                                    neuron_indexes_migration: Some(
-                                        MigrationDesc {
-                                            status: Some(MigrationStatus::Succeeded as i32),
-                                            failure_reason: None,
-                                            progress: None,
-                                        },
-                                    ),
+                                    neuron_indexes_migration: None,
                                     copy_inactive_neurons_to_stable_memory_migration: Some(
                                         MigrationDesc {
                                             status: Some(

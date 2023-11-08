@@ -833,8 +833,7 @@ mod tests {
             controller: Some(PrincipalId::new_user_test_id(1)),
             ..Default::default()
         };
-        let mut neuron_store = NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron});
-        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
+        let neuron_store = NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron});
         let mut validation = NeuronDataValidator::new();
 
         // Each index use 3 rounds and invalid neuron validator takes 2 rounds.
@@ -975,8 +974,7 @@ mod tests {
             },
             ..next_test_neuron()
         };
-        let mut neuron_store = NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron});
-        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
+        let neuron_store = NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron});
         let mut validator = NeuronDataValidator::new();
         let mut now = 1;
         while validator.maybe_validate(now, &neuron_store) {
@@ -991,9 +989,7 @@ mod tests {
         // Step 1: Cause as many issues as possible by having an inactive neuron (without adding it
         // to stable_neuron_store, and remove the only neuron from indexes).
         let neuron = next_test_neuron();
-        let mut neuron_store =
-            NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron.clone()});
-        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
+        let neuron_store = NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron.clone()});
         with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(&neuron)).unwrap();
 
         // Step 2: Validate and get validation summary.
@@ -1102,8 +1098,7 @@ mod tests {
                 (neuron.id.unwrap().id, neuron)
             })
             .collect();
-        let mut neuron_store = NeuronStore::new(neurons.clone());
-        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
+        let neuron_store = NeuronStore::new(neurons.clone());
         with_stable_neuron_indexes_mut(|indexes| {
             for neuron in neurons.values() {
                 indexes.remove_neuron(neuron).unwrap()
