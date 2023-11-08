@@ -7,9 +7,11 @@ use ic_protobuf::registry::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{NodeId, PrincipalId};
+use ic_types::PrincipalId;
+use indexmap::IndexMap;
 use serde::Serialize;
 use std::convert::{From, TryFrom, TryInto};
+use std::str::FromStr;
 
 /// All or part of the registry
 #[derive(Default, Serialize)]
@@ -40,11 +42,12 @@ pub(crate) enum RegistryValue {
     ProvisionalWhitelistRecord(ProvisionalWhitelistRecord),
 }
 
-/// User-friendly representation of a v1::SubnetRecord. Only difference is that
+/// User-friendly representation of a v1::SubnetRecord. For instance,
 /// the `membership` field is a `Vec<String>` to pretty-print the node IDs.
-#[derive(Default, Serialize)]
+#[derive(Default, Serialize, Clone)]
 pub(crate) struct SubnetRecord {
     pub membership: Vec<String>,
+    pub nodes: IndexMap<PrincipalId, NodeDetails>,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
     pub max_block_payload_size: u64,
@@ -65,6 +68,22 @@ pub(crate) struct SubnetRecord {
     pub ecdsa_config: Option<EcdsaConfig>,
 }
 
+impl SubnetRecord {
+    pub fn with_node_details(mut self, node_details: &IndexMap<PrincipalId, NodeDetails>) -> Self {
+        self.nodes = self
+            .membership
+            .iter()
+            .map(|n| {
+                let node_id = PrincipalId::from_str(n)
+                    .expect("could not create PrincipalId from membership entry");
+                let node_details = node_details.get(&node_id).unwrap().clone();
+                (node_id, node_details)
+            })
+            .collect();
+        self
+    }
+}
+
 impl From<&SubnetRecordProto> for SubnetRecord {
     /// Convert a v1::SubnetRecord to a SubnetRecord. Most data is passed
     /// through unchanged, except the `membership` list, which is converted
@@ -75,13 +94,12 @@ impl From<&SubnetRecordProto> for SubnetRecord {
                 .membership
                 .iter()
                 .map(|n| {
-                    NodeId::from(
-                        PrincipalId::try_from(&n[..])
-                            .expect("could not create PrincipalId from membership entry"),
-                    )
-                    .to_string()
+                    PrincipalId::try_from(&n[..])
+                        .expect("could not create PrincipalId from membership entry")
+                        .to_string()
                 })
                 .collect(),
+            nodes: IndexMap::default(),
             max_ingress_bytes_per_message: value.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: value.max_ingress_messages_per_block,
             max_block_payload_size: value.max_block_payload_size,
@@ -105,6 +123,15 @@ impl From<&SubnetRecordProto> for SubnetRecord {
                 .map(|c| c.clone().try_into().unwrap()),
         }
     }
+}
+
+/// Encapsulates a node/node operator id pair.
+#[derive(Serialize, Clone)]
+pub(crate) struct NodeDetails {
+    pub ipv6: std::net::Ipv6Addr,
+    pub node_operator_id: PrincipalId,
+    pub node_provider_id: PrincipalId,
+    pub dc_id: String,
 }
 
 /// User-friendly representation of a v1::ProvisionalWhitelist.

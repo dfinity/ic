@@ -201,6 +201,20 @@ pub fn make_node_operator_record_key(node_operator_principal_id: PrincipalId) ->
     )
 }
 
+/// Checks whether a given key is a Node Operator record key
+pub fn is_node_operator_record_key(key: &str) -> bool {
+    key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX)
+}
+
+/// Returns the node_operator_id associated with a given node operator record key
+pub fn get_node_operator_id_from_record_key(key: &str) -> Option<PrincipalId> {
+    if let Some(key) = key.strip_prefix(NODE_OPERATOR_RECORD_KEY_PREFIX) {
+        PrincipalId::from_str(key).ok()
+    } else {
+        None
+    }
+}
+
 /// Makes a key for a TLS certificate registry entry for a node.
 pub fn make_crypto_tls_cert_key(node_id: NodeId) -> String {
     format!("{}{}", CRYPTO_TLS_CERT_KEY_PREFIX, node_id.get())
@@ -227,11 +241,6 @@ pub fn make_node_record_key(node_id: NodeId) -> String {
     format!("{}{}", NODE_RECORD_KEY_PREFIX, node_id.get())
 }
 
-/// Makes a key for a DataCenterRecord registry entry.
-pub fn make_data_center_record_key(dc_id: &str) -> String {
-    format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id.to_lowercase())
-}
-
 /// Checks whether a given key is a node record key
 pub fn is_node_record_key(key: &str) -> bool {
     key.starts_with(NODE_RECORD_KEY_PREFIX)
@@ -245,6 +254,16 @@ pub fn get_node_record_node_id(key: &str) -> Option<PrincipalId> {
     } else {
         None
     }
+}
+
+/// Makes a key for a DataCenterRecord registry entry.
+pub fn make_data_center_record_key(dc_id: &str) -> String {
+    format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id.to_lowercase())
+}
+
+/// Checks whether a given key is a data center (DC) record key
+pub fn is_data_center_record_key(key: &str) -> bool {
+    key.starts_with(DATA_CENTER_KEY_PREFIX)
 }
 
 /// Returns the node_id associated with a given api_boundary_node_record key if

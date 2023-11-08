@@ -562,6 +562,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "idna": crate.spec(
                 version = "^0.3.0",
             ),
+            "indexmap": crate.spec(
+                version = "^2.1.0",
+            ),
             "indicatif": crate.spec(
                 package = "indicatif",
                 version = "^0.17.3",

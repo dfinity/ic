@@ -1,5 +1,5 @@
 {
-  "checksum": "61e80003a5b0c97e0d1d93f351e6800d8f5fd309671b441ef50021efc53f3deb",
+  "checksum": "2fff691a17186d9da9ae4619d2880ea9ac03353148217d42ce601070c349a219",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10013,7 +10013,7 @@
               "target": "gimli"
             },
             {
-              "id": "hashbrown 0.14.0",
+              "id": "hashbrown 0.14.2",
               "target": "hashbrown"
             },
             {
@@ -12011,7 +12011,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "hashbrown 0.14.0",
+              "id": "hashbrown 0.14.2",
               "target": "hashbrown"
             },
             {
@@ -13461,6 +13461,10 @@
             {
               "id": "idna 0.3.0",
               "target": "idna"
+            },
+            {
+              "id": "indexmap 2.1.0",
+              "target": "indexmap"
             },
             {
               "id": "indicatif 0.17.5",
@@ -19310,7 +19314,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             }
           ],
@@ -19747,13 +19751,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "hashbrown 0.14.0": {
+    "hashbrown 0.14.2": {
       "name": "hashbrown",
-      "version": "0.14.0",
+      "version": "0.14.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/hashbrown/0.14.0/download",
-          "sha256": "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
+          "url": "https://crates.io/api/v1/crates/hashbrown/0.14.2/download",
+          "sha256": "f93e7192158dbcda357bdec5fb5788eebf8bbac027f3f33e719d29135ae84156"
         }
       },
       "targets": [
@@ -19796,7 +19800,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.14.0"
+        "version": "0.14.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -19828,7 +19832,7 @@
         "deps": {
           "common": [
             {
-              "id": "hashbrown 0.14.0",
+              "id": "hashbrown 0.14.2",
               "target": "hashbrown"
             }
           ],
@@ -23802,13 +23806,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "indexmap 2.0.0": {
+    "indexmap 2.1.0": {
       "name": "indexmap",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/indexmap/2.0.0/download",
-          "sha256": "d5477fe2230a79769d8dc68e0eabf5437907c0457a5614a9e8dddb67f65eb65d"
+          "url": "https://crates.io/api/v1/crates/indexmap/2.1.0/download",
+          "sha256": "d530e1a18b1cb4c484e6e34556a0d948706958449fca0cab753d649f2bce3d1f"
         }
       },
       "targets": [
@@ -23842,7 +23846,7 @@
               "target": "equivalent"
             },
             {
-              "id": "hashbrown 0.14.0",
+              "id": "hashbrown 0.14.2",
               "target": "hashbrown"
             },
             {
@@ -23853,7 +23857,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.0"
+        "version": "2.1.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -32232,11 +32236,11 @@
               "target": "crc32fast"
             },
             {
-              "id": "hashbrown 0.14.0",
+              "id": "hashbrown 0.14.2",
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -51859,7 +51863,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56245,7 +56249,7 @@
               "target": "flagset"
             },
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56351,7 +56355,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56394,7 +56398,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56437,7 +56441,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56610,7 +56614,7 @@
               "target": "fxprof_processed_profile"
             },
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -56955,7 +56959,7 @@
               "target": "gimli"
             },
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -57268,7 +57272,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "indexmap 2.0.0",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
