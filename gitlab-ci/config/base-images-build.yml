@@ -39,7 +39,7 @@
 
 .build-base-image-job:
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
     - .rules-build-base-images
   needs: []
   artifacts:
