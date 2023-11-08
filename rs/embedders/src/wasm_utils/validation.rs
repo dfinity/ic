@@ -7,14 +7,14 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
-use ic_types::{NumBytes, NumInstructions};
+use ic_types::{NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
 use ic_wasm_transform::{Body, DataSegment, DataSegmentKind, Module};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::{
     cmp,
     collections::{BTreeMap, HashMap, HashSet},
 };
-use wasmtime::Config;
+use wasmtime::{Config, OptLevel};
 
 use crate::wasm_utils::instrumentation::{
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
@@ -1315,16 +1315,53 @@ fn validate_code_section(
 }
 
 /// Sets Wasmtime flags to ensure deterministic execution.
-pub fn ensure_determinism(config: &mut Config) {
+fn ensure_determinism(config: &mut Config) {
     config
         .wasm_threads(false)
         .wasm_simd(false)
         .cranelift_nan_canonicalization(true);
 }
 
-fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
+/// Explicitly disable Wasm features which aren't handled in validation and
+/// instrumentation.
+fn disable_unused_features(config: &mut wasmtime::Config) {
+    config.wasm_function_references(false);
+    config.wasm_relaxed_simd(false);
+    // The signal handler uses Posix signals, not Mach ports on MacOS.
+    config.macos_use_mach_ports(false);
+    // Disabling the address map saves about 20% of compile code size.
+    config.generate_address_map(false);
+    // Disable Wasm backtraces since we don't use them and don't have
+    // address maps.
+    config.wasm_backtrace(false);
+}
+
+/// Returns a Wasmtime config that is used for Wasm validation.
+pub fn wasmtime_validation_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
     let mut config = wasmtime::Config::default();
+    config.cranelift_opt_level(OptLevel::None);
     ensure_determinism(&mut config);
+    disable_unused_features(&mut config);
+    config
+        // The maximum size in bytes where a linear memory is considered
+        // static. Setting this to maximum Wasm memory size will guarantee
+        // the memory is always static.
+        //
+        // If there is a change in the size of the largest memories we
+        // expect to see then the changes will likely need to be coordinated
+        // with a change in how we create the memories in the implementation
+        // of `wasmtime::MemoryCreator`.
+        .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
+        .max_wasm_stack(embedder_config.max_wasm_stack_size);
+    config
+}
+
+fn can_compile(
+    wasm: &BinaryEncodedWasm,
+    embedder_config: &EmbeddersConfig,
+) -> Result<(), WasmValidationError> {
+    let config = wasmtime_validation_config(embedder_config);
+
     let engine = wasmtime::Engine::new(&config).map_err(|_| {
         WasmValidationError::WasmtimeValidation(String::from("Failed to initialize Wasm engine"))
     })?;
@@ -1380,7 +1417,7 @@ pub(super) fn validate_wasm_binary<'a>(
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
     check_code_section_size(wasm)?;
-    can_compile(wasm)?;
+    can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;
