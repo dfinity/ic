@@ -8,14 +8,19 @@ use std::{
 use axum::http::Request;
 use backoff::backoff::Backoff;
 use bytes::Bytes;
-use ic_async_utils::JoinMap;
 use ic_interfaces::{artifact_manager::ArtifactProcessorEvent, artifact_pool::ValidatedPoolReader};
 use ic_logger::{warn, ReplicaLogger};
 use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind};
 use ic_types::NodeId;
 use serde::{Deserialize, Serialize};
-use tokio::{runtime::Handle, select, sync::mpsc::Receiver, task::JoinHandle, time};
+use tokio::{
+    runtime::Handle,
+    select,
+    sync::mpsc::Receiver,
+    task::{JoinHandle, JoinSet},
+    time,
+};
 
 use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, Data, SlotNumber};
 
@@ -210,9 +215,9 @@ where
             .expect("Serializing advert update")
             .into();
 
-        let mut in_progress_transmissions = JoinMap::new();
+        let mut in_progress_transmissions = JoinSet::new();
         // stores the connection ID of the last successful transmission to a peer.
-        let mut completed_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
+        let mut initiated_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
         let mut periodic_check_interval = time::interval(Duration::from_secs(5));
 
         loop {
@@ -222,20 +227,20 @@ where
                     // spawn task for peers with higher conn id or not in completed transmissions.
                     // add task to join map
                     for (peer, connection_id) in transport.peers() {
-                        let is_completed = completed_transmissions.get(&peer).is_some_and(|c| *c == connection_id);
+                        let is_initiated = initiated_transmissions.get(&peer).is_some_and(|c| *c == connection_id);
 
-                        if !is_completed {
+                        if !is_initiated {
                             metrics.send_view_send_to_peer_total.inc();
-                            let task = send_advert_to_peer(transport.clone(), connection_id, body.clone(), peer, Artifact::TAG.into());
-                            in_progress_transmissions.spawn_on(peer, task, &rt_handle);
+                            let task = send_advert_to_peer(transport.clone(), body.clone(), peer, Artifact::TAG.into());
+                            in_progress_transmissions.spawn_on(task, &rt_handle);
+                            initiated_transmissions.insert(peer, connection_id);
                         }
                     }
                 }
                 Some(result) = in_progress_transmissions.join_next() => {
                     match result {
-                        Ok((connection_id, peer)) => {
+                        Ok(_) => {
                             metrics.send_view_send_to_peer_delivered_total.inc();
-                            completed_transmissions.insert(peer, connection_id);
                         },
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
@@ -254,11 +259,10 @@ where
 /// If the peer is not reachable, it will retry with an exponential backoff.
 async fn send_advert_to_peer(
     transport: Arc<dyn Transport>,
-    connection_id: ConnId,
     message: Bytes,
     peer: NodeId,
     uri_prefix: &str,
-) -> ConnId {
+) {
     let mut backoff = get_backoff_policy();
 
     loop {
@@ -268,7 +272,7 @@ async fn send_advert_to_peer(
             .expect("Building from typed values");
 
         if let Ok(()) = transport.push(&peer, request).await {
-            return connection_id;
+            return;
         }
 
         let backoff_duration = backoff.next_backoff().unwrap_or(MAX_ELAPSED_TIME);
