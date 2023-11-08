@@ -718,6 +718,7 @@ fn state_equivalence() {
         }),
         minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
         ethereum_block_height: BlockTag::Finalized,
+        first_scraped_block_number: BlockNumber::new(1_000_001),
         last_scraped_block_number: BlockNumber::new(1_000_000),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
@@ -762,6 +763,15 @@ fn state_equivalence() {
             ..state.clone()
         }),
         "changing only computed/transient fields should result in an equivalent state",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            first_scraped_block_number: BlockNumber::new(100_000_000_000),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
     );
 
     assert_ne!(
