@@ -96,12 +96,12 @@ Additional withdrawals could be made as long as the allowance from step 1 was no
 === Approving the Minter
 
 ```shell
-dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = LARGE_AMOUNT_WEI })"
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = LARGE_AMOUNT_WEI : nat })"
 ```
 
 Example: If you want to approve the minter to spend 1 ETH (1_000_000_000_000_000_000 Wei)
 ```shell
-dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000 })"
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000 : nat })"
 ```
 
 === Withdrawing
