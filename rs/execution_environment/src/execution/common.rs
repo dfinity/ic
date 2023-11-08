@@ -404,8 +404,6 @@ pub fn get_call_context_and_callback(
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
     round_limits.instructions -= as_round_instructions(slice.executed_instructions);
-    round_limits.execution_complexity =
-        &round_limits.execution_complexity - &slice.execution_complexity;
 }
 
 /// Tries to apply the given canister changes to the given system state and

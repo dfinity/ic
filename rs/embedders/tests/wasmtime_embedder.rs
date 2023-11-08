@@ -5,19 +5,21 @@ use ic_replicated_state::Global;
 use ic_test_utilities::{
     mock_time, types::ids::user_test_id, wasmtime_instance::WasmtimeInstanceBuilder,
 };
-use ic_types::{
-    methods::{FuncRef, WasmMethod},
-    Cycles,
-};
+use ic_types::methods::{FuncRef, WasmMethod};
+
+#[cfg(target_os = "linux")]
+use ic_types::Cycles;
 
 #[cfg(test)]
 mod test {
     use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
     use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
-    use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
     use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
-    use ic_types::{methods::WasmClosure, NumBytes, PrincipalId};
+    use ic_types::{methods::WasmClosure, NumBytes};
+
+    #[cfg(target_os = "linux")]
+    use ic_types::PrincipalId;
 
     use super::*;
 
@@ -257,128 +259,6 @@ mod test {
         assert_eq!(performance_counter2, expected_instructions_counter2);
 
         assert_eq!(instructions_used.get(), expected_instructions);
-    }
-
-    const CALL_NEW_CALL_PERFORM_WAT: &str = r#"
-    (module
-        (import "ic0" "call_new"
-            (func $ic0_call_new
-            (param $callee_src i32)         (param $callee_size i32)
-            (param $name_src i32)           (param $name_size i32)
-            (param $reply_fun i32)          (param $reply_env i32)
-            (param $reject_fun i32)         (param $reject_env i32)
-        ))
-        (import "ic0" "call_perform"
-            (func $ic0_call_perform (result i32)))
-        (memory 1)
-        (func (export "canister_update test_call_perform")
-            (call $ic0_call_new
-                (i32.const 0)   (i32.const 0)
-                (i32.const 100) (i32.const 0)
-                (i32.const 11)  (i32.const 0) ;; non-existent function
-                (i32.const 22)  (i32.const 0) ;; non-existent function
-            )
-            (drop (call $ic0_call_perform))
-        )
-    )
-    "#;
-
-    #[test]
-    fn correctly_observe_system_api_complexity() {
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
-            .with_api_type(ic_system_api::ApiType::update(
-                mock_time(),
-                vec![],
-                Cycles::zero(),
-                PrincipalId::new_user_test_id(0),
-                0.into(),
-            ))
-            .build();
-
-        instance
-            .run(ic_types::methods::FuncRef::Method(
-                ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
-            ))
-            .unwrap();
-
-        let instruction_counter = instance.instruction_counter();
-        let system_api = &instance.store_data().system_api().unwrap();
-        let instructions_used = system_api.slice_instructions_executed(instruction_counter);
-
-        let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-        let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
-        let drop_cost = instruction_to_cost_new(&wasmparser::Operator::Drop);
-
-        let call_8_const_cost = call_cost + 8 * const_cost;
-        let drop_call_cost = drop_cost + call_cost;
-        let expected_instructions = 1 // Function is 1 instruction.
-            + call_8_const_cost
-            + system_api_complexity::overhead::new::CALL_NEW.get()
-            + drop_call_cost
-            + system_api_complexity::overhead::new::CALL_PERFORM.get();
-        assert_eq!(instructions_used.get(), expected_instructions);
-
-        let total_cpu_complexity = system_api.execution_complexity().cpu;
-        let expected_cpu_complexity =
-            system_api_complexity::cpu::CALL_NEW + system_api_complexity::cpu::CALL_PERFORM;
-        assert_eq!(total_cpu_complexity, expected_cpu_complexity);
-    }
-
-    #[test]
-    fn complex_system_api_call_traps() {
-        let subnet_type = SubnetType::Application;
-        let expected_cpu_complexity = system_api_complexity::cpu::CALL_NEW.get()
-            + system_api_complexity::cpu::CALL_PERFORM.get();
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
-            .with_api_type(ic_system_api::ApiType::update(
-                mock_time(),
-                vec![],
-                Cycles::zero(),
-                PrincipalId::new_user_test_id(0),
-                0.into(),
-            ))
-            .with_num_instructions((expected_cpu_complexity as u64 - 1).into())
-            .with_subnet_type(subnet_type)
-            .build();
-
-        let result = instance.run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
-        ));
-
-        assert_eq!(
-            result.err(),
-            Some(HypervisorError::ExecutionComplexityLimitExceeded)
-        );
-    }
-
-    #[test]
-    fn complex_system_api_call_does_not_trap_on_system_subnet() {
-        // The same setup as previously, but with the System subnet type
-        let subnet_type = SubnetType::System;
-        let expected_cpu_complexity = (system_api_complexity::cpu::CALL_NEW.get()
-            + system_api_complexity::cpu::CALL_PERFORM.get())
-            * 5; // times 5B instructions per message / nanos_in_sec
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
-            .with_api_type(ic_system_api::ApiType::update(
-                mock_time(),
-                vec![],
-                Cycles::zero(),
-                PrincipalId::new_user_test_id(0),
-                0.into(),
-            ))
-            .with_num_instructions((expected_cpu_complexity as u64 - 1).into())
-            .with_subnet_type(subnet_type)
-            .build();
-
-        let result = instance.run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
-        ));
-
-        // Should not fail on System subnet
-        assert!(result.is_ok());
     }
 
     #[test]

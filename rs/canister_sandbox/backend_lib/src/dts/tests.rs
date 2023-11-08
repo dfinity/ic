@@ -3,9 +3,7 @@ use std::{
     thread,
 };
 
-use ic_interfaces::execution_environment::{
-    ExecutionComplexity, HypervisorError, OutOfInstructionsHandler,
-};
+use ic_interfaces::execution_environment::{HypervisorError, OutOfInstructionsHandler};
 use ic_types::NumInstructions;
 
 use crate::dts::MAX_NUM_SLICES;
@@ -19,17 +17,17 @@ fn dts_state_updates() {
     assert_eq!(state.instructions_executed, 0);
     assert_eq!(state.total_instructions_left(), 2500);
     assert!(!state.is_last_slice());
-    state.update(0, ExecutionComplexity::default());
+    state.update(0);
     assert_eq!(state.slice_instruction_limit, 1000);
     assert_eq!(state.instructions_executed, 1000);
     assert_eq!(state.total_instructions_left(), 1500);
     assert!(!state.is_last_slice());
-    state.update(0, ExecutionComplexity::default());
+    state.update(0);
     assert_eq!(state.slice_instruction_limit, 500);
     assert_eq!(state.instructions_executed, 2000);
     assert_eq!(state.total_instructions_left(), 500);
     assert!(state.is_last_slice());
-    state.update(-500, ExecutionComplexity::default());
+    state.update(-500);
     assert_eq!(state.slice_instruction_limit, 0);
     assert_eq!(state.instructions_executed, 3000);
     assert_eq!(state.total_instructions_left(), -500);
@@ -43,7 +41,7 @@ fn dts_state_updates_invalid_instructions() {
     assert_eq!(state.instructions_executed, 0);
     assert_eq!(state.total_instructions_left(), 2500);
     assert!(!state.is_last_slice());
-    state.update(4000, ExecutionComplexity::default());
+    state.update(4000);
     assert_eq!(state.slice_instruction_limit, 2000);
     assert_eq!(state.instructions_executed, 0);
     assert_eq!(state.total_instructions_left(), 2500);
@@ -57,7 +55,7 @@ fn dts_state_updates_saturating() {
     assert_eq!(state.instructions_executed, 0);
     assert_eq!(state.total_instructions_left(), 2500);
     assert!(!state.is_last_slice());
-    state.update(i64::MIN, ExecutionComplexity::default());
+    state.update(i64::MIN);
     assert_eq!(state.slice_instruction_limit, 0);
     assert_eq!(state.instructions_executed, i64::MAX);
     assert_eq!(state.total_instructions_left(), 2500 - i64::MAX);
@@ -69,7 +67,7 @@ fn dts_max_num_slices() {
     let mut state = super::State::new(1000000, 100);
     let mut iterations = 0;
     while !state.is_last_slice() {
-        state.update(99, ExecutionComplexity::default());
+        state.update(99);
         iterations += 1;
     }
     assert!(iterations <= MAX_NUM_SLICES);
@@ -89,13 +87,13 @@ fn pause_and_resume_works() {
         }
     });
     // Slice 1: executes 1000 instructions before calling `out_of_instructions()`.
-    let next_slice_limit = dts.out_of_instructions(0, Default::default()).unwrap();
+    let next_slice_limit = dts.out_of_instructions(0).unwrap();
     assert_eq!(1000, next_slice_limit);
     // Slice 2: executes 1000 instructions before calling `out_of_instructions()`.
-    let next_slice_limit = dts.out_of_instructions(0, Default::default()).unwrap();
+    let next_slice_limit = dts.out_of_instructions(0).unwrap();
     assert_eq!(500, next_slice_limit);
     // Slice 3: executes 500 instructions before calling `out_of_instructions()`.
-    let error = dts.out_of_instructions(0, Default::default());
+    let error = dts.out_of_instructions(0);
     assert_eq!(error, Err(HypervisorError::InstructionLimitExceeded));
     drop(dts);
     control_thread.join().unwrap();
@@ -113,11 +111,11 @@ fn early_exit_if_slice_does_not_any_instructions_left() {
         paused_execution.resume();
     });
     // Slice 1: executes 1500 instructions before calling `out_of_instructions()`.
-    let new_slice_limit = dts.out_of_instructions(-500, Default::default()).unwrap();
+    let new_slice_limit = dts.out_of_instructions(-500).unwrap();
     assert_eq!(500, new_slice_limit);
     // Slice 2: executes 1500 instructions before calling `out_of_instructions()`
     // and fails because the next slice wouldn't have any slice instructions left.
-    let error = dts.out_of_instructions(-1000, Default::default());
+    let error = dts.out_of_instructions(-1000);
     assert_eq!(
         error,
         Err(HypervisorError::SliceOverrun {
@@ -143,15 +141,13 @@ fn invalid_instructions() {
         }
     });
     // Slice 1: executes 1000 instructions before calling `out_of_instructions()`.
-    let new_instructions = dts.out_of_instructions(0, Default::default()).unwrap();
+    let new_instructions = dts.out_of_instructions(0).unwrap();
     assert_eq!(1000, new_instructions);
     // Slice 2: executes 0 instructions before calling `out_of_instructions()`.
-    let new_instructions = dts
-        .out_of_instructions(i64::MAX, Default::default())
-        .unwrap();
+    let new_instructions = dts.out_of_instructions(i64::MAX).unwrap();
     assert_eq!(1000, new_instructions);
     // Slice 3: executes more than i64::MAX instructions before calling `out_of_instructions()`.
-    let error = dts.out_of_instructions(i64::MIN, Default::default());
+    let error = dts.out_of_instructions(i64::MIN);
     assert_eq!(
         error,
         Err(HypervisorError::SliceOverrun {
@@ -178,7 +174,7 @@ fn max_num_slices() {
 
     let mut result = Ok(0);
     for i in 0..MAX_NUM_SLICES {
-        result = dts.out_of_instructions(99, Default::default());
+        result = dts.out_of_instructions(99);
         if i < MAX_NUM_SLICES - 1 {
             assert!(result.is_ok());
         } else {
