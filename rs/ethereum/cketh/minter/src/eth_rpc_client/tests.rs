@@ -1,11 +1,11 @@
 mod eth_rpc_client {
     use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider, SepoliaProvider};
     use crate::eth_rpc_client::EthRpcClient;
-    use crate::lifecycle::EvmNetwork;
+    use crate::lifecycle::EthereumNetwork;
 
     #[test]
     fn should_retrieve_sepolia_providers_in_stable_order() {
-        let client = EthRpcClient::new(EvmNetwork::Sepolia, None);
+        let client = EthRpcClient::new(EthereumNetwork::Sepolia, None);
 
         let providers = client.providers();
 
@@ -21,7 +21,7 @@ mod eth_rpc_client {
 
     #[test]
     fn should_retrieve_mainnet_providers_in_stable_order() {
-        let client = EthRpcClient::new(EvmNetwork::Ethereum, None);
+        let client = EthRpcClient::new(EthereumNetwork::Ethereum, None);
 
         let providers = client.providers();
 

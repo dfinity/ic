@@ -1,7 +1,7 @@
 use crate::address::Address;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc::BlockTag;
-use crate::lifecycle::EvmNetwork;
+use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::transactions::EthTransactions;
 use crate::state::{InvalidStateError, State};
@@ -13,7 +13,7 @@ use minicbor::{Decode, Encode};
 #[derive(CandidType, Deserialize, Clone, Debug, Encode, Decode, PartialEq, Eq)]
 pub struct InitArg {
     #[n(0)]
-    pub ethereum_network: EvmNetwork,
+    pub ethereum_network: EthereumNetwork,
     #[n(1)]
     pub ecdsa_key_name: String,
     #[n(2)]

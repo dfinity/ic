@@ -1,7 +1,7 @@
 use crate::address::Address;
 use crate::eth_logs::{report_transaction_error, ReceivedEthEventError};
 use crate::eth_rpc::BlockSpec;
-use crate::eth_rpc_client::EthRpcClient;
+use crate::eth_rpc_client::{EthRpcClient, DefaultTransport};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LedgerMintIndex};
@@ -232,7 +232,7 @@ pub async fn scrap_eth_logs() {
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     let block_height = read_state(State::ethereum_block_height);
-    match read_state(EthRpcClient::from_state)
+    match read_state(EthRpcClient::<DefaultTransport>::from_state)
         .eth_get_block_by_number(BlockSpec::Tag(block_height))
         .await
     {

@@ -32,8 +32,8 @@ pub struct DashboardFinalizedTransaction {
     pub status: TransactionStatus,
 }
 
-#[derive(Template)]
-#[template(path = "dashboard.html")]
+// #[derive(Template)]
+// #[template(path = "dashboard.html")]
 pub struct DashboardTemplate {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
@@ -138,5 +138,17 @@ impl DashboardTemplate {
             reimbursed_transactions,
             eth_balance: state.eth_balance.clone(),
         }
+    }
+}
+
+impl Template for DashboardTemplate {
+    const EXTENSION: Option<&'static str> = None;
+    const MIME_TYPE: &'static str = "";
+    const SIZE_HINT: usize = 0;
+    fn render(&self) -> askama::Result<String> {
+        unimplemented!()
+    }
+    fn render_into(&self, _writer: &mut (impl std::fmt::Write + ?Sized)) -> askama::Result<()> {
+        unimplemented!()
     }
 }

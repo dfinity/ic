@@ -4,8 +4,8 @@ use crate::eth_rpc::{
 };
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
-use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
+use crate::eth_rpc_client::{DefaultTransport, EthRpcClient};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionCount};
@@ -151,7 +151,7 @@ pub async fn process_retrieve_eth_requests() {
 }
 
 async fn latest_transaction_count() -> Option<TransactionCount> {
-    match read_state(EthRpcClient::from_state)
+    match read_state(EthRpcClient::<DefaultTransport>::from_state)
         .eth_get_transaction_count(GetTransactionCountParams {
             address: crate::state::minter_address().await,
             block: BlockSpec::Tag(BlockTag::Latest),
@@ -298,7 +298,7 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
             .transactions_to_send_batch(latest_transaction_count, TRANSACTIONS_TO_SEND_BATCH_SIZE)
     });
 
-    let rpc_client = read_state(EthRpcClient::from_state);
+    let rpc_client = read_state(EthRpcClient::<DefaultTransport>::from_state);
     let results = join_all(
         transactions_to_send
             .iter()
@@ -318,7 +318,7 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
                 "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
             ),
             Err(RpcError::HttpOutcallError(HttpOutcallError::IcError { code, message })) => log!(INFO,
-                "Failed to send transaction {signed_tx:?}: {message} (error code = {code}). Will retry later.",
+                "Failed to send transaction {signed_tx:?}: {message} (error code = {}). Will retry later.", code as i32,
             ),
             Err(e) => {
                 log!(INFO, "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later.")
@@ -340,7 +340,7 @@ async fn finalize_transactions_batch() {
             });
             let expected_finalized_withdrawal_ids: BTreeSet<_> =
                 txs_to_finalize.values().cloned().collect();
-            let rpc_client = read_state(EthRpcClient::from_state);
+            let rpc_client = read_state(EthRpcClient::<DefaultTransport>::from_state);
             let results = join_all(
                 txs_to_finalize
                     .keys()
@@ -404,7 +404,7 @@ async fn finalize_transactions_batch() {
 
 async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
 {
-    read_state(EthRpcClient::from_state)
+    read_state(EthRpcClient::<DefaultTransport>::from_state)
         .eth_get_transaction_count(GetTransactionCountParams {
             address: crate::state::minter_address().await,
             block: BlockSpec::Tag(BlockTag::Finalized),
@@ -414,7 +414,7 @@ async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallErro
 }
 
 pub async fn eth_fee_history() -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-    read_state(EthRpcClient::from_state)
+    read_state(EthRpcClient::<DefaultTransport>::from_state)
         .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
             highest_block: BlockSpec::Tag(BlockTag::Latest),

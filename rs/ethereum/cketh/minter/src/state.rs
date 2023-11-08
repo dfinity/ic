@@ -3,7 +3,7 @@ use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::upgrade::UpgradeArg;
-use crate::lifecycle::EvmNetwork;
+use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
 use candid::Principal;
@@ -25,7 +25,7 @@ mod tests;
 thread_local! {
     // pub static STATE: RefCell<Option<State>> = RefCell::default();
     pub static STATE: RefCell<Option<State>> = RefCell::new(Some(State {
-        ethereum_network: EvmNetwork::Ethereum,
+        ethereum_network: EthereumNetwork::Ethereum,
         ecdsa_key_name: "".to_string(),
         ledger_id: Principal::anonymous(),
         ethereum_contract_address: None,
@@ -60,7 +60,7 @@ impl MintedEvent {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State {
-    pub ethereum_network: EvmNetwork,
+    pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub ledger_id: Principal,
     pub ethereum_contract_address: Option<Address>,
@@ -246,7 +246,7 @@ impl State {
         }
     }
 
-    pub const fn ethereum_network(&self) -> EvmNetwork {
+    pub const fn ethereum_network(&self) -> EthereumNetwork {
         self.ethereum_network
     }
 

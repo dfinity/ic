@@ -280,7 +280,7 @@ mod eth_transactions {
 
     mod record_created_transaction {
         use crate::address::Address;
-        use crate::lifecycle::EvmNetwork;
+        use crate::lifecycle::EthereumNetwork;
         use crate::numeric::{LedgerBurnIndex, TransactionNonce};
         use crate::state::transactions::tests::{
             create_and_record_transaction, expect_panic_with_message, transaction_price,
@@ -299,7 +299,7 @@ mod eth_transactions {
                 &withdrawal_request,
                 TransactionNonce::ZERO,
                 transaction_price(),
-                EvmNetwork::Sepolia,
+                EthereumNetwork::Sepolia,
             )
             .unwrap();
 
@@ -321,7 +321,7 @@ mod eth_transactions {
                 &withdrawal_request,
                 TransactionNonce::ZERO,
                 transaction_price(),
-                EvmNetwork::Sepolia,
+                EthereumNetwork::Sepolia,
             )
             .unwrap();
 
@@ -372,7 +372,7 @@ mod eth_transactions {
                     &withdrawal_request,
                     wrong_nonce,
                     transaction_price(),
-                    EvmNetwork::Sepolia,
+                    EthereumNetwork::Sepolia,
                 )
                 .unwrap();
 
@@ -405,7 +405,7 @@ mod eth_transactions {
                 assert_eq!(
                     created_tx,
                     Eip1559TransactionRequest {
-                        chain_id: EvmNetwork::Sepolia.chain_id(),
+                        chain_id: EthereumNetwork::Sepolia.chain_id(),
                         nonce: TransactionNonce::from(i),
                         max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
                         max_fee_per_gas: transaction_price.max_fee_per_gas,
@@ -1498,7 +1498,7 @@ mod eth_withdrawal_request {
 }
 
 mod create_transaction {
-    use crate::lifecycle::EvmNetwork;
+    use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
     use crate::state::transactions::tests::{transaction_price, withdrawal_request_with_index};
     use crate::state::transactions::{
@@ -1524,7 +1524,7 @@ mod create_transaction {
                 &withdrawal_request,
                 TransactionNonce::TWO,
                 transaction_price,
-                EvmNetwork::Sepolia,
+                EthereumNetwork::Sepolia,
             );
 
             prop_assert_eq!(
@@ -1558,11 +1558,11 @@ mod create_transaction {
                 &withdrawal_request,
                 TransactionNonce::TWO,
                 transaction_price.clone(),
-                EvmNetwork::Sepolia,
+                EthereumNetwork::Sepolia,
             );
 
             prop_assert_eq!(result, Ok(Eip1559TransactionRequest {
-                chain_id: EvmNetwork::Sepolia.chain_id(),
+                chain_id: EthereumNetwork::Sepolia.chain_id(),
                 nonce: TransactionNonce::TWO,
                 max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
                 max_fee_per_gas: transaction_price.max_fee_per_gas,

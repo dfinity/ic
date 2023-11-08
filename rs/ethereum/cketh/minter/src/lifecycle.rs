@@ -22,7 +22,7 @@ pub enum MinterArg {
     CandidType, Clone, Copy, Default, Deserialize, Debug, Eq, PartialEq, Hash, Encode, Decode,
 )]
 #[cbor(index_only)]
-pub enum EvmNetwork {
+pub enum EthereumNetwork {
     #[n(1)]
     Ethereum,
     #[n(11155111)]
@@ -30,20 +30,20 @@ pub enum EvmNetwork {
     Sepolia,
 }
 
-impl EvmNetwork {
+impl EthereumNetwork {
     pub fn chain_id(&self) -> u64 {
         match self {
-            EvmNetwork::Ethereum => 1,
-            EvmNetwork::Sepolia => 11155111,
+            EthereumNetwork::Ethereum => 1,
+            EthereumNetwork::Sepolia => 11155111,
         }
     }
 }
 
-impl Display for EvmNetwork {
+impl Display for EthereumNetwork {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            EvmNetwork::Ethereum => write!(f, "Ethereum Mainnet"),
-            EvmNetwork::Sepolia => write!(f, "Ethereum Testnet Sepolia"),
+            EthereumNetwork::Ethereum => write!(f, "Ethereum Mainnet"),
+            EthereumNetwork::Sepolia => write!(f, "Ethereum Testnet Sepolia"),
         }
     }
 }

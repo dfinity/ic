@@ -1,12 +1,12 @@
 use crate::eth_rpc::{
     self, are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam,
-    Hash, HttpOutcallError, HttpResponsePayload, JsonRpcError, JsonRpcResult, LogEntry,
-    ResponseSizeEstimate, RpcError, SendRawTransactionResult,
+    Hash, HttpOutcallError, HttpResponsePayload, JsonRpcError, LogEntry, ResponseSizeEstimate,
+    RpcError, SendRawTransactionResult,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
-use crate::lifecycle::EvmNetwork;
+use crate::lifecycle::EthereumNetwork;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::TransactionCount;
 use crate::state::State;
@@ -60,13 +60,13 @@ impl RpcTransport for DefaultTransport {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EthRpcClient<T: RpcTransport> {
-    chain: EvmNetwork,
+    chain: EthereumNetwork,
     providers: Option<Vec<RpcNodeProvider>>,
     phantom: PhantomData<T>,
 }
 
 impl<T: RpcTransport> EthRpcClient<T> {
-    pub const fn new(chain: EvmNetwork, providers: Option<Vec<RpcNodeProvider>>) -> Self {
+    pub const fn new(chain: EthereumNetwork, providers: Option<Vec<RpcNodeProvider>>) -> Self {
         Self {
             chain,
             providers,
@@ -82,8 +82,8 @@ impl<T: RpcTransport> EthRpcClient<T> {
         match self.providers {
             Some(ref providers) => providers,
             None => match self.chain {
-                EvmNetwork::Ethereum => MAINNET_PROVIDERS,
-                EvmNetwork::Sepolia => SEPOLIA_PROVIDERS,
+                EthereumNetwork::Ethereum => MAINNET_PROVIDERS,
+                EthereumNetwork::Sepolia => SEPOLIA_PROVIDERS,
             },
         }
     }
@@ -211,7 +211,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
         results.reduce_with_equality()
     }
 
-    pub async fn eth_fee_history(&self, params: FeeHistoryParams) -> Result<FeeHistory, RpcError> {
+    pub async fn eth_fee_history(&self, params: FeeHistoryParams) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         // A typical response is slightly above 300 bytes.
         let results: MultiCallResults<FeeHistory> = self
             .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
@@ -236,15 +236,13 @@ impl<T: RpcTransport> EthRpcClient<T> {
     pub async fn eth_get_transaction_count(
         &self,
         params: GetTransactionCountParams,
-    ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        let results = self
-            .parallel_call(
-                "eth_getTransactionCount",
-                params,
-                ResponseSizeEstimate::new(50),
-            )
-            .await;
-        results.reduce_with_equality()
+    ) -> MultiCallResults<TransactionCount> {
+        self.parallel_call(
+            "eth_getTransactionCount",
+            params,
+            ResponseSizeEstimate::new(50),
+        )
+        .await
     }
 }
 
@@ -377,9 +375,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                                 votes_for_same_key
                                     .into_iter()
                                     .chain(std::iter::once((provider, result)))
-                                    .map(|(provider, result)| {
-                                        (provider, Ok(JsonRpcResult::Result(result)))
-                                    }),
+                                    .map(|(provider, result)| (provider, Ok(result))),
                             ),
                         );
                         log!(
@@ -420,9 +416,11 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                 } else {
                     let error =
                         MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
-                            first.1.into_iter().chain(second.1.into_iter()).map(
-                                |(provider, result)| (provider, Ok(JsonRpcResult::Result(result))),
-                            ),
+                            first
+                                .1
+                                .into_iter()
+                                .chain(second.1.into_iter())
+                                .map(|(provider, result)| (provider, Ok(result))),
                         ));
                     log!(
                         INFO,

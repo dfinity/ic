@@ -6,7 +6,7 @@ use crate::eth_rpc::{BlockTag, Hash};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
-use crate::lifecycle::EvmNetwork;
+use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{
     wei_from_milli_ether, BlockNumber, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
     TransactionNonce, Wei, WeiPerGas,
@@ -370,7 +370,7 @@ prop_compose! {
         last_scraped_block_number in arb_nat(),
     ) -> InitArg {
         InitArg {
-            ethereum_network: EvmNetwork::Sepolia,
+            ethereum_network: EthereumNetwork::Sepolia,
             ecdsa_key_name,
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
             ledger_id,
