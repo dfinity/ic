@@ -191,6 +191,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         &app_node.get_public_url(),
         app_node.effective_canister_id(),
         msg,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,

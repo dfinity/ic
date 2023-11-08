@@ -88,6 +88,7 @@ pub fn test(env: TestEnv) {
         &node1.get_public_url(),
         node1.effective_canister_id(),
         nns_msg,
+        log,
     );
     assert!(can_read_msg(
         log,
@@ -112,6 +113,7 @@ pub fn test(env: TestEnv) {
         &app_node.get_public_url(),
         app_node.effective_canister_id(),
         app_msg,
+        log,
     );
     assert!(can_read_msg(
         log,
@@ -188,6 +190,7 @@ pub fn test(env: TestEnv) {
         &node3.get_public_url(),
         node3.effective_canister_id(),
         nns_msg_2,
+        log,
     );
     assert!(can_read_msg_with_retries(
         log,
@@ -203,6 +206,7 @@ pub fn test(env: TestEnv) {
         &app_node.get_public_url(),
         app_node.effective_canister_id(),
         app_msg_2,
+        log,
     );
     assert!(can_read_msg_with_retries(
         log,

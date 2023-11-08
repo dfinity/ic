@@ -129,6 +129,13 @@ pub(crate) fn assert_assigned_replica_version(
     expected_version: &str,
     logger: Logger,
 ) {
+    info!(
+        logger,
+        "Waiting until the node {} is healthy and running replica version {}",
+        node.get_ip_addr(),
+        expected_version
+    );
+
     #[derive(PartialEq)]
     enum State {
         Uninitialized,
@@ -153,7 +160,11 @@ pub(crate) fn assert_assigned_replica_version(
                 } else {
                     state = State::OldVersionAgain
                 }
-                bail!("Replica version: {:?}", ver)
+                bail!(
+                    "Node is running the old replica version: {}. Expected: {}",
+                    ver,
+                    expected_version
+                )
             }
             Err(err) => {
                 state = State::Reboot;
