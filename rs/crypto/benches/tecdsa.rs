@@ -25,31 +25,9 @@ criterion_main!(benches);
 criterion_group!(benches, crypto_tecdsa_benchmarks);
 
 fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
-    let test_cases = vec![
-        TestCase {
-            num_of_nodes: 1,
-            ..TestCase::default()
-        },
-        TestCase {
-            num_of_nodes: 4,
-            ..TestCase::default()
-        },
-        TestCase {
-            sample_size: 10,
-            num_of_nodes: 13,
-            ..TestCase::default()
-        },
-        TestCase {
-            num_of_nodes: 28,
-            sample_size: 10,
-            ..TestCase::default()
-        },
-        TestCase {
-            num_of_nodes: 40,
-            sample_size: 10,
-            ..TestCase::default()
-        },
-    ];
+    let number_of_nodes = [1, 4, 13, 28, 40];
+
+    let test_cases = generate_test_cases(&number_of_nodes);
 
     let rng = &mut ReproducibleRng::new();
     for test_case in test_cases {
@@ -76,13 +54,7 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
     let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let key_transcript = generate_key_transcript(
-        &env,
-        &dealers,
-        &receivers,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        rng,
-    );
+    let key_transcript = generate_key_transcript(&env, &dealers, &receivers, test_case.alg(), rng);
     let signer = env.nodes.random_receiver(&key_transcript.receivers, rng);
 
     group.bench_function(format!("sign_share_{vault_type:?}"), |bench| {
@@ -97,7 +69,7 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
                     &hashed_message,
                     seed,
                     &derivation_path,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    test_case.alg(),
                     rng,
                 );
                 signer.load_input_transcripts(&inputs);
@@ -129,13 +101,7 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
     let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let key_transcript = generate_key_transcript(
-        &env,
-        &dealers,
-        &receivers,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        rng,
-    );
+    let key_transcript = generate_key_transcript(&env, &dealers, &receivers, test_case.alg(), rng);
 
     group.bench_function(format!("verify_sig_share_{vault_type:?}"), |bench| {
         bench.iter_batched_ref(
@@ -149,7 +115,7 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     &hashed_message,
                     seed,
                     &derivation_path,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    test_case.alg(),
                     rng,
                 );
                 let signer = env.nodes.random_receiver(&key_transcript.receivers, rng);
@@ -193,13 +159,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
     let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let key_transcript = generate_key_transcript(
-        &env,
-        &dealers,
-        &receivers,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        rng,
-    );
+    let key_transcript = generate_key_transcript(&env, &dealers, &receivers, test_case.alg(), rng);
     let combiner = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
 
     group.bench_function(format!("combine_sig_shares_{vault_type:?}"), |bench| {
@@ -214,7 +174,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
                     &hashed_message,
                     seed,
                     &derivation_path,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    test_case.alg(),
                     rng,
                 );
                 let sig_shares = sig_share_from_each_receiver(&env, &inputs);
@@ -251,13 +211,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
     let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let key_transcript = generate_key_transcript(
-        &env,
-        &dealers,
-        &receivers,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        rng,
-    );
+    let key_transcript = generate_key_transcript(&env, &dealers, &receivers, test_case.alg(), rng);
     let combiner = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
     let verifier = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
 
@@ -273,7 +227,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
                     &hashed_message,
                     seed,
                     &derivation_path,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    test_case.alg(),
                     rng,
                 );
                 let sig_shares = sig_share_from_each_receiver(&env, &inputs);
@@ -318,6 +272,7 @@ struct TestCase {
     sample_size: usize,
     sampling_mode: SamplingMode,
     num_of_nodes: usize,
+    alg: AlgorithmId,
 }
 
 impl Default for TestCase {
@@ -326,6 +281,7 @@ impl Default for TestCase {
             sample_size: 100,
             sampling_mode: SamplingMode::Auto,
             num_of_nodes: 0,
+            alg: AlgorithmId::ThresholdEcdsaSecp256k1,
         }
     }
 }
@@ -345,8 +301,40 @@ impl TestCase {
     }
 
     fn name(&self) -> String {
-        format!("crypto_tecdsa_{}_nodes", self.num_of_nodes,)
+        let curve = match self.alg {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => "secp256k1",
+            AlgorithmId::ThresholdEcdsaSecp256r1 => "secp256r1",
+            unexpected => panic!("Unexpected testcase algorithm {}", unexpected),
+        };
+        format!("crypto_tecdsa_{}_{}_nodes", curve, self.num_of_nodes)
     }
+
+    fn alg(&self) -> AlgorithmId {
+        self.alg
+    }
+}
+
+fn generate_test_cases(node_counts: &[usize]) -> Vec<TestCase> {
+    let mut test_cases = vec![];
+
+    let tecdsa_algs = AlgorithmId::all_threshold_ecdsa_algorithms();
+
+    for num_of_nodes in node_counts.iter().copied() {
+        let sample_size = if num_of_nodes < 10 { 100 } else { 10 };
+
+        for alg in tecdsa_algs {
+            let tc = TestCase {
+                num_of_nodes,
+                sample_size,
+                alg,
+                sampling_mode: SamplingMode::Auto,
+            };
+
+            test_cases.push(tc);
+        }
+    }
+
+    test_cases
 }
 
 #[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
