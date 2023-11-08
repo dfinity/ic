@@ -4617,7 +4617,8 @@ impl Governance {
                     "Matched Funding is not implemented yet.",
                 ));
             }
-
+            // Case A. Matched Funding is enabled and Neurons' Fund participation was requested for
+            // this SNS swap.
             let (
                 initial_neurons_fund_participation_snapshot,
                 neurons_fund_participation_constraints,
@@ -4628,7 +4629,12 @@ impl Governance {
                 Some(initial_neurons_fund_participation_snapshot),
                 Some(neurons_fund_participation_constraints),
             )
+        } else if IS_MATCHED_FUNDING_ENABLED {
+            // Case B: Matched Funding is enabled in principle, but Neurons' Fund participation was
+            // not requested for this SNS swap. Nothing to do.
+            (vec![], None, None)
         } else {
+            // Case C. Legacy, or fixed funding schema.
             // Return error in case ProposalData is unavailable for some reason. This check needs to
             // happen before the funds are actually drawn, as otherwise, we would need to issue the
             // refunds if this ProposalData is not available. Note that this check does not expire
