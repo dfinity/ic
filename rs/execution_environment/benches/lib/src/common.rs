@@ -14,7 +14,7 @@ use ic_execution_environment::{
     IngressHistoryWriterImpl, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -88,7 +88,6 @@ where
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
         compute_allocation_used: 0,
     };
@@ -105,6 +104,7 @@ where
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation =
         MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
+    canister_state.system_state.freeze_threshold = 0.into();
 
     // Create call context and callback
     let call_origin =
@@ -283,6 +283,7 @@ where
         cycles_account_manager,
         SchedulerConfig::application_subnet().scheduler_cores,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        subnet_configs.scheduler_config.heap_delta_rate_limit,
     );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(

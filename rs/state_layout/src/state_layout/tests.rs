@@ -16,6 +16,9 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
+use itertools::Itertools;
+use proptest::prelude::*;
+use std::fs::File;
 use std::sync::Arc;
 
 fn default_canister_state_bits() -> CanisterStateBits {
@@ -49,7 +52,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         consumed_cycles_since_replica_started_by_use_cases: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
-        total_query_stats: TotalCanisterQueryStats::default(),
+        total_query_stats: TotalQueryStats::default(),
     }
 }
 
@@ -348,4 +351,123 @@ fn test_canister_id_from_path() {
         None,
         canister_id_from_path(Path::new("canister_states/not-a-canister-ID/queues.pbuf"))
     );
+}
+
+// A strategy to create a randomly sampled and strictly monotonic sequence of `Height`.
+fn random_sorted_unique_heights(max_length: usize) -> impl Strategy<Value = Vec<Height>> {
+    // Take a vector of length max_length, sort it and remove duplicate entries.
+    let unsorted = prop::collection::vec(0u64.., max_length);
+    unsorted.prop_map(|heights| {
+        let mut heights: Vec<Height> = heights.iter().map(|h| Height::new(*h)).collect();
+        heights.sort();
+        heights.iter().unique().cloned().collect()
+    })
+}
+
+proptest! {
+#[test]
+fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
+    let tmp = tmpdir("canister");
+    let canister_layout: CanisterLayout<WriteOnly> =
+        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+    let overlay_names: Vec<PathBuf> = heights
+        .iter()
+        .map(|h| canister_layout.vmemory_0_overlay(*h))
+        .collect();
+
+    // Create the overlay files in the directory.
+    for overlay in &overlay_names {
+        File::create(overlay).unwrap();
+    }
+
+    // Create some other files that should be ignored.
+    File::create(canister_layout.raw_path().join("otherfile")).unwrap();
+    File::create(canister_layout.stable_memory_overlay(Height::new(42))).unwrap();
+    File::create(canister_layout.wasm_chunk_store_overlay(Height::new(42))).unwrap();
+    File::create(canister_layout.vmemory_0()).unwrap();
+
+    let existing_overlays = canister_layout.vmemory_0_overlays().unwrap();
+
+    // We expect the list of paths to be the same including ordering.
+    prop_assert_eq!(overlay_names, existing_overlays);
+}
+
+#[test]
+fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
+    let tmp = tmpdir("canister");
+    let canister_layout: CanisterLayout<WriteOnly> =
+        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+    let overlay_names: Vec<PathBuf> = heights
+        .iter()
+        .map(|h| canister_layout.stable_memory_overlay(*h))
+        .collect();
+
+    // Create the overlay files in the directory.
+    for overlay in &overlay_names {
+        File::create(overlay).unwrap();
+    }
+
+    // Create some other files that should be ignored.
+    File::create(canister_layout.raw_path().join("otherfile")).unwrap();
+    File::create(canister_layout.vmemory_0_overlay(Height::new(42))).unwrap();
+    File::create(canister_layout.wasm_chunk_store_overlay(Height::new(42))).unwrap();
+    File::create(canister_layout.stable_memory_blob()).unwrap();
+
+    let existing_overlays = canister_layout.stable_memory_overlays().unwrap();
+
+    // We expect the list of paths to be the same including ordering.
+    prop_assert_eq!(overlay_names, existing_overlays);
+}
+
+#[test]
+fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique_heights(10)) {
+    let tmp = tmpdir("canister");
+    let canister_layout: CanisterLayout<WriteOnly> =
+        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+    let overlay_names: Vec<PathBuf> = heights
+        .iter()
+        .map(|h| canister_layout.wasm_chunk_store_overlay(*h))
+        .collect();
+
+    // Create the overlay files in the directory.
+    for overlay in &overlay_names {
+        File::create(overlay).unwrap();
+    }
+
+    // Create some other files that should be ignored.
+    File::create(canister_layout.raw_path().join("otherfile")).unwrap();
+    File::create(canister_layout.vmemory_0_overlay(Height::new(42))).unwrap();
+    File::create(canister_layout.stable_memory_overlay(Height::new(42))).unwrap();
+    File::create(canister_layout.wasm_chunk_store()).unwrap();
+
+    let existing_overlays = canister_layout.wasm_chunk_store_overlays().unwrap();
+
+    // We expect the list of paths to be the same including ordering.
+    prop_assert_eq!(overlay_names, existing_overlays);
+}
+
+#[test]
+fn read_back_checkpoint_directory_names(heights in random_sorted_unique_heights(10)) {
+    with_test_replica_logger(|log| {
+        let tmp = tmpdir("state_layout");
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, tmp.path().to_owned(), &metrics_registry).unwrap();
+
+        let checkpoint_names: Vec<PathBuf> = heights
+            .iter()
+            .map(|h| state_layout.checkpoints().join(StateLayout::checkpoint_name(*h)))
+            .collect();
+
+        // Create the (empty) checkpoint directories.
+        for checkpoint in &checkpoint_names {
+            std::fs::create_dir(checkpoint).unwrap();
+        }
+
+        let existing_heights = state_layout.checkpoint_heights().unwrap();
+
+        // We expect the list of heights to be the same including ordering.
+        assert_eq!(heights, existing_heights);
+    });
+}
+
 }

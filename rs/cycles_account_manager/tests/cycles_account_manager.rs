@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfig};
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
@@ -86,6 +86,7 @@ fn test_can_charge_application_subnets() {
 fn withdraw_cycles_with_not_enough_balance_returns_error() {
     let initial_cycles = Cycles::new(100_000);
     let memory_usage = NumBytes::from(4 << 30);
+    let message_memory_usage = NumBytes::from(8 * 1024 * 1024);
     let amount = Cycles::new(200);
     {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
@@ -102,6 +103,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
                 NumBytes::from(0),
+                NumBytes::from(0),
                 ComputeAllocation::default(),
                 &mut new_balance,
                 amount,
@@ -114,6 +116,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         let threshold = cycles_account_manager.freeze_threshold_cycles(
             system_state.freeze_threshold,
             system_state.memory_allocation,
+            NumBytes::from(0),
             NumBytes::from(0),
             ComputeAllocation::default(),
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -137,6 +140,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
                 NumBytes::from(0),
+                NumBytes::from(0),
                 ComputeAllocation::default(),
                 &mut new_balance,
                 amount,
@@ -149,6 +153,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         let threshold = cycles_account_manager.freeze_threshold_cycles(
             system_state.freeze_threshold,
             system_state.memory_allocation,
+            NumBytes::from(0),
             NumBytes::from(0),
             ComputeAllocation::default(),
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -174,6 +179,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                     system_state.freeze_threshold,
                     system_state.memory_allocation,
                     memory_usage,
+                    message_memory_usage,
                     ComputeAllocation::default(),
                     &mut new_balance,
                     amount,
@@ -187,6 +193,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             system_state.freeze_threshold,
             system_state.memory_allocation,
             memory_usage,
+            message_memory_usage,
             ComputeAllocation::default(),
             SMALL_APP_SUBNET_MAX_SIZE,
             system_state.reserved_balance(),
@@ -209,6 +216,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
                 memory_usage,
+                message_memory_usage,
                 ComputeAllocation::default(),
                 &mut balance,
                 amount,
@@ -223,6 +231,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                     system_state.freeze_threshold,
                     system_state.memory_allocation,
                     memory_usage,
+                    message_memory_usage,
                     ComputeAllocation::default(),
                     SMALL_APP_SUBNET_MAX_SIZE,
                     system_state.reserved_balance(),
@@ -245,6 +254,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         .prepay_execution_cycles(
             &mut system_state,
             NumBytes::from(0),
+            NumBytes::from(0),
             ComputeAllocation::default(),
             NumInstructions::from(1_000_000),
             subnet_size,
@@ -263,42 +273,6 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         &no_op_logger(),
     );
     assert_eq!(system_state.balance(), initial_balance);
-}
-
-#[test]
-fn canister_charge_for_memory_until_zero_works() {
-    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
-    let mut system_state = SystemStateBuilder::new().build();
-    let subnet_type = SubnetType::Application;
-    let config = SubnetConfig::new(subnet_type).cycles_account_manager_config;
-    let gib_stored_per_second_fee = config.gib_storage_per_second_fee;
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_subnet_type(subnet_type)
-        .build();
-
-    // Number of times we want to change
-    let iterations = 16;
-
-    // Calculate the amount of memory we need to charge for each time to consume
-    // all the cycles in the system state.
-    let gibs = system_state.balance().get() / gib_stored_per_second_fee.get() / iterations
-        * 1024
-        * 1024
-        * 1024;
-    let gibs = NumBytes::from(u64::try_from(gibs).unwrap());
-
-    for _ in 0..iterations {
-        assert!(cycles_account_manager
-            .charge_for_memory(&mut system_state, gibs, Duration::from_secs(1), subnet_size)
-            .is_ok());
-    }
-
-    // The fee that will be charged in each iteration
-    let fee = cycles_account_manager.memory_cost(gibs, Duration::from_secs(1), subnet_size);
-    assert!(system_state.balance() < fee);
-    assert!(cycles_account_manager
-        .charge_for_memory(&mut system_state, gibs, Duration::from_secs(1), subnet_size)
-        .is_err());
 }
 
 #[test]
@@ -507,6 +481,7 @@ fn test_consume_with_threshold() {
 fn cycles_withdraw_for_execution() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let memory_usage = NumBytes::from(4 << 30);
+    let message_memory_usage = NumBytes::from(8 * 1024 * 1024);
     let compute_allocation = ComputeAllocation::try_from(90).unwrap();
 
     let initial_amount = std::u128::MAX;
@@ -524,6 +499,7 @@ fn cycles_withdraw_for_execution() {
         system_state.freeze_threshold,
         system_state.memory_allocation,
         memory_usage,
+        message_memory_usage,
         compute_allocation,
         SMALL_APP_SUBNET_MAX_SIZE,
         system_state.reserved_balance(),
@@ -534,6 +510,7 @@ fn cycles_withdraw_for_execution() {
         .consume_cycles(
             &mut system_state,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             amount,
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -545,6 +522,7 @@ fn cycles_withdraw_for_execution() {
         .consume_cycles(
             &mut system_state,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             amount,
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -559,6 +537,7 @@ fn cycles_withdraw_for_execution() {
             &system_state,
             exec_cycles_max,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             SMALL_APP_SUBNET_MAX_SIZE
         )
@@ -567,6 +546,7 @@ fn cycles_withdraw_for_execution() {
         .consume_cycles(
             &mut system_state,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             exec_cycles_max,
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -579,6 +559,7 @@ fn cycles_withdraw_for_execution() {
             &system_state,
             Cycles::new(10),
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             SMALL_APP_SUBNET_MAX_SIZE
         ),
@@ -595,6 +576,7 @@ fn cycles_withdraw_for_execution() {
         .consume_cycles(
             &mut system_state,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             exec_cycles_max,
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -605,6 +587,7 @@ fn cycles_withdraw_for_execution() {
         .consume_cycles(
             &mut system_state,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             Cycles::new(10),
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -615,6 +598,7 @@ fn cycles_withdraw_for_execution() {
         .consume_cycles(
             &mut system_state,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             Cycles::new(1),
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -625,6 +609,7 @@ fn cycles_withdraw_for_execution() {
         .consume_cycles(
             &mut system_state,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             Cycles::zero(),
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -647,6 +632,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
     cycles_account_manager
         .prepay_execution_cycles(
             &mut system_state,
+            NumBytes::from(0),
             NumBytes::from(0),
             ComputeAllocation::default(),
             NumInstructions::from(1_000_000),
@@ -674,6 +660,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
             system_state.canister_id,
             system_state.freeze_threshold,
             system_state.memory_allocation,
+            NumBytes::from(0),
             NumBytes::from(0),
             ComputeAllocation::default(),
             &mut balance,
@@ -703,6 +690,7 @@ fn consume_cycles_updates_consumed_cycles() {
     cycles_account_manager
         .consume_cycles(
             &mut system_state,
+            NumBytes::from(0),
             NumBytes::from(0),
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
@@ -821,6 +809,7 @@ fn withdraw_cycles_for_transfer_checks_reserved_balance() {
             system_state.freeze_threshold,
             system_state.memory_allocation,
             NumBytes::from(1_000_000),
+            NumBytes::from(1_000),
             ComputeAllocation::default(),
             &mut new_balance,
             Cycles::new(1_000_000),
@@ -838,6 +827,7 @@ fn freezing_threshold_uses_reserved_balance() {
         NumSeconds::from(1_000),
         MemoryAllocation::BestEffort,
         NumBytes::from(1_000_000),
+        NumBytes::from(1_000),
         ComputeAllocation::default(),
         SMALL_APP_SUBNET_MAX_SIZE,
         Cycles::new(0),
@@ -847,6 +837,7 @@ fn freezing_threshold_uses_reserved_balance() {
         NumSeconds::from(1_000),
         MemoryAllocation::BestEffort,
         NumBytes::from(1_000_000),
+        NumBytes::from(1_000),
         ComputeAllocation::default(),
         SMALL_APP_SUBNET_MAX_SIZE,
         Cycles::new(1_000),

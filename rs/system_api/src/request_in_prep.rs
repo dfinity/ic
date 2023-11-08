@@ -183,8 +183,7 @@ pub(crate) fn into_request(
     sandbox_safe_system_state: &mut SandboxSafeSystemState,
     _logger: &ReplicaLogger,
 ) -> HypervisorResult<RequestWithPrepayment> {
-    let destination_canister =
-        CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?;
+    let destination_canister = CanisterId::unchecked_from_principal(callee);
 
     let payload_size = (method_name.len() + method_payload.len()) as u64;
     {

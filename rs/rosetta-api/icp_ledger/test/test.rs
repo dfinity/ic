@@ -1170,7 +1170,9 @@ fn sub_account_test() {
         );
         let from_subaccount = sub_account(1);
         let mut send_whitelist = HashSet::new();
-        send_whitelist.insert(CanisterId::new(sender.get_principal_id()).unwrap());
+        send_whitelist.insert(CanisterId::unchecked_from_principal(
+            sender.get_principal_id(),
+        ));
         let ledger_canister = proj
             .cargo_bin("ledger-canister", &[])
             .install_(

@@ -896,6 +896,78 @@ impl From<(EcdsaMessageType, EcdsaPrefix, CryptoHash)> for EcdsaArtifactId {
     }
 }
 
+impl From<&EcdsaArtifactId> for pb::EcdsaArtifactId {
+    fn from(value: &EcdsaArtifactId) -> Self {
+        use pb::ecdsa_artifact_id::Kind;
+        let kind = match value.clone() {
+            EcdsaArtifactId::Dealing(p, h) => Kind::Dealing(pb::PrefixHashPair {
+                prefix: Some((&p.get()).into()),
+                hash: h.get().0,
+            }),
+            EcdsaArtifactId::DealingSupport(p, h) => Kind::DealingSupport(pb::PrefixHashPair {
+                prefix: Some((&p.get()).into()),
+                hash: h.get().0,
+            }),
+            EcdsaArtifactId::SigShare(p, h) => Kind::SigShare(pb::PrefixHashPair {
+                prefix: Some((&p.get()).into()),
+                hash: h.get().0,
+            }),
+            EcdsaArtifactId::Complaint(p, h) => Kind::Complaint(pb::PrefixHashPair {
+                prefix: Some((&p.get()).into()),
+                hash: h.get().0,
+            }),
+            EcdsaArtifactId::Opening(p, h) => Kind::Opening(pb::PrefixHashPair {
+                prefix: Some((&p.get()).into()),
+                hash: h.get().0,
+            }),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&pb::EcdsaArtifactId> for EcdsaArtifactId {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaArtifactId) -> Result<Self, Self::Error> {
+        use pb::ecdsa_artifact_id::Kind;
+        let kind = value
+            .kind
+            .clone()
+            .ok_or_else(|| ProxyDecodeError::MissingField("EcdsaArtifactId::kind"))?;
+
+        Ok(match kind {
+            Kind::Dealing(p) => Self::Dealing(
+                EcdsaPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Dealing::prefix")?),
+                CryptoHashOf::new(CryptoHash(p.hash)),
+            ),
+            Kind::DealingSupport(p) => Self::DealingSupport(
+                EcdsaPrefixOf::new(try_from_option_field(
+                    p.prefix.as_ref(),
+                    "DealingSupport::prefix",
+                )?),
+                CryptoHashOf::new(CryptoHash(p.hash)),
+            ),
+            Kind::SigShare(p) => Self::SigShare(
+                EcdsaPrefixOf::new(try_from_option_field(
+                    p.prefix.as_ref(),
+                    "SigShare::prefix",
+                )?),
+                CryptoHashOf::new(CryptoHash(p.hash)),
+            ),
+            Kind::Complaint(p) => Self::Complaint(
+                EcdsaPrefixOf::new(try_from_option_field(
+                    p.prefix.as_ref(),
+                    "Complaint::prefix",
+                )?),
+                CryptoHashOf::new(CryptoHash(p.hash)),
+            ),
+            Kind::Opening(p) => Self::Opening(
+                EcdsaPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Opening::prefix")?),
+                CryptoHashOf::new(CryptoHash(p.hash)),
+            ),
+        })
+    }
+}
+
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, EnumIter,
 )]
@@ -1149,7 +1221,7 @@ impl SignedBytesWithoutDomainSeparator for EcdsaOpening {
 /// The final output of the transcript creation sequence
 pub type EcdsaTranscript = IDkgTranscript;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EcdsaMessageAttribute {
     EcdsaSignedDealing(IDkgTranscriptId),
     EcdsaDealingSupport(IDkgTranscriptId),
@@ -1681,12 +1753,14 @@ impl EcdsaObject for EcdsaOpening {
     }
 }
 
-pub fn ecdsa_msg_id(msg: &EcdsaMessage) -> EcdsaArtifactId {
-    match msg {
-        EcdsaMessage::EcdsaSignedDealing(object) => object.message_id(),
-        EcdsaMessage::EcdsaDealingSupport(object) => object.message_id(),
-        EcdsaMessage::EcdsaSigShare(object) => object.message_id(),
-        EcdsaMessage::EcdsaComplaint(object) => object.message_id(),
-        EcdsaMessage::EcdsaOpening(object) => object.message_id(),
+impl From<&EcdsaMessage> for EcdsaArtifactId {
+    fn from(msg: &EcdsaMessage) -> EcdsaArtifactId {
+        match msg {
+            EcdsaMessage::EcdsaSignedDealing(object) => object.message_id(),
+            EcdsaMessage::EcdsaDealingSupport(object) => object.message_id(),
+            EcdsaMessage::EcdsaSigShare(object) => object.message_id(),
+            EcdsaMessage::EcdsaComplaint(object) => object.message_id(),
+            EcdsaMessage::EcdsaOpening(object) => object.message_id(),
+        }
     }
 }

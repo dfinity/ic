@@ -29,9 +29,9 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
     InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
-use ic_types::messages::CallbackId;
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::UNIX_EPOCH;
+use ic_types::{batch::RawQueryStats, messages::CallbackId};
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
     nominal_cycles::NominalCycles,
@@ -58,6 +58,7 @@ pub struct ReplicatedStateBuilder {
     batch_time: Time,
     subnet_features: SubnetFeatures,
     bitcoin_adapter_requests: Vec<BitcoinAdapterRequestWrapper>,
+    query_stats: RawQueryStats,
 }
 
 impl ReplicatedStateBuilder {
@@ -98,6 +99,11 @@ impl ReplicatedStateBuilder {
         self
     }
 
+    pub fn with_query_stats(mut self, query_stats: RawQueryStats) -> Self {
+        self.query_stats = query_stats;
+        self
+    }
+
     pub fn build(self) -> ReplicatedState {
         let mut state = ReplicatedState::new(self.subnet_id, self.subnet_type);
 
@@ -118,6 +124,8 @@ impl ReplicatedStateBuilder {
 
         state.metadata.batch_time = self.batch_time;
         state.metadata.own_subnet_features = self.subnet_features;
+
+        state.epoch_query_stats = self.query_stats;
 
         for request in self.bitcoin_adapter_requests.into_iter() {
             match request {
@@ -157,6 +165,7 @@ impl Default for ReplicatedStateBuilder {
             batch_time: mock_time(),
             subnet_features: SubnetFeatures::default(),
             bitcoin_adapter_requests: Vec::new(),
+            query_stats: RawQueryStats::default(),
         }
     }
 }

@@ -1,7 +1,10 @@
 [package]
 name = "ic-certification-test-utils"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
@@ -13,5 +16,5 @@ ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_d
 ic-types = { path = "../../types/types" }
 leb128 = "0.2.4"
 rand = "0.8.3"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }

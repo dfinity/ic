@@ -72,6 +72,7 @@ pub mod consensus;
 pub mod crypto;
 pub mod filetree_sync;
 pub mod funds;
+pub mod hostos_version;
 pub mod ingress;
 pub mod malicious_behaviour;
 pub mod malicious_flags;
@@ -216,12 +217,6 @@ pub type NumPages = AmountOf<NumPagesTag, u64>;
 pub enum AccumulatedPriorityTag {}
 pub type AccumulatedPriority = AmountOf<AccumulatedPriorityTag, i64>;
 
-pub struct CpuComplexityTag;
-/// Represents a CPU complexity of an execution. The CPU complexity is not used
-/// to charge the canister, but can be used to deterministically abort
-/// a very complex canister execution or round.
-pub type CpuComplexity = AmountOf<CpuComplexityTag, i64>;
-
 /// `ComputeAllocation` is a percent between 0 and 100 attached to a canister or
 /// equivalently a rational number A/100. Having an `ComputeAllocation` of A/100
 /// guarantees that the canister will get a full round at least A out of 100
@@ -319,10 +314,9 @@ fn display_canister_id() {
         "2chl6-4hpzw-vqaaa-aaaaa-c",
         format!(
             "{}",
-            CanisterId::new(
+            CanisterId::unchecked_from_principal(
                 PrincipalId::try_from(&[0xef, 0xcd, 0xab, 0, 0, 0, 0, 0, 1][..]).unwrap()
             )
-            .unwrap()
         )
     );
 }

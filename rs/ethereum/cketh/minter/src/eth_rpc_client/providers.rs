@@ -6,7 +6,8 @@ use super::RpcTransport;
 
 pub(crate) const MAINNET_PROVIDERS: &[RpcNodeProvider] = &[
     RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
-    RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare),
+    RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
+    RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
 ];
 
 pub(crate) const SEPOLIA_PROVIDERS: &[RpcNodeProvider] = &[
@@ -45,15 +46,18 @@ impl RpcNodeProvider {
 pub enum EthereumProvider {
     //https://www.ankr.com/rpc/
     Ankr,
-    //https://developers.cloudflare.com/web3/ethereum-gateway/
-    Cloudflare,
+    // https://public.blockpi.io/
+    BlockPi,
+    // https://publicnode.com/
+    PublicNode,
 }
 
 impl EthereumProvider {
     fn ethereum_mainnet_endpoint_url(&self) -> &str {
         match self {
             EthereumProvider::Ankr => "https://rpc.ankr.com/eth",
-            EthereumProvider::Cloudflare => "https://cloudflare-eth.com",
+            EthereumProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
+            EthereumProvider::PublicNode => "https://ethereum.publicnode.com",
         }
     }
 }
@@ -62,9 +66,9 @@ impl EthereumProvider {
 pub enum SepoliaProvider {
     //https://www.ankr.com/rpc/
     Ankr,
-    //https://public.blockpi.io/
+    // https://public.blockpi.io/
     BlockPi,
-    //https://publicnode.com/
+    // https://publicnode.com/
     PublicNode,
 }
 

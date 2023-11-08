@@ -2,7 +2,9 @@ use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
 use crate::key_id::KeyId;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
-use crate::public_key_store::{PublicKeyAddError, PublicKeyRetainError, PublicKeyStore};
+use crate::public_key_store::{
+    PublicKeyAddError, PublicKeyRetainCheckError, PublicKeyRetainError, PublicKeyStore,
+};
 use crate::secret_key_store::{
     SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
 };
@@ -15,9 +17,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
     privately_verify_dealing, CommitmentOpening, CommitmentOpeningBytes, EccCurveType,
     IDkgComplaintInternal, IDkgComputeSecretSharesInternalError, IDkgDealingInternal,
-    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey,
-    MEGaPrivateKeyK256Bytes, MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment,
-    SecretShares, Seed,
+    IDkgTranscriptInternal, IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternal,
+    MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKey,
+    MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
 };
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
@@ -27,9 +29,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::{BatchSignedIDkgDealing, IDkgDealingBytes};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
-use parking_lot::RwLockWriteGuard;
+use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -72,7 +75,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
-        dealing: &IDkgDealingInternal,
+        dealing: IDkgDealingBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
@@ -80,9 +83,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
         let start_time = self.metrics.now();
+        let internal_dealing = IDkgDealingInternal::deserialize(dealing.as_ref()).map_err(|e| {
+            IDkgVerifyDealingPrivateError::InvalidArgument(format!(
+                "failed to deserialize internal dealing: {:?}",
+                e
+            ))
+        })?;
         let result = self.idkg_verify_dealing_private_internal(
             algorithm_id,
-            dealing,
+            &internal_dealing,
             dealer_index,
             receiver_index,
             receiver_key_id,
@@ -100,19 +109,29 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: &[u8],
         receiver_index: NodeIndex,
         key_id: &KeyId,
-        transcript: &IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
+        let internal_dealings =
+            idkg_internal_dealings_from_verified_dealings(dealings).map_err(|e| {
+                IDkgLoadTranscriptError::SerializationError {
+                    internal_error: format!("failed to deserialize internal dealing: {:?}", e),
+                }
+            })?;
+        let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
+            .map_err(|e| IDkgLoadTranscriptError::SerializationError {
+                internal_error: e.0,
+            })?;
         let result = self.idkg_load_transcript_internal(
-            dealings,
+            &internal_dealings,
             context_data,
             receiver_index,
             key_id,
-            transcript,
+            &internal_transcript,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
@@ -126,21 +145,26 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: &[u8],
         receiver_index: NodeIndex,
         key_id: &KeyId,
-        transcript: &IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
+        let internal_dealings = idkg_internal_dealings_from_verified_dealings(dealings)?;
+        let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
+            .map_err(|e| IDkgLoadTranscriptError::SerializationError {
+                internal_error: e.0,
+            })?;
         let result = self.idkg_load_transcript_with_openings_internal(
-            dealings,
+            &internal_dealings,
             openings,
             context_data,
             receiver_index,
             key_id,
-            transcript,
+            &internal_transcript,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
@@ -512,7 +536,35 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainKeysError> {
         let oldest_public_key_proto = idkg_dealing_encryption_pk_to_proto(oldest_public_key);
-        {
+        // First check, while only holding a read lock on the PKS, if a call to
+        // [`idkg_retain_active_dealing_encryption_public_keys`] would modify the public key store.
+        // The reasons for doing this while holding a read lock (and, if necessary, thereafter
+        // separately acquiring write locks for both the secret and public key stores) are:
+        //  - [`IDkgProtocolCspVault::idkg_retain_active_keys`] is called by consensus around once
+        //    per minute, but we expect to actually have to delete old iDKG dealing encryption keys
+        //    only at much longer time intervals (on the order of hours/days; configured in the
+        //    registry) on production tECDSA subnets.
+        //  - Acquiring both PKS and SKS write locks each time blocks all readers - analysis shows
+        //    that they sometimes end up waiting for up to 1 second.
+        // The drawback of this approach is that it introduces a race condition - between the time
+        // that the PKS read lock is released, and the PKS and SKS write locks are acquired, the
+        // key stores could have been modified by another writer. However, this is the lesser of two
+        // evils, since:
+        //  - We only expect the set of iDKG dealing encryption keys to be modified as part of key
+        //    rotation, which doesn't happen that often.
+        //  - Even if the key stores are modified by another writer, the worst that can happen is
+        //    that we perform unnecessary work, i.e., check the iDKG dealing encryption keys in the
+        //    PKS again, and determine that there is no need to delete any key(s). This operation is
+        //    quite cheap, since we don't expect there to be more than a handful of keys at any
+        //    point in time (most likely just 1-2).
+        let would_pks_be_modified = {
+            let pks_read_lock = self.public_key_store_read_lock();
+            would_idkg_retain_modify_public_key_store(&pks_read_lock, &oldest_public_key_proto)?
+        }; // drop read lock on pks
+
+        // If the previous check determined that the public key store would be modified, acquire
+        // write locks for both PKS and SKS and try to actually make the modifications.
+        if would_pks_be_modified {
             let (sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
             let is_pks_modified = idkg_retain_active_dealing_encryption_public_keys(
                 &mut pks_write_lock,
@@ -532,25 +584,45 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         active_key_ids: BTreeSet<KeyId>,
     ) -> Result<(), IDkgRetainKeysError> {
-        self.canister_sks_write_lock()
-            .retain(
-                move |key_id, _| active_key_ids.contains(key_id),
-                IDKG_THRESHOLD_KEYS_SCOPE,
-            )
-            .map_err(|e| match e {
-                SecretKeyStoreWriteError::SerializationError(e) => {
-                    IDkgRetainKeysError::SerializationError {
-                        internal_error: format!("Serialization error while retaining active IDKG canister secret shares: {:?}", e),
-                    }
+        let filter = move |key_id: &KeyId, _: &CspSecretKey| active_key_ids.contains(key_id);
+        if self
+            .canister_sks_read_lock()
+            .retain_would_modify_keystore(filter.clone(), IDKG_THRESHOLD_KEYS_SCOPE)
+        {
+            // The fact that we perform the initial check holding a read lock on the canister SKS,
+            // and then possibly acquire a write lock to actually modify the canister SKS, results
+            // in a potential race condition here. This has two consequences:
+            //  - In case another writer managed to get the write lock after we released the read
+            //    lock and acquired the write lock, and also executed the retain operation with the
+            //    same set of `active_key_ids`, this is fine, since the operation is idempotent.
+            //  - Another potential issue is that a new transcript could have been loaded, and a
+            //    new key added, between the time that retain on the crypto component was called,
+            //    and the time that we actually call retain here. In this case, a newly-created key
+            //    may be deleted. This is currently not an issue given how the crypto component is
+            //    called from consensus, but an approach similar to the one proposed for NI-DKG in
+            //    CRP-1094 (adding the registry version to the keys) could be applied here also.
+            self.canister_sks_write_lock()
+                .retain(
+                    filter,
+                    IDKG_THRESHOLD_KEYS_SCOPE,
+                )
+                .map_err(|e| match e {
+                    SecretKeyStoreWriteError::SerializationError(e) => {
+                        IDkgRetainKeysError::SerializationError {
+                            internal_error: format!("Serialization error while retaining active IDKG canister secret shares: {:?}", e),
+                        }
 
-                }
-                SecretKeyStoreWriteError::TransientError(e) => {
-                    IDkgRetainKeysError::TransientInternalError {
-                        internal_error: format!("IO error while retaining active IDKG canister secret shares: {:?}", e)
                     }
+                    SecretKeyStoreWriteError::TransientError(e) => {
+                        IDkgRetainKeysError::TransientInternalError {
+                            internal_error: format!("IO error while retaining active IDKG canister secret shares: {:?}", e)
+                        }
 
-                }
-            })
+                    }
+                })
+        } else {
+            Ok(())
+        }
     }
 
     fn get_secret_shares(
@@ -720,7 +792,7 @@ fn idkg_retain_active_dealing_encryption_public_keys<P: PublicKeyStore>(
     oldest_public_key: &PublicKey,
 ) -> Result<bool, IDkgRetainKeysError> {
     pks_write_lock
-        .retain_most_recent_idkg_public_keys_up_to_inclusive(oldest_public_key)
+        .retain_idkg_public_keys_since(oldest_public_key)
         .map_err(|retain_error| match retain_error {
             PublicKeyRetainError::Io(io_error) => IDkgRetainKeysError::TransientInternalError {
                 internal_error: format!(
@@ -745,4 +817,38 @@ fn validate_idkg_dealing_encryption_public_key(
             internal_error: format!("Key validation error: {}", error),
         }
     })
+}
+
+fn would_idkg_retain_modify_public_key_store<P: PublicKeyStore>(
+    pks_read_lock: &RwLockReadGuard<P>,
+    oldest_public_key: &PublicKey,
+) -> Result<bool, IDkgRetainKeysError> {
+    pks_read_lock
+        .would_retain_idkg_public_keys_modify_pubkey_store(oldest_public_key)
+        .map_err(|retain_error| match retain_error {
+            PublicKeyRetainCheckError::OldestPublicKeyNotFound => {
+                IDkgRetainKeysError::InternalError {
+                    internal_error: format!(
+                        "Could not find oldest IDKG public key {:?} locally",
+                        &oldest_public_key
+                    ),
+                }
+            }
+        })
+}
+
+fn idkg_internal_dealings_from_verified_dealings(
+    verified_dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+) -> Result<BTreeMap<NodeIndex, IDkgDealingInternal>, IDkgLoadTranscriptError> {
+    verified_dealings
+        .iter()
+        .map(|(index, signed_dealing)| {
+            let dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
+                IDkgLoadTranscriptError::SerializationError {
+                    internal_error: format!("failed to deserialize internal dealing: {:?}", e),
+                }
+            })?;
+            Ok((*index, dealing))
+        })
+        .collect()
 }

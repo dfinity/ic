@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-internal-csp-test-utils"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto_lib/basic_sig/ed25519" }
@@ -14,12 +16,12 @@ ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" } # Would like to get rid of this but as long as the CSP depends on ic-types we can't really.
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 # No other ic-dependencies are allowed.
 
 rand = "0.8"
 rand_chacha = "0.3"
-serde_cbor = "0.11"
+serde_cbor = { workspace = true }
 tempfile = "3.1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }

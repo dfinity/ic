@@ -440,7 +440,8 @@ impl SubnetMetrics {
                 | CyclesUseCase::Instructions
                 | CyclesUseCase::RequestAndResponseTransmission
                 | CyclesUseCase::Uninstall
-                | CyclesUseCase::CanisterCreation => total += *cycles,
+                | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }
 
@@ -502,24 +503,18 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                     )
                 })
                 .collect(),
-            // (EXC-1473):Default to 0 values in case the fields do not exist for
-            // backwards compatibility. We can change the code to require these
-            // fields exist after the first upgrade to this code is done.
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
-            )
-            .unwrap_or(0),
+            )?,
             canister_state_bytes: try_from_option_field(
                 item.canister_state_bytes,
                 "SubnetMetrics::canister_state_bytes",
-            )
-            .unwrap_or(NumBytes::from(0)),
+            )?,
             update_transactions_total: try_from_option_field(
                 item.update_transactions_total,
                 "SubnetMetrics::update_transactions_total",
-            )
-            .unwrap_or(0),
+            )?,
         })
     }
 }
@@ -1414,10 +1409,8 @@ impl Streams {
                 .or_default() += msg.count_bytes();
         }
         self.streams.entry(destination).or_default().push(msg);
-        debug_assert_eq!(
-            Streams::calculate_stats(&self.streams),
-            self.responses_size_bytes
-        );
+        #[cfg(debug_assertions)]
+        self.debug_validate_stats();
     }
 
     /// Returns a mutable reference to the stream for the given destination
@@ -1425,10 +1418,8 @@ impl Streams {
     pub fn get_mut(&mut self, destination: &SubnetId) -> Option<StreamHandle> {
         // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
         // at least do it before.
-        debug_assert_eq!(
-            Streams::calculate_stats(&self.streams),
-            self.responses_size_bytes
-        );
+        #[cfg(debug_assertions)]
+        self.debug_validate_stats();
 
         match self.streams.get_mut(destination) {
             Some(stream) => Some(StreamHandle::new(stream, &mut self.responses_size_bytes)),
@@ -1441,10 +1432,8 @@ impl Streams {
     pub fn get_mut_or_insert(&mut self, destination: SubnetId) -> StreamHandle {
         // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
         // at least do it before.
-        debug_assert_eq!(
-            Streams::calculate_stats(&self.streams),
-            self.responses_size_bytes
-        );
+        #[cfg(debug_assertions)]
+        self.debug_validate_stats();
 
         StreamHandle::new(
             self.streams.entry(destination).or_default(),
@@ -1455,6 +1444,14 @@ impl Streams {
     /// Returns the response sizes by responder canister stat.
     pub fn responses_size_bytes(&self) -> &BTreeMap<CanisterId, usize> {
         &self.responses_size_bytes
+    }
+
+    /// Prunes zero-valued response sizes entries.
+    ///
+    /// This is triggered explicitly by `ReplicatedState` after it has updated the
+    /// canisters' copies of these values (including the zeroes).
+    pub fn prune_zero_responses_size_bytes(&mut self) {
+        self.responses_size_bytes.retain(|_, &mut value| value != 0);
     }
 
     /// Computes the `responses_size_bytes` map from scratch. Used when
@@ -1472,6 +1469,18 @@ impl Streams {
             }
         }
         responses_size_bytes
+    }
+
+    /// Checks that the running accounting of the sizes of responses in streams is
+    /// accurate.
+    #[cfg(debug_assertions)]
+    fn debug_validate_stats(&self) {
+        let mut nonzero_responses_size_bytes = self.responses_size_bytes.clone();
+        nonzero_responses_size_bytes.retain(|_, &mut value| value != 0);
+        debug_assert_eq!(
+            Streams::calculate_stats(&self.streams),
+            nonzero_responses_size_bytes
+        );
     }
 }
 
@@ -1520,14 +1529,18 @@ impl<'a> StreamHandle<'a> {
     }
 
     /// Appends the given message to the tail of the stream.
-    pub fn push(&mut self, message: RequestOrResponse) {
+    ///
+    /// Returns the byte size of the pushed message.
+    pub fn push(&mut self, message: RequestOrResponse) -> usize {
+        let size_bytes = message.count_bytes();
         if let RequestOrResponse::Response(response) = &message {
             *self
                 .responses_size_bytes
                 .entry(response.respondent)
-                .or_default() += message.count_bytes();
+                .or_default() += size_bytes;
         }
         self.stream.push(message);
+        size_bytes
     }
 
     /// Increments the index of the last sent signal.
@@ -1558,10 +1571,6 @@ impl<'a> StreamHandle<'a> {
                     .get_mut(&response.respondent)
                     .expect("No `responses_size_bytes` entry for discarded response");
                 *canister_responses_size_bytes -= msg.count_bytes();
-                // Drop zero counts.
-                if *canister_responses_size_bytes == 0 {
-                    self.responses_size_bytes.remove(&response.respondent);
-                }
             }
         }
 
@@ -1868,7 +1877,10 @@ impl IngressHistoryState {
         let should_retain = |status: &IngressStatus| match status {
             IngressStatus::Known {
                 receiver, state, ..
-            } => state.is_terminal() || is_local_receiver(CanisterId::new(*receiver).unwrap()),
+            } => {
+                state.is_terminal()
+                    || is_local_receiver(CanisterId::unchecked_from_principal(*receiver))
+            }
             IngressStatus::Unknown => false,
         };
 

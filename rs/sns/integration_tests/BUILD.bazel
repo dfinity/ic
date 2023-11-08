@@ -10,7 +10,6 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
-    "//rs/nns/constants",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icp_ledger/ledger",
@@ -41,11 +40,13 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/init",
     "//rs/sns/test_utils",
+    "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/init:init--test_feature",
     "//rs/sns/test_utils:test_utils--test_feature",
+    "//rs/nns/constants:constants--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [

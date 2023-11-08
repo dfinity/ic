@@ -93,7 +93,7 @@ const DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR: f64 = 0.0;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 
 lazy_static! {
-    static ref INITIAL_ICP_BALANCE: ExplosiveTokens = ExplosiveTokens::from_e8s(100 * E8);
+    static ref INITIAL_ICP_BALANCE: ExplosiveTokens = ExplosiveTokens::from_e8s(1000 * E8);
     static ref DEFAULT_TRANSFER_FEE: ExplosiveTokens =
         ExplosiveTokens::from(DEFAULT_TRANSFER_FEE_TOKENS);
 }
@@ -472,6 +472,12 @@ fn begin_swap_legacy(
         } else {
             ((1.0 - max_community_fund_relative_error) * fund_raising_amount_icp_e8s as f64) as u64
         };
+    assert!(
+        fund_raising_amount_icp_e8s > planned_community_fund_participation_amount.into_e8s() * 2,
+        "fund_raising_amount_icp_e8s must be at least twice planned_community_fund_participation_amount. fund_raising_amount_icp_e8s = {}, planned_community_fund_participation_amount = {}",
+        fund_raising_amount_icp_e8s,
+        planned_community_fund_participation_amount.into_e8s()
+    );
     let proposal = Proposal {
         title: Some("Schedule SNS Token Sale".to_string()),
         summary: "".to_string(),
@@ -481,11 +487,13 @@ fn begin_swap_legacy(
             params: Some(swap_pb::Params {
                 // Succeed as soon as we raise `fund_raising_amount_icp_e8s`. In this case,
                 // SNS tokens and ICP trade at a ratio of `neuron_basket` so each
-                // created neron reached minimum stake requirements.
+                // created neruon reached minimum stake requirements.
                 max_icp_e8s: fund_raising_amount_icp_e8s,
+                max_direct_participation_icp_e8s: None,
                 // We want to make sure our test is exactly right, so we set the
                 // minimum to be just one e8 less than the maximum.
                 min_icp_e8s,
+                min_direct_participation_icp_e8s: None,
 
                 // We need at least one participant, but they can contribute whatever
                 // amount they want (subject to max_icp_e8s for the whole swap).
@@ -493,7 +501,7 @@ fn begin_swap_legacy(
                 // 1.2 ICP to ensure that all participants are able to form SNS
                 // neurons.
                 min_participant_icp_e8s: E8 * 5 / 4,
-                max_participant_icp_e8s: INITIAL_ICP_BALANCE.get_e8s(),
+                max_participant_icp_e8s: planned_participation_amount_per_account.into_e8s(),
                 swap_due_timestamp_seconds: swap_due_from_now_timestamp_seconds(state_machine),
                 sns_token_e8s,
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
@@ -1513,7 +1521,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
         .collect::<HashSet<_>>();
 
     // Step 0: Constants
-    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(70 * E8);
+    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
     let neuron_basket_count = 3;
 
     // Step 1: Prepare the world.
@@ -1627,10 +1635,11 @@ fn assert_successful_swap_finalizes_correctly_legacy(
         );
         assert!(
             (0.0..=max_community_fund_relative_error).contains(&relative_error),
-            "{} vs. {} ({}% error)",
+            "{} vs. {} ({}% error, max allowed is {}%)",
             community_fund_in_escrow,
             planned_community_fund_participation_amount,
             100.0 * relative_error,
+            100.0 * max_community_fund_relative_error,
         );
     }
 
@@ -1655,7 +1664,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
     // Have all the accounts we created participate in the swap
     for (index, principal_id) in direct_participant_principal_ids.iter().enumerate() {
         println!(
-            "Direct participant {}/{}",
+            "Direct participant {}/{} (participating with {planned_participation_amount_per_account})",
             index + 1,
             direct_participant_count
         );
@@ -1745,6 +1754,13 @@ fn assert_successful_swap_finalizes_correctly_legacy(
                     invalid: 0,
                     global_failures: 0,
                 }),
+                create_sns_neuron_recipes_result: Some(swap_pb::SweepResult {
+                    success: expected_neuron_count,
+                    failure: 0,
+                    skipped: 0,
+                    invalid: 0,
+                    global_failures: 0,
+                }),
                 sweep_sns_result: Some(swap_pb::SweepResult {
                     success: expected_neuron_count,
                     failure: 0,
@@ -1772,6 +1788,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
                         })),
                     }
                 ),
+                settle_neurons_fund_participation_result: None,
                 error_message: None,
             }
         );
@@ -2673,6 +2690,8 @@ fn test_upgrade() {
         min_participants: None,                      // TODO[NNS1-2339]
         min_icp_e8s: None,                           // TODO[NNS1-2339]
         max_icp_e8s: None,                           // TODO[NNS1-2339]
+        min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
+        max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
         min_participant_icp_e8s: None,               // TODO[NNS1-2339]
         max_participant_icp_e8s: None,               // TODO[NNS1-2339]
         swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
@@ -2683,6 +2702,7 @@ fn test_upgrade() {
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
         neurons_fund_participation_constraints: None,
+        neurons_fund_participation: None,
     })
     .unwrap();
     let canister_id = state_machine
@@ -3082,6 +3102,8 @@ fn test_last_man_less_than_min() {
         min_participants: None,                      // TODO[NNS1-2339]
         min_icp_e8s: None,                           // TODO[NNS1-2339]
         max_icp_e8s: None,                           // TODO[NNS1-2339]
+        min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
+        max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
         min_participant_icp_e8s: None,               // TODO[NNS1-2339]
         max_participant_icp_e8s: None,               // TODO[NNS1-2339]
         swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
@@ -3092,6 +3114,7 @@ fn test_last_man_less_than_min() {
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
         neurons_fund_participation_constraints: None,
+        neurons_fund_participation: None,
     })
     .unwrap();
     state_machine
@@ -3109,6 +3132,8 @@ fn test_last_man_less_than_min() {
             min_participants: 1,
             min_icp_e8s: 1,
             max_icp_e8s,
+            min_direct_participation_icp_e8s: Some(1),
+            max_direct_participation_icp_e8s: Some(max_icp_e8s),
             min_participant_icp_e8s,
             max_participant_icp_e8s,
             swap_due_timestamp_seconds: swap_due_from_now_timestamp_seconds(&state_machine),

@@ -230,14 +230,10 @@ impl Hypervisor {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
-        match own_subnet_type {
-            SubnetType::System => {
-                embedder_config.metering_type = ic_config::embedders::MeteringType::Old
-            }
-            SubnetType::VerifiedApplication => {
-                embedder_config.metering_type = ic_config::embedders::MeteringType::Old
-            }
-            SubnetType::Application => (),
+
+        // Use old metering for System subnets.
+        if own_subnet_type == SubnetType::System {
+            embedder_config.metering_type = ic_config::embedders::MeteringType::Old;
         }
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
@@ -319,6 +315,7 @@ impl Hypervisor {
         time: Time,
         mut system_state: SystemState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         mut execution_state: ExecutionState,
@@ -335,6 +332,7 @@ impl Hypervisor {
             &execution_state,
             &system_state,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             execution_parameters,
             func_ref,
             round_limits,
@@ -372,6 +370,7 @@ impl Hypervisor {
         execution_state: &ExecutionState,
         system_state: &SystemState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         round_limits: &mut RoundLimits,
@@ -399,6 +398,7 @@ impl Hypervisor {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 execution_parameters,
                 subnet_available_memory: round_limits.subnet_available_memory,
                 func_ref,

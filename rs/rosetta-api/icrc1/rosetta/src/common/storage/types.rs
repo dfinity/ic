@@ -4,6 +4,7 @@ use ic_icrc1::{Block, Transaction};
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -17,6 +18,7 @@ pub struct RosettaBlock {
     pub block_hash: ByteBuf,
     pub encoded_block: EncodedBlock,
     pub transaction_hash: ByteBuf,
+    pub timestamp: u64,
 }
 
 impl RosettaBlock {
@@ -30,10 +32,13 @@ impl RosettaBlock {
                 .map_err(anyhow::Error::msg)?
                 .hash(),
         );
+        let timestamp = block.timestamp;
+
         Ok(Self {
             index: block_idx,
             parent_hash: Block::parent_hash(&block).map(|eb| ByteBuf::from(eb.as_slice().to_vec())),
             block_hash,
+            timestamp,
             encoded_block: block.encode(),
             transaction_hash,
         })
@@ -54,6 +59,7 @@ impl RosettaBlock {
                     .as_slice()
                     .to_vec(),
             ),
+            timestamp: block.timestamp,
         })
     }
 
@@ -64,9 +70,36 @@ impl RosettaBlock {
         )
     }
 
+    pub fn get_effective_fee(&self) -> anyhow::Result<Option<Tokens>> {
+        Block::decode(self.encoded_block.clone())
+            .map(|b| b.effective_fee)
+            .map_err(anyhow::Error::msg)
+    }
+
     pub fn get_transaction(&self) -> anyhow::Result<Transaction<Tokens>> {
         Ok(Block::decode(self.encoded_block.clone())
             .map_err(anyhow::Error::msg)?
             .transaction)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct MetadataEntry {
+    pub key: String,
+    pub value: Vec<u8>,
+}
+
+impl MetadataEntry {
+    pub fn from_metadata_value(key: &str, value: &MetadataValue) -> anyhow::Result<Self> {
+        let value = candid::encode_one(value)?;
+
+        Ok(Self {
+            key: key.to_string(),
+            value,
+        })
+    }
+
+    pub fn value(&self) -> anyhow::Result<MetadataValue> {
+        Ok(candid::decode_one(&self.value)?)
     }
 }

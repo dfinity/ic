@@ -13,16 +13,16 @@ use ic_sys::{PageBytes, PAGE_SIZE};
 use ic_types::{methods::WasmMethod, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
-use wasmtime::Module;
 
 use self::{instrumentation::instrument, validation::validate_wasm_binary};
+use crate::wasmtime_embedder::StoreData;
 use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
+use wasmtime::InstancePre;
 
 pub mod decoding;
 pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
-pub mod wasm_transform;
 
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct WasmImportsDetails {
@@ -226,18 +226,19 @@ pub fn validate_and_instrument_for_testing(
 fn compile_inner(
     embedder: &WasmtimeEmbedder,
     wasm: &BinaryEncodedWasm,
-) -> HypervisorResult<(Module, CompilationResult, SerializedModule)> {
+) -> HypervisorResult<(InstancePre<StoreData>, CompilationResult, SerializedModule)> {
     let timer = Instant::now();
     let (wasm_validation_details, instrumentation_output) =
         validate_and_instrument(wasm, embedder.config())?;
     let module = embedder.compile(&instrumentation_output.binary)?;
+    let instance_pre = embedder.pre_instantiate(&module)?;
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
     let max_complexity = wasm_validation_details.max_complexity.0;
     let serialized_module =
         SerializedModule::new(&module, instrumentation_output, wasm_validation_details)?;
     Ok((
-        module,
+        instance_pre,
         CompilationResult {
             largest_function_instruction_count,
             compilation_time: timer.elapsed(),

@@ -143,7 +143,7 @@ pub struct Config {
     pub ingress_history_memory_capacity: NumBytes,
 
     /// The maximum amount of logical storage available to wasm custom sections
-    /// across the whole subnet.    
+    /// across the whole subnet.
     pub subnet_wasm_custom_sections_memory_capacity: NumBytes,
 
     /// The number of bytes reserved for response callback execution.

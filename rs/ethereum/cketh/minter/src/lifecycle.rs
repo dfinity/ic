@@ -3,7 +3,6 @@ use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use candid::{CandidType, Deserialize};
 use minicbor::{Decode, Encode};
-use serde::Serialize;
 use std::fmt::{Display, Formatter};
 
 #[cfg(test)]
@@ -20,18 +19,7 @@ pub enum MinterArg {
 }
 
 #[derive(
-    CandidType,
-    Clone,
-    Copy,
-    Default,
-    Serialize,
-    Deserialize,
-    Debug,
-    Eq,
-    PartialEq,
-    Hash,
-    Encode,
-    Decode,
+    CandidType, Clone, Copy, Default, Deserialize, Debug, Eq, PartialEq, Hash, Encode, Decode,
 )]
 #[cbor(index_only)]
 pub enum EvmNetwork {

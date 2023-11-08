@@ -1,11 +1,14 @@
 [package]
 name = "ic-p8s-service-discovery"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.31"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 crossbeam = "0.8.0"
 crossbeam-channel = "0.5.5"
 elastic_common_schema = { path = "../elastic_common_schema" }
@@ -35,23 +38,23 @@ ic-utils = { path = "../utils/" }
 lazy_static = "1.4.0"
 parse_int = "0.4.0"
 prometheus = { workspace = true }
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_json = { workspace = true }
 tempfile = "3.1.0"
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 slog_derive = "0.2.0"
-strum = "0.23.0"
-strum_macros = "0.23.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 thiserror = "1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 
 [dev-dependencies]
 ic-test-utilities = { path = "../test_utilities" }
-itertools = "0.10.0"
+itertools = { workspace = true }
 
 
 [[bin]]

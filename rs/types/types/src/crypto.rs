@@ -50,7 +50,7 @@ impl fmt::Debug for CryptoHash {
 pub type CryptoHashOf<T> = Id<T, CryptoHash>;
 
 /// Signed contains the signed content and its signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct Signed<T, S> {
     pub content: T,
     pub signature: S,
@@ -146,6 +146,16 @@ pub enum AlgorithmId {
     ThresholdEcdsaSecp256k1 = 15,
     MegaSecp256k1 = 16,
     ThresholdEcdsaSecp256r1 = 17,
+}
+
+impl AlgorithmId {
+    pub const fn all_threshold_ecdsa_algorithms() -> [AlgorithmId; 2] {
+        [Self::ThresholdEcdsaSecp256r1, Self::ThresholdEcdsaSecp256k1]
+    }
+
+    pub fn is_threshold_ecdsa(&self) -> bool {
+        Self::all_threshold_ecdsa_algorithms().contains(self)
+    }
 }
 
 impl From<AlgorithmId> for u8 {

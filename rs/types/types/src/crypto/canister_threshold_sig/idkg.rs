@@ -12,6 +12,7 @@ use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
+use serde_bytes::ByteBuf;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
@@ -302,8 +303,10 @@ pub struct IDkgTranscriptParams {
     dealers: IDkgDealers,
     receivers: IDkgReceivers,
     registry_version: RegistryVersion,
-    /// Identifies the cryptographic signature scheme used in the protocol.
-    /// Currently only [`AlgorithmId::ThresholdEcdsaSecp256k1`] is supported.
+    /// Identifies the cryptographic signature scheme used in the
+    /// protocol.  Currently only
+    /// [`AlgorithmId::ThresholdEcdsaSecp256k1`] and
+    /// [`AlgorithmId::ThresholdEcdsaSecp256r1`] are supported.
     algorithm_id: AlgorithmId,
     /// Mode of operation for this current execution of the protocol.
     operation_type: IDkgTranscriptOperation,
@@ -498,6 +501,7 @@ impl IDkgTranscriptParams {
     fn ensure_algorithm_id_supported(&self) -> Result<(), IDkgParamsValidationError> {
         match self.algorithm_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(()),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => Ok(()),
             _ => Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
                 algorithm_id: self.algorithm_id,
             }),
@@ -939,6 +943,12 @@ impl IDkgTranscript {
     pub fn has_receiver(&self, receiver_id: NodeId) -> bool {
         self.receivers.position(receiver_id).is_some()
     }
+
+    /// Returns a copy of the raw internal transcript as `serde_bytes::ByteBuf`.
+    #[inline]
+    pub fn transcript_as_bytebuf(&self) -> ByteBuf {
+        ByteBuf::from(self.internal_transcript_raw.clone())
+    }
 }
 
 impl Debug for IDkgTranscript {
@@ -974,6 +984,14 @@ pub struct IDkgDealing {
     pub internal_dealing_raw: Vec<u8>,
 }
 
+impl IDkgDealing {
+    /// Returns a copy of the internal dealing as `serde_bytes::ByteBuf`.
+    #[inline]
+    pub fn dealing_as_bytebuf(&self) -> IDkgDealingBytes {
+        IDkgDealingBytes::from(self.internal_dealing_raw.clone())
+    }
+}
+
 impl Debug for IDkgDealing {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "IDkgDealing {{ transcript_id: {}", self.transcript_id)?;
@@ -998,6 +1016,8 @@ impl SignedBytesWithoutDomainSeparator for IDkgDealing {
         serde_cbor::to_vec(&self).unwrap()
     }
 }
+
+pub type IDkgDealingBytes = serde_bytes::ByteBuf;
 
 /// The signed dealing sent by dealers
 ///

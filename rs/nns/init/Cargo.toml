@@ -1,12 +1,15 @@
 [package]
 name = "ic-nns-init"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -21,7 +24,7 @@ ic-test-identity = { path = "../../test_utilities/identity" }
 ic-sys = { path = "../../sys" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 prost = { workspace = true }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 url = "2.2.0"
 
 [[bin]]

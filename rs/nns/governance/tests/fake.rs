@@ -18,7 +18,7 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
         ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
-        NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
+        NetworkEconomics, Neuron, NnsFunction, Proposal, Topic, Vote,
     },
 };
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -30,11 +30,11 @@ use maplit::hashmap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
@@ -384,19 +384,22 @@ impl Environment for FakeDriver {
                         confirmation_text: None,
                         restricted_countries: None,
 
-                        min_participants: None,             // TODO[NNS1-2339]
-                        min_icp_e8s: None,                  // TODO[NNS1-2339]
-                        max_icp_e8s: None,                  // TODO[NNS1-2339]
-                        min_participant_icp_e8s: None,      // TODO[NNS1-2339]
-                        max_participant_icp_e8s: None,      // TODO[NNS1-2339]
+                        min_participants: None, // TODO[NNS1-2339]
+                        min_icp_e8s: None,      // TODO[NNS1-2339]
+                        max_icp_e8s: None,      // TODO[NNS1-2339]
+                        min_direct_participation_icp_e8s: None, // TODO[NNS1-2339]
+                        max_direct_participation_icp_e8s: None, // TODO[NNS1-2339]
+                        min_participant_icp_e8s: None, // TODO[NNS1-2339]
+                        max_participant_icp_e8s: None, // TODO[NNS1-2339]
                         swap_start_timestamp_seconds: None, // TODO[NNS1-2339]
-                        swap_due_timestamp_seconds: None,   // TODO[NNS1-2339]
-                        sns_token_e8s: None,                // TODO[NNS1-2339]
+                        swap_due_timestamp_seconds: None, // TODO[NNS1-2339]
+                        sns_token_e8s: None,    // TODO[NNS1-2339]
                         neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
-                        nns_proposal_id: None,              // TODO[NNS1-2339]
-                        neurons_fund_participants: None,    // TODO[NNS1-2339]
+                        nns_proposal_id: None,  // TODO[NNS1-2339]
+                        neurons_fund_participants: None, // TODO[NNS1-2339]
                         should_auto_finalize: Some(true),
                         neurons_fund_participation_constraints: None,
+                        neurons_fund_participation: None,
                     }),
                     ..Default::default() // Not realistic, but sufficient for tests.
                 }),
@@ -497,6 +500,28 @@ impl Environment for FakeDriver {
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
     PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+}
+
+/// Issues a manage_neuron command to follow
+pub fn follow(
+    governance: &mut Governance,
+    caller: PrincipalId,
+    neuron_id: NeuronId,
+    topic: Topic,
+    followee_neuron_id: NeuronId,
+) -> ManageNeuronResponse {
+    let manage_neuron = ManageNeuron {
+        id: None,
+        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
+        command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
+            topic: topic as i32,
+            followees: vec![followee_neuron_id],
+        })),
+    };
+    governance
+        .manage_neuron(&caller, &manage_neuron)
+        .now_or_never()
+        .unwrap()
 }
 
 /// Issues a manage_neuron command to register a vote

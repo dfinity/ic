@@ -159,21 +159,12 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         transcript.registry_version,
     )?;
 
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-            internal_error: e.serde_error,
-        })?;
-    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-        IDkgLoadTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
-        }
-    })?;
     let internal_complaints = csp_client.idkg_load_transcript(
-        &internal_dealings,
+        &transcript.verified_dealings,
         &transcript.context_data(),
         self_index,
         &self_mega_pubkey,
-        &internal_transcript,
+        transcript.transcript_as_bytebuf(),
     )?;
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
 
@@ -201,16 +192,6 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
         registry,
         transcript.registry_version,
     )?;
-
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-            internal_error: e.serde_error,
-        })?;
-    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-        IDkgLoadTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
-        }
-    })?;
 
     let mut internal_openings = BTreeMap::new();
     for (complaint, openings_by_opener_id) in openings {
@@ -243,12 +224,12 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
     }
 
     csp_client.idkg_load_transcript_with_openings(
-        &internal_dealings,
+        &transcript.verified_dealings,
         &internal_openings,
         &transcript.context_data(),
         self_index,
         &self_mega_pubkey,
-        &internal_transcript,
+        transcript.transcript_as_bytebuf(),
     )
 }
 

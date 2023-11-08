@@ -80,8 +80,6 @@ pub enum HypervisorError {
     ContractViolation(String),
     /// Wasm execution consumed too many instructions.
     InstructionLimitExceeded,
-    /// Wasm execution was too complex, i.e. had too many System API calls.
-    ExecutionComplexityLimitExceeded,
     /// We could not validate the wasm module
     InvalidWasm(WasmValidationError),
     /// We could not instrument the wasm module
@@ -144,6 +142,11 @@ pub enum HypervisorError {
         bytes: NumBytes,
         requested: Cycles,
         limit: Cycles,
+    },
+    InsufficientCyclesInMessageMemoryGrow {
+        bytes: NumBytes,
+        available: Cycles,
+        threshold: Cycles,
     },
 }
 
@@ -228,10 +231,6 @@ impl HypervisorError {
             Self::InstructionLimitExceeded => UserError::new(
                 E::CanisterInstructionLimitExceeded,
                 format!("Canister {} exceeded the instruction limit for single message execution.", canister_id),
-            ),
-            Self::ExecutionComplexityLimitExceeded => UserError::new(
-                E::CanisterInstructionLimitExceeded,
-                format!("Canister {} exceeded the instruction limit for single message execution due to too many System API calls.", canister_id),
             ),
             Self::InvalidWasm(err) => UserError::new(
                 E::CanisterInvalidWasm,
@@ -346,6 +345,14 @@ impl HypervisorError {
                         bytes, limit, requested - limit,
                     ),
             ),
+            Self::InsufficientCyclesInMessageMemoryGrow { bytes, available, threshold } => UserError::new(
+                E::InsufficientCyclesInMessageMemoryGrow,
+                format!(
+                    "Canister cannot grow message memory by {} bytes due to insufficient cycles. \
+                     At least {} additional cycles are required.",
+                     bytes,
+                     threshold - available)
+            ),
         }
     }
 
@@ -357,7 +364,6 @@ impl HypervisorError {
             HypervisorError::MethodNotFound(_) => "MethodNotFound",
             HypervisorError::ContractViolation(_) => "ContractViolation",
             HypervisorError::InstructionLimitExceeded => "InstructionLimitExceeded",
-            HypervisorError::ExecutionComplexityLimitExceeded => "ExecutionComplexityLimitExceeded",
             HypervisorError::InvalidWasm(_) => "InvalidWasm",
             HypervisorError::InstrumentationFailed(_) => "InstrumentationFailed",
             HypervisorError::Trapped(_) => "Trapped",
@@ -381,6 +387,9 @@ impl HypervisorError {
             }
             HypervisorError::ReservedCyclesLimitExceededInMemoryGrow { .. } => {
                 "ReservedCyclesLimitExceededInMemoryGrow"
+            }
+            HypervisorError::InsufficientCyclesInMessageMemoryGrow { .. } => {
+                "InsufficientCyclesInMessageMemoryGrow"
             }
         }
     }

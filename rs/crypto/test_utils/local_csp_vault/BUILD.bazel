@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/crypto/tls_interfaces",
     "//rs/types/types",
     "@crate_index//:mockall_0_7_2",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = []

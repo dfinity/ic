@@ -5,14 +5,25 @@
 # directory must be a valid corpus.
 
 set -x
-# Create a dummy input directory
+
 # If you would like to include your own corpus,
-# INPUT_DIR=/path/to/corpus
-INPUT_DIR=$(mktemp -d)
-echo "A dummy corpus file to make AFL work" >$INPUT_DIR/seed_corpus.txt
+# export INPUT_DIR=/path/to/corpus
+if [[ -z "$INPUT_DIR" ]]; then
+    INPUT_DIR=$(mktemp -d)
+    echo "A dummy corpus file to make AFL work" >$INPUT_DIR/seed_corpus.txt
+fi
 
 # Output directory
-OUTPUT_DIR=$(mktemp -d)
+if [[ -z "$OUTPUT_DIR" ]]; then
+    OUTPUT_DIR=$(mktemp -d)
+fi
+
+cleanup() {
+    echo "Input directory ${INPUT_DIR}"
+    echo "Output directory ${OUTPUT_DIR}"
+}
+
+trap cleanup EXIT
 
 ASAN_OPTIONS="abort_on_error=1:\
             alloc_dealloc_mismatch=0:\

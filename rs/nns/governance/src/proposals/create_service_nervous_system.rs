@@ -5,6 +5,7 @@ use crate::pb::v1::{
 };
 use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
+use ic_nns_constants::IS_MATCHED_FUNDING_ENABLED;
 use ic_sns_init::pb::v1::{
     self as sns_init_pb, sns_init_payload, NeuronsFundParticipants, SnsInitPayload,
 };
@@ -19,6 +20,7 @@ pub struct ExecutedCreateServiceNervousSystemProposal {
     pub proposal_id: u64,
     pub neurons_fund_participants: Vec<CfParticipant>,
     pub random_swap_start_time: GlobalTimeOfDay,
+    /// Information about the Neurons' Fund participation needed by the Swap canister.
     pub neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
 }
 
@@ -318,9 +320,166 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
 
         let min_participants = swap_parameters.minimum_participants;
 
+        let min_direct_participation_icp_e8s = swap_parameters
+            .minimum_direct_participation_icp
+            .and_then(|tokens| tokens.e8s);
+
+        let max_direct_participation_icp_e8s = swap_parameters
+            .maximum_direct_participation_icp
+            .and_then(|tokens| tokens.e8s);
+
+        let neurons_fund_investment_icp_e8s = if IS_MATCHED_FUNDING_ENABLED {
+            if let Some(neurons_fund_investment_icp) = swap_parameters.neurons_fund_investment_icp {
+                defects.push(format!(
+                    "neurons_fund_investment_icp ({:?}) is deprecated; please \
+                        set neurons_fund_participation instead.",
+                    neurons_fund_investment_icp,
+                ));
+            }
+            None
+        } else {
+            swap_parameters
+                .neurons_fund_investment_icp
+                .and_then(|tokens| tokens.e8s)
+        };
+
         let min_icp_e8s = swap_parameters.minimum_icp.and_then(|tokens| tokens.e8s);
 
         let max_icp_e8s = swap_parameters.maximum_icp.and_then(|tokens| tokens.e8s);
+
+        let neurons_fund_participation = swap_parameters.neurons_fund_participation;
+
+        // If min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
+        // max_direct_participation_icp_e8s are Some, or vice versa, then we can
+        // "reconstruct" the missing fields.
+        let (
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
+            min_icp_e8s,
+            max_icp_e8s,
+        ) = match (
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
+            min_icp_e8s,
+            max_icp_e8s,
+        ) {
+            // If matched funding is enabled, we don't need to populate the old fields
+            // TODO NNS1-2687: Once this ticket is being worked on, this branch
+            // will always be taken, making the entire `match` expression a no-op,
+            // so let's just remove it entirely.
+            min_max_icp_bounds if IS_MATCHED_FUNDING_ENABLED => min_max_icp_bounds,
+            // Otherwise, let's "reconstruct" the missing fields.
+            (
+                Some(min_direct_participation_icp_e8s),
+                Some(max_direct_participation_icp_e8s),
+                None,
+                None,
+            ) => {
+                let min_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        min_direct_participation_icp_e8s
+                            .checked_add(neurons_fund_investment_icp_e8s)
+                    });
+
+                let max_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        max_direct_participation_icp_e8s
+                            .checked_add(neurons_fund_investment_icp_e8s)
+                    });
+
+                (
+                    Some(min_direct_participation_icp_e8s),
+                    Some(max_direct_participation_icp_e8s),
+                    min_icp_e8s,
+                    max_icp_e8s,
+                )
+            }
+            (None, None, Some(min_icp_e8s), Some(max_icp_e8s)) => {
+                let min_direct_participation_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        min_icp_e8s.checked_sub(neurons_fund_investment_icp_e8s)
+                    });
+
+                let max_direct_participation_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        max_icp_e8s.checked_sub(neurons_fund_investment_icp_e8s)
+                    });
+
+                (
+                    min_direct_participation_icp_e8s,
+                    max_direct_participation_icp_e8s,
+                    Some(min_icp_e8s),
+                    Some(max_icp_e8s),
+                )
+            }
+            (
+                Some(min_direct_participation_icp_e8s),
+                Some(max_direct_participation_icp_e8s),
+                Some(min_icp_e8s),
+                Some(max_icp_e8s),
+            ) => {
+                // We'll just check that all 4 are consistent
+                let expected_min_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        min_direct_participation_icp_e8s
+                            .checked_add(neurons_fund_investment_icp_e8s)
+                    });
+
+                let expected_max_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        max_direct_participation_icp_e8s
+                            .checked_add(neurons_fund_investment_icp_e8s)
+                    });
+
+                if expected_min_icp_e8s != Some(min_icp_e8s) {
+                    defects.push(format!(
+                        "min_icp_e8s is inconsistent with min_direct_participation_icp_e8s and neurons_fund_investment_icp_e8s. \
+                        min_icp_e8s = {min_icp_e8s:?}, \
+                        min_direct_participation_icp_e8s = {min_direct_participation_icp_e8s:?}, \
+                        neurons_fund_investment_icp_e8s = {neurons_fund_investment_icp_e8s:?}, \
+                        min_icp_e8s should be {expected_min_icp_e8s:?}",
+                    ));
+                }
+
+                if expected_max_icp_e8s != Some(max_icp_e8s) {
+                    defects.push(format!(
+                        "max_icp_e8s is inconsistent with max_direct_participation_icp_e8s and neurons_fund_investment_icp_e8s. \
+                        max_icp_e8s = {max_icp_e8s:?}, \
+                        max_direct_participation_icp_e8s = {max_direct_participation_icp_e8s:?}, \
+                        neurons_fund_investment_icp_e8s = {neurons_fund_investment_icp_e8s:?}, \
+                        max_icp_e8s should be {expected_max_icp_e8s:?}",
+                    ));
+                }
+
+                (
+                    Some(min_direct_participation_icp_e8s),
+                    Some(max_direct_participation_icp_e8s),
+                    Some(min_icp_e8s),
+                    Some(max_icp_e8s),
+                )
+            }
+            (
+                min_direct_participation_icp_e8s,
+                max_direct_participation_icp_e8s,
+                min_icp_e8s,
+                max_icp_e8s,
+            ) => {
+                defects.push(format!(
+                    "(min_direct_participation_icp_e8s AND max_direct_participation_icp_e8s) OR (min_icp_e8s AND max_icp_e8s) must be set. \
+                    min_direct_participation_icp_e8s = {min_direct_participation_icp_e8s:?}, \
+                    max_direct_participation_icp_e8s = {max_direct_participation_icp_e8s:?}, \
+                    min_icp_e8s = {min_icp_e8s:?}, \
+                    max_icp_e8s = {max_icp_e8s:?}"
+                ));
+
+                (
+                    min_direct_participation_icp_e8s,
+                    max_direct_participation_icp_e8s,
+                    min_icp_e8s,
+                    max_icp_e8s,
+                )
+            }
+        };
 
         let min_participant_icp_e8s = swap_parameters
             .minimum_participant_icp
@@ -342,9 +501,18 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
                 },
             );
 
+        // TODO NNS1-2687: move this check to sns/init
+        if IS_MATCHED_FUNDING_ENABLED {
+            if swap_parameters.neurons_fund_participation.is_none() {
+                defects.push("Error: neurons_fund_participation must be specified.".to_string());
+            }
+        } else if swap_parameters.neurons_fund_participation.is_some() {
+            defects.push("Error: neurons_fund_participation must not be specified until Matched Funding is enabled.".to_string());
+        }
+
         if !defects.is_empty() {
             return Err(format!(
-                "Failed to convert proposal to SnsInitPayload:\n{}",
+                "Failed to convert CreateServiceNervousSystem proposal to SnsInitPayload:\n{}",
                 defects.join("\n"),
             ));
         }
@@ -375,12 +543,15 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             min_participants,
             min_icp_e8s,
             max_icp_e8s,
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
             min_participant_icp_e8s,
             max_participant_icp_e8s,
             neuron_basket_construction_parameters,
             confirmation_text,
             restricted_countries,
             token_logo,
+            neurons_fund_participation,
 
             // These are not known from only the CreateServiceNervousSystem
             // proposal. See TryFrom<ExecutedCreateServiceNervousSystemProposal>

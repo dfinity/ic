@@ -1,5 +1,6 @@
+use std::os::unix::fs::PermissionsExt;
 use std::{
-    fs::File,
+    fs::{self, File, Permissions},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -7,13 +8,13 @@ use std::{
 use anyhow::{Context, Error};
 use clap::{Args, Parser};
 use ipnet::Ipv6Net;
-use loopdev::{create_loop_device, detach_loop_device};
-use sysmount::{mount, umount};
-use tempfile::tempdir;
-use tokio::fs;
+use tempfile::NamedTempFile;
+use url::Url;
 
-mod loopdev;
-mod sysmount;
+mod deployment;
+use deployment::DeploymentJson;
+
+use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
 
 const SERVICE_NAME: &str = "setupos-inject-configuration";
 
@@ -31,10 +32,12 @@ struct Cli {
 
     #[arg(long, value_delimiter = ',')]
     public_keys: Option<Vec<String>>,
+
+    #[command(flatten)]
+    deployment: DeploymentConfig,
 }
 
 #[derive(Args)]
-#[group(required = true)]
 struct NetworkConfig {
     #[arg(long)]
     ipv6_prefix: Option<Ipv6Net>,
@@ -42,127 +45,148 @@ struct NetworkConfig {
     #[arg(long)]
     ipv6_gateway: Option<Ipv6Net>,
 
-    #[arg(long, conflicts_with_all = ["ipv6_prefix", "ipv6_gateway"])]
-    ipv6_address: Option<Ipv6Net>,
+    #[arg(long)]
+    mgmt_mac: Option<String>,
+}
+
+#[derive(Args)]
+struct DeploymentConfig {
+    #[arg(long)]
+    nns_url: Option<Url>,
+
+    #[arg(long, allow_hyphen_values = true)]
+    nns_public_key: Option<String>,
+
+    #[arg(long)]
+    memory_gb: Option<u32>,
+
+    #[arg(long)]
+    cpu_mode: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
-    // Create a loop device
-    let device_path = create_loop_device(&cli.image_path)
-        .await
-        .context("failed to create loop device")?;
-
-    let config_partition_path = format!("{device_path}p3");
-
-    // Mount config partition
-    let target_dir = tempdir().context("failed to create temporary dir")?;
-
-    mount(
-        &config_partition_path,               // source
-        &target_dir.path().to_string_lossy(), // target
-    )
-    .await
-    .context("failed to mount partition")?;
+    // Open config partition
+    let mut config = FatPartition::open(cli.image_path.clone(), 3).await?;
 
     // Print previous config.ini
     println!("Previous config.ini:\n---");
-    print_file_contents(&target_dir.path().join("config.ini"))
+    let previous_config = config
+        .read_file(Path::new("/config.ini"))
         .await
         .context("failed to print previous config")?;
+    println!("{previous_config}");
 
     // Update config.ini
-    let cfg = match (
-        cli.network.ipv6_prefix,
-        cli.network.ipv6_gateway,
-        cli.network.ipv6_address,
-    ) {
-        // PrefixAndGateway
-        (Some(ipv6_prefix), Some(ipv6_gateway), None) => {
-            Config::PrefixAndGateway(ipv6_prefix, ipv6_gateway)
-        }
-
-        // Address
-        (None, None, Some(ipv6_address)) => Config::Address(ipv6_address),
-
-        _ => panic!("invalid network arguments"),
-    };
-
-    write_config(&target_dir.path().join("config.ini"), &cfg)
+    let config_ini = NamedTempFile::new()?;
+    write_config(config_ini.path(), &cli.network)
         .await
         .context("failed to write config file")?;
+    config
+        .write_file(config_ini.path(), Path::new("/config.ini"))
+        .await
+        .context("failed to copy config file")?;
 
     // Update node-provider private-key
     if let Some(private_key_path) = cli.private_key_path {
-        fs::copy(
-            private_key_path,
-            &target_dir.path().join("node_operator_private_key.pem"),
-        )
-        .await
-        .context("failed to copy private-key")?;
+        config
+            .write_file(
+                &private_key_path,
+                Path::new("/node_operator_private_key.pem"),
+            )
+            .await
+            .context("failed to copy private-key")?;
     }
 
     // Print previous public keys
     println!("Previous ssh_authorized_keys/admin:\n---");
-    print_file_contents(&target_dir.path().join("ssh_authorized_keys/admin"))
+    let previous_admin_keys = config
+        .read_file(Path::new("ssh_authorized_keys/admin"))
         .await
         .context("failed to print previous config")?;
+    println!("{previous_admin_keys}");
 
     // Update SSH keys
     if let Some(ks) = cli.public_keys {
-        write_public_keys(&target_dir.path().join("ssh_authorized_keys/admin"), ks)
+        let public_keys = NamedTempFile::new()?;
+        write_public_keys(public_keys.path(), ks)
             .await
             .context("failed to write public keys")?;
+
+        config
+            .write_file(public_keys.path(), Path::new("/ssh_authorized_keys/admin"))
+            .await
+            .context("failed to copy public keys")?;
     }
 
-    // Unmount partition
-    umount(&target_dir.path().to_string_lossy())
-        .await
-        .context("failed to unmount partition")?;
+    // Close config partition
+    config.close().await?;
 
-    // Detach loop device
-    detach_loop_device(&device_path)
+    // Open data partition
+    let mut data = ExtPartition::open(cli.image_path.clone(), 4).await?;
+
+    // Print previous deployment.json
+    println!("Previous deployment.json:\n---");
+    let previous_deployment = data
+        .read_file(Path::new("/deployment.json"))
         .await
-        .context("failed to detach loop device")?;
+        .context("failed to print previous deployment config")?;
+    println!("{previous_deployment}");
+
+    // Update deployment.json
+    let mut deployment_json = NamedTempFile::new()?;
+    deployment_json.write_all(previous_deployment.as_bytes())?;
+    fs::set_permissions(deployment_json.path(), Permissions::from_mode(0o644))?;
+    update_deployment(deployment_json.path(), &cli.deployment)
+        .await
+        .context("failed to write deployment config file")?;
+    data.write_file(deployment_json.path(), Path::new("/deployment.json"))
+        .await
+        .context("failed to copy deployment config file")?;
+
+    // Update NNS key
+    if let Some(public_key) = cli.deployment.nns_public_key {
+        let mut nns_key = NamedTempFile::new()?;
+        write!(&mut nns_key, "{public_key}")?;
+        fs::set_permissions(nns_key.path(), Permissions::from_mode(0o644))?;
+
+        data.write_file(nns_key.path(), Path::new("/nns_public_key.pem"))
+            .await
+            .context("failed to copy nns key file")?;
+    }
+
+    // Close data partition
+    data.close().await?;
 
     Ok(())
 }
 
-enum Config {
-    PrefixAndGateway(Ipv6Net, Ipv6Net),
-    Address(Ipv6Net),
-}
-
-async fn print_file_contents(path: &Path) -> Result<(), Error> {
-    let s = fs::read_to_string(path).await;
-
-    if let Ok(s) = s {
-        println!("{s}");
-    }
-
-    Ok(())
-}
-
-async fn write_config(path: &Path, cfg: &Config) -> Result<(), Error> {
+async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
     let mut f = File::create(path).context("failed to create config file")?;
 
-    match cfg {
-        Config::PrefixAndGateway(ipv6_prefix, ipv6_gateway) => {
-            writeln!(
-                &mut f,
-                "ipv6_prefix={}",
-                ipv6_prefix.addr().to_string().trim_end_matches("::")
-            )?;
+    let NetworkConfig {
+        ipv6_prefix,
+        ipv6_gateway,
+        mgmt_mac,
+    } = cfg;
 
-            writeln!(&mut f, "ipv6_subnet=/{}", ipv6_prefix.prefix_len())?;
-            writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway.addr())?;
-        }
+    if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
+        // Always write 4 segments, even if our prefix is less.
+        let segments = ipv6_prefix.trunc().addr().segments();
+        writeln!(
+            &mut f,
+            "ipv6_prefix={:04x}:{:04x}:{:04x}:{:04x}",
+            segments[0], segments[1], segments[2], segments[3],
+        )?;
 
-        Config::Address(ipv6_address) => {
-            writeln!(&mut f, "ipv6_address={}", ipv6_address.addr())?;
-        }
+        writeln!(&mut f, "ipv6_subnet=/{}", ipv6_prefix.prefix_len())?;
+        writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway.addr())?;
+    }
+
+    if let Some(mgmt_mac) = mgmt_mac {
+        writeln!(&mut f, "mgmt_mac={}", mgmt_mac)?;
     }
 
     Ok(())
@@ -172,8 +196,35 @@ async fn write_public_keys(path: &Path, ks: Vec<String>) -> Result<(), Error> {
     let mut f = File::create(path).context("failed to create public keys file")?;
 
     for k in ks {
-        writeln!(&mut f, "{k}",)?;
+        writeln!(&mut f, "{k}")?;
     }
+
+    Ok(())
+}
+
+async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
+    let mut deployment_json = {
+        let f = File::open(path).context("failed to open deployment config file")?;
+        let deployment_json: DeploymentJson = serde_json::from_reader(f)?;
+
+        deployment_json
+    };
+
+    if let Some(nns_url) = &cfg.nns_url {
+        deployment_json.nns.url = nns_url.clone();
+    }
+
+    if let Some(memory) = cfg.memory_gb {
+        deployment_json.resources.memory = memory;
+    }
+
+    if let Some(cpu_mode) = &cfg.cpu_mode {
+        deployment_json.resources.cpu = Some(cpu_mode.to_owned());
+    }
+
+    let mut f = File::create(path).context("failed to open deployment config file")?;
+    let output = serde_json::to_string_pretty(&deployment_json)?;
+    write!(&mut f, "{output}")?;
 
     Ok(())
 }

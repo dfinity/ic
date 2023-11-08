@@ -20,7 +20,6 @@ rust_test(
     srcs = ["tests/sha224.rs"],
     deps = [
         ":sha2",
-        "@crate_index//:openssl",
     ],
 )
 
@@ -29,6 +28,5 @@ rust_test(
     srcs = ["tests/sha256.rs"],
     deps = [
         ":sha2",
-        "@crate_index//:openssl",
     ],
 )

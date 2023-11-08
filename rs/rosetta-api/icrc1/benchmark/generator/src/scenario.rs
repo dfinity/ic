@@ -9,8 +9,8 @@ use ic_cdk::api::management_canister::main::{
     CanisterIdRecord, CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument, WasmModule,
 };
 use ic_icrc1_benchmark_worker::InitArgs;
-use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use ic_ledger_core::Tokens;
+use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 
@@ -69,7 +69,7 @@ async fn install_code_on_canisters(wasm: WasmModule, canisters: Vec<Principal>) 
             canister_id
         );
         let arg = InitArgs {
-            ledger_id: CanisterId::new(get_ledger_principal()).unwrap(),
+            ledger_id: CanisterId::unchecked_from_principal(get_ledger_principal()),
             rand_seed: Nat::from(next_u64()),
         };
         let arg = &Encode!(&arg).expect("Error while encoding arg");

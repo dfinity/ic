@@ -234,11 +234,10 @@ pub fn locate_canister_ids(
     ic: &dyn Ic,
 ) -> Vec<CanisterLocator> {
     fn into_canister_id(canister_id: &str) -> CanisterId {
-        CanisterId::new(
+        CanisterId::unchecked_from_principal(
             PrincipalId::from_str(canister_id)
                 .unwrap_or_else(|_| panic!("Could not create PrincipalId from {}", canister_id)),
         )
-        .unwrap_or_else(|_| panic!("Could not convert {} into canister id.", canister_id))
     }
     fn into_canister_ids<'a>(canister_ids: &'_ [String]) -> Vec<CanisterHandle<'a>> {
         canister_ids

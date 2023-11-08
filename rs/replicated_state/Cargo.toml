@@ -1,7 +1,10 @@
 [package]
 name = "ic-replicated-state"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 cvt = "0.1.1"
@@ -29,11 +32,11 @@ ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
 libc = "0.2.91"
 maplit = "1.0.2"
-nix = "0.23.0"
+nix = { workspace = true }
 rand = "0.8.4"
 rand_chacha = "0.3.0"
 phantom_newtype = { path = "../phantom_newtype" }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
@@ -50,11 +53,11 @@ ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev =
 ic-test-utilities = { path = "../test_utilities" }
 ic-metrics = { path = "../monitoring/metrics" }
 maplit = "1.0.2"
-serde_cbor = "0.11.1"
+serde_cbor = { workspace = true }
 proptest = "1.0"
 prost = { workspace = true }
 scoped_threadpool = "0.1.*"
-static_assertions = "1.1.0"
+static_assertions = "0.3.4"
 
 [[bench]]
 name = "bench_allocator"

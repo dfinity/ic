@@ -280,7 +280,7 @@ fn point_mul(c: &mut Criterion) {
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_point_multiplication_{}", curve_type));
 
-        group.bench_function("multiply", |b| {
+        group.bench_function("multiply_arbitrary_point", |b| {
             b.iter_batched_ref(
                 || {
                     (
@@ -293,6 +293,14 @@ fn point_mul(c: &mut Criterion) {
             )
         });
 
+        group.bench_function("multiply_generator", |b| {
+            b.iter_batched_ref(
+                || random_scalar(curve_type, rng),
+                |s| EccPoint::mul_by_g(s),
+                BatchSize::SmallInput,
+            )
+        });
+
         group.bench_function("multiply_vartime_online", |b| {
             b.iter_batched_ref(
                 || {
@@ -301,7 +309,7 @@ fn point_mul(c: &mut Criterion) {
                         random_scalar(curve_type, rng),
                     );
                     p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
-                        .expect("failed to precopmute point");
+                        .expect("failed to precompute point");
                     (p, s)
                 },
                 |(p, s)| p.scalar_mul_vartime(s),
@@ -319,7 +327,7 @@ fn point_mul(c: &mut Criterion) {
                 },
                 |(p, s)| {
                     p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
-                        .expect("failed to precopmute point");
+                        .expect("failed to precompute point");
                     p.scalar_mul_vartime(s)
                 },
                 BatchSize::SmallInput,
@@ -337,7 +345,7 @@ fn point_mul(c: &mut Criterion) {
                                 random_scalar(curve_type, rng),
                             );
                             p.precompute(window_size)
-                                .expect("failed to precopmute point");
+                                .expect("failed to precompute point");
                             (p, s)
                         },
                         |(p, s)| p.scalar_mul_vartime(s),
@@ -358,7 +366,7 @@ fn point_mul(c: &mut Criterion) {
                         },
                         |(p, s)| {
                             p.precompute(window_size)
-                                .expect("failed to precopmute point");
+                                .expect("failed to precompute point");
                             p.scalar_mul_vartime(s)
                         },
                         BatchSize::SmallInput,

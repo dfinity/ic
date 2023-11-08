@@ -16,6 +16,8 @@ use ic_types::Time;
 use prost::Message;
 use std::path::PathBuf;
 
+use ic_types::state_sync::DEFAULT_CHUNK_SIZE;
+
 #[cfg(test)]
 mod tests;
 
@@ -217,6 +219,7 @@ impl ManifestBuilder {
 
     /// Appends a single-chunk file to the manifest.
     fn append_single_chunk_file(&mut self, path: &str, data: &[u8]) {
+        assert!(data.len() <= DEFAULT_CHUNK_SIZE as usize);
         let mut file_hasher = file_hasher();
 
         if data.is_empty() {

@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 54
+assertion_line: 55
 expression: out
 ---
 (module
@@ -18,7 +18,7 @@ expression: out
   (import "__" "stable_read_first_access" (func (;4;) (type 5)))
   (func (;5;) (type 0) (param i64) (result i64)
     global.get 0
-    i64.const 9
+    i64.const 10
     i64.sub
     global.set 0
     global.get 0

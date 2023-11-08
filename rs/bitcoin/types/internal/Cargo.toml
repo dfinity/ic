@@ -1,11 +1,15 @@
 [package]
 name = "ic-btc-types-internal"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
 ic-btc-interface = { workspace = true }
+ic-error-types = { path = "../../../types/error_types" }
 ic-protobuf = { path = "../../../protobuf" }
-serde = "1.0.132"
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }

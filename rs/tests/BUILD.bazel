@@ -70,12 +70,8 @@ uvm_config_image(
         "//rs/tests:activate-systest-uvm-config",
         "@ubuntu_test_runtime//image",
     ],
-    mode = "664",
-    modes = {
-        "activate": "775",
-    },
     remap_paths = {
-        "/activate-systest-uvm-config": "/activate",
+        "activate-systest-uvm-config": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -96,11 +92,6 @@ exports_files([
 filegroup(
     name = "grafana_dashboards",
     srcs = glob(["dashboards/**/*"]),
-)
-
-sh_binary(
-    name = "create_universal_vm_config_image_ci_sh",
-    srcs = ["create-universal-vm-config-image-ci.sh"],
 )
 
 tip_nns_canisters(
@@ -169,12 +160,8 @@ uvm_config_image(
         ":src/btc_integration/btc_activate.sh",
         "@bitcoind//image",
     ],
-    mode = "664",
-    modes = {
-        "activate": "775",
-    },
     remap_paths = {
-        "/btc_activate.sh": "/activate",
+        "btc_activate.sh": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -203,14 +190,10 @@ uvm_config_image(
         "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.key",
         "//rs/tests/httpbin-rs:httpbin_image.tar",
     ],
-    mode = "664",
-    modes = {
-        "activate": "775",
-    },
     remap_paths = {
-        "/universal_vm_activation.sh": "/activate",
-        "/canister_http_test_ca.cert": "/cert.pem",
-        "/canister_http_test_ca.key": "/key.pem",
+        "universal_vm_activation.sh": "activate",
+        "canister_http_test_ca.cert": "cert.pem",
+        "canister_http_test_ca.key": "key.pem",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -318,8 +301,6 @@ uvm_config_image(
         ":src/custom_domains_integration/pebble_cache.py",
         ":src/custom_domains_integration/cloudflare_api.py",
     ],
-    mode = "664",
-    modes = {"activate": "775"},
-    remap_paths = {"/activate.sh": "/activate"},
+    remap_paths = {"activate.sh": "activate"},
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

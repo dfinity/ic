@@ -49,6 +49,8 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     pub(crate) unexpected_response_error: IntCounter,
     /// Critical error for unexpected invalid canister state.
     pub(crate) invalid_canister_state_error: IntCounter,
+    /// Critical error for failed canister creation.
+    pub(crate) canister_creation_error: IntCounter,
 }
 impl ExecutionEnvironmentMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -99,6 +101,8 @@ impl ExecutionEnvironmentMetrics {
                 .error_counter("execution_environment_unexpected_response"),
             invalid_canister_state_error: metrics_registry
                 .error_counter("execution_environment_invalid_canister_state"),
+            canister_creation_error: metrics_registry
+                .error_counter("execution_environment_canister_creation_failed"),
         }
     }
 

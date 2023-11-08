@@ -12,10 +12,8 @@ use clap::Parser;
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use pocket_ic::common::{
-    blob::{BinaryBlob, BlobCompression, BlobId},
-    rest::RawVerifyCanisterSigArg,
-};
+use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
+use pocket_ic_server::state_api::routes::timeout_or_default;
 use pocket_ic_server::state_api::{
     routes::{instances_routes, status, AppState, RouterExt},
     state::PocketIcApiStateBuilder,
@@ -38,28 +36,25 @@ const TTL_SEC: u64 = 60;
 // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
 // XXX: UPDATE CLI-ARGS IF YOU CHANGE THIS!
 const DEFAULT_LOG_LEVELS: &str = "pocket_ic_server=info,tower_http=info,axum::rejection=trace";
-
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
-/// Command line arguments to PocketIC server.
+/// The PocketIC server hosts and manages IC instances.
 #[derive(Parser)]
+#[clap(version = "1.0.0")]
 struct Args {
-    /// A common identifier for all clients that use this instance of a PocketIC-server. In
-    /// general, this is assumed to be the PID of the parent process of the test process. Thus, all
-    /// tests of a `cargo test`-invocation (re-)use the same PocketIC-server instance.
+    /// If you use PocketIC from the command line, you should not use this flag.
+    /// Client libraries use this flag to provide a common identifier (the process ID of the test
+    /// process) such that the server is only started once and the individual tests in a test
+    /// run can (re-)use the same server.
     #[clap(long)]
-    pid: u32,
-}
-
-impl Args {
-    fn validate(self) -> ValidatedArgs {
-        ValidatedArgs { pid: self.pid }
-    }
-}
-
-struct ValidatedArgs {
-    pub pid: u32,
+    pid: Option<u32>,
+    /// The port under which the PocketIC server should be started
+    #[clap(long, short, default_value_t = 0)]
+    port: u16,
+    /// The time-to-live of the PocketIC server in seconds
+    #[clap(long, default_value_t = TTL_SEC)]
+    ttl: u64,
 }
 
 fn main() {
@@ -75,38 +70,47 @@ fn main() {
 }
 
 async fn start(runtime: Arc<Runtime>) {
-    let args = Args::parse().validate();
-    // If log-dir is specified, a background thread is started that writes logs into the files in
-    // batches. This guard ensures that at the end of the process execution, the buffer is flushed
-    // to disk.
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
-    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
-    let mut new_port_file = match is_first_server(&port_file_path) {
-        Ok(f) => f,
-        Err(_) => {
-            return;
-        }
-    };
-    // This process is the one to start PocketIC.
-    let _guard = setup_tracing(&args);
+    let args = Args::parse();
 
+    // If PocketIC was started with the `--pid` flag, create a port file to communicate the port back to
+    // the parent process (e.g., the `cargo test` invocation). Other tests can then see this port file
+    // as well and reuse the same PocketIC server.
+    let use_port_file = args.pid.is_some();
+    let mut port_file_path = None;
+    let mut ready_file_path = None;
+    let mut port_file = None;
+    if use_port_file {
+        port_file_path =
+            Some(std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid.unwrap())));
+        ready_file_path =
+            Some(std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid.unwrap())));
+        port_file = match create_file_atomically(port_file_path.clone().unwrap()) {
+            Ok(f) => Some(f),
+            Err(_) => {
+                // A PocketIC server is already running for this PID, terminate.
+                return;
+            }
+        };
+    }
+
+    let _guard = setup_tracing(args.pid);
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default().build();
     let instance_map = Arc::new(RwLock::new(HashMap::new()));
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while
-    let last_request = Arc::new(RwLock::new(Instant::now()));
+    let min_alive_until = Arc::new(RwLock::new(Instant::now()));
     let app_state = AppState {
         instance_map,
         instances_sequence_counter: Arc::new(AtomicU64::from(0)),
         api_state,
         checkpoints: Arc::new(RwLock::new(HashMap::new())),
-        last_request,
+        min_alive_until,
         runtime,
         blob_store: Arc::new(InMemoryBlobStore::new()),
     };
 
-    let app = Router::new()
+    let router = Router::new()
         //
         // Get server health.
         .directory_route("/status", get(status))
@@ -135,45 +139,62 @@ async fn start(runtime: Arc<Runtime>) {
         .layer(TraceLayer::new_for_http())
         .with_state(app_state.clone());
 
-    // bind to port 0; the OS will give a specific port; communicate that to parent process
-    let server = Server::bind(&"127.0.0.1:0".parse().expect("Failed to parse address"))
-        .serve(app.into_make_service());
+    let server_res = Server::try_bind(
+        &format!("127.0.0.1:{}", args.port)
+            .parse()
+            .expect("Invalid server address"),
+    )
+    .map(|s| s.serve(router.into_make_service()));
+    let server = match server_res {
+        Ok(s) => s,
+        Err(e) => {
+            error!(
+                "Failed to start the PocketIC server on port {}: {}",
+                args.port, e
+            );
+            return;
+        }
+    };
     let real_port = server.local_addr().port();
-    let _ = new_port_file.write_all(real_port.to_string().as_bytes());
-    let _ = new_port_file.flush();
 
-    let ready_file = File::options()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open(&ready_file_path);
-    if ready_file.is_ok() {
-        info!("The PocketIC server is listening on port {}", real_port);
-    } else {
-        error!("The .ready file already exists; This should not happen unless the PID has been reused, and/or the tmp dir has not been properly cleaned up");
+    if use_port_file {
+        let _ = port_file
+            .as_mut()
+            .unwrap()
+            .write_all(real_port.to_string().as_bytes());
+        let _ = port_file.unwrap().flush();
+        // Signal that the port file can safely be read by other clients.
+        let ready_file = create_file_atomically(ready_file_path.clone().unwrap());
+        if ready_file.is_err() {
+            error!("The .ready file already exists; This should not happen unless the PID has been reused, and/or the tmp dir has not been properly cleaned up");
+        }
     }
+
+    info!("The PocketIC server is listening on port {}", real_port);
 
     // This is a safeguard against orphaning this child process.
     let shutdown_signal = async {
         loop {
-            let guard = app_state.last_request.read().await;
-            if guard.elapsed() > Duration::from_secs(TTL_SEC) {
+            let guard = app_state.min_alive_until.read().await;
+            if guard.elapsed() > Duration::from_secs(args.ttl) {
                 break;
             }
             drop(guard);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
         info!("The PocketIC server will terminate");
-        // Clean up tmpfiles.
-        let _ = std::fs::remove_file(ready_file_path);
-        let _ = std::fs::remove_file(port_file_path);
+        if use_port_file {
+            // Clean up port files.
+            let _ = std::fs::remove_file(ready_file_path.unwrap());
+            let _ = std::fs::remove_file(port_file_path.unwrap());
+        }
     };
     let server = server.with_graceful_shutdown(shutdown_signal);
     server.await.expect("Failed to launch the PocketIC server");
 }
 
 // Registers a global subscriber that collects tracing events and spans.
-fn setup_tracing(args: &ValidatedArgs) -> Option<WorkerGuard> {
+fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
     use time::format_description::well_known::Rfc3339;
     use time::OffsetDateTime;
     use tracing_subscriber::prelude::*;
@@ -193,11 +214,17 @@ fn setup_tracing(args: &ValidatedArgs) -> Option<WorkerGuard> {
 
     let guard = match std::env::var(LOG_DIR_PATH_ENV_NAME).map(std::path::PathBuf::from) {
         Ok(p) => {
-            std::fs::create_dir_all(&p).expect("Could not create directory!");
-            let pid = args.pid;
+            std::fs::create_dir_all(&p).expect("Could not create directory");
             let dt = OffsetDateTime::from(std::time::SystemTime::now());
             let ts = dt.format(&Rfc3339).unwrap().replace(':', "_");
-            let appender = tracing_appender::rolling::never(&p, format!("{ts}_pocket_ic_{pid}"));
+            let logfile_suffix = match pid {
+                Some(pid) => format!("{}_{}", ts, pid),
+                None => format!("{}_cli", ts),
+            };
+            let appender = tracing_appender::rolling::never(
+                &p,
+                format!("pocket_ic_server_{logfile_suffix}.log"),
+            );
             let (non_blocking_appender, guard) = tracing_appender::non_blocking(appender);
 
             let log_dir_filter: EnvFilter =
@@ -221,15 +248,13 @@ fn setup_tracing(args: &ValidatedArgs) -> Option<WorkerGuard> {
     guard
 }
 
-/// Returns the opened file if it was successfully created and is readable, writeable. Otherwise,
-/// returns an error. Used to determine if this is the first process creating this file.
-fn is_first_server<P: AsRef<std::path::Path>>(port_file_path: P) -> std::io::Result<File> {
-    // .create_new(true) ensures atomically that this file was created newly, and gives an error otherwise.
+// Ensures atomically that this file was created freshly, and gives an error otherwise.
+fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File> {
     File::options()
         .read(true)
         .write(true)
         .create_new(true)
-        .open(&port_file_path)
+        .open(&file_path)
 }
 
 async fn bump_last_request_timestamp<B>(
@@ -238,13 +263,23 @@ async fn bump_last_request_timestamp<B>(
         instances_sequence_counter: _,
         api_state: _,
         checkpoints: _,
-        last_request,
+        min_alive_until,
         ..
     }): State<AppState>,
+    headers: HeaderMap,
     request: http::Request<B>,
     next: Next<B>,
 ) -> Response {
-    *last_request.write().await = Instant::now();
+    // TTL should not decrease: If now + header_timeout is later
+    // than the current TTL (from previous requests), reset it.
+    // Otherwise, a previous request set a larger TTL and we don't
+    // touch it.
+    let timeout = timeout_or_default(headers).unwrap_or(Duration::from_secs(1));
+    let alive_until = Instant::now().checked_add(timeout).unwrap();
+    let mut min_alive_until = min_alive_until.write().await;
+    if *min_alive_until < alive_until {
+        *min_alive_until = alive_until;
+    }
     next.run(request).await
 }
 

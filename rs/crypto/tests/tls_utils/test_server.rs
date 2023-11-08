@@ -3,7 +3,7 @@ use crate::tls_utils::{temp_crypto_component_with_tls_keys, REG_V1};
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError,
+    AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError,
 };
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -68,10 +68,9 @@ impl ServerBuilder {
     pub fn build(self, registry: Arc<FakeRegistryClient>) -> Server {
         let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("failed to bind");
         let (crypto, cert) = temp_crypto_component_with_tls_keys(registry, self.node_id);
-        let allowed_clients = AllowedClients::new(
-            self.allowed_nodes
-                .unwrap_or_else(|| SomeOrAllNodes::Some(BTreeSet::new())),
-        );
+        let allowed_clients = self
+            .allowed_nodes
+            .unwrap_or_else(|| SomeOrAllNodes::Some(BTreeSet::new()));
         Server {
             listener,
             crypto,
@@ -88,7 +87,7 @@ impl ServerBuilder {
 pub struct Server {
     listener: std::net::TcpListener,
     crypto: TempCryptoComponent,
-    allowed_clients: AllowedClients,
+    allowed_clients: SomeOrAllNodes,
     msg_for_client: Option<String>,
     msg_expected_from_client: Option<String>,
     cert: TlsPublicKeyCert,
@@ -194,7 +193,7 @@ impl Server {
     }
 
     pub fn allowed_clients(&self) -> &BTreeSet<NodeId> {
-        match self.allowed_clients.nodes() {
+        match &self.allowed_clients {
             SomeOrAllNodes::Some(nodes) => nodes,
             SomeOrAllNodes::All => unimplemented!(),
         }

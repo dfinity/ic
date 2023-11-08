@@ -3,37 +3,23 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
-    },
+    artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     dkg::{ChangeAction, ChangeSet, DkgPool},
     time_source::TimeSource,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{ArtifactKind, DkgMessageId},
-    artifact_kind::DkgArtifact,
-    consensus,
-    consensus::dkg,
-    crypto::CryptoHashOf,
-    time::{current_time, Time},
-    Height,
+    artifact::ArtifactKind, artifact_kind::DkgArtifact, consensus, consensus::dkg,
+    consensus::dkg::DkgMessageId, Height,
 };
 use prometheus::IntCounter;
-use std::time::Duration;
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
 /// the process of executing DKG.
 pub struct DkgPoolImpl {
-    validated: PoolSection<
-        CryptoHashOf<consensus::dkg::Message>,
-        ValidatedArtifact<consensus::dkg::Message>,
-    >,
-    unvalidated: PoolSection<
-        CryptoHashOf<consensus::dkg::Message>,
-        UnvalidatedArtifact<consensus::dkg::Message>,
-    >,
+    validated: PoolSection<DkgMessageId, dkg::Message>,
+    unvalidated: PoolSection<DkgMessageId, UnvalidatedArtifact<dkg::Message>>,
     invalidated_artifacts: IntCounter,
     current_start_height: Height,
     log: ReplicaLogger,
@@ -58,11 +44,10 @@ impl DkgPoolImpl {
 
     /// Returns a DKG message by hash if available in either the validated or
     /// unvalidated sections.
-    pub fn get(&self, hash: &CryptoHashOf<consensus::dkg::Message>) -> Option<&dkg::Message> {
+    pub fn get(&self, id: &DkgMessageId) -> Option<&dkg::Message> {
         self.validated
-            .get(hash)
-            .map(|artifact| artifact.as_ref())
-            .or_else(|| self.unvalidated.get(hash).map(|pa| &pa.message))
+            .get(id)
+            .or_else(|| self.unvalidated.get(id).map(|pa| &pa.message))
     }
 
     /// Deletes all validated and unvalidated messages, which do not correspond
@@ -73,20 +58,18 @@ impl DkgPoolImpl {
         // TODO: use drain_filter once it's stable.
         let unvalidated_keys: Vec<_> = self
             .unvalidated
-            .iter()
-            .filter(|(_, artifact)| artifact.message.content.dkg_id.start_block_height < height)
-            .map(|(hash, _)| hash)
+            .keys()
+            .filter(|id| id.height < height)
             .cloned()
             .collect();
-        for hash in unvalidated_keys {
-            self.unvalidated.remove(&hash);
+        for id in unvalidated_keys {
+            self.unvalidated.remove(&id);
         }
 
         let validated_keys: Vec<_> = self
             .validated
-            .iter()
-            .filter(|(_, artifact)| artifact.msg.content.dkg_id.start_block_height < height)
-            .map(|(hash, _)| hash)
+            .keys()
+            .filter(|id| id.height < height)
             .cloned()
             .collect();
         for hash in &validated_keys {
@@ -94,23 +77,15 @@ impl DkgPoolImpl {
         }
         validated_keys
     }
-
-    /// Returns the validated entries that have creation timestamp <= timestamp
-    fn entries_older_than(&self, timestamp: Time) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
-        Box::new(
-            self.validated
-                .values()
-                .filter(move |artifact| artifact.timestamp <= timestamp)
-                .map(|artifact| artifact.as_ref()),
-        )
-    }
 }
 
-impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
+impl MutablePool<DkgArtifact> for DkgPoolImpl {
+    type ChangeSet = ChangeSet;
+
     /// Inserts an unvalidated artifact into the unvalidated section.
     fn insert(&mut self, artifact: UnvalidatedArtifact<consensus::dkg::Message>) {
         self.unvalidated
-            .insert(ic_types::crypto::crypto_hash(&artifact.message), artifact);
+            .insert(DkgMessageId::from(&artifact.message), artifact);
     }
 
     /// Removes an unvalidated artifact from the unvalidated section.
@@ -135,39 +110,27 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
         let mut purged = Vec::new();
         for action in change_set {
             match action {
-                ChangeAction::HandleInvalid(hash, reason) => {
+                ChangeAction::HandleInvalid(id, reason) => {
                     self.invalidated_artifacts.inc();
-                    warn!(self.log, "Invalid DKG message ({:?}): {:?}", reason, hash);
-                    self.unvalidated.remove(&hash);
+                    warn!(self.log, "Invalid DKG message ({:?}): {:?}", reason, id);
+                    self.unvalidated.remove(&id);
                 }
                 ChangeAction::AddToValidated(message) => {
                     adverts.push(DkgArtifact::message_to_advert(&message));
-                    self.validated.insert(
-                        ic_types::crypto::crypto_hash(&message),
-                        ValidatedArtifact {
-                            msg: message,
-                            timestamp: current_time(),
-                        },
-                    );
+                    self.validated.insert(DkgMessageId::from(&message), message);
                 }
                 ChangeAction::MoveToValidated(message) => {
                     adverts.push(DkgArtifact::message_to_advert(&message));
-                    let hash = ic_types::crypto::crypto_hash(&message);
+                    let id = DkgMessageId::from(&message);
                     self.unvalidated
-                        .remove(&hash)
+                        .remove(&id)
                         .expect("Unvalidated artifact was not found.");
-                    self.validated.insert(
-                        hash,
-                        ValidatedArtifact {
-                            msg: message,
-                            timestamp: current_time(),
-                        },
-                    );
+                    self.validated.insert(id, message);
                 }
                 ChangeAction::RemoveFromUnvalidated(message) => {
-                    let hash = ic_types::crypto::crypto_hash(&message);
+                    let id = DkgMessageId::from(&message);
                     self.unvalidated
-                        .remove(&hash)
+                        .remove(&id)
                         .expect("Unvalidated artifact was not found.");
                 }
                 ChangeAction::Purge(height) => purged.append(&mut self.purge(height)),
@@ -176,41 +139,28 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
         ChangeResult {
             purged,
             adverts,
-            changed,
+            poll_immediately: changed,
         }
     }
 }
 
 impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
-    fn contains(&self, hash: &CryptoHashOf<dkg::Message>) -> bool {
-        self.unvalidated.contains_key(hash) || self.validated.contains_key(hash)
+    fn contains(&self, id: &DkgMessageId) -> bool {
+        self.unvalidated.contains_key(id) || self.validated.contains_key(id)
     }
 
-    fn get_validated_by_identifier(&self, id: &CryptoHashOf<dkg::Message>) -> Option<dkg::Message> {
-        self.validated
-            .get(id)
-            .map(|artifact| artifact.as_ref())
-            .cloned()
+    fn get_validated_by_identifier(&self, id: &DkgMessageId) -> Option<dkg::Message> {
+        self.validated.get(id).cloned()
     }
 
-    fn get_all_validated_by_filter(
-        &self,
-        _filter: &Height,
-    ) -> Box<dyn Iterator<Item = dkg::Message>> {
-        unimplemented!()
+    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = dkg::Message>> {
+        Box::new(std::iter::empty())
     }
 }
 
 impl DkgPool for DkgPoolImpl {
     fn get_validated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
-        Box::new(self.validated.values().map(|artifact| artifact.as_ref()))
-    }
-
-    fn get_validated_older_than(
-        &self,
-        age_threshold: Duration,
-    ) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
-        self.entries_older_than(current_time().saturating_sub_duration(age_threshold))
+        Box::new(self.validated.values())
     }
 
     fn get_unvalidated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
@@ -226,8 +176,7 @@ impl DkgPool for DkgPoolImpl {
     }
 
     fn validated_contains(&self, msg: &dkg::Message) -> bool {
-        self.validated
-            .contains_key(&ic_types::crypto::crypto_hash(msg))
+        self.validated.contains_key(&DkgMessageId::from(msg))
     }
 }
 
@@ -235,22 +184,18 @@ impl DkgPool for DkgPoolImpl {
 mod test {
     use super::*;
     use ic_interfaces::dkg::DkgPool;
-    use ic_interfaces::time_source::SysTimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         consensus::fake::FakeSigner,
         mock_time,
         types::ids::{node_test_id, subnet_test_id},
+        MockTimeSource,
     };
     use ic_types::{
-        crypto::{
-            crypto_hash,
-            threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        },
+        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         signature::BasicSignature,
         NodeId,
     };
-    use std::ops::Add;
 
     fn make_message(start_height: Height, node_id: NodeId) -> dkg::Message {
         let dkg_id = NiDkgId {
@@ -269,7 +214,7 @@ mod test {
     fn test_dkg_pool_insert_and_remove() {
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let message = make_message(Height::from(30), node_test_id(1));
-        let id = crypto_hash(&message);
+        let id = DkgMessageId::from(&message);
 
         // add unvalidated
         pool.insert(UnvalidatedArtifact {
@@ -292,7 +237,7 @@ mod test {
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         // add two validated messages, one for every DKG instance
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             [
                 make_message(current_dkg_id_start_height, node_test_id(0)),
                 make_message(last_dkg_id_start_height, node_test_id(0)),
@@ -316,30 +261,30 @@ mod test {
         // ensure we have 2 validated and 2 unvalidated artifacts
         assert_eq!(result.adverts.len(), 2);
         assert!(result.purged.is_empty());
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
 
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![ChangeAction::Purge(current_dkg_id_start_height)],
         );
         assert_eq!(result.purged.len(), 1);
         assert!(result.adverts.is_empty());
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
 
         // purge the highest height and make sure everything is gone
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![ChangeAction::Purge(current_dkg_id_start_height.increment())],
         );
         assert_eq!(result.purged.len(), 1);
         assert!(result.adverts.is_empty());
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);
     }
@@ -347,72 +292,21 @@ mod test {
     #[test]
     fn test_dkg_pool_filter_by_age() {
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-        let now = current_time();
 
         // 200 sec old
         let msg = make_message(Height::from(1), node_test_id(1));
-        pool.validated.insert(
-            ic_types::crypto::crypto_hash(&msg),
-            ValidatedArtifact {
-                msg,
-                timestamp: now.saturating_sub_duration(Duration::from_secs(200)),
-            },
-        );
+        pool.validated.insert(DkgMessageId::from(&msg), msg);
 
         // 100 sec old
         let msg = make_message(Height::from(2), node_test_id(2));
-        pool.validated.insert(
-            ic_types::crypto::crypto_hash(&msg),
-            ValidatedArtifact {
-                msg,
-                timestamp: now.saturating_sub_duration(Duration::from_secs(100)),
-            },
-        );
+        pool.validated.insert(DkgMessageId::from(&msg), msg);
 
         // 50 sec old
         let msg = make_message(Height::from(3), node_test_id(3));
-        pool.validated.insert(
-            ic_types::crypto::crypto_hash(&msg),
-            ValidatedArtifact {
-                msg,
-                timestamp: now.saturating_sub_duration(Duration::from_secs(50)),
-            },
-        );
+        pool.validated.insert(DkgMessageId::from(&msg), msg);
 
         // In future
         let msg = make_message(Height::from(4), node_test_id(4));
-        pool.validated.insert(
-            ic_types::crypto::crypto_hash(&msg),
-            ValidatedArtifact {
-                msg,
-                timestamp: now.add(Duration::from_secs(50)),
-            },
-        );
-
-        assert_eq!(
-            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(300)))
-                .count(),
-            0
-        );
-        assert_eq!(
-            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(150)))
-                .count(),
-            1
-        );
-        assert_eq!(
-            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(75)))
-                .count(),
-            2
-        );
-        assert_eq!(
-            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(50)))
-                .count(),
-            3
-        );
-        assert_eq!(
-            pool.entries_older_than(now.add(Duration::from_secs(500)))
-                .count(),
-            4
-        );
+        pool.validated.insert(DkgMessageId::from(&msg), msg);
     }
 }

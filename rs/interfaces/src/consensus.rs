@@ -8,6 +8,7 @@ use crate::{
         IngressPayloadValidationError, IngressPermanentError, IngressTransientError,
     },
     messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetTransientValidationError},
+    query_stats::{QueryStatsPermanentValidationError, QueryStatsTransientValidationError},
     self_validating_payload::{
         InvalidSelfValidatingPayload, SelfValidatingPayloadValidationError,
         SelfValidatingTransientValidationError,
@@ -64,6 +65,7 @@ pub enum PayloadPermanentError {
     },
     SelfValidatingPayloadValidationError(InvalidSelfValidatingPayload),
     CanisterHttpPayloadValidationError(CanisterHttpPermanentValidationError),
+    QueryStatsPayloadValidationError(QueryStatsPermanentValidationError),
 }
 
 #[derive(Debug)]
@@ -74,6 +76,7 @@ pub enum PayloadTransientError {
     SubnetNotFound(SubnetId),
     SelfValidatingPayloadValidationError(SelfValidatingTransientValidationError),
     CanisterHttpPayloadValidationError(CanisterHttpTransientValidationError),
+    QueryStatsPayloadValidationError(QueryStatsTransientValidationError),
 }
 
 /// Payload validation error

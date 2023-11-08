@@ -1,9 +1,10 @@
 [package]
 name = "ic-crypto-internal-csp-proptest-utils"
 description = "Proptest strategies to generate values for types in the ic-crypto-internal-csp crate and its internal dependencies"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 hex = "0.4.2"
@@ -19,4 +20,4 @@ ic-protobuf = { path = "../../../../protobuf" }
 ic-types = { path = "../../../../types/types" }
 paste = "1.0.12"
 proptest = "1.0"
-strum = "0.23.0"
+strum = { workspace = true }

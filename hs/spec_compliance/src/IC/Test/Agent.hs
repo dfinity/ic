@@ -864,7 +864,7 @@ checkQueryResponse cid rid r = do
               requestId $
                 rec
                   [ "status" =: GText "replied",
-                    "reply" =: GBlob (requestId $ rec ["arg" =: GBlob payload]),
+                    "reply" =: rec ["arg" =: GBlob payload],
                     "timestamp" =: GNat t,
                     "request_id" =: GBlob rid
                   ]

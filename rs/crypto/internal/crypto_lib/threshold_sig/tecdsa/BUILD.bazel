@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -49,6 +50,10 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_threshold_sig_ecdsa",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
     version = "0.1.0",
     deps = DEPENDENCIES,
 )

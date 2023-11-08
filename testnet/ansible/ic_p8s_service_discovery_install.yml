@@ -18,13 +18,13 @@
       vars:
         ic: "{{ ic_deployment_name }}"
       uri:
-        url: "https://{{ service_discovery_server }}/service-discovery"
+        url: "{{ multiservice_discovery_server }}/"
         method: POST
         body_format: json
         body:
-          ic_name: "{{ ic }}"
-          nns_urls: "{{ groups['nns'] | map('extract', hostvars, ['api_listen_url']) | join(',') }}"
-          nns_public_key: "{{ nns_public_key }}"
+          name: "{{ ic }}"
+          nns_urls: "{{ groups['nns'] | map('extract', hostvars, ['api_listen_url']) }}"
+          public_key: "{{ nns_public_key }}"
         validate_certs: no
         headers:
           Content-Type: "application/json"
@@ -33,14 +33,17 @@
       vars:
         ic: "{{ ic_deployment_name }}"
       uri:
-        url: "https://{{ service_discovery_server }}/static-configs/{{ ic }}"
+        url: "{{ multiservice_discovery_server }}/add_boundary_node"
         method: POST
         body_format: json
         body:
-          targets: "{{ groups['boundary'] | map('extract', hostvars, [item + '_metrics_addr']) | join(',') }}"
-          labels:
+          name: "{{ groups['boundary'] | map('extract', hostvars, [item + '_metrics_ip']) | join(',') }}-{{ item }}"
+          ic_name: "{{ ic }}"
+          targets: "{{ groups['boundary'] | map('extract', hostvars, [item + '_metrics_addr']) }}"
+          job_type: "node_exporter"
+          custom_labels:
             ic: "{{ ic }}"
-            env: "testnet"
+            env: "test"
             service: "{{ item }}"
         validate_certs: no
         headers:

@@ -7,7 +7,7 @@ dependencies-check:
     # commit in the master branch. This would cause the job to
     # fail even if it has successfully passed.
   extends:
-    - .ubuntu-k8s
+    - .build-k8s-legacy
   rules :
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
   needs: []  # don't wait on other jobs
@@ -17,6 +17,7 @@ dependencies-check:
   script:
     - |
       set -euo pipefail
+      pip3 install --ignore-installed -r requirements.txt
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
@@ -24,7 +25,7 @@ dependencies-check:
 
 dependency-scan-nightly:
   extends:
-    - .ubuntu-k8s
+    - .build-k8s-legacy
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"'
   needs: []  # don't wait on other jobs
@@ -35,6 +36,7 @@ dependency-scan-nightly:
   script:
     - |
       set -euo pipefail
+      pip3 install --ignore-installed -r requirements.txt
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
@@ -51,7 +53,7 @@ dependency-scan-nightly:
 
 dependency-scan-release-cut:
   extends:
-    - .ubuntu-k8s
+    - .build-k8s-legacy
   needs: []
   rules :
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
@@ -61,6 +63,7 @@ dependency-scan-release-cut:
   script:
     - |
       set -euo pipefail
+      pip3 install --ignore-installed -r requirements.txt
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py

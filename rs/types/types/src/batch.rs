@@ -7,21 +7,23 @@ mod ingress;
 mod self_validating;
 mod xnet;
 
-pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
-pub use self::execution_environment::{
-    CanisterQueryStats, EpochStats, EpochStatsMessages, QueryStatsMessage, QueryStatsPayload,
-    ReceivedEpochStats, TotalCanisterQueryStats,
+pub use self::{
+    canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
+    execution_environment::{
+        CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
+        TotalQueryStats,
+    },
+    ingress::{IngressPayload, IngressPayloadError},
+    self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    xnet::XNetPayload,
 };
-pub use self::ingress::{IngressPayload, IngressPayloadError};
-pub use self::self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES};
-pub use self::xnet::XNetPayload;
-
-use super::{
+use crate::{
+    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     messages::{Response, SignedIngress},
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, SubnetId, Time,
 };
-use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_base_types::NodeId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -49,6 +51,8 @@ pub struct Batch {
     pub time: Time,
     /// Responses to subnet calls that require consensus' involvement.
     pub consensus_responses: Vec<Response>,
+    /// Information about block makers
+    pub blockmaker_metrics: BlockmakerMetrics,
 }
 
 /// The context built by Consensus for deterministic processing. Captures all
@@ -95,7 +99,7 @@ pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
-    pub query_stats: Option<EpochStatsMessages>,
+    pub query_stats: Option<QueryStatsPayload>,
 }
 
 impl BatchPayload {
@@ -119,6 +123,22 @@ impl BatchPayload {
             && self.canister_http.is_empty()
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlockmakerMetrics {
+    pub blockmaker: NodeId,
+    pub failed_blockmakers: Vec<NodeId>,
+}
+
+impl BlockmakerMetrics {
+    pub fn new_for_test() -> Self {
+        Self {
+            blockmaker: NodeId::new(ic_base_types::PrincipalId::new_node_test_id(0)),
+            failed_blockmakers: vec![],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

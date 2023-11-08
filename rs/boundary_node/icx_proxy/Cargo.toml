@@ -1,6 +1,5 @@
 [package]
 name = "icx-proxy"
-version = "0.11.1"
 authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
 edition = "2018"
 description = "CLI tool to create an HTTP proxy to the Internet Computer."
@@ -11,6 +10,7 @@ readme = "README.md"
 categories = ["command-line-interface", "web-programming::http-server"]
 keywords = ["internet-computer", "agent", "icp", "dfinity", "proxy"]
 include = ["src", "Cargo.toml", "../LICENSE", "README.md"]
+version.workspace = true
 
 [[bin]]
 name = "icx-proxy"
@@ -33,7 +33,7 @@ http = "0.2.6"
 http-body = "0.4"
 hyper = { version = "0.14.26", features = ["client", "http2", "http1"] }
 hyper-rustls = { version = "0.24.0", features = ["http2"] }
-itertools = "0.10"
+itertools = { workspace = true }
 ic-agent = { workspace = true, default-features = false, features = [
     "hyper",
     "reqwest",
@@ -45,15 +45,16 @@ prometheus = { workspace = true }
 rustls = { version = "0.21", features = ["dangerous_configuration"] }
 rustls-native-certs = "0.6.2"
 rustls-pemfile = "1"
+tokio-util = { version = "0.7", features = ["rt"] }
 tower = { workspace = true }
 tower-http = { version = "0.3", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json"] }
-serde = "1"
-serde_cbor = "0.11"
-serde_json = "1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 sha2 = "0.10"
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true }
 ic-response-verification = "1.2.0"
 thiserror = "1.0.40"
 

@@ -579,13 +579,9 @@ fn registry_unavailable_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Transient(
-            PayloadTransientError::CanisterHttpPayloadValidationError(
-                CanisterHttpTransientValidationError::RegistryUnavailable(
-                    RegistryClientError::VersionNotAvailable { version },
-                ),
-            ),
-        )) if version == RegistryVersion::new(2) => (),
+        Err(ValidationError::Transient(PayloadTransientError::RegistryUnavailable(
+            RegistryClientError::VersionNotAvailable { version },
+        ))) if version == RegistryVersion::new(2) => (),
         x => panic!("Expected RegistryUnavailable, got {:?}", x),
     }
 }
@@ -817,7 +813,7 @@ fn test_response_and_metadata_full(
 }
 /// Replicates the behaviour of receiving and successfully validating a share over the network
 pub(crate) fn add_received_shares_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpArtifact, ChangeSet = CanisterHttpChangeSet>,
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     for share in shares {
@@ -836,7 +832,7 @@ pub(crate) fn add_received_shares_to_pool(
 
 /// Replicates the behaviour of adding your own share (and content) to the pool
 pub(crate) fn add_own_share_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpArtifact, ChangeSet = CanisterHttpChangeSet>,
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {

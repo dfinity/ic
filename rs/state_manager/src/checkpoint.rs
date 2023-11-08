@@ -1,8 +1,6 @@
 use crate::{CheckpointError, CheckpointMetrics, TipRequest, NUMBER_OF_CHECKPOINT_THREADS};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
-// TODO(MR-412): uncomment
-//use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::Memory;
@@ -11,7 +9,7 @@ use ic_replicated_state::{
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
-use ic_types::batch::ReceivedEpochStats;
+use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
@@ -178,10 +176,10 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
 
     let stats = checkpoint_layout.stats().deserialize()?;
     let query_stats = if let Some(query_stats) = stats.query_stats {
-        ReceivedEpochStats::try_from(query_stats)
+        RawQueryStats::try_from(query_stats)
             .map_err(|err| into_checkpoint_error("QueryStats".into(), err))?
     } else {
-        ReceivedEpochStats::default()
+        RawQueryStats::default()
     };
 
     let canister_states = {
@@ -283,6 +281,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let wasm_memory = Memory::new(
                 PageMap::open(
                     &canister_layout.vmemory_0(),
+                    &canister_layout.vmemory_0_overlays()?,
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -294,6 +293,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let stable_memory = Memory::new(
                 PageMap::open(
                     &canister_layout.stable_memory_blob(),
+                    &canister_layout.stable_memory_overlays()?,
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -354,6 +354,7 @@ pub fn load_canister_state<P: ReadPolicy>(
     let wasm_chunk_store_data = if canister_layout.wasm_chunk_store().exists() {
         PageMap::open(
             &canister_layout.wasm_chunk_store(),
+            &canister_layout.wasm_chunk_store_overlays()?,
             height,
             Arc::clone(&fd_factory),
         )?

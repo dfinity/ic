@@ -16,6 +16,7 @@ use axum::{
     response::{IntoResponse, Response},
     BoxError, Extension,
 };
+use bytes::Bytes;
 use candid::Principal;
 use http::{
     header::{HeaderName, HeaderValue, CONTENT_TYPE},
@@ -25,7 +26,9 @@ use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId,
 };
+use lazy_static::lazy_static;
 use rand::seq::SliceRandom;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tower_governor::errors::GovernorError;
 use url::Url;
@@ -61,12 +64,34 @@ const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status")
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
     HeaderName::from_static("x-ic-cache-bypass-reason");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
 // Rust const/static concat is non-existent, so we have to repeat
 pub const PATH_STATUS: &str = "/api/v2/status";
 pub const PATH_QUERY: &str = "/api/v2/canister/:canister_id/query";
 pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
 pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
+pub const PATH_HEALTH: &str = "/health";
+
+lazy_static! {
+    pub static ref UUID_REGEX: Regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+}
 
 // Type of IC request
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
@@ -118,14 +143,14 @@ impl ErrorCause {
             Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
             Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
             Self::MalformedResponse(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::NoRoutingTable => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::NoRoutingTable => StatusCode::SERVICE_UNAVAILABLE,
             Self::SubnetNotFound => StatusCode::BAD_REQUEST, // TODO change to 404?
-            Self::NoHealthyNodes => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::ReplicaErrorDNS(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::ReplicaErrorConnect => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::NoHealthyNodes => StatusCode::SERVICE_UNAVAILABLE,
+            Self::ReplicaErrorDNS(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::ReplicaErrorConnect => StatusCode::SERVICE_UNAVAILABLE,
             Self::ReplicaTimeout => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::ReplicaTLSErrorOther(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::ReplicaTLSErrorCert(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ReplicaTLSErrorOther(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::ReplicaTLSErrorCert(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::ReplicaErrorOther(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
         }
@@ -460,6 +485,27 @@ impl From<BoxError> for ApiError {
     }
 }
 
+pub async fn validate_request(
+    request: Request<Body>,
+    next: Next<Body>,
+) -> Result<impl IntoResponse, ApiError> {
+    if let Some(id_header) = request.headers().get(HEADER_X_REQUEST_ID) {
+        let is_valid_id = id_header
+            .to_str()
+            .map(|id| UUID_REGEX.is_match(id))
+            .unwrap_or(false);
+        if !is_valid_id {
+            #[allow(clippy::borrow_interior_mutable_const)]
+            return Err(ErrorCause::MalformedRequest(format!(
+                "value of '{HEADER_X_REQUEST_ID}' header is not in UUID format"
+            ))
+            .into());
+        }
+    }
+
+    Ok(next.run(request).await)
+}
+
 // Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     canister_id: Path<String>,
@@ -516,7 +562,11 @@ pub async fn preprocess_request(
 
     // Inject context into the response for access by other middleware
     response.extensions_mut().insert(ctx);
-    response.extensions_mut().insert(canister_id);
+
+    // Inject canister_id if it's not there already (could be overriden by other middleware)
+    if response.extensions().get::<CanisterId>().is_none() {
+        response.extensions_mut().insert(canister_id);
+    }
 
     Ok(response)
 }
@@ -560,21 +610,79 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     if let Some(v) = cache_status {
         response.headers_mut().insert(
             HEADER_IC_CACHE,
-            HeaderValue::from_str(v.to_string().as_str()).unwrap(),
+            HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
         );
 
         if let CacheStatus::Bypass(v) = v {
             response.headers_mut().insert(
                 HEADER_IC_CACHE_BYPASS_REASON,
-                HeaderValue::from_str(v.to_string().as_str()).unwrap(),
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
             );
         }
+    }
+
+    let node = response.extensions().get::<Node>().cloned();
+    if let Some(v) = node {
+        // Principals and subnet type are always ASCII printable, so unwrap is safe
+        response.headers_mut().insert(
+            HEADER_IC_NODE_ID,
+            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
+        );
+
+        response.headers_mut().insert(
+            HEADER_IC_SUBNET_ID,
+            HeaderValue::from_maybe_shared(Bytes::from(v.subnet_id.to_string())).unwrap(),
+        );
+
+        response.headers_mut().insert(
+            HEADER_IC_SUBNET_TYPE,
+            HeaderValue::from_str(v.subnet_type.as_ref()).unwrap(),
+        );
+    }
+
+    if let Some(ctx) = response.extensions().get::<RequestContext>().cloned() {
+        response.headers_mut().insert(
+            HEADER_IC_REQUEST_TYPE,
+            HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
+        );
+
+        ctx.canister_id.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_CANISTER_ID,
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+            )
+        });
+
+        ctx.sender.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_SENDER,
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+            )
+        });
+
+        ctx.method_name.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_METHOD_NAME,
+                HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
+            )
+        });
     }
 
     response
 }
 
-// Handler: processess IC status call
+// Handler: emit an HTTP status code that signals the service's state
+pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {
+    let health = h.health().await;
+
+    if health == ReplicaHealthStatus::Healthy {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+// Handler: processes IC status call
 pub async fn status(
     State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
 ) -> impl IntoResponse {
@@ -597,9 +705,13 @@ pub async fn status(
     let cbor = ser.into_inner();
 
     // Construct response and inject health status for middleware
-    let mut resp = cbor.into_response();
-    resp.extensions_mut().insert(health);
-    resp
+    let mut response = cbor.into_response();
+    response.extensions_mut().insert(health);
+    response
+        .headers_mut()
+        .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+
+    response
 }
 
 // Handler: Unified handler for query/call/read_state calls

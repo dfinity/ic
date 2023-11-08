@@ -27,6 +27,7 @@ fn main() {
         replica_version: args.replica_version,
         key_file: args.key_file,
         test_mode: args.test,
+        skip_prompts: args.skip_prompts,
     };
 
     let recovery_state = cli::read_and_maybe_update_state(&logger, recovery_args, args.subcmd);

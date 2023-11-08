@@ -1,7 +1,10 @@
 [package]
 name = "ic-sns-init"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 path = "src/lib.rs"
@@ -25,8 +28,8 @@ isocountry = "0.3.2"
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 prost = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.8.24"
+serde = { workspace = true }
+serde_yaml = { workspace = true }
 
 [dev-dependencies]
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

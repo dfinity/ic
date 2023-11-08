@@ -13,7 +13,7 @@ use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
     artifact_manager::JoinGuard, artifact_pool::UnvalidatedArtifactEvent,
-    execution_environment::QueryHandler, time_source::SysTimeSource,
+    execution_environment::QueryHandler,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
@@ -113,7 +113,6 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
-    let time_source = Arc::new(SysTimeSource::new());
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the persistent
     // consensus pool is the only way for retrieving the height of the last CUP and/or certification.
@@ -124,6 +123,7 @@ pub fn construct_ic_stack(
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
+        node_id,
         subnet_id,
         pb::CatchUpPackage::from(&catch_up_package),
         artifact_pool_config.clone(),
@@ -237,6 +237,7 @@ pub fn construct_ic_stack(
         btc_testnet_client,
         subnet_id,
         registry.clone(),
+        config.bitcoin_payload_builder_config,
         log.clone(),
     ));
     // ---------- HTTPS OUTCALLS DEPS FOLLOW ----------
@@ -248,6 +249,10 @@ pub fn construct_ic_stack(
         log.clone(),
         subnet_type,
     );
+    // ---------- QUERY STATS DEPS FOLLOW -----------
+    let query_stats_payload_builder = execution_services
+        .query_stats_payload_builder
+        .into_payload_builder(state_manager.clone(), node_id, log.clone());
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
     let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
@@ -272,7 +277,7 @@ pub fn construct_ic_stack(
         P2PStateSyncClient::Client(state_sync),
         xnet_payload_builder,
         self_validating_payload_builder,
-        execution_services.query_stats_payload_builder,
+        query_stats_payload_builder,
         message_router,
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
@@ -284,7 +289,6 @@ pub fn construct_ic_stack(
         local_store_cert_time_reader,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
-        time_source.clone(),
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
@@ -295,7 +299,6 @@ pub fn construct_ic_stack(
         execution_services.async_query_handler,
         ingress_throttler,
         ingress_tx.clone(),
-        time_source,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         registry,

@@ -4,6 +4,8 @@ use crate::tls_utils::test_client::{Client, ClientBuilder};
 use crate::tls_utils::test_server::{Server, ServerBuilder};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_tls::registry::TlsRegistry;
+use ic_crypto_test_utils_tls::CipherSuite;
+use ic_crypto_test_utils_tls::TlsVersion;
 use ic_crypto_tls_interfaces::{
     AuthenticatedPeer, TlsClientHandshakeError, TlsServerHandshakeError,
 };
@@ -172,8 +174,6 @@ mod server {
     use ic_crypto_test_utils_tls::x509_certificates::{
         ed25519_key_pair, x509_public_key_cert, CertWithPrivateKey,
     };
-    use openssl::hash::MessageDigest;
-    use openssl::ssl::SslVersion;
 
     #[test]
     fn should_return_error_if_allowed_clients_empty() {
@@ -310,13 +310,13 @@ mod server {
 
     #[test]
     fn should_allow_connection_from_custom_client_only_supporting_aes_128_cipher() {
-        const AES_128_ONLY_CIPHER_SUITE: &str = "TLS_AES_128_GCM_SHA256";
+        const AES_128_ONLY_CIPHER_SUITE: CipherSuite = CipherSuite::TLS13_AES_128_GCM_SHA256;
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
             .build(registry.get());
         let client = CustomClient::builder()
-            .with_allowed_cipher_suites(AES_128_ONLY_CIPHER_SUITE)
+            .with_allowed_cipher_suites(vec![AES_128_ONLY_CIPHER_SUITE])
             .with_default_client_auth(CLIENT_ID_1)
             .build(server.cert());
         registry
@@ -332,13 +332,13 @@ mod server {
 
     #[test]
     fn should_allow_connection_from_custom_client_only_supporting_aes_256_cipher() {
-        const AES_256_ONLY_CIPHER_SUITE: &str = "TLS_AES_256_GCM_SHA384";
+        const AES_256_ONLY_CIPHER_SUITE: CipherSuite = CipherSuite::TLS13_AES_256_GCM_SHA384;
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
             .build(registry.get());
         let client = CustomClient::builder()
-            .with_allowed_cipher_suites(AES_256_ONLY_CIPHER_SUITE)
+            .with_allowed_cipher_suites(vec![AES_256_ONLY_CIPHER_SUITE])
             .with_default_client_auth(CLIENT_ID_1)
             .build(server.cert());
         registry
@@ -361,8 +361,8 @@ mod server {
         let client = CustomClient::builder()
             .with_client_auth(
                 CertWithPrivateKey::builder()
-                    // Once upon a time in year 1012 in ASN.1 YYYYMMDDHHMMSSZ
-                    .not_before("10121224075600Z")
+                    // Once upon a time in year 2012 in ASN.1 YYYYMMDDHHMMSSZ
+                    .not_before("20121224075600Z")
                     .cn(CLIENT_ID_1.to_string())
                     .build_ed25519(),
             )
@@ -386,8 +386,11 @@ mod server {
             .build(registry.get());
         let client = CustomClient::builder()
             .with_default_client_auth(CLIENT_ID_1)
-            .with_max_protocol_version(SslVersion::TLS1_2)
-            .expect_error("tlsv1 alert protocol version")
+            .with_protocol_versions(vec![TlsVersion::TLS1_2])
+            .with_allowed_cipher_suites(vec![
+                CipherSuite::TLS12_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            ])
+            .expect_error("received fatal alert: ProtocolVersion")
             .build(server.cert());
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -399,46 +402,22 @@ mod server {
 
         assert_handshake_server_error_containing(
             &server_result,
-            "peer is incompatible: SupportedVersionsExtensionRequired",
+            "peer is incompatible: Tls12NotOfferedOrEnabled",
         )
     }
 
     #[test]
     fn should_return_error_if_client_does_not_support_required_ciphers() {
-        const CIPHER_SUITES_NOT_SUPPORTED_BY_SERVER: &str = "TLS_CHACHA20_POLY1305_SHA256";
+        const CIPHER_SUITES_NOT_SUPPORTED_BY_SERVER: CipherSuite =
+            CipherSuite::TLS13_CHACHA20_POLY1305_SHA256;
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
             .build(registry.get());
         let client = CustomClient::builder()
             .with_default_client_auth(CLIENT_ID_1)
-            .with_allowed_cipher_suites(CIPHER_SUITES_NOT_SUPPORTED_BY_SERVER)
-            .expect_error("tlsv1 alert access denied")
-            .build(server.cert());
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, client.client_auth_cert())
-            .update();
-
-        let (_, server_result) = new_tokio_runtime()
-            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
-
-        assert_handshake_server_error_containing(
-            &server_result,
-            "no server certificate chain resolved",
-        )
-    }
-
-    #[test]
-    fn should_return_error_if_client_does_not_support_ed25519_sig_alg() {
-        let registry = TlsRegistry::new();
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client(CLIENT_ID_1)
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .with_default_client_auth(CLIENT_ID_1)
-            .with_allowed_signature_algorithms("ECDSA+SHA256:RSA+SHA256")
-            .expect_error("tlsv1 alert access denied")
+            .with_allowed_cipher_suites(vec![CIPHER_SUITES_NOT_SUPPORTED_BY_SERVER])
+            .expect_error("TlsConnector::connect failed: received fatal alert: AccessDenied")
             .build(server.cert());
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -461,7 +440,6 @@ mod server {
             .add_allowed_client(CLIENT_ID_1)
             .build(registry.get());
         let client = CustomClient::builder()
-            .with_allowed_signature_algorithms("ed25519")
             .with_client_auth(
                 CertWithPrivateKey::builder()
                     .cn(CLIENT_ID_1.to_string())
@@ -476,7 +454,10 @@ mod server {
         let (_, server_result) = new_tokio_runtime()
             .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
-        assert_handshake_server_error_containing(&server_result, "peer sent no certificates")
+        assert_handshake_server_error_containing(
+            &server_result,
+            "signature algorithm is not Ed25519 (OID 1.3.101.112)",
+        )
     }
 
     #[test]
@@ -611,14 +592,14 @@ mod server {
             .with_client_auth(
                 CertWithPrivateKey::builder()
                     .cn(CLIENT_ID_1.to_string())
-                    .build(ed25519_key_pair.clone(), MessageDigest::null()),
+                    .build(ed25519_key_pair.clone()),
             )
             .build(server.cert());
         let different_client_cert_in_registry_with_same_key = x509_public_key_cert(
             &CertWithPrivateKey::builder()
                 .validity_days(3) // ensures this cert differs!
                 .cn(CLIENT_ID_1.to_string())
-                .build(ed25519_key_pair, MessageDigest::null())
+                .build(ed25519_key_pair)
                 .x509(),
         );
         assert_ne!(
@@ -653,11 +634,11 @@ mod server {
         let leaf_cert = CertWithPrivateKey::builder()
             .cn(CLIENT_LEAF_ID.to_string())
             .with_ca_signing(ca_cert_key_pair.clone(), CLIENT_CA_ID.to_string())
-            .build(leaf_cert_key_pair, MessageDigest::null());
+            .build(leaf_cert_key_pair);
         let ca_cert = CertWithPrivateKey::builder()
             .cn(CLIENT_CA_ID.to_string())
             .set_ca_key_usage_extension()
-            .build(ca_cert_key_pair, MessageDigest::null())
+            .build(ca_cert_key_pair)
             .x509();
         let x509_client_ca_cert = x509_public_key_cert(&ca_cert);
         let client = CustomClient::builder()
@@ -784,8 +765,6 @@ mod client {
     use ic_crypto_test_utils_tls::x509_certificates::{
         ed25519_key_pair, x509_public_key_cert, CertWithPrivateKey,
     };
-    use openssl::hash::MessageDigest;
-    use openssl::ssl::SslVersion;
 
     #[test]
     fn should_return_error_if_client_cert_in_registry_is_malformed() {
@@ -806,7 +785,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, malformed_cert())
@@ -831,7 +810,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build_with_default_server_cert(SERVER_ID_1);
         registry
             // deliberately not adding server.cert() to the registry
@@ -915,11 +894,11 @@ mod client {
 
     #[test]
     fn should_allow_connection_to_custom_server_only_supporting_aes_128_cipher() {
-        const AES_128_ONLY_CIPHER_SUITE: &str = "TLS_AES_128_GCM_SHA256";
+        const AES_128_ONLY_CIPHER_SUITE: CipherSuite = CipherSuite::TLS13_AES_128_GCM_SHA256;
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .with_allowed_cipher_suites(AES_128_ONLY_CIPHER_SUITE)
+            .with_allowed_cipher_suites(vec![AES_128_ONLY_CIPHER_SUITE])
             .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -934,11 +913,11 @@ mod client {
 
     #[test]
     fn should_allow_connection_to_custom_server_only_supporting_aes_256_cipher() {
-        const AES_256_ONLY_CIPHER_SUITE: &str = "TLS_AES_256_GCM_SHA384";
+        const AES_256_ONLY_CIPHER_SUITE: CipherSuite = CipherSuite::TLS13_AES_256_GCM_SHA384;
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .with_allowed_cipher_suites(AES_256_ONLY_CIPHER_SUITE)
+            .with_allowed_cipher_suites(vec![AES_256_ONLY_CIPHER_SUITE])
             .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -957,8 +936,8 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder().build(
             CertWithPrivateKey::builder()
-                // Once upon a time in year 1012 in ASN.1 YYYYMMDDHHMMSSZ
-                .not_before("10121224075600Z")
+                // Once upon a time in year 2012 in ASN.1 YYYYMMDDHHMMSSZ
+                .not_before("20121224075600Z")
                 .cn(SERVER_ID_1.to_string())
                 .build_ed25519(),
         );
@@ -978,8 +957,13 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .with_max_protocol_version(SslVersion::TLS1_2)
-            .expect_error("tls_early_post_process_client_hello:unsupported protocol")
+            .with_protocol_versions(vec![TlsVersion::TLS1_2])
+            .with_allowed_cipher_suites(vec![
+                CipherSuite::TLS12_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            ])
+            .expect_error(
+                "TlsAcceptor::accept failed: peer is incompatible: Tls12NotOfferedOrEnabled",
+            )
             .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -997,34 +981,15 @@ mod client {
 
     #[test]
     fn should_return_error_if_server_does_not_support_required_ciphers() {
-        const CIPHER_SUITES_NOT_SUPPORTED_BY_CLIENT: &str = "TLS_CHACHA20_POLY1305_SHA256";
+        const CIPHER_SUITES_NOT_SUPPORTED_BY_CLIENT: CipherSuite =
+            CipherSuite::TLS13_CHACHA20_POLY1305_SHA256;
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .with_allowed_cipher_suites(CIPHER_SUITES_NOT_SUPPORTED_BY_CLIENT)
-            .expect_error("no shared cipher")
-            .build_with_default_server_cert(SERVER_ID_1);
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, client.cert())
-            .update();
-
-        let (client_result, _) = new_tokio_runtime()
-            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
-
-        assert_handshake_client_error_containing(
-            &client_result,
-            "received fatal alert: HandshakeFailure",
-        )
-    }
-
-    #[test]
-    fn should_return_error_if_server_does_not_support_ed25519_sig_alg() {
-        let registry = TlsRegistry::new();
-        let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
-        let server = CustomServer::builder()
-            .with_allowed_signature_algorithms("ECDSA+SHA256:RSA+SHA256")
-            .expect_error("no suitable signature algorithm")
+            .with_allowed_cipher_suites(vec![CIPHER_SUITES_NOT_SUPPORTED_BY_CLIENT])
+            .expect_error(
+                "TlsAcceptor::accept failed: peer is incompatible: NoCipherSuitesInCommon",
+            )
             .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -1045,8 +1010,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .with_allowed_signature_algorithms("ECDSA+SHA256:RSA+SHA256:ed25519")
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1072,7 +1036,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(WRONG_NODE_ID.to_string())
@@ -1097,7 +1061,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build_with_default_server_cert(SERVER_ID_1);
         let different_server_cert_in_registry = x509_public_key_cert(
             &CertWithPrivateKey::builder()
@@ -1126,17 +1090,17 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let ed25519_key_pair = ed25519_key_pair();
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
-                    .build(ed25519_key_pair.clone(), MessageDigest::null()),
+                    .build(ed25519_key_pair.clone()),
             );
         let different_server_cert_in_registry_with_same_key = x509_public_key_cert(
             &CertWithPrivateKey::builder()
                 .validity_days(3) // ensures this cert differs!
                 .cn(SERVER_ID_1.to_string())
-                .build(ed25519_key_pair, MessageDigest::null())
+                .build(ed25519_key_pair)
                 .x509(),
         );
         assert_ne!(
@@ -1168,14 +1132,14 @@ mod client {
         let leaf_cert = CertWithPrivateKey::builder()
             .cn(SERVER_LEAF_ID.to_string())
             .with_ca_signing(ca_cert_key_pair.clone(), SERVER_CA_ID.to_string())
-            .build(leaf_cert_key_pair, MessageDigest::null());
+            .build(leaf_cert_key_pair);
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build(leaf_cert);
         let ca_cert = CertWithPrivateKey::builder()
             .set_ca_key_usage_extension()
             .cn(SERVER_CA_ID.to_string())
-            .build(ca_cert_key_pair, MessageDigest::null())
+            .build(ca_cert_key_pair)
             .x509();
         registry
             .add_cert(SERVER_CA_ID, x509_public_key_cert(&ca_cert))
@@ -1196,7 +1160,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1222,7 +1186,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1248,7 +1212,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert handshake failure")
+            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())

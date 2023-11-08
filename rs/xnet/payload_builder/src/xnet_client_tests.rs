@@ -255,15 +255,14 @@ async fn query_request_timeout() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_request_failed() {
     use nix::sys::socket::{
-        bind, getsockname, socket, AddressFamily, InetAddr, SockAddr, SockFlag, SockType,
+        bind, getsockname, socket, AddressFamily, SockFlag, SockType, SockaddrIn,
     };
 
     let metrics = &MetricsRegistry::new();
 
     // Bind to a port and hold on to it in order to block it from being used by
     // other threads/processes, but don't listen() on it.
-    let address = SocketAddr::from(([127, 0, 0, 1], 0));
-    let address = SockAddr::new_inet(InetAddr::from_std(&address));
+    let address = SockaddrIn::new(127, 0, 0, 1, 0);
     let socket = socket(
         AddressFamily::Inet,
         SockType::Stream,
@@ -272,7 +271,7 @@ async fn query_request_failed() {
     )
     .expect("Socket creation failed");
     bind(socket, &address).expect("bind() failed");
-    let sa = getsockname(socket).expect("getsockname() failed");
+    let sa = getsockname::<SockaddrIn>(socket).expect("getsockname() failed");
 
     // URL to query a server that would be running on the allocated port.
     let url = format!("http://{}", sa).parse::<Uri>().unwrap();

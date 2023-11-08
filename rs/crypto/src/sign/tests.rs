@@ -4,6 +4,7 @@ use super::*;
 use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -16,7 +17,6 @@ use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_27};
-use openssl::sha::sha256;
 
 pub const KEY_ID_1: [u8; 32] = [0u8; 32];
 pub const KEY_ID_2: [u8; 32] = [1u8; 32];
@@ -224,7 +224,7 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
         match algorithm_id {
             AlgorithmId::EcdsaP256 => {
                 let (sk, pk) = ecdsa_secp256r1::test_utils::new_keypair(rng).unwrap();
-                let msg_hash = sha256(&bytes_to_sign);
+                let msg_hash = Sha256::hash(&bytes_to_sign);
                 (
                     pk.0,
                     ecdsa_secp256r1::sign(&msg_hash, &sk).unwrap().0.to_vec(),

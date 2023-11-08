@@ -159,10 +159,19 @@ pub(crate) struct RewardRate {
 pub(crate) struct Swap {
     minimum_participants: u64,
 
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    minimum_icp: nervous_system_pb::Tokens,
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    maximum_icp: nervous_system_pb::Tokens,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    minimum_icp: Option<nervous_system_pb::Tokens>,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    maximum_icp: Option<nervous_system_pb::Tokens>,
+
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    minimum_direct_participation_icp: Option<nervous_system_pb::Tokens>,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    maximum_direct_participation_icp: Option<nervous_system_pb::Tokens>,
 
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
     minimum_participant_icp: nervous_system_pb::Tokens,
@@ -181,8 +190,12 @@ pub(crate) struct Swap {
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     duration: nervous_system_pb::Duration,
 
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    neurons_fund_investment_icp: nervous_system_pb::Tokens,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    neurons_fund_investment_icp: Option<nervous_system_pb::Tokens>,
+
+    #[serde(default)]
+    neurons_fund_participation: Option<bool>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -732,6 +745,9 @@ impl Swap {
             minimum_icp,
             maximum_icp,
 
+            minimum_direct_participation_icp,
+            maximum_direct_participation_icp,
+
             maximum_participant_icp,
             minimum_participant_icp,
 
@@ -743,12 +759,18 @@ impl Swap {
             start_time,
             duration,
             neurons_fund_investment_icp,
+            neurons_fund_participation,
         } = self;
 
         let minimum_participants = Some(*minimum_participants);
 
-        let minimum_icp = Some(*minimum_icp);
-        let maximum_icp = Some(*maximum_icp);
+        let minimum_icp = *minimum_icp;
+        let maximum_icp = *maximum_icp;
+
+        let minimum_direct_participation_icp = minimum_direct_participation_icp
+            .or_else(|| minimum_icp?.checked_sub(&neurons_fund_investment_icp.unwrap_or_default()));
+        let maximum_direct_participation_icp = maximum_direct_participation_icp
+            .or_else(|| maximum_icp?.checked_sub(&neurons_fund_investment_icp.unwrap_or_default()));
 
         let maximum_participant_icp = Some(*maximum_participant_icp);
         let minimum_participant_icp = Some(*minimum_participant_icp);
@@ -766,13 +788,16 @@ impl Swap {
         let start_time = *start_time;
         let duration = Some(*duration);
 
-        let neurons_fund_investment_icp = Some(*neurons_fund_investment_icp);
+        let neurons_fund_participation = *neurons_fund_participation;
 
         nns_governance_pb::SwapParameters {
             minimum_participants,
 
             minimum_icp,
             maximum_icp,
+
+            minimum_direct_participation_icp,
+            maximum_direct_participation_icp,
 
             maximum_participant_icp,
             minimum_participant_icp,
@@ -784,7 +809,9 @@ impl Swap {
 
             start_time,
             duration,
-            neurons_fund_investment_icp,
+
+            neurons_fund_investment_icp: *neurons_fund_investment_icp,
+            neurons_fund_participation,
         }
     }
 }

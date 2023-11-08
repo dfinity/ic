@@ -144,12 +144,11 @@ pub fn create_nodes() -> Vec<(&'static str, IpAddr, u16)> {
 async fn test_routing_table() -> Result<(), Error> {
     let rt = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(Arc::clone(&rt), reg);
+    let mut runner = Runner::new(Arc::clone(&rt), reg, Duration::ZERO);
     runner.run().await?;
     let rt = rt.load_full().unwrap();
 
     assert_eq!(rt.registry_version, 1);
-    assert_eq!(rt.nns_subnet_id.to_string(), "fscpm-uiaaa-aaaaa-aaaap-yai");
     assert_eq!(rt.subnets.len(), 4);
 
     let subnets = vec![

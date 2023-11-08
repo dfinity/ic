@@ -18,6 +18,7 @@ mod ecdsa_sign_share {
     use proptest::prelude::any;
     use proptest::proptest;
     use proptest::strategy::Strategy;
+    use serde_bytes::ByteBuf;
     use std::collections::HashSet;
 
     #[test]
@@ -176,8 +177,7 @@ mod ecdsa_sign_share {
         use strum::IntoEnumIterator;
 
         AlgorithmId::iter()
-            .filter(|algorithm_id| *algorithm_id != AlgorithmId::ThresholdEcdsaSecp256k1)
-            .filter(|algorithm_id| *algorithm_id != AlgorithmId::ThresholdEcdsaSecp256r1)
+            .filter(|algorithm_id| !algorithm_id.is_threshold_ecdsa())
             .for_each(|wrong_algorithm_id| {
                 let parameters = EcdsaSignShareParameters::default();
                 let mut canister_sks = MockSecretKeyStore::new();
@@ -456,11 +456,27 @@ mod ecdsa_sign_share {
                 &self.derivation_path,
                 &self.hashed_message,
                 &self.nonce,
-                &self.key,
-                &self.kappa_unmasked,
-                &self.lambda_masked,
-                &self.kappa_times_lambda,
-                &self.key_times_lambda,
+                ByteBuf::from(self.key.serialize().expect("should serialize successfully")),
+                ByteBuf::from(
+                    self.kappa_unmasked
+                        .serialize()
+                        .expect("should serialize successfully"),
+                ),
+                ByteBuf::from(
+                    self.lambda_masked
+                        .serialize()
+                        .expect("should serialize successfully"),
+                ),
+                ByteBuf::from(
+                    self.kappa_times_lambda
+                        .serialize()
+                        .expect("should serialize successfully"),
+                ),
+                ByteBuf::from(
+                    self.key_times_lambda
+                        .serialize()
+                        .expect("should serialize successfully"),
+                ),
                 self.algorithm_id,
             )
         }

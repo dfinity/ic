@@ -30,6 +30,7 @@ def image_deps(mode, malicious = False):
 
             # additional files to install
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
+            "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",
             "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
             "//publish/binaries:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",
@@ -39,8 +40,6 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Install the malicious replica if set
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
-            "//publish/binaries:sevctl": "/opt/ic/bin/sevctl:0755",
-            "@sevtool": "/opt/ic/bin/sevtool:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
             "//ic-os/utils:infogetty": "/opt/ic/bin/infogetty:0755",

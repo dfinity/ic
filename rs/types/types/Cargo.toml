@@ -1,13 +1,16 @@
 [package]
 name = "ic-types"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
 bincode = "1.2.1"
 candid = { workspace = true }
-derive_more = { git = "https://github.com/dfinity-lab/derive_more", branch = "master" }
+derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da" }
 hex = "0.4.2"
 ic-base-types = { path = "../base_types" }
 ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
@@ -23,18 +26,18 @@ maplit = "1.0.2"
 once_cell = "1.8"
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
-serde_cbor = "0.11.1"
-serde_json = "1.0.40"
-serde_with = "1.6.2"
-strum = "0.23.0"
-strum_macros = "0.23.0"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 thiserror = "1.0"
 thousands = "0.2.0"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
-chrono = "0.4"
+chrono = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
@@ -42,7 +45,7 @@ hex-literal = "0.4.1"
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-exhaustive-derive = { path = "../exhaustive_derive" }
-pretty_assertions = "0.6.1"
+pretty_assertions = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3.1"
 rusty-fork = "0.3.0"

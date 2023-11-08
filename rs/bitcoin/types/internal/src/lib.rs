@@ -6,6 +6,7 @@
 
 use candid::CandidType;
 use ic_btc_interface::Network;
+use ic_error_types::{RejectCode, TryFromError};
 use ic_protobuf::{
     bitcoin::v1,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -417,9 +418,74 @@ impl SendTransactionResponse {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BitcoinReject {
+    /// The [`RejectCode`] of the request.
+    pub reject_code: RejectCode,
+    /// Error message to provide additional information.
+    pub message: String,
+}
+
+impl BitcoinReject {
+    /// Returns the size of this `RejectResponse` in bytes.
+    pub fn count_bytes(&self) -> usize {
+        size_of_val(&self.reject_code) + self.message.len()
+    }
+}
+
+impl From<&BitcoinReject> for v1::GetSuccessorsReject {
+    fn from(reject: &BitcoinReject) -> Self {
+        v1::GetSuccessorsReject {
+            reject_code: reject.reject_code as u64,
+            message: reject.message.clone(),
+        }
+    }
+}
+
+impl TryFrom<v1::GetSuccessorsReject> for BitcoinReject {
+    type Error = ProxyDecodeError;
+    fn try_from(reject: v1::GetSuccessorsReject) -> Result<Self, Self::Error> {
+        Ok(BitcoinReject {
+            reject_code: RejectCode::try_from(reject.reject_code).map_err(|err| match err {
+                TryFromError::ValueOutOfRange(range) => ProxyDecodeError::ValueOutOfRange {
+                    typ: "GetSuccessorsReject::reject_code",
+                    err: format!("value out of range: {}", range),
+                },
+            })?,
+            message: reject.message,
+        })
+    }
+}
+
+impl From<&BitcoinReject> for v1::SendTransactionReject {
+    fn from(reject: &BitcoinReject) -> Self {
+        v1::SendTransactionReject {
+            reject_code: reject.reject_code as u64,
+            message: reject.message.clone(),
+        }
+    }
+}
+
+impl TryFrom<v1::SendTransactionReject> for BitcoinReject {
+    type Error = ProxyDecodeError;
+    fn try_from(reject: v1::SendTransactionReject) -> Result<Self, Self::Error> {
+        Ok(BitcoinReject {
+            reject_code: RejectCode::try_from(reject.reject_code).map_err(|err| match err {
+                TryFromError::ValueOutOfRange(range) => ProxyDecodeError::ValueOutOfRange {
+                    typ: "SendTransactionReject::reject_code",
+                    err: format!("value out of range: {}", range),
+                },
+            })?,
+            message: reject.message,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BitcoinAdapterResponseWrapper {
     GetSuccessorsResponse(GetSuccessorsResponseComplete),
     SendTransactionResponse(SendTransactionResponse),
+    GetSuccessorsReject(BitcoinReject),
+    SendTransactionReject(BitcoinReject),
 }
 
 impl BitcoinAdapterResponseWrapper {
@@ -428,6 +494,8 @@ impl BitcoinAdapterResponseWrapper {
         match self {
             BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) => r.count_bytes(),
             BitcoinAdapterResponseWrapper::SendTransactionResponse(r) => r.count_bytes(),
+            BitcoinAdapterResponseWrapper::GetSuccessorsReject(r) => r.count_bytes(),
+            BitcoinAdapterResponseWrapper::SendTransactionReject(r) => r.count_bytes(),
         }
     }
 }
@@ -453,6 +521,22 @@ impl From<&BitcoinAdapterResponseWrapper> for v1::BitcoinAdapterResponseWrapper 
                     ),
                 }
             }
+            BitcoinAdapterResponseWrapper::GetSuccessorsReject(reject) => {
+                v1::BitcoinAdapterResponseWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_response_wrapper::R::GetSuccessorsReject(reject.into()),
+                    ),
+                }
+            }
+            BitcoinAdapterResponseWrapper::SendTransactionReject(reject) => {
+                v1::BitcoinAdapterResponseWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_response_wrapper::R::SendTransactionReject(
+                            reject.into(),
+                        ),
+                    ),
+                }
+            }
         }
     }
 }
@@ -468,6 +552,12 @@ impl TryFrom<v1::BitcoinAdapterResponseWrapper> for BitcoinAdapterResponseWrappe
             ),
             v1::bitcoin_adapter_response_wrapper::R::SendTransactionResponse(r) => Ok(
                 BitcoinAdapterResponseWrapper::SendTransactionResponse(r.try_into()?),
+            ),
+            v1::bitcoin_adapter_response_wrapper::R::GetSuccessorsReject(r) => Ok(
+                BitcoinAdapterResponseWrapper::GetSuccessorsReject(r.try_into()?),
+            ),
+            v1::bitcoin_adapter_response_wrapper::R::SendTransactionReject(r) => Ok(
+                BitcoinAdapterResponseWrapper::SendTransactionReject(r.try_into()?),
             ),
         }
     }

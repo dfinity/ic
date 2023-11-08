@@ -1,7 +1,10 @@
 [package]
 name = "ic-transport"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 async-trait = "0.1.36"
@@ -10,7 +13,7 @@ ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
-ic-icos-sev-interfaces = { path = "../ic_os/sev_interfaces" }
+ic-icos-sev = { path = "../ic_os/sev" }
 ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -18,20 +21,19 @@ futures = { workspace = true }
 h2 = "0.3.14"
 http = "0.2.8"
 prometheus = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-strum = { version = "0.24", features = ["derive"] }
-tokio = { version = "1.32.0", features = ["full"] }
+strum = { workspace = true }
+tokio = { workspace = true }
 tokio-util = { version = "0.7.4", features = ["io"] }
 tower = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
 ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
-ic-icos-sev = { path = "../ic_os/sev" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-transport-test-utils = { path = "./test_utils" }
 tower-test = "0.4.0"

@@ -3,9 +3,8 @@
 use crate::time_source::TimeSource;
 use ic_types::{
     artifact::{Advert, ArtifactKind, PriorityFn},
-    CountBytes, Height, NodeId, Time,
+    NodeId, Time,
 };
-use serde::{Deserialize, Serialize};
 
 /// Produces mutations to be applied on the artifact pool.
 pub trait ChangeSetProducer<Pool>: Send {
@@ -37,17 +36,17 @@ pub trait ChangeSetProducer<Pool>: Send {
 pub struct ChangeResult<Artifact: ArtifactKind> {
     pub purged: Vec<Artifact::Id>,
     pub adverts: Vec<Advert<Artifact>>,
-    /// The result of a single `apply_changes` call can result in either:
-    /// - new changes applied to the state. So `on_state_change` + `apply_changes` should be
-    ///   immediately called again.
-    /// - no change applied and state was unchanged. So calling `on_state_change` + `apply_changes` is
-    ///   not immediately required.
-    pub changed: bool,
+    /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
+    /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
+    /// true results in lower consensus latencies.
+    pub poll_immediately: bool,
 }
 
 /// Defines the canonical way for mutating an artifact pool.
 /// Mutations should happen from a single place/component.
-pub trait MutablePool<Artifact: ArtifactKind, C> {
+pub trait MutablePool<Artifact: ArtifactKind> {
+    type ChangeSet;
+
     /// Inserts a message into the unvalidated part of the pool.
     fn insert(&mut self, msg: UnvalidatedArtifact<Artifact::Message>);
 
@@ -58,7 +57,7 @@ pub trait MutablePool<Artifact: ArtifactKind, C> {
     fn apply_changes(
         &mut self,
         time_source: &dyn TimeSource,
-        change_set: C,
+        change_set: Self::ChangeSet,
     ) -> ChangeResult<Artifact>;
 }
 
@@ -69,8 +68,8 @@ pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync
     /// Returns a filter that represents what artifacts are needed.
     /// The filter is derived from the (persisted) state of the client and not directly
     /// from a pool content. Hence, no pool reference is used here.
-    fn get_filter(&self) -> Height {
-        Height::default()
+    fn get_filter(&self) -> Artifact::Filter {
+        Artifact::Filter::default()
     }
 }
 
@@ -94,92 +93,25 @@ pub trait ValidatedPoolReader<T: ArtifactKind> {
     /// A iterator over all the validated artifacts.
     fn get_all_validated_by_filter(
         &self,
-        filter: &Height,
+        filter: &T::Filter,
     ) -> Box<dyn Iterator<Item = T::Message> + '_>;
 }
 
-/// Validated artifact
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ValidatedArtifact<T> {
-    pub msg: T,
-    pub timestamp: Time,
-}
-
-impl<T> ValidatedArtifact<T> {
-    pub fn map<U, F>(self, f: F) -> ValidatedArtifact<U>
-    where
-        F: FnOnce(T) -> U,
-    {
-        ValidatedArtifact {
-            msg: f(self.msg),
-            timestamp: self.timestamp,
-        }
-    }
-}
-
 pub enum UnvalidatedArtifactEvent<Artifact: ArtifactKind> {
-    Insert(UnvalidatedArtifact<Artifact::Message>),
+    Insert((Artifact::Message, NodeId)),
     Remove(Artifact::Id),
 }
 
 /// Unvalidated artifact
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnvalidatedArtifact<T> {
     pub message: T,
     pub peer_id: NodeId,
     pub timestamp: Time,
 }
 
-// Traits for accessing data for (un)validated artifacts follow.
-
-impl<T: CountBytes> CountBytes for ValidatedArtifact<T> {
-    fn count_bytes(&self) -> usize {
-        self.msg.count_bytes() + self.timestamp.count_bytes()
-    }
-}
-
-impl<T> AsRef<T> for ValidatedArtifact<T> {
-    fn as_ref(&self) -> &T {
-        &self.msg
-    }
-}
-
 impl<T> AsRef<T> for UnvalidatedArtifact<T> {
     fn as_ref(&self) -> &T {
         &self.message
-    }
-}
-
-/// A trait similar to Into, but without its restrictions.
-pub trait IntoInner<T>: AsRef<T> {
-    fn into_inner(self) -> T;
-}
-
-impl<T> IntoInner<T> for ValidatedArtifact<T> {
-    fn into_inner(self) -> T {
-        self.msg
-    }
-}
-
-impl<T> IntoInner<T> for UnvalidatedArtifact<T> {
-    fn into_inner(self) -> T {
-        self.message
-    }
-}
-
-/// A trait to get timestamp.
-pub trait HasTimestamp {
-    fn timestamp(&self) -> Time;
-}
-
-impl<T> HasTimestamp for ValidatedArtifact<T> {
-    fn timestamp(&self) -> Time {
-        self.timestamp
-    }
-}
-
-impl<T> HasTimestamp for UnvalidatedArtifact<T> {
-    fn timestamp(&self) -> Time {
-        self.timestamp
     }
 }

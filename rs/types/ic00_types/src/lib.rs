@@ -16,7 +16,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
-use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
+use ic_protobuf::state::canister_state_bits::v1::{self as pb_canister_state_bits};
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
 use ic_protobuf::types::v1::{
     CanisterInstallMode as CanisterInstallModeProto, CanisterUpgradeOptions,
@@ -56,6 +56,7 @@ pub enum Method {
     HttpRequest,
     ECDSAPublicKey,
     InstallCode,
+    InstallChunkedCode,
     RawRand,
     SetupInitialDKG,
     SignWithECDSA,
@@ -114,8 +115,7 @@ pub struct CanisterIdRecord {
 
 impl CanisterIdRecord {
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 }
 
@@ -389,8 +389,7 @@ impl CanisterInfoRequest {
     }
 
     pub fn canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn num_requested_changes(&self) -> Option<u64> {
@@ -627,8 +626,7 @@ impl UninstallCodeArgs {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -744,6 +742,14 @@ impl CanisterStatusResult {
 
 impl Payload<'_> for CanisterStatusResult {}
 
+#[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
+pub struct QueryStats {
+    num_calls_total: candid::Nat,
+    num_instructions_total: candid::Nat,
+    request_payload_bytes_total: candid::Nat,
+    response_payload_bytes_total: candid::Nat,
+}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     status : variant { running; stopping; stopped };
@@ -755,6 +761,12 @@ impl Payload<'_> for CanisterStatusResult {}
 ///     freezing_threshold: nat,
 ///     idle_cycles_burned_per_day: nat;
 ///     reserved_cycles: nat;
+///     query_stats: record {
+///         num_calls: nat;
+///         num_instructions: nat;
+///         ingress_payload_size: nat;
+///         egress_payload_size: nat;
+///     }
 /// })`
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
 pub struct CanisterStatusResultV2 {
@@ -769,6 +781,7 @@ pub struct CanisterStatusResultV2 {
     freezing_threshold: candid::Nat,
     idle_cycles_burned_per_day: candid::Nat,
     reserved_cycles: candid::Nat,
+    query_stats: QueryStats,
 }
 
 impl CanisterStatusResultV2 {
@@ -786,6 +799,10 @@ impl CanisterStatusResultV2 {
         reserved_cycles_limit: Option<u128>,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
+        query_num_calls: u128,
+        query_num_instructions: u128,
+        query_ingress_payload_size: u128,
+        query_egress_payload_size: u128,
     ) -> Self {
         Self {
             status,
@@ -807,6 +824,12 @@ impl CanisterStatusResultV2 {
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
             reserved_cycles: candid::Nat::from(reserved_cycles),
+            query_stats: QueryStats {
+                num_calls_total: candid::Nat::from(query_num_calls),
+                num_instructions_total: candid::Nat::from(query_num_instructions),
+                request_payload_bytes_total: candid::Nat::from(query_ingress_payload_size),
+                response_payload_bytes_total: candid::Nat::from(query_egress_payload_size),
+            },
         }
     }
 
@@ -1195,8 +1218,7 @@ impl InstallCodeArgs {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -1278,8 +1300,7 @@ impl InstallCodeArgsV2 {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -1326,8 +1347,7 @@ impl UpdateSettingsArgs {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -2162,7 +2182,7 @@ impl Payload<'_> for UploadChunkArgs {}
 
 impl UploadChunkArgs {
     pub fn get_canister_id(&self) -> CanisterId {
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 }
 
@@ -2177,3 +2197,123 @@ pub struct UploadChunkReply {
 }
 
 impl Payload<'_> for UploadChunkReply {}
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     mode : variant {
+///         install;
+///         reinstall;
+///         upgrade: opt record {
+///             skip_pre_upgrade: opt bool
+///         }
+///     };
+///     target_canister_id: principal;
+///     store_canister_id: opt principal;
+///     chunk_hashes_list: vec blob;
+///     wasm_module_hash: blob;
+///     arg: blob;
+///     sender_canister_version : opt nat64;
+/// })`
+#[derive(Clone, CandidType, Deserialize, Debug)]
+pub struct InstallChunkedCodeArgs {
+    pub mode: CanisterInstallModeV2,
+    pub target_canister: PrincipalId,
+    pub store_canister: Option<PrincipalId>,
+    pub chunk_hashes_list: Vec<serde_bytes::ByteBuf>,
+    #[serde(with = "serde_bytes")]
+    pub wasm_module_hash: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub arg: Vec<u8>,
+    pub sender_canister_version: Option<u64>,
+}
+
+impl std::fmt::Display for InstallChunkedCodeArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "InstallChunkedCodeArgs {{")?;
+        writeln!(f, "  mode: {:?}", &self.mode)?;
+        writeln!(f, "  target_canister: {:?}", &self.target_canister)?;
+        writeln!(f, "  store_canister: {:?}", &self.store_canister)?;
+        writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
+        writeln!(f, "}}")
+    }
+}
+
+impl Payload<'_> for InstallChunkedCodeArgs {}
+
+impl InstallChunkedCodeArgs {
+    pub fn new(
+        mode: CanisterInstallModeV2,
+        target_canister: CanisterId,
+        store_canister: Option<CanisterId>,
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+        arg: Vec<u8>,
+    ) -> Self {
+        Self {
+            mode,
+            target_canister: target_canister.into(),
+            store_canister: store_canister.map(|p| p.into()),
+            chunk_hashes_list: chunk_hashes_list
+                .into_iter()
+                .map(serde_bytes::ByteBuf::from)
+                .collect(),
+            wasm_module_hash,
+            arg,
+            sender_canister_version: None,
+        }
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
+    }
+
+    pub fn target_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.target_canister)
+    }
+
+    pub fn store_canister_id(&self) -> Option<CanisterId> {
+        self.store_canister
+            .map(|p| CanisterId::unchecked_from_principal(p))
+    }
+}
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct ClearChunkStoreArgs {
+    pub canister_id: PrincipalId,
+}
+
+impl Payload<'_> for ClearChunkStoreArgs {}
+
+impl ClearChunkStoreArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct StoredChunksArgs {
+    pub canister_id: PrincipalId,
+}
+
+impl Payload<'_> for StoredChunksArgs {}
+
+impl StoredChunksArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+/// Struct to be returned when listing chunks in the Wasm store
+/// `(vec blob)`
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
+pub struct StoredChunksReply(pub Vec<serde_bytes::ByteBuf>);
+
+impl Payload<'_> for StoredChunksReply {}

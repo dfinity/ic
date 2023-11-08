@@ -337,8 +337,27 @@ message Init {
   // number of SNS tokens received per invested ICP. If this amount is achieved
   // without reaching sufficient_participation, the swap will abort without
   // waiting for the due date. Must be at least
-  // `min_participants * min_participant_icp_e8s`.
+  // `min_participants * min_participant_icp_e8s`
   optional uint64 max_icp_e8s = 19;
+
+  // The total number of ICP that is required to be "directly contributed"
+  // for this token swap to take place. This number divided by the number of SNS tokens being
+  // offered gives the seller's reserve price for the swap, i.e., the
+  // minimum number of ICP per SNS tokens that the seller of SNS
+  // tokens is willing to accept. If this amount is not achieved, the
+  // swap will be aborted (instead of committed) when the due date/time
+  // occurs. Must be smaller than or equal to `max_icp_e8s`.
+  optional uint64 min_direct_participation_icp_e8s = 30;
+
+  // The number of ICP that is "targeted" by this token swap. If this
+  // amount is achieved with sufficient participation, the swap will be
+  // triggered immediately, without waiting for the due date
+  // (`end_timestamp_seconds`). This means that an investor knows the minimum
+  // number of SNS tokens received per invested ICP. If this amount is achieved
+  // without reaching sufficient_participation, the swap will abort without
+  // waiting for the due date. Must be at least
+  // `min_participants * min_participant_icp_e8s`.
+  optional uint64 max_direct_participation_icp_e8s = 31;
 
   // The minimum amount of ICP that each buyer must contribute to
   // participate. Must be greater than zero.
@@ -393,8 +412,10 @@ message Init {
   optional bool should_auto_finalize = 28;
 
   // Constraints for the Neurons' Fund participation in this swap.
-  // TODO[NNS1-2570]: Use this data to compute neurons_fund_participation_icp_e8s.
   optional NeuronsFundParticipationConstraints neurons_fund_participation_constraints = 29;
+
+  // Whether Neurons' Fund participation is requested.
+  optional bool neurons_fund_participation = 32;
 }
 
 // Constraints for the Neurons' Fund participation in an SNS swap.
@@ -410,6 +431,27 @@ message NeuronsFundParticipationConstraints {
   // ideal Neurons' Fund participation amount (down) to the effective Neurons' Fund
   // participation amount.
   repeated LinearScalingCoefficient coefficient_intervals = 3;
+
+  // The function used in the implementation of Matched Funding for mapping amounts of direct
+  // participation to "ideal" Neurons' Fund participation amounts. The value needs to be adjusted
+  // to a potentially smaller value due to SNS-specific participation constraints and
+  // the configuration of the Neurons' Fund at the time of the CreateServiceNervousSystem proposal
+  // execution.
+  optional IdealMatchedParticipationFunction ideal_matched_participation_function = 4;
+}
+
+// This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
+// try to follow, but may deviate from in order to satisfy SNS-specific participation constraints
+// while allocating its overall participation amount among its neurons' maturity. In contrast,
+// The "effective" matched participation function `crate::neurons_fund::MatchedParticipationFunction`
+// is computed *based* on this one.
+// TODO(NNS1-1589): Until the Jira ticket gets solved, this definition needs to be synchronized with
+// that from nns/governance/proto/ic_nns_governance/pb/v1/governance.proto.
+message IdealMatchedParticipationFunction {
+  // The encoding of the "ideal" matched participation function is defined in `crate::neurons_fund`.
+  // In the future, we could change this message to represent full abstract syntactic trees
+  // comprised of elementary mathematical operators, with literals and variables as tree leaves.
+  optional string serialized_representation = 1;
 }
 
 // Some Neurons' Fund neurons might be too small, and some might be too large to participate in a
@@ -426,7 +468,7 @@ message NeuronsFundParticipationConstraints {
 // mapping the Neurons' Fund ideal-participation to effective-participation on a given
 // linear (semi-open) interval. Say we have the following function for matching direct
 // participants' contributions: `f: ICP e8s -> ICP e8s`; then the *ideal* Neuron's Fund
-// participation amount corresponding to the direct participatio of `x` ICP e8s is
+// participation amount corresponding to the direct participation of `x` ICP e8s is
 // `f(x)`, while the Neuron's Fund *effective* participation amount is:
 // ```
 // g(x) = (c.slope_numerator / c.slope_denominator) * f(x) + c.intercept
@@ -462,6 +504,12 @@ message CfNeuron {
   // The amount of ICP that the Neurons' Fund invests associated
   // with this neuron.
   uint64 amount_icp_e8s = 2;
+
+  // Idempotency flag indicating whether the neuron recipes have been created for
+  // the CfNeuron. When set to true, it signifies that the action of creating neuron
+  // recipes has been performed on this structure. If the action is retried, this flag
+  // can be checked to avoid duplicate operations.
+  optional bool has_created_neuron_recipes = 3;
 }
 
 // Represents a Neurons' Fund participant, possibly with several neurons.
@@ -509,6 +557,25 @@ message Params {
   // waiting for the due date. Must be at least
   // `min_participants * min_participant_icp_e8s`.
   uint64 max_icp_e8s = 3;
+
+  // The total number of ICP that is required for this token swap to
+  // take place. This number divided by the number of SNS tokens being
+  // offered gives the seller's reserve price for the swap, i.e., the
+  // minimum number of ICP per SNS tokens that the seller of SNS
+  // tokens is willing to accept. If this amount is not achieved, the
+  // swap will be aborted (instead of committed) when the due date/time
+  // occurs. Must be smaller than or equal to `max_icp_e8s`.
+  optional uint64 min_direct_participation_icp_e8s = 10;
+
+  // The number of ICP that is "targeted" by this token swap. If this
+  // amount is achieved with sufficient participation, the swap will be
+  // triggered immediately, without waiting for the due date
+  // (`end_timestamp_seconds`). This means that an investor knows the minimum
+  // number of SNS tokens received per invested ICP. If this amount is achieved
+  // without reaching sufficient_participation, the swap will abort without
+  // waiting for the due date. Must be at least
+  // `min_participants * min_participant_icp_e8s`.
+  optional uint64 max_direct_participation_icp_e8s = 11;
 
   // The minimum amount of ICP that each buyer must contribute to
   // participate. Must be greater than zero.
@@ -595,6 +662,12 @@ message BuyerState {
   // * COMMITTED - owned by the SNS governance canister, can be transferred out
   // * ABORTED - owned by the buyer, can be transferred out
   TransferableAmount icp = 5;
+
+  // Idempotency flag indicating whether the neuron recipes have been created for
+  // the BuyerState. When set to true, it signifies that the action of creating neuron
+  // recipes has been performed on this structure. If the action is retried, this flag
+  // can be checked to avoid duplicate operations.
+  optional bool has_created_neuron_recipes = 6;
 }
 
 // Information about a direct investor.
@@ -781,6 +854,10 @@ message FinalizeSwapResponse {
 
   SettleCommunityFundParticipationResult settle_community_fund_participation_result = 6;
 
+  SweepResult create_sns_neuron_recipes_result = 8;
+
+  SettleNeuronsFundParticipationResult settle_neurons_fund_participation_result = 9;
+
   // Explains what (if anything) went wrong.
   optional string error_message = 7;
 }
@@ -851,6 +928,36 @@ message SettleCommunityFundParticipationResult {
   oneof possibility {
     Response ok = 1;
     CanisterCallError err = 2;
+  }
+}
+
+// The result from settling the neurons' fund participation in finalization.
+message SettleNeuronsFundParticipationResult {
+  // The successful branch of the result. On subsequent attempts to settle
+  // neurons fund participation (for example: due to some later stage of
+  // finalization failing and a manual retry is invoked), this branch
+  // will be set with the results of the original successful attempt.
+  message Ok {
+    optional uint64 neurons_fund_participation_icp_e8s = 1;
+    optional uint64 neurons_fund_neurons_count = 2;
+  }
+
+  // The failure branch of the result. This message can be set for a
+  // number of reasons not limited to
+  //    - invalid state
+  //    - replica errors
+  //    - canister errors
+  //
+  // While some of these errors are transient and can immediately retried,
+  // others require manual intervention. The error messages and logs of the
+  // canister should provide enough context to debug.
+  message Error {
+    optional string message = 1;
+  }
+
+  oneof possibility {
+    Ok ok = 1;
+    Error err = 2;
   }
 }
 
@@ -976,6 +1083,122 @@ message SettleCommunityFundParticipation {
   // The amounts to be refunded can be found in the ProposalData's
   // `cf_participants` field.
   message Aborted {}
+}
+
+// Request to settle the Neurons' Fund participation in this SNS Swap.
+//
+// When a swap ends, the Swap canister notifies the Neurons' Fund of the swap's ultimate result,
+// which can be either `Committed` or `Aborted`. Note that currently, the Neurons' Fund is managed
+// by the NNS Governance canister.
+// * If the result is `Committed`:
+//   - Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
+//     the Matched Funding rules). This computation is based on the total direct participation
+//     amount, which is thus a field of `Committed`.
+//   - Neurons' Fund converts the "effective" amount of maturity into ICP by:
+//     - Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
+//       to the SNS treasury.
+//     - Refunding whatever maturity is left over (the maximum possible maturity is reserved by
+//       the Neurons' Fund before the swap begins).
+//   - Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
+//     (see SettleNeuronsFundParticipationResponse).
+//   - The Swap canister then creates SNS neurons for the Neurons' Fund participants.
+// * If the result is Aborted, the Neurons' Fund is refunded for all maturity reserved for this SNS.
+//
+// This design assumes trust between the Neurons' Fund and the SNS Swap canisters. In the one hand,
+// the Swap trusts that the Neurons' Fund sends the correct amount of ICP to the SNS treasury,
+// and that the Neurons' Fund allocates its participants following the Matched Funding rules. On the
+// other hand, the Neurons' Fund trusts that the Swap will indeed create appropriate SNS neurons
+// for the Neurons' Fund participants.
+//
+// The justification for this trust assumption is as follows. The Neurons' Fund can be trusted as
+// it is controlled by the NNS. The SNS Swap can be trusted as it is (1) deployed by SNS-W, which is
+// also part of the NNS and (2) upgraded via an NNS proposal (unlike all other SNS canisters).
+//
+// This request may be submitted only by the Swap canister of an SNS instance created by
+// a CreateServiceNervousSystem proposal.
+//
+// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
+// manually propagated to (sns) swap.proto.
+message SettleNeuronsFundParticipationRequest {
+  // Proposal ID of the CreateServiceNervousSystem proposal that created this SNS instance.
+  optional uint64 nns_proposal_id = 1;
+
+  // Each of the possibilities here corresponds to one of two ways that a swap can terminate.
+  // See also sns_swap_pb::Lifecycle::is_terminal.
+  oneof result {
+    Committed committed = 2;
+    Aborted aborted = 3;
+  }
+
+  // When this happens, the NNS Governance needs to do several things:
+  // (1) Compute the effective amount of ICP per neuron of the Neurons' Fund as a function of
+  //     `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
+  //     equal `total_neurons_fund_contribution_icp_e8s`.
+  // (2) Mint (via the ICP Ledger) and sent to the SNS governance the amount of
+  //     `total_neurons_fund_contribution_icp_e8s`.
+  // (3) Respond to this request with `SettleNeuronsFundParticipationResponse`, providing
+  //     the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
+  //     as computed in step (1).
+  // (4) Refund each neuron of the Neurons' Fund with (reserved - effective) amount of ICP.
+  // Effective amounts depend on `total_direct_participation_icp_e8s` and the participation limits
+  // of a particular SNS instance, namely, each participation must be between
+  // `min_participant_icp_e8s` and `max_participant_icp_e8s`.
+  // - If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
+  //   then it is ineligible to participate.
+  // - If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
+  //   then its participation amount is limited to `max_participant_icp_e8s`.
+  // Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
+  // the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
+  message Committed {
+    // This is where the minted ICP will be sent.
+    ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 1;
+    // Total amount of participation from direct swap participants.
+    optional uint64 total_direct_participation_icp_e8s = 2;
+    // Total amount of participation from the Neurons' Fund.
+    // TODO[NNS1-2570]: Ensure this field is set.
+    optional uint64 total_neurons_fund_participation_icp_e8s = 3;
+  }
+
+  // When this happens, all priorly reserved maturity for this SNS instance needs to be restored to
+  // the Neurons' Fund neurons.
+  message Aborted {}
+}
+
+// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
+// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
+// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
+// field as `committed`. The NNS Governance then computes the ultimate distribution of maturity in
+// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
+// that will use this information to create SNS neurons of an appropriate size for each
+// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
+// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
+// case it should be empty.
+//
+// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
+// manually propagated to (sns) swap.proto.
+message SettleNeuronsFundParticipationResponse {
+  // Represents one NNS neuron from the Neurons' Fund participating in this swap.
+  message NeuronsFundNeuron {
+    // The NNS neuron ID of the participating neuron.
+    optional uint64 nns_neuron_id = 1;
+    // The amount of Neurons' Fund participation associated with this neuron.
+    optional uint64 amount_icp_e8s = 2;
+    // The principal that can vote on behalf of this neuron.
+    optional string hotkey_principal = 3;
+    // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
+    // has been capped to reflect the maximum participation amount for this SNS swap.
+    optional bool is_capped = 4;
+  }
+
+  // Request was completed successfully.
+  message Ok {
+    repeated NeuronsFundNeuron neurons_fund_neuron_portions = 1;
+  }
+
+  oneof result {
+    GovernanceError err = 1;
+    Ok ok = 2;
+  }
 }
 
 // The id of a specific neuron, which equals the neuron's subaccount on
@@ -1141,7 +1364,7 @@ message GetOpenTicketResponse {
     optional Ticket ticket = 1;
   }
 
-  // Request was not successful, and no ticket was creatd.
+  // Request was not successful, and no ticket was created.
   message Err {
     enum Type {
       TYPE_UNSPECIFIED = 0;
@@ -1177,7 +1400,7 @@ message NewSaleTicketResponse {
     Ticket ticket = 1;
   }
 
-  // Request was not successful, and no ticket was creatd.
+  // Request was not successful, and no ticket was created.
   message Err {
     message InvalidUserAmount {
       uint64 min_amount_icp_e8s_included = 1;
@@ -1306,10 +1529,10 @@ message ListSnsNeuronRecipesResponse {
   repeated SnsNeuronRecipe sns_neuron_recipes = 1;
 }
 
-// Request struct for the method `notfiy_payment_failure`
+// Request struct for the method `notify_payment_failure`
 message NotifyPaymentFailureRequest {}
 
-// Response for the method `notfiy_payment_failure`
+// Response for the method `notify_payment_failure`
 // Returns the ticket if a ticket was found for the caller and the ticket
 // was removed successfully. Returns None if no ticket was found for the caller.
 message NotifyPaymentFailureResponse {

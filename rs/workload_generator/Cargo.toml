@@ -1,7 +1,10 @@
 [package]
 name = "ic-workload-generator"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 backoff = "0.3.0"
@@ -15,25 +18,25 @@ ic-test-identity = { path = "../test_utilities/identity" }
 ic-types = { path = "../types/types" }
 byte-unit = "4.0.14"
 candid = { workspace = true }
-chrono = "0.4.19"
-clap = { version = "3.1.6", features = ["derive"] }
+chrono = { workspace = true }
+clap = { workspace = true }
 console = "0.11"
 futures = { workspace = true }
 hex = "0.4.3"
-itertools = "0.10.3"
+itertools = { workspace = true }
 indicatif = "0.17.3"
 lazy_static = "1.4.0"
 prometheus = { workspace = true }
 rand = "0.8.4"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_json = "1.0.40"
+serde = { workspace = true }
+serde_json = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
 slog-scope = "4.1.2"
 slog-term = "2.6.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 url = "2.1.1"
 wat = "1.0.52"
 

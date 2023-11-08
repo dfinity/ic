@@ -360,7 +360,11 @@ pub fn get_call_context_and_callback(
 
     let callback_id = response.originator_reply_callback;
 
-    debug_assert!(call_context_manager.peek_callback(callback_id).is_some());
+    debug_assert!(
+        call_context_manager.peek_callback(callback_id).is_some()
+            // [EXC-1510] Ignore callbacks with ID `u64::MAX`.
+            || callback_id.get() == u64::MAX
+    );
     let callback = match call_context_manager.peek_callback(callback_id) {
         Some(callback) => callback.clone(),
         None => {
@@ -400,8 +404,6 @@ pub fn get_call_context_and_callback(
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
     round_limits.instructions -= as_round_instructions(slice.executed_instructions);
-    round_limits.execution_complexity =
-        &round_limits.execution_complexity - &slice.execution_complexity;
 }
 
 /// Tries to apply the given canister changes to the given system state and

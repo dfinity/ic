@@ -104,7 +104,6 @@ pub struct AppSubnetRecovery {
     pub recovery_args: RecoveryArgs,
     pub neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
-    interactive: bool,
     logger: Logger,
 }
 
@@ -114,7 +113,6 @@ impl AppSubnetRecovery {
         recovery_args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
         subnet_args: AppSubnetRecoveryArgs,
-        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
@@ -132,7 +130,6 @@ impl AppSubnetRecovery {
             neuron_args,
             recovery,
             logger,
-            interactive,
         }
     }
 
@@ -155,7 +152,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
     }
 
     fn interactive(&self) -> bool {
-        self.interactive
+        !self.recovery_args.skip_prompts
     }
 
     fn read_step_params(&mut self, step_type: StepType) {

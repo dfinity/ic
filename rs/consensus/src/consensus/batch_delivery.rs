@@ -7,13 +7,13 @@ use crate::{
         metrics::{BatchStats, BlockStats},
         status::{self, Status},
     },
-    ecdsa::utils::EcdsaBlockReaderImpl,
+    ecdsa::utils::get_ecdsa_subnet_public_key,
 };
-use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
-use ic_consensus_utils::{crypto_hashable_to_seed, get_block_hash_string, pool_reader::PoolReader};
-use ic_crypto::get_tecdsa_master_public_key;
+use ic_consensus_utils::{
+    crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
+};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
-use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGResponse};
+use ic_ic00_types::SetupInitialDKGResponse;
 use ic_interfaces::{
     batch_payload::IntoMessages,
     messaging::{MessageRouting, MessageRoutingError},
@@ -25,15 +25,12 @@ use ic_protobuf::{
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
-    batch::{Batch, BatchMessages},
+    batch::{Batch, BatchMessages, BlockmakerMetrics},
     consensus::{
-        ecdsa::{self, CompletedSignature, EcdsaBlockReader},
+        ecdsa::{self, CompletedSignature},
         Block,
     },
-    crypto::{
-        canister_threshold_sig::MasterEcdsaPublicKey,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
-    },
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
     messages::{CallbackId, Payload, RejectContext, Response},
     CanisterId, Cycles, Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
 };
@@ -45,6 +42,7 @@ use std::collections::BTreeMap;
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn deliver_batches(
     message_routing: &dyn MessageRouting,
+    membership: &Membership,
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
@@ -150,6 +148,38 @@ pub fn deliver_batches(
                         .unwrap_or_default()
                 };
 
+                let Some(previous_beacon) = pool.get_random_beacon(last_delivered_batch_height)
+                else {
+                    warn!(
+                        every_n_seconds => 5,
+                        log,
+                        "No batch delivery at height {}: no random beacon found.",
+                        h
+                    );
+                    return Ok(last_delivered_batch_height);
+                };
+                let blockmaker_ranking = match membership.get_shuffled_nodes(
+                    block.height,
+                    &previous_beacon,
+                    &ic_crypto_prng::RandomnessPurpose::BlockmakerRanking,
+                ) {
+                    Ok(nodes) => nodes,
+                    Err(e) => {
+                        warn!(
+                            every_n_seconds => 5,
+                            log,
+                            "No batch delivery at height {}: membership error: {:?}",
+                            h,
+                            e
+                        );
+                        return Ok(last_delivered_batch_height);
+                    }
+                };
+                let blockmaker_metrics = BlockmakerMetrics {
+                    blockmaker: blockmaker_ranking[block.rank.0 as usize],
+                    failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
+                };
+
                 let batch = Batch {
                     batch_number: h,
                     requires_full_state_hash,
@@ -159,6 +189,7 @@ pub fn deliver_batches(
                     registry_version: block.context.registry_version,
                     time: block.context.time,
                     consensus_responses,
+                    blockmaker_metrics,
                 };
 
                 debug!(
@@ -181,9 +212,11 @@ pub fn deliver_batches(
             }
             (None, _) => {
                 trace!(
-                        log,
-                        "Do not deliver height {:?} because no finalized block was found. This should indicate we are waiting for state sync.",
-                        h);
+                    log,
+                    "Do not deliver height {:?} because no finalized block was found. \
+                    This should indicate we are waiting for state sync.",
+                    h
+                );
                 break;
             }
             (_, None) => {
@@ -198,60 +231,6 @@ pub fn deliver_batches(
         }
     }
     Ok(last_delivered_batch_height)
-}
-
-/// This function returns the ECDSA subnet public key to be added to the batch, if required.
-/// We return `Ok(Some(key))`, if
-/// - The block contains an ECDSA payload with current key transcript ref, and
-/// - the corresponding transcript exists in past blocks, and
-/// - we can extract the tECDSA master public key from the transcript.
-/// Otherwise `Ok(None)` is returned.
-/// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
-/// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
-/// a newer CUP is already present in the pool and we should continue from there.
-pub fn get_ecdsa_subnet_public_key(
-    block: &Block,
-    pool: &PoolReader<'_>,
-    log: &ReplicaLogger,
-) -> Result<Option<(EcdsaKeyId, MasterEcdsaPublicKey)>, String> {
-    let maybe_ecdsa_and_transcript_ref = block.payload.as_ref().as_ecdsa().and_then(|ecdsa| {
-        ecdsa
-            .key_transcript
-            .current
-            .as_ref()
-            .map(|unmasked| (ecdsa, *unmasked.as_ref()))
-    });
-    let ecdsa_subnet_public_key =
-        if let Some((ecdsa, transcript_ref)) = maybe_ecdsa_and_transcript_ref {
-            let summary = match pool.dkg_summary_block_for_finalized_height(block.height) {
-                Some(b) => b,
-                None => {
-                    return Err(format!(
-                        "Failed to find dkg summary block for height {}",
-                        block.height
-                    ))
-                }
-            };
-            let chain = build_consensus_block_chain(pool.pool(), &summary, block);
-            let block_reader = EcdsaBlockReaderImpl::new(chain);
-            match block_reader.transcript(&transcript_ref) {
-                Ok(transcript) => get_tecdsa_master_public_key(&transcript)
-                    .ok()
-                    .map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key)),
-                Err(err) => {
-                    warn!(
-                        log,
-                        "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
-                        transcript_ref,
-                        err
-                    );
-                    None
-                }
-            }
-        } else {
-            None
-        };
-    Ok(ecdsa_subnet_public_key)
 }
 
 /// This function creates responses to the system calls that are redirected to

@@ -86,21 +86,18 @@ impl std::fmt::Debug for CspSecretKey {
             CspSecretKey::MEGaEncryptionK256(_) => {
                 write!(f, "CspSecretKey::MEGaEncryptionK256 - REDACTED")
             }
-            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(EccScalarBytes::K256(
-                _,
-            ))) => {
+            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(s)) => {
                 write!(
                     f,
-                    "CspSecretKey::IDkgCommitmentOpening::Simple::K256 - REDACTED"
+                    "CspSecretKey::IDkgCommitmentOpening::Simple::{} - REDACTED",
+                    s.curve_type(),
                 )
             }
-            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Pedersen(
-                EccScalarBytes::K256(_),
-                EccScalarBytes::K256(_),
-            )) => {
+            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Pedersen(s, _)) => {
                 write!(
                     f,
-                    "CspSecretKey::IDkgCommitmentOpening::Pedersen::K256 - REDACTED"
+                    "CspSecretKey::IDkgCommitmentOpening::Pedersen::{} - REDACTED",
+                    s.curve_type()
                 )
             }
         }

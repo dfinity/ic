@@ -132,7 +132,7 @@ async fn get_canisters_to_upgrade(
                         label
                     )
                 })
-                .and_then(|principal| CanisterId::new(principal).map_err(|e| format!("{}", e)))
+                .map(CanisterId::unchecked_from_principal)
         })
         .collect()
 }

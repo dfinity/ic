@@ -94,6 +94,7 @@ impl Finalizer {
         // Try to deliver finalized batches to messaging
         let _ = deliver_batches(
             &*self.message_routing,
+            &self.membership,
             pool,
             &*self.registry_client,
             self.replica_config.subnet_id,
@@ -235,6 +236,7 @@ mod tests {
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_ic00_types::SetupInitialDKGResponse;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -251,9 +253,7 @@ mod tests {
     use ic_types::consensus::{HasHeight, HashedBlock};
     use ic_types::messages::Payload;
     use ic_types::{
-        crypto::threshold_sig::ni_dkg::{
-            NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
-        },
+        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
         messages::{CallbackId, Request},
     };
     use ic_types::{CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId};
@@ -502,7 +502,7 @@ mod tests {
                     target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
                 },
                 CallbackId::from(1),
-                Ok(NiDkgTranscript::dummy_transcript_for_tests()),
+                Ok(dummy_transcript_for_tests()),
             ),
             (
                 NiDkgId {
@@ -512,7 +512,7 @@ mod tests {
                     target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
                 },
                 CallbackId::from(1),
-                Ok(NiDkgTranscript::dummy_transcript_for_tests()),
+                Ok(dummy_transcript_for_tests()),
             ),
         ]
         .drain(..)

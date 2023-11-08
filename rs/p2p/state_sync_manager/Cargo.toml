@@ -20,14 +20,14 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = "0.8.5"
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-strum = "0.23.0"
-strum_macros = "0.23.0"
-tokio = { version = "1.32.0", features = ["full"] }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+tokio = { workspace = true }
 tokio-metrics = "0.3.0"
 zstd = "0.12.4"
 

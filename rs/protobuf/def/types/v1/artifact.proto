@@ -3,52 +3,37 @@ syntax = "proto3";
 package types.v1;
 
 import "google/protobuf/empty.proto";
+import "p2p/v1/state_sync_manager.proto";
 import "registry/subnet/v1/subnet.proto";
+import "types/v1/canister_http.proto";
 import "types/v1/ecdsa.proto";
 
 message ArtifactAttribute {
   oneof kind {
     ConsensusMessageAttribute consensus_message = 1;
-    DkgMessageAttribute dkg_message = 2;
     EcdsaMessageAttribute ecdsa_message = 3;
-    CanisterHttpResponseAttribute canister_http = 4;
     google.protobuf.Empty empty = 5;
   }
+  reserved 2, 4;
 }
 
 message ConsensusMessageAttribute {
   oneof kind {
-    uint64 random_beacon = 1;
     FinalizationAttribute finalization = 2;
     NotarizationAttribute notarization = 3;
-    BlockProposalAttribute block_proposal = 4;
-    uint64 random_beacon_share = 5;
-    uint64 notarization_share = 6;
-    uint64 finalization_share = 7;
-    uint64 random_tape = 8;
-    uint64 random_tape_share = 9;
-    uint64 cup = 10;
-    uint64 cup_share = 11;
+    google.protobuf.Empty empty = 12;
   }
+  reserved 1, 4, 5, 6, 7, 8, 9, 10, 11;
 }
 
 message FinalizationAttribute {
   bytes block_hash = 1;
-  uint64 height = 2;
+  reserved 2;
 }
 
 message NotarizationAttribute {
   bytes block_hash = 1;
-  uint64 height = 2;
-}
-
-message BlockProposalAttribute {
-  uint64 rank = 1;
-  uint64 height = 2;
-}
-
-message DkgMessageAttribute {
-  uint64 height = 1;
+  reserved 2;
 }
 
 message EcdsaMessageAttribute {
@@ -61,8 +46,59 @@ message EcdsaMessageAttribute {
   }
 }
 
-message CanisterHttpResponseAttribute {
-  uint64 registry_version = 1;
-  uint64 id = 2;
-  bytes hash = 3; // cryptographic hash of [`CanisterHttpResponse`]
+message ArtifactId {
+  oneof kind {
+    ConsensusMessageId consensus = 1;
+    IngressMessageId ingress = 2;
+    CertificationMessageId certification = 3;
+    types.v1.CanisterHttpShare canister_http = 11;
+    DkgMessageId dkg_message = 10;
+    types.v1.EcdsaArtifactId ecdsa = 6;
+    string file_tree_sync = 7;
+    p2p.v1.StateSyncId state_sync = 9;
+  }
+  reserved 4, 5;
+}
+
+message DkgMessageId {
+  bytes hash = 1;
+  uint64 height = 2;
+}
+
+message ConsensusMessageId {
+  ConsensusMessageHash hash = 1;
+  uint64 height = 2;
+}
+
+message ConsensusMessageHash {
+  oneof kind {
+    bytes random_beacon = 1;
+    bytes finalization = 2;
+    bytes notarization = 3;
+    bytes block_proposal = 4;
+    bytes random_beacon_share = 5;
+    bytes notarization_share = 6;
+    bytes finalization_share = 7;
+    bytes random_tape = 8;
+    bytes random_tape_share = 9;
+    bytes catch_up_package = 10;
+    bytes catch_up_package_share = 11;
+  }
+}
+
+message IngressMessageId {
+  uint64 expiry = 1;
+  bytes message_id = 2;
+}
+
+message CertificationMessageId {
+  CertificationMessageHash hash = 1;
+  uint64 height = 2;
+}
+
+message CertificationMessageHash {
+  oneof kind {
+    bytes certification = 1;
+    bytes certification_share = 2;
+  }
 }

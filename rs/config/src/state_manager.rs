@@ -8,6 +8,9 @@ pub struct Config {
     /// A feature flag that enables/disables the file backed memory allocator.
     #[serde(default = "file_backed_memory_allocator_default")]
     pub file_backed_memory_allocator: FlagStatus,
+    /// A feature flag that enables/disables the log structure merge tree based storage
+    #[serde(default = "lsmt_storage_default")]
+    pub lsmt_storage: FlagStatus,
 }
 
 impl Config {
@@ -15,6 +18,7 @@ impl Config {
         Self {
             state_root,
             file_backed_memory_allocator: file_backed_memory_allocator_default(),
+            lsmt_storage: lsmt_storage_default(),
         }
     }
 
@@ -31,4 +35,8 @@ impl Config {
 
 fn file_backed_memory_allocator_default() -> FlagStatus {
     FlagStatus::Enabled
+}
+
+pub fn lsmt_storage_default() -> FlagStatus {
+    FlagStatus::Disabled
 }

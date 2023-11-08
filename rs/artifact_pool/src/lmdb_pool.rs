@@ -19,7 +19,7 @@ use ic_types::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         ecdsa::{
-            ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
+            EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
             EcdsaPrefix, EcdsaPrefixOf, EcdsaSigShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
@@ -1497,7 +1497,7 @@ impl EcdsaMessageDb {
     /// false otherwise.
     fn insert_txn(&self, message: EcdsaMessage, tx: &mut RwTransaction) -> bool {
         assert_eq!(EcdsaMessageType::from(&message), self.object_type);
-        let key = IdKey::from(ecdsa_msg_id(&message));
+        let key = IdKey::from(EcdsaArtifactId::from(&message));
         let bytes = match bincode::serialize::<EcdsaMessage>(&message) {
             Ok(bytes) => bytes,
             Err(err) => {

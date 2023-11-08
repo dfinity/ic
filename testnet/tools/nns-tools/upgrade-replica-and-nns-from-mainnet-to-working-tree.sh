@@ -2,23 +2,22 @@
 
 set -Eeuo pipefail
 
-if (($# < 2)); then
+if (($# < 1)); then
     echo >&2 "This script deploys a testnet with mainnet NNS state and upgrades the replica and all NNS canisters via proposals."
-    echo "Usage: <TESTNET> <REPLICA_VERSION>"
-    echo ""
-    echo "NOTE: To use this script, your public key should be present on pyr07 backup pod! (ask for help on #backup-ops Slack channel)"
+    echo "Usage: <REPLICA_VERSION>"
     echo ""
     echo "REPLICA_VERSION    A build id of a downloadable image."
-    echo "TESTNET            A testnet which supports unassigned nodes. (hosts_unassigned.ini should be present!)"
     exit 1
 fi
 
-TESTNET=$1
-CUSTOM_GIT_SHA=$2
+CUSTOM_GIT_SHA=$1
 NNS_DAPP_RELEASE="proposal-123301"
 
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
+
 get_latest_nns_proposal() {
-    dfx canister \
+    __dfx canister \
         --network "${NNS_URL}" \
         call "${GOVERNANCE}" \
         --candid ../../../rs/nns/governance/canister/governance.did \
@@ -44,16 +43,14 @@ export ICP_ARCHIVE=qjdve-lqaaa-aaaaa-aaaeq-cai
 export SNS_W=qaa6y-5yaaa-aaaaa-aaafa-cai
 
 TIMESTAMP=$(date +%s)
-export DIR="${HOME}/testnet-${TIMESTAMP}/${TESTNET}"
+export DIR="${HOME}/testnet-${TIMESTAMP}"
 rm -fr "${DIR}"
 mkdir -p "${DIR}"
 echo "DIR = ${DIR}"
 
-# Don't deploy BNs
-STEPS="1" ./nns_dev_testnet.sh "${TESTNET}" || true
+ensure_variable_set IC_ADMIN
 
-source "${DIR}/output_vars_nns_dev_testnet.sh"
-"${DIR}/ic-admin" \
+"${IC_ADMIN}" \
     -r "${NNS_URL}" \
     -s "${PEM}" \
     propose-to-update-elected-replica-versions \
@@ -66,7 +63,7 @@ source "${DIR}/output_vars_nns_dev_testnet.sh"
 sleep 3
 get_latest_nns_proposal
 
-"${DIR}/ic-admin" \
+"${IC_ADMIN}" \
     -r "${NNS_URL}" \
     -s "${PEM}" \
     propose-to-update-subnet-replica-version tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
@@ -103,7 +100,7 @@ echo "==== Replica upgraded SUCCESSFULLY! ===="
 curl \
     -L "https://github.com/dfinity/nns-dapp/releases/download/${NNS_DAPP_RELEASE}/nns-dapp.wasm.gz" \
     -o "${DIR}/nns-dapp.wasm.gz"
-"${DIR}/ic-admin" \
+"${IC_ADMIN}" \
     -r "${NNS_URL}" \
     -s "${PEM}" \
     propose-to-change-nns-canister \

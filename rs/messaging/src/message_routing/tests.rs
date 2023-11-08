@@ -1,5 +1,8 @@
 use super::*;
 use assert_matches::assert_matches;
+use ic_crypto_test_utils_ni_dkg::{
+    dummy_transcript_for_tests, dummy_transcript_for_tests_with_params,
+};
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
@@ -24,6 +27,7 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_types::batch::BlockmakerMetrics;
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -564,7 +568,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             max_number_of_canisters: 387,
         };
 
-        let own_transcript = NiDkgTranscript::dummy_transcript_for_tests_with_params(
+        let own_transcript = dummy_transcript_for_tests_with_params(
             vec![node_test_id(123)], // committee
             NiDkgTag::HighThreshold, // dkg_tag
             2,                       // threshold
@@ -574,7 +578,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // Other subnet characteristics.
         let other_subnet_id = subnet_test_id(17);
         let other_subnet_record = SubnetRecord::default();
-        let other_transcript = NiDkgTranscript::dummy_transcript_for_tests();
+        let other_transcript = dummy_transcript_for_tests();
 
         // General parameters.
         let nns_subnet_id = subnet_test_id(42);
@@ -761,6 +765,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
+            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(network_topology, latest_state.metadata.network_topology);
@@ -789,7 +794,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             max_number_of_canisters: 784,
             ..Default::default()
         };
-        let own_transcript = NiDkgTranscript::dummy_transcript_for_tests();
+        let own_transcript = dummy_transcript_for_tests();
         let nns_subnet_id = subnet_test_id(42);
 
         let minimal_input = TestRecords {
@@ -888,7 +893,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             max_number_of_canisters: 784,
             ..Default::default()
         };
-        let own_transcript = NiDkgTranscript::dummy_transcript_for_tests();
+        let own_transcript = dummy_transcript_for_tests();
         let nns_subnet_id = subnet_test_id(42);
 
         let minimal_input = TestRecords {
@@ -1050,7 +1055,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             membership: &[node_test_id(1), node_test_id(2), node_test_id(3)],
             ..Default::default()
         };
-        let own_transcript = NiDkgTranscript::dummy_transcript_for_tests();
+        let own_transcript = dummy_transcript_for_tests();
         let nns_subnet_id = subnet_test_id(42);
 
         let input = TestRecords {
@@ -1144,7 +1149,7 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
             max_number_of_canisters: 784,
             ..Default::default()
         };
-        let own_transcript = NiDkgTranscript::dummy_transcript_for_tests();
+        let own_transcript = dummy_transcript_for_tests();
         let nns_subnet_id = subnet_test_id(42);
 
         let minimal_input = TestRecords {
@@ -1279,7 +1284,7 @@ fn process_batch_updates_subnet_metrics() {
             max_number_of_canisters: 387,
         };
 
-        let own_transcript = NiDkgTranscript::dummy_transcript_for_tests_with_params(
+        let own_transcript = dummy_transcript_for_tests_with_params(
             vec![node_test_id(123)], // committee
             NiDkgTag::HighThreshold, // dkg_tag
             2,                       // threshold
@@ -1289,7 +1294,7 @@ fn process_batch_updates_subnet_metrics() {
         // Other subnet characteristics.
         let other_subnet_id = subnet_test_id(17);
         let other_subnet_record = SubnetRecord::default();
-        let other_transcript = NiDkgTranscript::dummy_transcript_for_tests();
+        let other_transcript = dummy_transcript_for_tests();
 
         // General parameters.
         let nns_subnet_id = subnet_test_id(42);
@@ -1372,6 +1377,7 @@ fn process_batch_updates_subnet_metrics() {
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
+            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         });
 
         let latest_state = state_manager.get_latest_state().take();

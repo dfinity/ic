@@ -1,9 +1,13 @@
 [package]
 name = "ic-test-utilities-registry"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }

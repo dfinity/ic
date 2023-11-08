@@ -146,6 +146,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 minimum_participants: Some(42),
                 minimum_icp: Some(nervous_system_pb::Tokens::from_tokens(123)),
                 maximum_icp: Some(nervous_system_pb::Tokens::from_tokens(65000)),
+                minimum_direct_participation_icp: Some(nervous_system_pb::Tokens::from_tokens(121)),
+                maximum_direct_participation_icp: Some(nervous_system_pb::Tokens::from_tokens(
+                    64998
+                )),
                 minimum_participant_icp: Some(nervous_system_pb::Tokens::from_tokens(650)),
                 maximum_participant_icp: Some(nervous_system_pb::Tokens::from_tokens(6500)),
                 neuron_basket_construction_parameters: Some(
@@ -164,7 +168,8 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 duration: Some(nervous_system_pb::Duration {
                     seconds: Some(7 * SECONDS_PER_DAY),
                 }),
-                neurons_fund_investment_icp: Some(nervous_system_pb::Tokens::from_tokens(2))
+                neurons_fund_investment_icp: Some(nervous_system_pb::Tokens::from_tokens(2)),
+                neurons_fund_participation: None,
             }),
             ledger_parameters: Some(LedgerParameters {
                 transaction_fee: Some(nervous_system_pb::Tokens { e8s: Some(10_000) }),

@@ -714,6 +714,10 @@ fn can_get_canister_information() {
                 Some(5_000_000_000_000u128),
                 0u128,
                 0u128,
+                0u128,
+                0u128,
+                0u128,
+                0u128,
             )
         );
 
@@ -765,6 +769,10 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
+                    0u128,
+                    0u128,
+                    0u128,
+                    0u128,
                     0u128,
                     0u128,
                 ),
@@ -970,11 +978,9 @@ fn test_canister_skip_upgrade() {
 
         // Set pre_upgrade to trap.
         assert_matches!(
-            canister.update(wasm().call_simple(
-                canister_id,
-                "update",
-                call_args().other_side(set_trap_pre_upgrade),
-            )),
+            canister.update(
+                wasm().inter_update(canister_id, call_args().other_side(set_trap_pre_upgrade),)
+            ),
             Ok(WasmResult::Reply(_))
         );
 

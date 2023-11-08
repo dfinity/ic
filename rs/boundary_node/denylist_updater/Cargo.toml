@@ -1,29 +1,32 @@
 [package]
 name = "denylist-updater"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.58"
 async-trait = "0.1.56"
 axum = "0.6.1"
 chacha20poly1305 = "0.10.0"
-clap = { version = "3.2.6", features = ["derive"] }
+clap = { workspace = true }
 flate2 = "1.0.24"
 futures = { workspace = true }
 httptest = "0.15.4"
 mockall = "0.11.1"
-nix = { version = "0.24.2", features = ["signal"] }
+nix = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 prometheus = { workspace = true }
 reqwest = { version = "0.11.11", features = ["json"] }
 rsa = "0.9.2"
-serde = { version = "1.0.139", features = ["serde_derive"] }
-serde_json = "1.0.82"
+serde = { workspace = true }
+serde_json = { workspace = true }
 sha2 = "0.10.2"
 tar = "0.4.38"
 tempfile = "3.3.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["json"] }

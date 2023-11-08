@@ -1,4 +1,8 @@
-use ic_icrc_rosetta::common::types::{MetadataRequest, NetworkListResponse};
+use ic_icrc_rosetta::common::types::{
+    BlockIdentifier, BlockRequest, BlockResponse, BlockTransactionRequest,
+    BlockTransactionResponse, MetadataRequest, NetworkIdentifier, NetworkListResponse,
+    NetworkRequest, NetworkStatusResponse, PartialBlockIdentifier, TransactionIdentifier,
+};
 use reqwest::{Client, Url};
 use url::ParseError;
 
@@ -39,6 +43,58 @@ impl RosettaClient {
         self.http_client
             .post(self.url("/network/list"))
             .json(&MetadataRequest { metadata: None })
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    pub async fn network_status(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> reqwest::Result<NetworkStatusResponse> {
+        self.http_client
+            .post(self.url("/network/status"))
+            .json(&NetworkRequest {
+                network_identifier,
+                metadata: None,
+            })
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    pub async fn block(
+        &self,
+        network_identifier: NetworkIdentifier,
+        block_identifier: PartialBlockIdentifier,
+    ) -> reqwest::Result<BlockResponse> {
+        self.http_client
+            .post(self.url("/block"))
+            .json(&BlockRequest {
+                network_identifier: network_identifier.clone(),
+                block_identifier: block_identifier.clone(),
+            })
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    pub async fn block_transaction(
+        &self,
+        network_identifier: NetworkIdentifier,
+        block_identifier: BlockIdentifier,
+        transaction_identifier: TransactionIdentifier,
+    ) -> reqwest::Result<BlockTransactionResponse> {
+        self.http_client
+            .post(self.url("/block/transaction"))
+            .json(&BlockTransactionRequest {
+                network_identifier,
+                block_identifier,
+                transaction_identifier,
+            })
             .send()
             .await?
             .json()

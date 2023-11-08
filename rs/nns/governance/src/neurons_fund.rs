@@ -1,647 +1,1207 @@
-//! Implementation of functions for Matched Funding.
+//! Implementation of NNS Governance-specific functions for Matched Funding.
 
-// TODO[NNS1-2619]: remove this
-#![allow(dead_code)]
-#![allow(unused)]
-
-use ic_nervous_system_common::E8;
-use ic_sns_swap::pb::v1::{LinearScalingCoefficient, NeuronsFundParticipationConstraints};
-use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
-    Decimal, RoundingStrategy,
+use ic_base_types::PrincipalId;
+use ic_nervous_system_governance::maturity_modulation::BASIS_POINTS_PER_UNITY;
+use ic_neurons_fund::{
+    dec_to_u64, u64_to_dec, DeserializableFunction, IdealMatchingFunction,
+    PolynomialMatchingFunction, ValidatedLinearScalingCoefficient,
+    MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
 };
-use rust_decimal_macros::dec;
+use ic_nns_common::pb::v1::NeuronId;
+use ic_sns_swap::pb::v1::{
+    IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
+    LinearScalingCoefficient, NeuronsFundParticipationConstraints,
+};
+use rust_decimal::Decimal;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+    num::NonZeroU64,
+};
 
-/// This is a theoretical limit which should be smaller than any realistic amount of maturity
-/// that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
-pub const MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S: u64 = 333_000 * E8;
+use crate::{
+    governance,
+    neuron_store::{NeuronStore, NeuronsFundNeuron},
+    pb::v1::{
+        create_service_nervous_system::SwapParameters, governance_error,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
+        GovernanceError, IdealMatchedParticipationFunction,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb,
+        SwapParticipationLimits as SwapParticipationLimitsPb,
+    },
+};
 
-// The maximum number of intervals for scaling ideal Neurons' Fund participation down to effective
-// participation. Theoretically, this number should be greater than double the number of neurons
-// participating in the Neurons' Fund. Although the currently chosen value is quite high, it is
-// still significantly smaller than `usize::MAX`, allowing to reject an misformed
-// SnsInitPayload.coefficient_intervals structure with obviously too many elements.
-const MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN: usize = 100_000;
+/// The Neurons' Fund should not participate in any SNS swap with more than this portion of its
+/// overall maturity.
+pub const MAX_NEURONS_FUND_PARTICIPATION_BASIS_POINTS: u16 = 1_000; // 10%
 
-/// The implmentation of `Decimal::from_u64` cannot fail.
-pub fn u64_to_dec(x: u64) -> Decimal {
-    Decimal::from_u64(x).unwrap()
+pub fn take_percentile_of(x: u64, percentile: u16) -> u64 {
+    ((x as u128)
+        .saturating_mul(percentile as u128)
+        .saturating_div(BASIS_POINTS_PER_UNITY)
+        .min(u64::MAX as u128)) as u64
 }
 
-/// The canonical converter from (non-negative) `Decimal` to `u64`.
-pub fn dec_to_u64(x: Decimal) -> Result<u64, String> {
-    if x.is_sign_negative() {
-        return Err(format!("Cannot convert negative value {:?} to u64.", x));
+pub fn take_max_initial_neurons_fund_participation_percentage(x: u64) -> u64 {
+    take_percentile_of(x, MAX_NEURONS_FUND_PARTICIPATION_BASIS_POINTS)
+}
+
+// -------------------------------------------------------------------------------------------------
+// ------------------- NeuronsFundNeuronPortion ----------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+/// This structure represents an arbitrary portion of a Neurons' Fund neuron, be that the whole
+/// neuron (in which case `amount_icp_e8s` equals `maturity_equivalent_icp_e8s`) or a portion
+/// thereof that may either participate in an SNS swap or be refunded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NeuronsFundNeuronPortion {
+    /// The NNS neuron ID of the participating neuron.
+    pub id: NeuronId,
+    /// Portion of maturity taken from this neuron. Must be less than or equal to
+    /// `maturity_equivalent_icp_e8s`.
+    pub amount_icp_e8s: u64,
+    /// Overall amount of maturity of the neuron from which this portion is taken.
+    pub maturity_equivalent_icp_e8s: u64,
+    /// Controller of the neuron from which this portion is taken.
+    pub controller: PrincipalId,
+    /// Indicates whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
+    /// participation constraints.
+    pub is_capped: bool,
+}
+
+// By-default, Neurons' Fund neuron portions should be ordered lexicographically, first by
+// `controller`, then by `maturity_equivalent_icp_e8s`.
+impl Ord for NeuronsFundNeuronPortion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.controller.cmp(&other.controller) {
+            Ordering::Equal => self
+                .maturity_equivalent_icp_e8s
+                .cmp(&other.maturity_equivalent_icp_e8s),
+            ordering => ordering,
+        }
     }
-    // The same could be achieved via `x.round()`, but we opt for verbosity.
-    let x = x.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
-    // We already checked that 0 <= x; the only reason `to_u64` can fail at this point is overflow.
-    Decimal::to_u64(&x)
-        .ok_or_else(|| format!("Overflow while trying to convert value {:?} to u64.", x))
 }
 
-#[derive(Debug)]
-pub enum LinearScalingCoefficientValidationError {
-    // All fields are mandatory.
+impl PartialOrd for NeuronsFundNeuronPortion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum NeuronsFundNeuronPortionError {
     UnspecifiedField(String),
-    EmptyInterval {
-        from_direct_participation_icp_e8s: u64,
-        to_direct_participation_icp_e8s: u64,
-    },
-    DenominatorIsZero,
-    // The slope should be between 0.0 and 1.0.
-    NumeratorGreaterThanDenominator {
-        slope_numerator: u64,
-        slope_denominator: u64,
+    AmountTooBig {
+        amount_icp_e8s: u64,
+        maturity_equivalent_icp_e8s: u64,
     },
 }
 
-impl ToString for LinearScalingCoefficientValidationError {
+impl ToString for NeuronsFundNeuronPortionError {
     fn to_string(&self) -> String {
-        let prefix = "LinearScalingCoefficientValidationError: ";
+        let prefix = "Invalid NeuronsFundNeuronPortion: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}Field `{}` must be specified.", prefix, field_name)
+                format!("{}field `{}` is not specified.", prefix, field_name)
             }
-            Self::EmptyInterval {
-                from_direct_participation_icp_e8s,
-                to_direct_participation_icp_e8s,
+            Self::AmountTooBig {
+                amount_icp_e8s,
+                maturity_equivalent_icp_e8s,
             } => {
                 format!(
-                    "{}from_direct_participation_icp_e8s ({}) must be strictly less that \
-                    to_direct_participation_icp_e8s ({})).",
-                    prefix, from_direct_participation_icp_e8s, to_direct_participation_icp_e8s,
-                )
-            }
-            Self::DenominatorIsZero => {
-                format!("{}slope_denominator must not equal zero.", prefix)
-            }
-            Self::NumeratorGreaterThanDenominator {
-                slope_numerator,
-                slope_denominator,
-            } => {
-                format!(
-                    "{}slope_numerator ({}) must be less than or equal \
-                    slope_denominator ({})",
-                    prefix, slope_numerator, slope_denominator,
+                    "{}`amount_icp_e8s` ({}) exceeds `maturity_equivalent_icp_e8s` ({})",
+                    prefix, amount_icp_e8s, maturity_equivalent_icp_e8s,
                 )
             }
         }
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ValidatedLinearScalingCoefficient {
-    pub from_direct_participation_icp_e8s: u64,
-    pub to_direct_participation_icp_e8s: u64,
-    pub slope_numerator: u64,
-    pub slope_denominator: u64,
-    pub intercept_icp_e8s: u64,
-}
-
-impl From<ValidatedLinearScalingCoefficient> for LinearScalingCoefficient {
-    fn from(value: ValidatedLinearScalingCoefficient) -> Self {
-        Self {
-            from_direct_participation_icp_e8s: Some(value.from_direct_participation_icp_e8s),
-            to_direct_participation_icp_e8s: Some(value.to_direct_participation_icp_e8s),
-            slope_numerator: Some(value.slope_numerator),
-            slope_denominator: Some(value.slope_denominator),
-            intercept_icp_e8s: Some(value.intercept_icp_e8s),
-        }
-    }
-}
-
-impl TryFrom<LinearScalingCoefficient> for ValidatedLinearScalingCoefficient {
-    type Error = LinearScalingCoefficientValidationError;
-
-    fn try_from(value: LinearScalingCoefficient) -> Result<Self, Self::Error> {
-        let from_direct_participation_icp_e8s =
-            value.from_direct_participation_icp_e8s.ok_or_else(|| {
-                LinearScalingCoefficientValidationError::UnspecifiedField(
-                    "from_direct_participation_icp_e8s".to_string(),
-                )
-            })?;
-        let to_direct_participation_icp_e8s =
-            value.to_direct_participation_icp_e8s.ok_or_else(|| {
-                LinearScalingCoefficientValidationError::UnspecifiedField(
-                    "to_direct_participation_icp_e8s".to_string(),
-                )
-            })?;
-        let slope_numerator = value.slope_numerator.ok_or_else(|| {
-            LinearScalingCoefficientValidationError::UnspecifiedField("slope_numerator".to_string())
+impl NeuronsFundNeuronPortionPb {
+    pub fn validate(&self) -> Result<NeuronsFundNeuronPortion, NeuronsFundNeuronPortionError> {
+        let id = self.nns_neuron_id.ok_or_else(|| {
+            NeuronsFundNeuronPortionError::UnspecifiedField("nns_neuron_id".to_string())
         })?;
-        let slope_denominator = value.slope_denominator.ok_or_else(|| {
-            LinearScalingCoefficientValidationError::UnspecifiedField(
-                "slope_denominator".to_string(),
+        let amount_icp_e8s = self.amount_icp_e8s.ok_or_else(|| {
+            NeuronsFundNeuronPortionError::UnspecifiedField("amount_icp_e8s".to_string())
+        })?;
+        let maturity_equivalent_icp_e8s = self.maturity_equivalent_icp_e8s.ok_or_else(|| {
+            NeuronsFundNeuronPortionError::UnspecifiedField(
+                "maturity_equivalent_icp_e8s".to_string(),
             )
         })?;
-        // Currently we only check that `intercept_icp_e8s` is specified, so the actual field value
-        // is unchecked.
-        let intercept_icp_e8s = value.intercept_icp_e8s.ok_or_else(|| {
-            LinearScalingCoefficientValidationError::UnspecifiedField(
-                "intercept_icp_e8s".to_string(),
-            )
-        })?;
-        if to_direct_participation_icp_e8s <= from_direct_participation_icp_e8s {
-            return Err(LinearScalingCoefficientValidationError::EmptyInterval {
-                from_direct_participation_icp_e8s,
-                to_direct_participation_icp_e8s,
+        if maturity_equivalent_icp_e8s < amount_icp_e8s {
+            return Err(NeuronsFundNeuronPortionError::AmountTooBig {
+                amount_icp_e8s,
+                maturity_equivalent_icp_e8s,
             });
         }
-        if slope_denominator == 0 {
-            return Err(LinearScalingCoefficientValidationError::DenominatorIsZero);
-        }
-        if slope_numerator > slope_denominator {
-            return Err(
-                LinearScalingCoefficientValidationError::NumeratorGreaterThanDenominator {
-                    slope_numerator,
-                    slope_denominator,
-                },
-            );
-        }
-        Ok(Self {
-            from_direct_participation_icp_e8s,
-            to_direct_participation_icp_e8s,
-            slope_numerator,
-            slope_denominator,
-            intercept_icp_e8s,
+        let controller = self.hotkey_principal.ok_or_else(|| {
+            NeuronsFundNeuronPortionError::UnspecifiedField("hotkey_principal".to_string())
+        })?;
+        let is_capped = self.is_capped.ok_or_else(|| {
+            NeuronsFundNeuronPortionError::UnspecifiedField("is_capped".to_string())
+        })?;
+        Ok(NeuronsFundNeuronPortion {
+            id,
+            amount_icp_e8s,
+            maturity_equivalent_icp_e8s,
+            controller,
+            is_capped,
         })
     }
-}
 
-enum MaxNeuronsFundParticipationValidationError {
-    // This value must be specified.
-    Unspecified,
-    // Does not make sense if no SNS neurons can be created.
-    BelowSingleParticipationLimit {
-        max_neurons_fund_participation_icp_e8s: u64,
-        min_participant_icp_e8s: u64,
-    },
-    // The Neuron's Fund should never provide over 50% of the collected funds.
-    AboveHalfOfSwapIcpMax {
-        max_neurons_fund_participation_icp_e8s: u64,
-        half_of_max_icp_e8s: u64,
-    },
-}
-
-impl ToString for MaxNeuronsFundParticipationValidationError {
-    fn to_string(&self) -> String {
-        let prefix = "MaxNeuronsFundParticipationValidationError: ";
-        match self {
-            Self::Unspecified => {
-                format!(
-                    "{}max_neurons_fund_participation_icp_e8s must be specified.",
-                    prefix
-                )
-            }
-            Self::BelowSingleParticipationLimit {
-                max_neurons_fund_participation_icp_e8s,
-                min_participant_icp_e8s,
-            } => {
-                format!(
-                    "{}max_neurons_fund_participation_icp_e8s ({}) \
-                    should be greater than or equal min_participant_icp_e8s ({}).",
-                    prefix, max_neurons_fund_participation_icp_e8s, min_participant_icp_e8s,
-                )
-            }
-            Self::AboveHalfOfSwapIcpMax {
-                max_neurons_fund_participation_icp_e8s,
-                half_of_max_icp_e8s,
-            } => {
-                format!(
-                    "{}max_neurons_fund_participation_icp_e8s ({}) \
-                    should be less than or equal half_of_max_icp_e8s ({}).",
-                    prefix, max_neurons_fund_participation_icp_e8s, half_of_max_icp_e8s,
-                )
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum LinearScalingCoefficientVecValidationError {
-    LinearScalingCoefficientsOutOfRange(usize),
-    LinearScalingCoefficientsUnordered(
-        ValidatedLinearScalingCoefficient,
-        ValidatedLinearScalingCoefficient,
-    ),
-    IrregularLinearScalingCoefficients(ValidatedLinearScalingCoefficient),
-    LinearScalingCoefficientValidationError(LinearScalingCoefficientValidationError),
-}
-
-impl ToString for LinearScalingCoefficientVecValidationError {
-    fn to_string(&self) -> String {
-        let prefix = "LinearScalingCoefficientVecValidationError: ";
-        match self {
-            Self::LinearScalingCoefficientsOutOfRange(num_elements) => {
-                format!(
-                    "{}coefficient_intervals (len={}) must contain at least 1 and at most {} elements.",
-                    prefix,
-                    num_elements,
-                    MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
-                )
-            }
-            Self::LinearScalingCoefficientsUnordered(left, right) => {
-                format!(
-                    "{}The intervals {:?} and {:?} are ordered incorrectly.",
-                    prefix, left, right
-                )
-            }
-            Self::IrregularLinearScalingCoefficients(interval) => {
-                format!(
-                    "{}The first interval {:?} does not start from 0.",
-                    prefix, interval,
-                )
-            }
-            Self::LinearScalingCoefficientValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
-            }
-        }
-    }
-}
-
-impl From<LinearScalingCoefficientVecValidationError> for Result<(), String> {
-    fn from(value: LinearScalingCoefficientVecValidationError) -> Self {
-        Err(value.to_string())
-    }
-}
-
-#[derive(Debug)]
-pub enum NeuronsFundParticipationConstraintsValidationError {
-    RelatedFieldUnspecified(String),
-    LinearScalingCoefficientVecValidationError(LinearScalingCoefficientVecValidationError),
-}
-
-impl ToString for NeuronsFundParticipationConstraintsValidationError {
-    fn to_string(&self) -> String {
-        let prefix = "NeuronsFundParticipationConstraintsValidationError: ";
-        match self {
-            Self::RelatedFieldUnspecified(related_field_name) => {
-                format!("{}{} must be specified.", prefix, related_field_name,)
-            }
-            Self::LinearScalingCoefficientVecValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
-            }
-        }
-    }
-}
-
-impl From<NeuronsFundParticipationConstraintsValidationError> for Result<(), String> {
-    fn from(value: NeuronsFundParticipationConstraintsValidationError) -> Self {
-        Err(value.to_string())
-    }
-}
-
-pub struct ValidatedNeuronsFundParticipationConstraints {
-    pub min_direct_participation_threshold_icp_e8s: u64,
-    pub max_neurons_fund_participation_icp_e8s: u64,
-    pub coefficient_intervals: Vec<ValidatedLinearScalingCoefficient>,
-}
-
-impl From<ValidatedNeuronsFundParticipationConstraints> for NeuronsFundParticipationConstraints {
-    fn from(value: ValidatedNeuronsFundParticipationConstraints) -> Self {
+    /// Returns a clone of `self` without sensitive data, specifically, `nns_neuron_id`.
+    pub fn anonymized(&self) -> Self {
         Self {
-            min_direct_participation_threshold_icp_e8s: Some(
-                value.min_direct_participation_threshold_icp_e8s,
-            ),
-            max_neurons_fund_participation_icp_e8s: Some(
-                value.min_direct_participation_threshold_icp_e8s,
-            ),
-            coefficient_intervals: value
-                .coefficient_intervals
-                .into_iter()
-                .map(LinearScalingCoefficient::from)
+            nns_neuron_id: None,
+            ..self.clone()
+        }
+    }
+}
+
+pub trait NeuronsFund {
+    fn draw_maturity_from_neurons_fund(
+        &mut self,
+        snapshot: &NeuronsFundSnapshot,
+    ) -> Result<(), String>;
+
+    fn refund_maturity_to_neurons_fund(
+        &mut self,
+        snapshot: &NeuronsFundSnapshot,
+    ) -> Result<(), String>;
+}
+
+impl NeuronsFund for NeuronStore {
+    fn draw_maturity_from_neurons_fund(
+        &mut self,
+        snapshot: &NeuronsFundSnapshot,
+    ) -> Result<(), String> {
+        apply_neurons_fund_snapshot(self, snapshot, NeuronsFundAction::DrawMaturity)
+    }
+
+    fn refund_maturity_to_neurons_fund(
+        &mut self,
+        snapshot: &NeuronsFundSnapshot,
+    ) -> Result<(), String> {
+        apply_neurons_fund_snapshot(self, snapshot, NeuronsFundAction::RefundMaturity)
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// ------------------- NeuronsFundSnapshot ---------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct NeuronsFundSnapshot {
+    neurons: BTreeMap<NeuronId, NeuronsFundNeuronPortion>,
+}
+
+impl NeuronsFundSnapshot {
+    pub fn empty() -> Self {
+        let neurons = BTreeMap::new();
+        Self { neurons }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.neurons.is_empty()
+    }
+
+    pub fn num_neurons(&self) -> usize {
+        self.neurons.len()
+    }
+
+    pub fn new<I>(neurons: I) -> Self
+    where
+        I: IntoIterator<Item = NeuronsFundNeuronPortion>,
+    {
+        let neurons = neurons.into_iter().map(|n| (n.id, n)).collect();
+        Self { neurons }
+    }
+
+    pub fn neurons(&self) -> &BTreeMap<NeuronId, NeuronsFundNeuronPortion> {
+        &self.neurons
+    }
+
+    pub fn total_amount_icp_e8s(&self) -> u64 {
+        self.neurons
+            .values()
+            .fold(0_u64, |a, n| a.saturating_add(n.amount_icp_e8s))
+    }
+
+    pub fn into_vec(self) -> Vec<NeuronsFundNeuronPortion> {
+        self.neurons.into_values().collect()
+    }
+
+    /// Implements the `self - other` semantics for calculating Neurons' Fund refunds.
+    ///
+    /// Example:
+    /// self = { (N1, maturity=100), (N2, maturity=200), (N3, maturity=300) }
+    /// other = { (N1, maturity=60), (N3, maturity=300) }
+    /// result = Ok({ (N1, maturity=40), (N2, maturity=200), (N2, maturity=200) })
+    pub fn diff(&self, other: &Self) -> Result<Self, String> {
+        let mut deductible_neurons = other.neurons().clone();
+        let neurons = self
+            .neurons
+            .iter()
+            .map(|(id, left)| {
+                let err_prefix =
+                    || format!("Cannot compute diff of two portions of neuron {:?}: ", id);
+                let controller = left.controller;
+                let (amount_icp_e8s, maturity_equivalent_icp_e8s, is_capped) = if let Some(right) = deductible_neurons.remove(id)
+                {
+                    if right.amount_icp_e8s > left.amount_icp_e8s {
+                        return Err(format!(
+                            "{}left.amount_icp_e8s={:?}, right.amount_icp_e8s={:?}.",
+                            err_prefix(),
+                            left.amount_icp_e8s,
+                            right.amount_icp_e8s,
+                        ));
+                    }
+                    if right.maturity_equivalent_icp_e8s != left.maturity_equivalent_icp_e8s {
+                        return Err(format!(
+                            "{}left.maturity_equivalent_icp_e8s={:?} != right.maturity_equivalent_icp_e8s={:?}.",
+                            err_prefix(),
+                            left.maturity_equivalent_icp_e8s,
+                            right.maturity_equivalent_icp_e8s,
+                        ));
+                    }
+                    if right.controller != controller {
+                        return Err(format!(
+                            "{}left.controller={:?}, right.controller={:?}.",
+                            err_prefix(),
+                            controller,
+                            right.controller,
+                        ));
+                    }
+                    if right.is_capped && !left.is_capped {
+                        return Err(format!(
+                            "{}left.is_capped=false, right.is_capped=true.",
+                            err_prefix()
+                        ));
+                    }
+                    // Taking right.is_capped, as that corresponds to the capping of the effectively
+                    // taken portion of the neuron (left.is_capped is whether the originally
+                    // reserved portion has been capped).
+                    (left.amount_icp_e8s - right.amount_icp_e8s, left.maturity_equivalent_icp_e8s, right.is_capped)
+                } else {
+                    (left.amount_icp_e8s, left.maturity_equivalent_icp_e8s, left.is_capped)
+                };
+                Ok((
+                    *id,
+                    NeuronsFundNeuronPortion {
+                        id: *id,
+                        controller,
+                        amount_icp_e8s,
+                        maturity_equivalent_icp_e8s,
+                        is_capped,
+                    },
+                ))
+            })
+            .collect::<Result<BTreeMap<NeuronId, NeuronsFundNeuronPortion>, _>>()?;
+        if !deductible_neurons.is_empty() {
+            let extra_neuron_portions_str = deductible_neurons
+                .keys()
+                .map(|n| n.id.to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+            return Err(format!(
+                "Cannot compute diff of two NeuronsFundSnapshot instances: right-hand side \
+                contains {} extra neuron portions: {}",
+                deductible_neurons.len(),
+                extra_neuron_portions_str,
+            ));
+        }
+        Ok(Self { neurons })
+    }
+}
+
+impl From<NeuronsFundSnapshot> for NeuronsFundSnapshotPb {
+    fn from(snapshot: NeuronsFundSnapshot) -> Self {
+        let neurons_fund_neuron_portions = snapshot
+            .into_vec()
+            .into_iter()
+            .map(Into::<NeuronsFundNeuronPortionPb>::into)
+            .collect();
+        Self {
+            neurons_fund_neuron_portions,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum NeuronsFundSnapshotValidationError {
+    NeuronsFundNeuronPortionError(usize, NeuronsFundNeuronPortionError),
+}
+
+impl ToString for NeuronsFundSnapshotValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "Cannot validate NeuronsFundSnapshot: ";
+        match self {
+            Self::NeuronsFundNeuronPortionError(index, error) => {
+                format!(
+                    "{}neurons_fund_neuron_portions[{}]: {}",
+                    prefix,
+                    index,
+                    error.to_string()
+                )
+            }
+        }
+    }
+}
+
+impl NeuronsFundSnapshotPb {
+    pub fn validate(&self) -> Result<NeuronsFundSnapshot, NeuronsFundSnapshotValidationError> {
+        let neurons_fund = self
+            .neurons_fund_neuron_portions
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                n.validate().map_err(|err| {
+                    NeuronsFundSnapshotValidationError::NeuronsFundNeuronPortionError(i, err)
+                })
+            })
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        Ok(NeuronsFundSnapshot::new(neurons_fund.into_iter()))
+    }
+
+    /// Returns a clone of `self` without sensitive data, specifically, `nns_neuron_id`.
+    pub fn anonymized(&self) -> Self {
+        Self {
+            neurons_fund_neuron_portions: self
+                .neurons_fund_neuron_portions
+                .iter()
+                .map(NeuronsFundNeuronPortionPb::anonymized)
                 .collect(),
         }
     }
 }
 
-impl TryFrom<NeuronsFundParticipationConstraints> for ValidatedNeuronsFundParticipationConstraints {
-    type Error = NeuronsFundParticipationConstraintsValidationError;
+// -------------------------------------------------------------------------------------------------
+// ------------------- NeuronsFundParticipation ----------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
-    fn try_from(value: NeuronsFundParticipationConstraints) -> Result<Self, Self::Error> {
-        // Validate min_direct_participation_threshold_icp_e8s
-        let min_direct_participation_threshold_icp_e8s = value
-            .min_direct_participation_threshold_icp_e8s
-            .ok_or_else(|| {
-                Self::Error::RelatedFieldUnspecified(
-                    "min_direct_participation_threshold_icp_e8s".to_string(),
-                )
-            })?;
+/// Absolute constraints of this swap needed in Matched Funding computations.
+#[derive(Clone, Debug)]
+pub struct SwapParticipationLimits {
+    pub min_direct_participation_icp_e8s: u64,
+    pub max_direct_participation_icp_e8s: u64,
+    pub min_participant_icp_e8s: u64,
+    pub max_participant_icp_e8s: u64,
+}
 
-        // Validate max_neurons_fund_participation_icp_e8s
-        let max_neurons_fund_participation_icp_e8s = value
-            .max_neurons_fund_participation_icp_e8s
-            .ok_or_else(|| {
-            Self::Error::RelatedFieldUnspecified(
-                "max_neurons_fund_participation_icp_e8s".to_string(),
-            )
-        })?;
+#[derive(Debug)]
+pub enum SwapParametersError {
+    /// We expect this to never occur, and can ensure this, since the caller is Swap, and we control
+    /// the code that the Swap canisters run.
+    UnspecifiedField(String),
+}
 
-        // Validate coefficient_intervals length.
-        if !(1..MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN + 1)
-            .contains(&value.coefficient_intervals.len())
-        {
-            return Err(Self::Error::LinearScalingCoefficientVecValidationError(
-                LinearScalingCoefficientVecValidationError::LinearScalingCoefficientsOutOfRange(
-                    value.coefficient_intervals.len(),
-                ),
-            ));
-        }
-
-        // Validate individual coefficient_intervals elements, consuming value.
-        let coefficient_intervals: Vec<ValidatedLinearScalingCoefficient> = value
-            .coefficient_intervals
-            .into_iter()
-            .map(|interval| ValidatedLinearScalingCoefficient::try_from(interval))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| {
-                Self::Error::LinearScalingCoefficientVecValidationError(
-            LinearScalingCoefficientVecValidationError::LinearScalingCoefficientValidationError(err)
-        )
-            })?;
-
-        // Validate that coefficient_intervals forms a partitioning.
-        let intervals = &coefficient_intervals;
-        intervals
-            .iter()
-            .zip(intervals.iter().skip(1))
-            .find(|(prev, this)| {
-                prev.to_direct_participation_icp_e8s != this.from_direct_participation_icp_e8s
-            })
-            .map_or(Ok(()), |(prev, this)| {
-                Err(Self::Error::LinearScalingCoefficientVecValidationError(
-                    LinearScalingCoefficientVecValidationError::LinearScalingCoefficientsUnordered(
-                        prev.clone(),
-                        this.clone(),
-                    ),
-                ))
-            })?;
-
-        // Validate that coefficient_intervals starts from 0.
-        if let Some(first_interval) = intervals.first() {
-            if first_interval.from_direct_participation_icp_e8s != 0 {
-                return Err(Self::Error::LinearScalingCoefficientVecValidationError(
-                    LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
-                        first_interval.clone(),
-                    ),
-                ));
+impl ToString for SwapParametersError {
+    fn to_string(&self) -> String {
+        let prefix = "Cannot extract data from SwapParameters: ";
+        match self {
+            Self::UnspecifiedField(field_name) => {
+                format!("{}field `{}` is not specified.", prefix, field_name,)
             }
         }
+    }
+}
 
+impl From<SwapParametersError> for GovernanceError {
+    fn from(swap_parameters_error: SwapParametersError) -> Self {
+        Self {
+            error_type: governance_error::ErrorType::InvalidCommand as i32,
+            error_message: swap_parameters_error.to_string(),
+        }
+    }
+}
+
+impl SwapParticipationLimits {
+    pub fn try_from_swap_parameters(
+        swap_parameters: &SwapParameters,
+    ) -> Result<Self, SwapParametersError> {
+        let min_direct_participation_icp_e8s = swap_parameters
+            .minimum_direct_participation_icp
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField(
+                    "minimum_direct_participation_icp".to_string(),
+                )
+            })?
+            .e8s
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField(
+                    "minimum_direct_participation_icp.e8s".to_string(),
+                )
+            })?;
+        let max_direct_participation_icp_e8s = swap_parameters
+            .maximum_direct_participation_icp
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField(
+                    "maximum_direct_participation_icp".to_string(),
+                )
+            })?
+            .e8s
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField(
+                    "maximum_direct_participation_icp.e8s".to_string(),
+                )
+            })?;
+        let min_participant_icp_e8s = swap_parameters
+            .minimum_participant_icp
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("minimum_participant_icp".to_string())
+            })?
+            .e8s
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("minimum_participant_icp.e8s".to_string())
+            })?;
+        let max_participant_icp_e8s = swap_parameters
+            .maximum_participant_icp
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("maximum_participant_icp".to_string())
+            })?
+            .e8s
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("maximum_participant_icp.e8s".to_string())
+            })?;
         Ok(Self {
-            min_direct_participation_threshold_icp_e8s,
-            max_neurons_fund_participation_icp_e8s,
-            coefficient_intervals,
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
+            min_participant_icp_e8s,
+            max_participant_icp_e8s,
         })
     }
 }
 
-/// An invertible function is a function that has an inverse.
-///
-/// Say we have an invertible function `f(x: u64) -> u64` and its inverse is `g(y: u64) -> u64`.
-/// Then the equality `g(f(x)) = x` must hold for all `x` s.t. `g(f(x))` is defined.
-///
-/// Additionally, the equality `f(g(y)) = y` must hold for all `y` s.t. `f(g(y))` is defined.
-pub trait InvertibleFunction {
-    fn apply(&self, x: u64) -> Decimal;
-    fn invert(&self, x: Decimal) -> Result<u64, String>;
+/// Information for deciding how the Neurons' Fund should participate in an SNS Swap.
+#[derive(Debug)]
+pub struct NeuronsFundParticipation<F> {
+    swap_participation_limits: SwapParticipationLimits,
+    ideal_matched_participation_function: Box<F>,
+    /// Represents the participation amount per Neurons' Fund neuron.
+    neurons_fund_reserves: NeuronsFundSnapshot,
+    /// Neurons' Fund participation is computed for this amount of direct participation.
+    direct_participation_icp_e8s: u64,
+    /// Total amount of maturity in the Neurons' Fund at the time when the Neurons' Fund
+    /// participation was created.
+    total_maturity_equivalent_icp_e8s: u64,
+    /// Maximum amount that the Neurons' Fund will participate with in this SNS swap, regardless of
+    /// how large the value of `direct_participation_icp_e8s` is. This value is capped by whichever
+    /// of the three is the smallest value:
+    /// * `ideal_matched_participation_function.apply(swap_participation_limits. )`,
+    /// * `MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S`,
+    /// * 10% of the total Neurons' Fund maturity ICP equivalent.
+    ///
+    /// Warning: This value does not take into account limiting the participation of individual
+    /// Neurons' Fund neurons, i.e., capping and dropping. To compute the precise Neurons' Fund
+    /// participation amount, use `neurons_fund_reserves.total_amount_icp_e8s()`.
+    max_neurons_fund_swap_participation_icp_e8s: u64,
+    /// How much the Neurons' Fund would ideally like to participate with in this SNS swap,
+    /// given the direct participation amount (`direct_participation_icp_e8s`) and matching function
+    /// (`ideal_matched_participation_function`).
+    ///
+    /// Warning: This value does not take into account limiting the participation of individual
+    /// Neurons' Fund neurons, i.e., capping and dropping. To compute the precise Neurons' Fund
+    /// participation amount, use `neurons_fund_reserves.total_amount_icp_e8s()`.
+    intended_neurons_fund_participation_icp_e8s: u64,
+
+    /// How much from `intended_neurons_fund_participation_icp_e8s` was the Neurons' Fund actually
+    /// able to allocate, given the specific composition of neurons at the time of execution of
+    /// the proposal through which this SNS was created and the participation limits of this SNS.
+    allocated_neurons_fund_participation_icp_e8s: u64,
 }
 
-pub struct SimpleLinearFunction {}
-
-impl InvertibleFunction for SimpleLinearFunction {
-    fn apply(&self, x: u64) -> Decimal {
-        u64_to_dec(x)
+impl<F> NeuronsFundParticipation<F>
+where
+    F: IdealMatchingFunction,
+{
+    /// Returns whether there is some participation at all.
+    pub fn is_empty(&self) -> bool {
+        self.neurons_fund_reserves.is_empty()
     }
 
-    fn invert(&self, x: Decimal) -> Result<u64, String> {
-        x.to_u64()
-            .ok_or_else(|| format!("{:?} cannot be converted to u64", x))
+    /// Returns the total Neurons' Fund participation amount.
+    pub fn total_amount_icp_e8s(&self) -> u64 {
+        self.neurons_fund_reserves.total_amount_icp_e8s()
+    }
+
+    pub fn num_neurons(&self) -> usize {
+        self.neurons_fund_reserves.num_neurons()
+    }
+
+    fn count_neurons_fund_total_maturity_equivalent_icp_e8s(
+        neurons_fund: &[NeuronsFundNeuron],
+    ) -> u64 {
+        neurons_fund
+            .iter()
+            .map(|neuron| neuron.maturity_equivalent_icp_e8s)
+            .fold(0_u64, |a, n| a.saturating_add(n))
+    }
+
+    /// Create a new Neurons' Fund participation for the given `swap_participation_limits`
+    /// and `ideal_matched_participation_function`.
+    #[cfg(test)]
+    pub fn new_for_test(
+        swap_participation_limits: SwapParticipationLimits,
+        neurons_fund: Vec<NeuronsFundNeuron>,
+        ideal_matched_participation_function: Box<F>,
+    ) -> Result<Self, String> {
+        let total_maturity_equivalent_icp_e8s =
+            Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund);
+        Self::new_impl(
+            total_maturity_equivalent_icp_e8s,
+            swap_participation_limits.max_direct_participation_icp_e8s, // best case scenario
+            swap_participation_limits,
+            neurons_fund,
+            ideal_matched_participation_function,
+        )
+    }
+
+    /// Consumes self, returning the contained `NeuronsFundSnapshot`.
+    pub fn into_snapshot(self) -> NeuronsFundSnapshot {
+        self.neurons_fund_reserves
+    }
+
+    /// Borrows self, returning a reference to the contained `NeuronsFundSnapshot`.
+    pub fn snapshot(&self) -> &NeuronsFundSnapshot {
+        &self.neurons_fund_reserves
+    }
+
+    /// Retains self, returning a cloned version of the contained `NeuronsFundSnapshot`.
+    pub fn snapshot_cloned(&self) -> NeuronsFundSnapshot {
+        self.neurons_fund_reserves.clone()
+    }
+
+    /// Create a new Neurons' Fund participation matching given `direct_participation_icp_e8s` with
+    /// `ideal_matched_participation_function`.  All other parameters are taken from `self`.
+    #[cfg(test)]
+    pub fn from_initial_participation_for_test(
+        &self,
+        direct_participation_icp_e8s: u64,
+        ideal_matched_participation_function: Box<F>,
+    ) -> Result<Self, String> {
+        let neurons_fund = self
+            .snapshot()
+            .neurons()
+            .values()
+            .map(
+                |NeuronsFundNeuronPortion {
+                     id,
+                     maturity_equivalent_icp_e8s,
+                     controller,
+                     ..
+                 }| {
+                    NeuronsFundNeuron {
+                        id: *id,
+                        maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
+                        controller: *controller,
+                    }
+                },
+            )
+            .collect();
+        Self::new_impl(
+            self.total_maturity_equivalent_icp_e8s,
+            direct_participation_icp_e8s,
+            self.swap_participation_limits.clone(),
+            neurons_fund,
+            ideal_matched_participation_function,
+        )
+    }
+
+    fn new_impl(
+        total_maturity_equivalent_icp_e8s: u64,
+        direct_participation_icp_e8s: u64,
+        swap_participation_limits: SwapParticipationLimits,
+        neurons_fund: Vec<NeuronsFundNeuron>,
+        ideal_matched_participation_function: Box<F>,
+    ) -> Result<Self, String> {
+        // Take 10% of overall Neurons' Fund maturity.
+        let max_neurons_fund_swap_participation_icp_e8s =
+            take_max_initial_neurons_fund_participation_percentage(
+                total_maturity_equivalent_icp_e8s,
+            );
+        // Apply hard cap.
+        let max_neurons_fund_swap_participation_icp_e8s = u64::min(
+            max_neurons_fund_swap_participation_icp_e8s,
+            MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
+        );
+        // Apply cap dictated by `ideal_matched_participation_function`.
+        let max_neurons_fund_swap_participation_icp_e8s = u64::min(
+            max_neurons_fund_swap_participation_icp_e8s,
+            ideal_matched_participation_function.apply_and_rescale_to_icp_e8s(
+                swap_participation_limits.max_direct_participation_icp_e8s,
+            )?,
+        );
+        let ideal_matched_participation_function_value_icp_e8s =
+            ideal_matched_participation_function
+                .apply_and_rescale_to_icp_e8s(direct_participation_icp_e8s)?;
+        if ideal_matched_participation_function_value_icp_e8s > direct_participation_icp_e8s {
+            return Err(format!(
+                "ideal_matched_participation_function_value_icp_e8s ({}) is greater than \
+                direct_participation_icp_e8s ({}). ideal_matched_participation_function = {:?}\n \
+                Plot: \n{:?}",
+                ideal_matched_participation_function_value_icp_e8s,
+                direct_participation_icp_e8s,
+                ideal_matched_participation_function,
+                ideal_matched_participation_function
+                    .plot(NonZeroU64::try_from(50).unwrap())
+                    .map(|plot| format!("{:?}", plot))
+                    .unwrap_or_else(|e| e)
+            ));
+        }
+        let intended_neurons_fund_participation_icp_e8s = u64::min(
+            ideal_matched_participation_function_value_icp_e8s,
+            max_neurons_fund_swap_participation_icp_e8s,
+        );
+        let neurons_fund_reserves = if total_maturity_equivalent_icp_e8s == 0 {
+            println!(
+                "{}WARNING: Neurons' Fund has zero total maturity.",
+                governance::LOG_PREFIX
+            );
+            NeuronsFundSnapshot::empty()
+        } else if intended_neurons_fund_participation_icp_e8s == 0 {
+            println!(
+                "{}WARNING: intended_neurons_fund_participation_icp_e8s is zero, matching \
+                direct_participation_icp_e8s = {}. total_maturity_equivalent_icp_e8s = {}. \
+                ideal_matched_participation_function = {:?}\n \
+                Plot: \n{:?}",
+                governance::LOG_PREFIX,
+                direct_participation_icp_e8s,
+                total_maturity_equivalent_icp_e8s,
+                ideal_matched_participation_function,
+                ideal_matched_participation_function
+                    .plot(NonZeroU64::try_from(50).unwrap())
+                    .map(|plot| format!("{:?}", plot))
+                    .unwrap_or_else(|e| e),
+            );
+            NeuronsFundSnapshot::empty()
+        } else {
+            // Unlike in other places, here we keep the ICP value in e8s (even after converting to
+            // Decimal). This mitigates rounding errors and is safe because the only operation we
+            // perform over this value is multiplication over a weight between 0 and 1, so there cannot
+            // be a multiplication overflow.
+            let intended_neurons_fund_participation_icp_e8s =
+                u64_to_dec(intended_neurons_fund_participation_icp_e8s);
+            NeuronsFundSnapshot::new(neurons_fund.into_iter().filter_map(
+                |NeuronsFundNeuron {
+                     id,
+                     maturity_equivalent_icp_e8s,
+                     controller,
+                 }| {
+                    let proportion_to_overall_neurons_fund: Decimal = u64_to_dec(maturity_equivalent_icp_e8s)
+                        / u64_to_dec(total_maturity_equivalent_icp_e8s);
+                    let ideal_participation_amount_icp_e8s: u64 =
+                        match dec_to_u64(proportion_to_overall_neurons_fund * intended_neurons_fund_participation_icp_e8s) {
+                            Ok(ideal_participation_amount_icp_e8s) => {
+                                ideal_participation_amount_icp_e8s
+                            }
+                            Err(err) => {
+                                // This cannot practically happen as `dec_to_u64` returns an error
+                                // only in two cases: (1) the argument is negative (we've multiplied
+                                // two non-negative numbers, `proportion_to_overall_neurons_fund`
+                                // and `intended_neurons_fund_participation_icp_e8s`) and (2) there
+                                // is a u64 overflow (`intended_neurons_fund_participation_icp_e8s`
+                                // is bounded by `u64::MAX` and `proportion_to_overall_neurons_fund`
+                                // is a value between 0.0 and 1.0). If these assumptions are somehow
+                                // still violated, we log this situation to aid debugging.
+                                println!(
+                                    "{}ERROR: Cannot compute ideal participation amount for \
+                                    Neurons' Fund neuron {:?}: {}",
+                                    governance::LOG_PREFIX, id, err,
+                                );
+                                return None;
+                            }
+                        };
+                    if ideal_participation_amount_icp_e8s < swap_participation_limits.min_participant_icp_e8s {
+                        // Do not include neurons that cannot participate under any circumstances.
+                        println!(
+                            "{}INFO: discarding neuron {:?} ({} ICP e8s maturity equivalent) as it \
+                            cannot participate in the swap with its proportional participation \
+                            amount ({}) that is less than `min_participant_icp_e8s` ({}).",
+                            governance::LOG_PREFIX, id, maturity_equivalent_icp_e8s,
+                            ideal_participation_amount_icp_e8s,
+                            swap_participation_limits.min_participant_icp_e8s,
+                        );
+                        None
+                    } else {
+                        let (amount_icp_e8s, is_capped) = if ideal_participation_amount_icp_e8s > swap_participation_limits.max_participant_icp_e8s {
+                            println!(
+                                "{}INFO: capping neuron {:?} ({} ICP e8s maturity equivalent) as it \
+                                cannot participate in the swap with all of its proportional \
+                                participation amount ({}) that exceeds `max_participant_icp_e8s` ({}).",
+                                governance::LOG_PREFIX, id, maturity_equivalent_icp_e8s,
+                                ideal_participation_amount_icp_e8s,
+                                swap_participation_limits.max_participant_icp_e8s,
+                            );
+                            (swap_participation_limits.max_participant_icp_e8s, true)
+                        } else {
+                            (ideal_participation_amount_icp_e8s, false)
+                        };
+                        Some(NeuronsFundNeuronPortion {
+                            id,
+                            amount_icp_e8s,
+                            maturity_equivalent_icp_e8s,
+                            controller,
+                            is_capped,
+                        })
+                    }
+                },
+            ))
+        };
+        let allocated_neurons_fund_participation_icp_e8s =
+            neurons_fund_reserves.total_amount_icp_e8s();
+        Ok(Self {
+            swap_participation_limits,
+            ideal_matched_participation_function,
+            neurons_fund_reserves,
+            direct_participation_icp_e8s,
+            total_maturity_equivalent_icp_e8s,
+            max_neurons_fund_swap_participation_icp_e8s,
+            intended_neurons_fund_participation_icp_e8s,
+            allocated_neurons_fund_participation_icp_e8s,
+        })
+    }
+
+    /// TODO[NNS1-2591]: Implement the rest of this function. Currently, it returns a mock structure
+    /// that will pass validiation but does not reflect the real Neurons' Fund participation.
+    /// After this TODO is addressed, the tests in rs/nns/governance/tests/governance.rs would need
+    /// to be adjusted.
+    pub fn compute_constraints(&self) -> Result<NeuronsFundParticipationConstraints, String> {
+        let min_direct_participation_threshold_icp_e8s = Some(
+            self.swap_participation_limits
+                .min_direct_participation_icp_e8s,
+        );
+        let max_neurons_fund_participation_icp_e8s =
+            Some(self.allocated_neurons_fund_participation_icp_e8s);
+        let dummy_interval = ValidatedLinearScalingCoefficient {
+            from_direct_participation_icp_e8s: 0,
+            to_direct_participation_icp_e8s: u64::MAX,
+            slope_numerator: 1,
+            slope_denominator: 1,
+            intercept_icp_e8s: 0,
+        };
+        let dummy_interval: LinearScalingCoefficient = dummy_interval.into();
+        let coefficient_intervals = vec![dummy_interval];
+        let ideal_matched_participation_function = Some(IdealMatchedParticipationFunctionSwapPb {
+            serialized_representation: Some(self.ideal_matched_participation_function.serialize()),
+        });
+        Ok(NeuronsFundParticipationConstraints {
+            min_direct_participation_threshold_icp_e8s,
+            max_neurons_fund_participation_icp_e8s,
+            coefficient_intervals,
+            ideal_matched_participation_function,
+        })
     }
 }
 
-pub trait Interval {
-    fn from(&self) -> u64;
-    fn to(&self) -> u64;
-    fn contains(&self, x: u64) -> bool {
-        self.from() <= x && x < self.to()
+pub type PolynomialNeuronsFundParticipation = NeuronsFundParticipation<PolynomialMatchingFunction>;
+
+impl PolynomialNeuronsFundParticipation {
+    /// Create a new Neurons' Fund participation for the given `swap_participation_limits`.
+    pub fn new(
+        swap_participation_limits: SwapParticipationLimits,
+        neurons_fund: Vec<NeuronsFundNeuron>,
+    ) -> Result<Self, String> {
+        let total_maturity_equivalent_icp_e8s =
+            Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund);
+        let ideal_matched_participation_function =
+            Box::from(PolynomialMatchingFunction::new(total_maturity_equivalent_icp_e8s).unwrap());
+        Self::new_impl(
+            total_maturity_equivalent_icp_e8s,
+            swap_participation_limits.max_direct_participation_icp_e8s, // best case scenario
+            swap_participation_limits,
+            neurons_fund,
+            ideal_matched_participation_function,
+        )
+    }
+
+    /// Create a new Neurons' Fund participation matching given `direct_participation_icp_e8s` with
+    /// `ideal_matched_participation_function`.  All other parameters are taken from `self`.
+    pub fn from_initial_participation(
+        &self,
+        direct_participation_icp_e8s: u64,
+    ) -> Result<Self, String> {
+        let neurons_fund = self
+            .snapshot()
+            .neurons()
+            .values()
+            .map(
+                |NeuronsFundNeuronPortion {
+                     id,
+                     maturity_equivalent_icp_e8s,
+                     controller,
+                     ..
+                 }| {
+                    NeuronsFundNeuron {
+                        id: *id,
+                        maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
+                        controller: *controller,
+                    }
+                },
+            )
+            .collect();
+        Self::new_impl(
+            self.total_maturity_equivalent_icp_e8s,
+            direct_participation_icp_e8s,
+            self.swap_participation_limits.clone(),
+            neurons_fund,
+            self.ideal_matched_participation_function.clone(),
+        )
     }
 }
 
-impl Interval for ValidatedLinearScalingCoefficient {
-    fn from(&self) -> u64 {
-        self.from_direct_participation_icp_e8s
-    }
-
-    fn to(&self) -> u64 {
-        self.to_direct_participation_icp_e8s
-    }
+#[derive(Debug, PartialEq)]
+pub enum NeuronsFundParticipationValidationError {
+    UnspecifiedField(String),
+    NeuronsFundSnapshotValidationError(NeuronsFundSnapshotValidationError),
+    MatchFunctionDeserializationFailed(String),
+    NeuronsFundParticipationCreationFailed(String),
 }
 
-pub trait IntervalPartition<I> {
-    fn intervals(&self) -> Vec<&I>;
-
-    fn find_interval(&self, x: u64) -> Option<&I>
-    where
-        I: Interval,
-    {
-        let intervals = &self.intervals();
-        let mut i = 0_usize;
-        let mut j = intervals.len() - 1;
-        while i <= j {
-            let m = (i + j) / 2;
-            if intervals[m].to() <= x {
-                // If x == intervals[m].to, then x \in intervals[m+1]; move rightwards.
-                // ... [intervals[m].from, intervals[m].to) ... x ...
-                i = m + 1;
-            } else if x < intervals[m].from() {
-                // exclusive, since x==intervals[m].from ==> x \in intervals[m]; move leftwards.
-                // ... x ... [intervals[m].from, intervals[m].to) ...
-                j = m - 1;
-            } else {
-                // x \in intervals[m]
-                return Some(intervals[m]);
+impl ToString for NeuronsFundParticipationValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "Cannot validate NeuronsFundParticipation: ";
+        match self {
+            Self::UnspecifiedField(field_name) => {
+                format!("{}field `{}` is not specified.", prefix, field_name)
+            }
+            Self::NeuronsFundSnapshotValidationError(error) => {
+                format!("{}{}", prefix, error.to_string())
+            }
+            Self::MatchFunctionDeserializationFailed(error) => {
+                format!(
+                    "{}failed to deserialize an IdealMatchingFunction instance: {}",
+                    prefix, error
+                )
+            }
+            Self::NeuronsFundParticipationCreationFailed(error) => {
+                format!(
+                    "{}failed to create NeuronsFundParticipation: {}",
+                    prefix, error
+                )
             }
         }
-        None
     }
 }
 
-impl IntervalPartition<ValidatedLinearScalingCoefficient>
-    for ValidatedNeuronsFundParticipationConstraints
+impl<F> From<NeuronsFundParticipation<F>> for NeuronsFundParticipationPb
+where
+    F: IdealMatchingFunction,
 {
-    fn intervals(&self) -> Vec<&ValidatedLinearScalingCoefficient> {
-        self.coefficient_intervals.iter().collect()
-    }
-}
-
-pub struct NeuronsInterval<T> {
-    from_direct_participation_icp_e8s: u64,
-    to_direct_participation_icp_e8s: Option<u64>,
-    neurons: Vec<T>,
-}
-
-impl<T> Interval for NeuronsInterval<T> {
-    fn from(&self) -> u64 {
-        self.from_direct_participation_icp_e8s
-    }
-
-    fn to(&self) -> u64 {
-        self.to_direct_participation_icp_e8s.unwrap_or(u64::MAX)
-    }
-}
-
-impl<T> IntervalPartition<NeuronsInterval<T>> for Vec<NeuronsInterval<T>> {
-    fn intervals(&self) -> Vec<&NeuronsInterval<T>> {
-        self.iter().collect()
-    }
-}
-
-pub struct MatchedParticipationFunction {
-    function: Box<dyn Fn(u64) -> Decimal>,
-    params: ValidatedNeuronsFundParticipationConstraints,
-}
-
-impl MatchedParticipationFunction {
-    pub fn new(
-        function: Box<dyn Fn(u64) -> Decimal>,
-        params: ValidatedNeuronsFundParticipationConstraints,
-    ) -> Result<Self, String> {
-        // TODO[NNS1-2619]: validate params
-        Ok(Self { function, params })
-    }
-
-    pub fn apply(&self, direct_participation_icp_e8s: u64) -> Decimal {
-        // Normally, this threshold follows from `self.function`, a.k.a. the "ideal" participation
-        // matching function. However, we add an explicit check here in order to make this
-        // threashold more prominantly visible from readong the code. In addition, having this
-        // branch allows us to use functions with a less complicated shape in the tests.
-        if direct_participation_icp_e8s < self.params.min_direct_participation_threshold_icp_e8s {
-            return dec!(0.0);
-        }
-
-        let intervals = &self.params.coefficient_intervals;
-        // This condition is always satisfied, as `self.params` has been validated. We add it here
-        // again for verbosity.
-        assert!(
-            !intervals.is_empty(),
-            "There must be at least one interval."
+    fn from(participation: NeuronsFundParticipation<F>) -> Self {
+        let serialized_representation = Some(
+            participation
+                .ideal_matched_participation_function
+                .serialize(),
         );
-
-        // Special case A: direct_participation_icp_e8s is less than the first interval.
-        if direct_participation_icp_e8s
-            < intervals.first().unwrap().from_direct_participation_icp_e8s
-        {
-            // This should not happen in practice, as the first interval should contain 0.
-            return dec!(0.0);
+        let ideal_matched_participation_function = Some(IdealMatchedParticipationFunction {
+            serialized_representation,
+        });
+        let swap_participation_limits = Some(SwapParticipationLimitsPb {
+            min_direct_participation_icp_e8s: Some(
+                participation
+                    .swap_participation_limits
+                    .min_direct_participation_icp_e8s,
+            ),
+            max_direct_participation_icp_e8s: Some(
+                participation
+                    .swap_participation_limits
+                    .max_direct_participation_icp_e8s,
+            ),
+            min_participant_icp_e8s: Some(
+                participation
+                    .swap_participation_limits
+                    .min_participant_icp_e8s,
+            ),
+            max_participant_icp_e8s: Some(
+                participation
+                    .swap_participation_limits
+                    .max_participant_icp_e8s,
+            ),
+        });
+        let direct_participation_icp_e8s = Some(participation.direct_participation_icp_e8s);
+        let total_maturity_equivalent_icp_e8s =
+            Some(participation.total_maturity_equivalent_icp_e8s);
+        let max_neurons_fund_swap_participation_icp_e8s =
+            Some(participation.max_neurons_fund_swap_participation_icp_e8s);
+        let intended_neurons_fund_participation_icp_e8s =
+            Some(participation.intended_neurons_fund_participation_icp_e8s);
+        let allocated_neurons_fund_participation_icp_e8s =
+            Some(participation.allocated_neurons_fund_participation_icp_e8s);
+        let neurons_fund_neuron_portions: Vec<NeuronsFundNeuronPortionPb> = participation
+            .into_snapshot()
+            .neurons()
+            .values()
+            .map(|neuron| NeuronsFundNeuronPortionPb {
+                nns_neuron_id: Some(neuron.id),
+                amount_icp_e8s: Some(neuron.amount_icp_e8s),
+                maturity_equivalent_icp_e8s: Some(neuron.maturity_equivalent_icp_e8s),
+                hotkey_principal: Some(neuron.controller),
+                is_capped: Some(neuron.is_capped),
+            })
+            .collect();
+        let neurons_fund_reserves = Some(NeuronsFundSnapshotPb {
+            neurons_fund_neuron_portions,
+        });
+        Self {
+            ideal_matched_participation_function,
+            neurons_fund_reserves,
+            swap_participation_limits,
+            direct_participation_icp_e8s,
+            total_maturity_equivalent_icp_e8s,
+            max_neurons_fund_swap_participation_icp_e8s,
+            intended_neurons_fund_participation_icp_e8s,
+            allocated_neurons_fund_participation_icp_e8s,
         }
-
-        // Special case B: direct_participation_icp_e8s is greated than or equal to the last
-        // interval's upper bound.
-        if intervals.last().unwrap().to_direct_participation_icp_e8s <= direct_participation_icp_e8s
-        {
-            return u64_to_dec(u64::min(
-                self.params.max_neurons_fund_participation_icp_e8s,
-                MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-            ));
-        }
-
-        // Otherwise, direct_participation_icp_e8s must fall into one of the intervals.
-        if let Some(ValidatedLinearScalingCoefficient {
-            slope_numerator,
-            slope_denominator,
-            intercept_icp_e8s,
-            ..
-        }) = self.params.find_interval(direct_participation_icp_e8s)
-        {
-            // This value is how much of Neurons' Fund maturity we should "ideally" allocate.
-            let ideal = (self.function)(direct_participation_icp_e8s);
-
-            // Convert to Decimal
-            let intercept_icp_e8s = u64_to_dec(*intercept_icp_e8s);
-            let slope_numerator = Decimal::from(*slope_numerator);
-            let slope_denominator = Decimal::from(*slope_denominator);
-
-            // Normally, `self.params.max_neurons_fund_participation_icp_e8s` should be set to a
-            // *reasonable* value. Since this value is computed based on the overall amount of
-            // maturity in the Neurons' Fund (at the time when the swap is being opened), in theory
-            // it could grow indefinitely. To safeguard against overly massive Neurons' Fund
-            // participation to a single SNS swap, the NNS Governance (which manages the
-            // Neurons' Fund) should limit the Neurons' Fund maximal theoretically possible amount
-            // of participation also by `MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S`.
-            // Here, we apply this threshold again for making it more explicit.
-            let hard_cap = u64_to_dec(u64::min(
-                self.params.max_neurons_fund_participation_icp_e8s,
-                MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-            ));
-
-            // This value is how much of Neurons' Fund maturity can "effectively" be allocated.
-            // This value may be less than or equal to the "ideal" value above, due to:
-            // (1) Some Neurons' fund neurons being too small to participate at all (at this direct
-            //     participation amount, `direct_participation_icp_e8s`). This is taken into account
-            //     via the `(slope_numerator / slope_denominator)` factor.
-            // (2) Some Neurons' fund neurons being too big to fully participate (at this direct
-            //     participation amount, `direct_participation_icp_e8s`). This is taken into account
-            //     via the `intercept_icp_e8s` component.
-            // (3) The computed overall participation amount (unexpectedly) exceeded `hard_cap`; so
-            //     we enforce the limited at `hard_cap`.
-            let effective = hard_cap.min(intercept_icp_e8s.saturating_add(
-                // slope_denominator can't be zero as it has been validated.
-                // See `LinearScalingCoefficientValidationError::DenominatorIsZero`.
-                (slope_numerator / slope_denominator).saturating_mul(ideal),
-            ));
-            return effective;
-        }
-
-        unreachable!(
-            "Found a bug in MatchedParticipationFunction.apply({})",
-            direct_participation_icp_e8s
-        );
     }
 }
 
-mod tests {
-    use super::{
-        dec_to_u64, u64_to_dec, InvertibleFunction, MatchedParticipationFunction,
-        SimpleLinearFunction,
-    };
-    use crate::neurons_fund::ValidatedNeuronsFundParticipationConstraints;
+impl NeuronsFundParticipationPb {
+    /// Validate that a NeuronsFundParticipationPb structure is free of defects, returning a
+    /// NeuronsFundParticipation structure with validated fields.
+    pub fn validate(
+        &self,
+    ) -> Result<PolynomialNeuronsFundParticipation, NeuronsFundParticipationValidationError> {
+        self.validate_impl()
+    }
+
+    fn validate_impl<F>(
+        &self,
+    ) -> Result<NeuronsFundParticipation<F>, NeuronsFundParticipationValidationError>
+    where
+        F: IdealMatchingFunction + DeserializableFunction,
+    {
+        let ideal_match_function_repr = self
+            .ideal_matched_participation_function
+            .as_ref()
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "ideal_matched_participation_function".to_string(),
+                )
+            })?
+            .serialized_representation
+            .as_ref()
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "ideal_matched_participation_function.serialized_representation".to_string(),
+                )
+            })?;
+        let ideal_matched_participation_function = F::from_repr(ideal_match_function_repr)
+            .map_err(NeuronsFundParticipationValidationError::MatchFunctionDeserializationFailed)?;
+        let neurons_fund_reserves = self
+            .neurons_fund_reserves
+            .as_ref()
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "neurons_fund_reserves".to_string(),
+                )
+            })?
+            .validate()
+            .map_err(NeuronsFundParticipationValidationError::NeuronsFundSnapshotValidationError)?;
+        let swap_participation_limits =
+            self.swap_participation_limits.as_ref().ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "swap_participation_limits".to_string(),
+                )
+            })?;
+        let min_direct_participation_icp_e8s = swap_participation_limits
+            .min_direct_participation_icp_e8s
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "swap_participation_limits.min_direct_participation_icp_e8s".to_string(),
+                )
+            })?;
+        let max_direct_participation_icp_e8s = swap_participation_limits
+            .max_direct_participation_icp_e8s
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "swap_participation_limits.max_direct_participation_icp_e8s".to_string(),
+                )
+            })?;
+        let min_participant_icp_e8s = swap_participation_limits
+            .min_participant_icp_e8s
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "swap_participation_limits.min_participant_icp_e8s".to_string(),
+                )
+            })?;
+        let max_participant_icp_e8s = swap_participation_limits
+            .max_participant_icp_e8s
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "swap_participation_limits.max_participant_icp_e8s".to_string(),
+                )
+            })?;
+        let swap_participation_limits = SwapParticipationLimits {
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
+            min_participant_icp_e8s,
+            max_participant_icp_e8s,
+        };
+        let direct_participation_icp_e8s = self.direct_participation_icp_e8s.ok_or_else(|| {
+            NeuronsFundParticipationValidationError::UnspecifiedField(
+                "direct_participation_icp_e8s".to_string(),
+            )
+        })?;
+        let total_maturity_equivalent_icp_e8s =
+            self.total_maturity_equivalent_icp_e8s.ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "total_maturity_equivalent_icp_e8s".to_string(),
+                )
+            })?;
+        let max_neurons_fund_swap_participation_icp_e8s = self
+            .max_neurons_fund_swap_participation_icp_e8s
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "max_neurons_fund_swap_participation_icp_e8s".to_string(),
+                )
+            })?;
+        let intended_neurons_fund_participation_icp_e8s = self
+            .intended_neurons_fund_participation_icp_e8s
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "intended_neurons_fund_participation_icp_e8s".to_string(),
+                )
+            })?;
+        let allocated_neurons_fund_participation_icp_e8s = self
+            .allocated_neurons_fund_participation_icp_e8s
+            .ok_or_else(|| {
+                NeuronsFundParticipationValidationError::UnspecifiedField(
+                    "allocated_neurons_fund_participation_icp_e8s".to_string(),
+                )
+            })?;
+        Ok(NeuronsFundParticipation {
+            swap_participation_limits,
+            ideal_matched_participation_function,
+            neurons_fund_reserves,
+            direct_participation_icp_e8s,
+            total_maturity_equivalent_icp_e8s,
+            max_neurons_fund_swap_participation_icp_e8s,
+            intended_neurons_fund_participation_icp_e8s,
+            allocated_neurons_fund_participation_icp_e8s,
+        })
+    }
+
+    /// Returns a clone of `self` without sensitive data, specifically, `nns_neuron_id`.
+    pub fn anonymized(&self) -> Self {
+        let neurons_fund_reserves = self
+            .neurons_fund_reserves
+            .as_ref()
+            .map(NeuronsFundSnapshotPb::anonymized);
+        Self {
+            neurons_fund_reserves,
+            ..self.clone()
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// ------------------- NeuronsFundAction -----------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+pub enum NeuronsFundAction {
+    DrawMaturity,
+    RefundMaturity,
+}
+
+impl NeuronsFundAction {
+    pub fn checked_apply(&self, left: u64, right: u64) -> Result<u64, String> {
+        match self {
+            Self::DrawMaturity => left.checked_sub(right).ok_or_else(|| "drawing".to_string()),
+            Self::RefundMaturity => left
+                .checked_add(right)
+                .ok_or_else(|| "refunding".to_string()),
+        }
+    }
+}
+
+/// Apply the Neurons' Fund snapshot, i.e., either (depending on `action`) add or subtract maturity
+/// to Neurons' Fund neurons stored in `neuron_store`.
+///
+/// Potential refund errors (e.g., u64 overflows) are collected, serialized, and returned as
+/// the Err result. Note that the maturity of neurons for which thean error occured does not
+/// need to be adjusted, as the function will retain their original maturity in case of errors.
+fn apply_neurons_fund_snapshot(
+    neuron_store: &mut NeuronStore,
+    snapshot: &NeuronsFundSnapshot,
+    action: NeuronsFundAction,
+) -> Result<(), String> {
+    let mut neurons_fund_action_error = vec![];
+    for (neuron_id, neuron_delta) in snapshot.neurons().iter() {
+        let refund_result = neuron_store.with_neuron_mut(neuron_id, |nns_neuron| {
+            let old_nns_neuron_maturity_e8s = nns_neuron.maturity_e8s_equivalent;
+            let maturity_delta_e8s = neuron_delta.amount_icp_e8s;
+            nns_neuron.maturity_e8s_equivalent = action
+                .checked_apply(old_nns_neuron_maturity_e8s, maturity_delta_e8s)
+                .unwrap_or_else(|verb| {
+                    neurons_fund_action_error.push(format!(
+                        "u64 overflow while {verb} maturity from {neuron_id:?} \
+                            (*kept* original maturity e8s = {old_nns_neuron_maturity_e8s}; \
+                            requested maturity delta e8s = {maturity_delta_e8s})."
+                    ));
+                    old_nns_neuron_maturity_e8s
+                });
+        });
+        if let Err(with_neuron_mut_error) = refund_result {
+            neurons_fund_action_error.push(with_neuron_mut_error.to_string());
+        }
+    }
+    if neurons_fund_action_error.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Errors while mutating the Neurons' Fund:\n  - {}",
+            neurons_fund_action_error.join("\n  - ")
+        ))
+    }
+}
+
+#[cfg(test)]
+mod test_functions_tests {
     use ic_nervous_system_common::E8;
-    use ic_sns_swap::pb::v1::{LinearScalingCoefficient, NeuronsFundParticipationConstraints};
-    use rust_decimal::{
-        prelude::{FromPrimitive, ToPrimitive},
-        Decimal,
+    use ic_neurons_fund::{
+        test_functions::{AnalyticallyInvertibleFunction, LinearFunction, SimpleLinearFunction},
+        u64_to_dec, InvertibleFunction, MatchedParticipationFunction, NonDecreasingFunction,
+        SerializableFunction, ValidatedNeuronsFundParticipationConstraints,
     };
+    use ic_sns_swap::pb::v1::{
+        IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
+        LinearScalingCoefficient, NeuronsFundParticipationConstraints,
+    };
+    use rust_decimal::Decimal;
     use rust_decimal_macros::dec;
 
     #[test]
     fn test_simple_linear_function() {
         let f = SimpleLinearFunction {};
-        let run_test_for_a = |x: u64| {
-            let y = f.apply(x);
-            let x1 = f.invert(y).unwrap();
-            assert_eq!(x, x1);
+        let run_test_for_a = |x_icp_e8s: u64| {
+            let y_icp = f.apply_unchecked(x_icp_e8s);
+            println!("({}, {})", x_icp_e8s, y_icp);
+            let x1_icp_e8s = f.invert(y_icp).unwrap();
+            assert_eq!(x_icp_e8s, x1_icp_e8s);
         };
-        let run_test_for_b = |y: Decimal| {
-            let x = f.invert(y).unwrap();
-            let y1 = f.apply(x);
-            assert_eq!(y, y1);
+        let run_test_for_b = |y_icp: Decimal| {
+            let x1_icp_e8s = f.invert(y_icp).unwrap();
+            println!("({}, {})", x1_icp_e8s, y_icp);
+            let y1_icp = f.apply_unchecked(x1_icp_e8s);
+            assert_eq!(y_icp, y1_icp);
         };
         run_test_for_a(0);
         run_test_for_a(77 * E8);
         run_test_for_a(888 * E8 + 123);
         run_test_for_a(9_999 * E8);
 
-        run_test_for_b(u64_to_dec(0));
-        run_test_for_b(u64_to_dec(77 * E8));
-        run_test_for_b(u64_to_dec(888 * E8 + 123));
-        run_test_for_b(u64_to_dec(9_999 * E8));
+        run_test_for_b(dec!(0));
+        run_test_for_b(dec!(77));
+        run_test_for_b(dec!(888.000_001_23));
+        run_test_for_b(dec!(9_999));
     }
 
     #[test]
     fn test_intervals() {
-        let slope_denominator = 200_000 * E8;
+        let slope_denominator = 200_000;
         let max_neurons_fund_participation_icp_e8s = 95_000 * E8;
         let params = NeuronsFundParticipationConstraints {
             min_direct_participation_threshold_icp_e8s: Some(50 * E8),
@@ -651,7 +1211,7 @@ mod tests {
                     // Interval A
                     from_direct_participation_icp_e8s: Some(0),
                     to_direct_participation_icp_e8s: Some(100 * E8),
-                    slope_numerator: Some(100_000 * E8),
+                    slope_numerator: Some(100_000),
                     slope_denominator: Some(slope_denominator),
                     intercept_icp_e8s: Some(111),
                 },
@@ -659,7 +1219,7 @@ mod tests {
                     // Interval B
                     from_direct_participation_icp_e8s: Some(100 * E8),
                     to_direct_participation_icp_e8s: Some(1_000 * E8),
-                    slope_numerator: Some(120_000 * E8),
+                    slope_numerator: Some(120_000),
                     slope_denominator: Some(slope_denominator),
                     intercept_icp_e8s: Some(222),
                 },
@@ -667,7 +1227,7 @@ mod tests {
                     // Interval C
                     from_direct_participation_icp_e8s: Some(1_000 * E8),
                     to_direct_participation_icp_e8s: Some(10_000 * E8),
-                    slope_numerator: Some(140_000 * E8),
+                    slope_numerator: Some(140_000),
                     slope_denominator: Some(slope_denominator),
                     intercept_icp_e8s: Some(333),
                 },
@@ -675,7 +1235,7 @@ mod tests {
                     // Interval D
                     from_direct_participation_icp_e8s: Some(10_000 * E8),
                     to_direct_participation_icp_e8s: Some(100_000 * E8),
-                    slope_numerator: Some(160_000 * E8),
+                    slope_numerator: Some(160_000),
                     slope_denominator: Some(slope_denominator),
                     intercept_icp_e8s: Some(444),
                 },
@@ -683,43 +1243,391 @@ mod tests {
                     // Interval E
                     from_direct_participation_icp_e8s: Some(100_000 * E8),
                     to_direct_participation_icp_e8s: Some(1_000_000 * E8),
-                    slope_numerator: Some(180_000 * E8),
+                    slope_numerator: Some(180_000),
                     slope_denominator: Some(slope_denominator),
                     intercept_icp_e8s: Some(555),
                 },
             ],
+            ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionSwapPb {
+                serialized_representation: Some((SimpleLinearFunction {}).serialize()),
+            }),
         };
-        let params = ValidatedNeuronsFundParticipationConstraints::try_from(params).unwrap();
-        let f = SimpleLinearFunction {};
-        let g: MatchedParticipationFunction =
-            MatchedParticipationFunction::new(Box::from(move |x| f.apply(x)), params).unwrap();
+        let participation =
+            ValidatedNeuronsFundParticipationConstraints::<SimpleLinearFunction>::try_from(&params)
+                .unwrap();
+
         // Below min_direct_participation_threshold_icp_e8s
-        assert_eq!(dec_to_u64(g.apply(0)).unwrap(), 0);
+        assert_eq!(participation.apply_unchecked(0), 0);
         // Falls into Interval A, thus we expect slope(0.5) * x + intercept_icp_e8s(111)
-        assert_eq!(dec_to_u64(g.apply(90 * E8)).unwrap(), 45 * E8 + 111);
+        assert_eq!(participation.apply_unchecked(90 * E8), 45 * E8 + 111);
         // Falls into Interval B, thus we expect slope(0.6) * x + intercept_icp_e8s(222)
-        assert_eq!(dec_to_u64(g.apply(100 * E8)).unwrap(), 60 * E8 + 222);
+        assert_eq!(participation.apply_unchecked(100 * E8), 60 * E8 + 222);
         // Falls into Interval C, thus we expect slope(0.7) * x + intercept_icp_e8s(333)
-        assert_eq!(dec_to_u64(g.apply(5_000 * E8)).unwrap(), 3_500 * E8 + 333);
+        assert_eq!(participation.apply_unchecked(5_000 * E8), 3_500 * E8 + 333);
         // Falls into Interval D, thus we expect slope(0.8) * x + intercept_icp_e8s(444)
         assert_eq!(
-            dec_to_u64(g.apply(100_000 * E8 - 1)).unwrap(),
+            participation.apply_unchecked(100_000 * E8 - 1),
             80_000 * E8 - 1 + 444
         );
-        // Falls into Interval D, thus we expect slope(0.9) * x + intercept_icp_e8s(555)
+        // Falls into Interval E, thus we expect slope(0.9) * x + intercept_icp_e8s(555)
         assert_eq!(
-            dec_to_u64(g.apply(100_000 * E8)).unwrap(),
+            participation.apply_unchecked(100_000 * E8),
             90_000 * E8 + 555
         );
         // Beyond the last interval
         assert_eq!(
-            dec_to_u64(g.apply(1_000_000 * E8)).unwrap(),
+            participation.apply_unchecked(1_000_000 * E8),
             max_neurons_fund_participation_icp_e8s
         );
         // Extremely high value
         assert_eq!(
-            dec_to_u64(g.apply(u64::MAX)).unwrap(),
+            participation.apply_unchecked(u64::MAX),
             max_neurons_fund_participation_icp_e8s
+        );
+    }
+
+    const POTENTIALLY_INTERESTING_TARGET_Y_VALUES: &[&std::ops::RangeInclusive<u64>] = &[
+        // The first 101 values of the the u64 range.
+        &(0..=100_u64),
+        // The last 101 values of the first one-third of the u64 range.
+        &(6_148_914_691_236_516_764..=6_148_914_691_236_516_864),
+        // The last 101 values of the u64 range.
+        &(18_446_744_073_709_551_515..=u64::MAX),
+    ];
+
+    fn generate_potentially_intresting_target_values() -> Vec<u64> {
+        POTENTIALLY_INTERESTING_TARGET_Y_VALUES
+            .iter()
+            .flat_map(|rs| {
+                let rs = (*rs).clone();
+                rs.collect::<Vec<u64>>()
+            })
+            .collect()
+    }
+
+    fn run_inverse_function_test<F>(function: &F, target_y: Decimal)
+    where
+        F: InvertibleFunction + AnalyticallyInvertibleFunction,
+    {
+        let Ok(expected) = function.invert_analytically(target_y) else {
+            println!(
+                "Cannot run inverse test as a u64 analytical inverse does not exist for {}.",
+                target_y,
+            );
+            return;
+        };
+        let observed = function.invert(target_y).unwrap();
+        println!("{}, target_y = {target_y}", std::any::type_name::<F>(),);
+
+        // Sometimes exact equality cannot be reached with our search strategy. We tolerate errors
+        // up to 1 E8.
+        assert!(
+            observed.max(expected) - observed.min(expected) <= 1,
+            "Deviation bigger than 1 E8.\n\
+            Expected: {expected}\n\
+            Observed: {observed}"
+        );
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_basic_linear_function() {
+        let f = SimpleLinearFunction {};
+        for i in generate_potentially_intresting_target_values() {
+            run_inverse_function_test(&f, u64_to_dec(i));
+        }
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_slow_linear_function() {
+        let slopes = vec![
+            dec!(0.0001),
+            dec!(0.0003),
+            dec!(0.0005),
+            dec!(0.001),
+            dec!(0.003),
+            dec!(0.005),
+            dec!(0.01),
+            dec!(0.03),
+            dec!(0.05),
+            dec!(0.1),
+            dec!(0.3),
+            dec!(0.5),
+            dec!(1.0),
+            dec!(3.0),
+            dec!(5.0),
+            dec!(10.0),
+        ];
+        let intercepts = vec![
+            dec!(0.0),
+            dec!(-0.0001),
+            dec!(-0.0003),
+            dec!(-0.0005),
+            dec!(-0.001),
+            dec!(-0.003),
+            dec!(-0.005),
+            dec!(-0.01),
+            dec!(-0.03),
+            dec!(-0.05),
+            dec!(-0.1),
+            dec!(-0.3),
+            dec!(-0.5),
+            dec!(-1.0),
+            dec!(-3.0),
+            dec!(-5.0),
+            dec!(-10.0),
+            dec!(-30.0),
+            dec!(-50.0),
+            dec!(-100.0),
+            dec!(-300.0),
+            dec!(-500.0),
+            dec!(-1000.0),
+            dec!(-3000.0),
+            dec!(-5000.0),
+            dec!(-10000.0),
+            dec!(-30000.0),
+            dec!(-50000.0),
+        ];
+        for intercept in intercepts {
+            for slope in slopes.iter().cloned() {
+                let f = LinearFunction { slope, intercept };
+                for i in generate_potentially_intresting_target_values() {
+                    let target_y = u64_to_dec(i);
+                    println!("Inverting linear function {target_y} = f(x) = {slope} * x + {intercept} ...");
+                    run_inverse_function_test(&f, target_y);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_result_exactly_max() {
+        let function = LinearFunction {
+            slope: dec!(1),
+            intercept: dec!(0),
+        };
+        let target_y = u64_to_dec(u64::MAX);
+        let observed = function.invert(target_y).unwrap();
+        assert_eq!(observed, u64::MAX);
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_result_above_max() {
+        let function = LinearFunction {
+            slope: dec!(1),
+            intercept: dec!(-1),
+        };
+        let target_y = u64_to_dec(u64::MAX);
+        let error = function.invert(target_y).unwrap_err();
+        assert_eq!(
+            error,
+            format!(
+                "inverse of function appears to be greater than {}",
+                u64::MAX
+            )
+        );
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_result_exactly_zero() {
+        let function = LinearFunction {
+            slope: dec!(1),
+            intercept: dec!(0),
+        };
+        let target_y = dec!(0);
+        let observed = function.invert(target_y).unwrap();
+        assert_eq!(observed, 0);
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_result_below_zero() {
+        let function = LinearFunction {
+            slope: dec!(1),
+            intercept: dec!(1),
+        };
+        let target_y = dec!(0);
+        let error = function.invert(target_y).unwrap_err();
+        assert_eq!(error, "inverse of function appears to be lower than 0");
+    }
+}
+
+#[cfg(test)]
+mod neurons_fund_anonymization_tests {
+
+    use crate::neurons_fund::*;
+    use crate::pb::v1::{
+        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
+        IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionPb,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb,
+        SwapParticipationLimits as SwapParticipationLimitsPb,
+    };
+    use ic_base_types::PrincipalId;
+    use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
+    use ic_nns_common::pb::v1::NeuronId;
+
+    #[test]
+    fn test_neurons_fund_participation_anonymization() {
+        let id1 = NeuronId { id: 123 };
+        let id2 = NeuronId { id: 456 };
+        let amount_icp_e8s = 100_000_000_000;
+        let maturity_equivalent_icp_e8s = 100_000_000_000;
+        let controller = PrincipalId::default();
+        let is_capped = false;
+        let n1: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id1),
+            amount_icp_e8s: Some(amount_icp_e8s),
+            maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
+            hotkey_principal: Some(controller),
+            is_capped: Some(is_capped),
+        };
+        let n2 = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id2),
+            ..n1
+        };
+        let neurons = vec![n1, n2];
+        let snapshot = NeuronsFundSnapshotPb {
+            neurons_fund_neuron_portions: neurons,
+        };
+        let participation = NeuronsFundParticipationPb {
+            ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionPb {
+                serialized_representation: Some(
+                    PolynomialMatchingFunction::new(1_000_000_000_000_000)
+                        .unwrap()
+                        .serialize(),
+                ),
+            }),
+            neurons_fund_reserves: Some(snapshot.clone()),
+            swap_participation_limits: Some(SwapParticipationLimitsPb {
+                min_direct_participation_icp_e8s: Some(0),
+                max_direct_participation_icp_e8s: Some(u64::MAX),
+                min_participant_icp_e8s: Some(1_000_000_000),
+                max_participant_icp_e8s: Some(10_000_000_000),
+            }),
+            direct_participation_icp_e8s: Some(1_000_000_000_000),
+            total_maturity_equivalent_icp_e8s: Some(1_000_000_000_000_000),
+            max_neurons_fund_swap_participation_icp_e8s: Some(1_000_000_000_000),
+            intended_neurons_fund_participation_icp_e8s: Some(1_000_000_000_000),
+            allocated_neurons_fund_participation_icp_e8s: Some(2 * amount_icp_e8s),
+        };
+        let participation_validation_result = participation.validate();
+        assert!(
+            participation_validation_result.is_ok(),
+            "expected Ok result, got {:#?}",
+            participation_validation_result
+        );
+        let anonymized_participation = participation.anonymized();
+        assert_eq!(
+            anonymized_participation.validate().map(|_| ()),
+            Err(
+                NeuronsFundParticipationValidationError::NeuronsFundSnapshotValidationError(
+                    NeuronsFundSnapshotValidationError::NeuronsFundNeuronPortionError(
+                        0,
+                        NeuronsFundNeuronPortionError::UnspecifiedField(
+                            "nns_neuron_id".to_string()
+                        )
+                    )
+                )
+            )
+        );
+        assert_eq!(
+            anonymized_participation,
+            NeuronsFundParticipationPb {
+                neurons_fund_reserves: Some(snapshot.anonymized()),
+                ..participation
+            }
+        );
+    }
+
+    #[test]
+    fn test_neurons_fund_snapshot_anonymization() {
+        let id1 = NeuronId { id: 123 };
+        let id2 = NeuronId { id: 456 };
+        let amount_icp_e8s = 100_000_000_000;
+        let maturity_equivalent_icp_e8s = 100_000_000_000;
+        let controller = PrincipalId::default();
+        let is_capped = false;
+        let n1: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id1),
+            amount_icp_e8s: Some(amount_icp_e8s),
+            maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
+            hotkey_principal: Some(controller),
+            is_capped: Some(is_capped),
+        };
+        let n2 = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id2),
+            ..n1
+        };
+        let neurons = vec![n1, n2];
+        let snapshot = NeuronsFundSnapshotPb {
+            neurons_fund_neuron_portions: neurons.clone(),
+        };
+        assert_eq!(
+            snapshot.validate(),
+            Ok(NeuronsFundSnapshot {
+                neurons: neurons
+                    .iter()
+                    .map(|n| { (n.nns_neuron_id.unwrap(), n.validate().unwrap()) })
+                    .collect()
+            })
+        );
+        let anonymized_snapshot = snapshot.anonymized();
+        assert_eq!(
+            anonymized_snapshot.validate(),
+            Err(
+                NeuronsFundSnapshotValidationError::NeuronsFundNeuronPortionError(
+                    0,
+                    NeuronsFundNeuronPortionError::UnspecifiedField("nns_neuron_id".to_string())
+                )
+            )
+        );
+        assert_eq!(
+            anonymized_snapshot,
+            NeuronsFundSnapshotPb {
+                neurons_fund_neuron_portions: neurons
+                    .into_iter()
+                    .map(|n| { n.anonymized() })
+                    .collect()
+            }
+        );
+    }
+
+    #[test]
+    fn test_neurons_fund_neuron_portion_anonymization() {
+        let id = NeuronId { id: 123 };
+        let amount_icp_e8s = 100_000_000_000;
+        let maturity_equivalent_icp_e8s = 100_000_000_000;
+        let controller = PrincipalId::default();
+        let is_capped = false;
+        let neuron: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
+            nns_neuron_id: Some(id),
+            amount_icp_e8s: Some(amount_icp_e8s),
+            maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
+            hotkey_principal: Some(controller),
+            is_capped: Some(is_capped),
+        };
+        assert_eq!(
+            neuron.validate(),
+            Ok(NeuronsFundNeuronPortion {
+                id,
+                amount_icp_e8s,
+                maturity_equivalent_icp_e8s,
+                controller,
+                is_capped,
+            })
+        );
+        let anonymized_neuron = neuron.anonymized();
+        assert_eq!(
+            anonymized_neuron.validate(),
+            Err(NeuronsFundNeuronPortionError::UnspecifiedField(
+                "nns_neuron_id".to_string()
+            ))
+        );
+        assert_eq!(
+            anonymized_neuron,
+            NeuronsFundNeuronPortionPb {
+                nns_neuron_id: None,
+                ..neuron
+            }
         );
     }
 }

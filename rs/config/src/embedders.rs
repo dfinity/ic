@@ -12,7 +12,7 @@ use crate::flag_status::FlagStatus;
 // each message's execution time (about 40x), so set a limit 3 orders of
 // magnitude lower which should still allow for reasonable canisters to be
 // written (current max number of globals on the Alpha network is 7).
-pub(crate) const MAX_GLOBALS: usize = 300;
+pub(crate) const MAX_GLOBALS: usize = 1000;
 // The maximum number of functions allowed in a Wasm module.
 pub(crate) const MAX_FUNCTIONS: usize = 50000;
 // The maximum number of custom sections allowed in a Wasm module.

@@ -1,7 +1,10 @@
 [package]
 name = "ic-metrics"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 futures = { workspace = true }
@@ -11,7 +14,7 @@ libc = "0.2.91"
 prometheus = { workspace = true }
 slog = "2.7.0"
 slog-async = "2.7.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-metrics = "0.3.0"
 
 [dev-dependencies]

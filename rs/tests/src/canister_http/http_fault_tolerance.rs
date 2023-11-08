@@ -118,7 +118,7 @@ pub fn test(env: TestEnv) {
         info!(&log, "Starting workload of continued remote HTTP calls.");
         let proxy_canister = Canister::new(
             &app_runtime,
-            CanisterId::new(PrincipalId::from(cid)).unwrap(),
+            CanisterId::unchecked_from_principal(PrincipalId::from(cid)),
         );
 
         // Proxy requests store request responses made in a HashMap that
@@ -190,7 +190,7 @@ pub fn test(env: TestEnv) {
     );
     let canister_endpoint = Canister::new(
         healthy_runtime,
-        CanisterId::new(PrincipalId::from(cid)).unwrap(),
+        CanisterId::unchecked_from_principal(PrincipalId::from(cid)),
     );
 
     // Wait the node is actually killed

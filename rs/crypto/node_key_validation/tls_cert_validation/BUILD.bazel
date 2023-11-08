@@ -24,7 +24,6 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/keys",
     "@crate_index//:assert_matches",
     "@crate_index//:curve25519-dalek",
-    "@crate_index//:openssl",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

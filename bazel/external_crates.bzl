@@ -1,73 +1,88 @@
 """
 This module declares all direct rust dependencies.
 
-Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file to regenerate Cargo Bazel lockfiles.
+Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
+to regenerate Cargo Bazel lockfiles.
 """
 
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
+def sanitize_external_crates(sanitizers_enabled):
+    FUZZING_ANNOTATION = [crate.annotation(rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING)] if sanitizers_enabled else []
+    return {
+        "candid": FUZZING_ANNOTATION,
+        "wasmtime": FUZZING_ANNOTATION,
+        "bitcoin": FUZZING_ANNOTATION,
+        "bincode": FUZZING_ANNOTATION,
+        "hex": FUZZING_ANNOTATION,
+        "subtle": FUZZING_ANNOTATION,
+    }
+
+def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, sanitizers_enabled):
+    CRATE_ANNOTATIONS = {
+        "ic_bls12_381": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
+        "ring": [crate.annotation(
+            build_script_env = {
+                "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
+            },
+        )],
+        "ic-wasm": [crate.annotation(
+            gen_binaries = True,
+        )],
+        "openssl-sys": [crate.annotation(
+            build_script_data = [
+                "@openssl//:gen_dir",
+                "@openssl//:openssl",
+            ],
+            # https://github.com/sfackler/rust-openssl/tree/master/openssl-sys/build
+            build_script_data_glob = ["build/**/*.c"],
+            build_script_env = {
+                "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
+                "OPENSSL_STATIC": "true",
+            },
+            data = ["@openssl"],
+            deps = ["@openssl"],
+        )] if static_openssl or sanitizers_enabled else [],
+        "librocksdb-sys": [crate.annotation(
+            build_script_env = {
+                # Bazel executors assign only one core when executing
+                # the build script, making rocksdb compilation
+                # extremely slow. Bazel doesn't provide any way to
+                # override this settings so we cheat by starting more
+                # processes in parallel.
+                #
+                # See IDX-2406.
+                "NUM_JOBS": "8",
+            },
+        )],
+        "pprof": [crate.annotation(
+            build_script_data = [
+                "@com_google_protobuf//:protoc",
+            ],
+            build_script_env = {
+                "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+            },
+        )],
+        "prost-build": [crate.annotation(
+            build_script_env = {
+                "PROTOC_NO_VENDOR": "1",
+            },
+        )],
+    }
+    CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
     crates_repository(
         name = name,
         isolated = True,
         cargo_lockfile = cargo_lockfile,
         lockfile = lockfile,
         cargo_config = "//:bazel/cargo.config",
-        annotations = {
-            "ic_bls12_381": [crate.annotation(
-                rustc_flags = [
-                    "-C",
-                    "opt-level=3",
-                ],
-            )],
-            "ring": [crate.annotation(
-                build_script_env = {
-                    "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
-                },
-            )],
-            "ic-wasm": [crate.annotation(
-                gen_binaries = True,
-            )],
-            "openssl-sys": [] if not static_openssl else [crate.annotation(
-                build_script_data = [
-                    "@openssl//:gen_dir",
-                    "@openssl//:openssl",
-                ],
-                # https://github.com/sfackler/rust-openssl/tree/master/openssl-sys/build
-                build_script_data_glob = ["build/**/*.c"],
-                build_script_env = {
-                    "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
-                    "OPENSSL_STATIC": "true",
-                },
-                data = ["@openssl"],
-                deps = ["@openssl"],
-            )],
-            "librocksdb-sys": [crate.annotation(
-                build_script_env = {
-                    # Bazel executors assign only one core when executing
-                    # the build script, making rocksdb compilation
-                    # extremely slow. Bazel doesn't provide any way to
-                    # override this settings so we cheat by starting more
-                    # processes in parallel.
-                    #
-                    # See IDX-2406.
-                    "NUM_JOBS": "8",
-                },
-            )],
-            "pprof": [crate.annotation(
-                build_script_data = [
-                    "@com_google_protobuf//:protoc",
-                ],
-                build_script_env = {
-                    "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
-                },
-            )],
-            "prost-build": [crate.annotation(
-                build_script_env = {
-                    "PROTOC_NO_VENDOR": "1",
-                },
-            )],
-        },
+        annotations = CRATE_ANNOTATIONS,
         packages = {
             "actix-rt": crate.spec(
                 version = "^2.2.0",
@@ -139,7 +154,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "axum-server": crate.spec(
                 version = "^0.5.1",
                 features = [
-                    "tls-openssl",
                     "tls-rustls",
                 ],
             ),
@@ -159,12 +173,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.2.1",
             ),
             "bindgen": crate.spec(
-                version = "^0.59.0",
+                version = "^0.65.1",
                 default_features = False,
                 features = ["runtime"],
             ),
             "bip32": crate.spec(
-                version = "^0.4.0",
+                version = "^0.5.0",
                 features = [
                     "secp256k1",
                 ],
@@ -229,7 +243,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "candid": crate.spec(
-                version = "^0.9.5",
+                version = "^0.9.10",
                 features = ["parser"],
             ),
             "cargo_metadata": crate.spec(
@@ -241,7 +255,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "cddl": crate.spec(
                 version = "^0.9.0-beta.1",
             ),
-            "cfg-if": crate.spec(version = "^0.1.10"),
+            "cfg-if": crate.spec(version = "^1.0.0"),
             "chacha20poly1305": crate.spec(
                 version = "^0.10.0",
             ),
@@ -252,7 +266,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.1",
             ),
             "clap": crate.spec(
-                version = "^3.1.6",
+                version = "^3.2.25",
                 features = [
                     "derive",
                 ],
@@ -323,8 +337,14 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "digest": crate.spec(
                 version = "^0.9.0",
             ),
+            "dyn-clone": crate.spec(
+                version = "^1.0.14",
+            ),
             "ed25519-consensus": crate.spec(
                 version = "^2.0.1",
+            ),
+            "educe": crate.spec(
+                version = "^0.4",
             ),
             "either": crate.spec(
                 version = "^1.6",
@@ -416,6 +436,14 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "http-body": crate.spec(
                 version = "^0.4",
             ),
+            "http-body_1_0_0_rc_2": crate.spec(
+                package = "http-body",
+                version = "=1.0.0-rc.2",
+            ),
+            "http-body-util_0_1_0_rc_3": crate.spec(
+                package = "http-body-util",
+                version = "=0.1.0-rc.3",
+            ),
             "http-serde": crate.spec(
                 version = "^1.1.2",
             ),
@@ -442,6 +470,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "tcp",
                 ],
             ),
+            "hyper_1_0_0_rc_4": crate.spec(
+                package = "hyper",
+                version = "=1.0.0-rc.4",
+                features = [
+                    "full",
+                ],
+            ),
             "hyper-rustls": crate.spec(
                 version = "^0.24.0",
                 features = [
@@ -458,10 +493,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.18.11",
             ),
             "icrc1-test-env": crate.spec(
-                version = "^0.1.1",
+                git = "https://github.com/dfinity/ICRC-1",
+                rev = "6eda22d0dc882b347a945647902f2d844a404c7f",
             ),
             "icrc1-test-suite": crate.spec(
-                version = "^0.1.1",
+                git = "https://github.com/dfinity/ICRC-1",
+                rev = "6eda22d0dc882b347a945647902f2d844a404c7f",
             ),
             "ic-agent": crate.spec(
                 version = "^0.27.0",
@@ -497,7 +534,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.3.1",
             ),
             "ic-metrics-encoder": crate.spec(
-                version = "^1.1.0",
+                version = "^1.1.1",
             ),
             "ic-stable-structures": crate.spec(
                 version = "^0.5.0",
@@ -525,12 +562,15 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "idna": crate.spec(
                 version = "^0.3.0",
             ),
+            "indexmap": crate.spec(
+                version = "^2.1.0",
+            ),
             "indicatif": crate.spec(
                 package = "indicatif",
                 version = "^0.17.3",
             ),
             "indoc": crate.spec(
-                version = "^1.0.6",
+                version = "^1.0.9",
             ),
             "insta": crate.spec(
                 version = "^1.31.0",
@@ -549,7 +589,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "0.3.2",
             ),
             "itertools": crate.spec(
-                version = "^0.10.0",
+                version = "^0.10.5",
             ),
             "jemalloc-ctl": crate.spec(
                 version = "^0.3.3",
@@ -570,6 +610,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "ecdsa",
                     "pem",
                     "pkcs8",
+                    "precomputed-tables",
+                    "std",
                 ],
                 default_features = False,
             ),
@@ -586,7 +628,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.1.2",
             ),
             "libfuzzer-sys": crate.spec(
-                version = "^0.4",
+                version = "^0.4.7",
+                default_features = False,
             ),
             "libsecp256k1": crate.spec(
                 version = "^0.7.0",
@@ -636,6 +679,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 package = "mockall",
                 version = "^0.8.3",
             ),
+            "moka": crate.spec(
+                version = "^0.12",
+                features = [
+                    "future",
+                ],
+            ),
             "native-tls": crate.spec(
                 version = "^0.2.7",
                 features = [
@@ -643,7 +692,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "nix": crate.spec(
-                version = "^0.23.0",
+                version = "^0.24.3",
             ),
             "nonblock": crate.spec(
                 version = "^0.1.0",
@@ -742,6 +791,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "pico-args": crate.spec(
                 version = "^0.3",
             ),
+            "pin-project-lite": crate.spec(
+                version = "^0.2",
+            ),
             "pkcs8": crate.spec(
                 version = "^0.10.2",
             ),
@@ -763,7 +815,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.2",
             ),
             "pretty_assertions": crate.spec(
-                version = "^0.6.1",
+                version = "^1.4.0",
             ),
             "priority-queue": crate.spec(
                 version = "^1.3.1",
@@ -792,6 +844,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "test-strategy": crate.spec(
                 version = "^0.2",
+            ),
+            "prometheus-parse": crate.spec(
+                version = "^0.2.4",
             ),
             "proptest-derive": crate.spec(
                 version = "^0.3.0",
@@ -887,7 +942,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.2",
             ),
             "rocksdb": crate.spec(
-                version = "^0.15.0",
+                version = "^0.21.0",
                 default_features = False,
             ),
             "rsa": crate.spec(
@@ -934,6 +989,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "scopeguard": crate.spec(
                 version = "^1.1.0",
             ),
+            "scraper": crate.spec(
+                version = "^0.17.1",
+            ),
             "semver": crate.spec(
                 version = "^1.0.9",
                 features = [
@@ -941,7 +999,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "serde": crate.spec(
-                version = "=1.0.171",
+                version = "^1.0",
                 features = [
                     "derive",
                 ],
@@ -960,7 +1018,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.0",
             ),
             "serde_json": crate.spec(
-                version = "^1.0.40",
+                version = "^1.0.107",
             ),
             "serde_millis": crate.spec(
                 version = "^0.1",
@@ -975,7 +1033,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.8.0",
             ),
             "sev": crate.spec(
-                version = "^1.2.0",
+                version = "^1.2.1",
                 features = [
                     "openssl",
                 ],
@@ -1002,8 +1060,11 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "support-v0_7",
                 ],
             ),
+            "signature": crate.spec(
+                version = "^2.1.0",
+            ),
             "simple_asn1": crate.spec(
-                version = "^0.5.4",
+                version = "^0.6.2",
             ),
             "simple_moving_average": crate.spec(
                 version = "^0.1.2",
@@ -1054,12 +1115,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "static_assertions": crate.spec(
                 version = "^0.3.4",
             ),
-            "stretto": crate.spec(
-                version = "^0.8",
-                features = [
-                    "full",
-                ],
-            ),
             "strum": crate.spec(
                 version = "^0.24.1",
                 features = [
@@ -1079,7 +1134,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^2.4",
             ),
             "syn": crate.spec(
-                version = "^1.0",
+                version = "^1.0.109",
                 features = [
                     "fold",
                     "full",
@@ -1167,6 +1222,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 features = [
                     "codec",
                     "time",
+                    "rt",
                 ],
             ),
             "toml": crate.spec(
@@ -1205,6 +1261,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "tracing-appender": crate.spec(
                 version = "^0.2.2",
+            ),
+            "tracing-slog": crate.spec(
+                version = "^0.2",
             ),
             "tracing-subscriber": crate.spec(
                 version = "^0.3.11",
@@ -1262,19 +1321,18 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^11.0.2",
+                version = "^13.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
                     "parallel-compilation",
-                    "posix-signals-on-macos",
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^11.0.2",
+                version = "^13.0.1",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^11.0.2",
+                version = "^13.0.1",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",
@@ -1296,6 +1354,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "wiremock": crate.spec(
                 version = "^0.5.19",
+            ),
+            "x509-cert": crate.spec(
+                version = "^0.2.4",
+                features = [
+                    "builder",
+                    "hazmat",
+                ],
             ),
             "x509-parser": crate.spec(
                 version = "^0.15.1",

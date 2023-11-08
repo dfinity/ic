@@ -206,6 +206,10 @@ pub trait HasPrometheus {
     /// JSON files and scps them to the prometheus VM.
     fn sync_with_prometheus(&self);
 
+    /// Retrieves a topology snapshot by name, converts it into p8s scraping target
+    /// JSON files and scps them to the prometheus VM.
+    fn sync_with_prometheus_by_name(&self, name: &str);
+
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
     ///
@@ -217,6 +221,10 @@ pub trait HasPrometheus {
 
 impl HasPrometheus for TestEnv {
     fn sync_with_prometheus(&self) {
+        self.sync_with_prometheus_by_name("")
+    }
+
+    fn sync_with_prometheus_by_name(&self, name: &str) {
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);
@@ -224,7 +232,7 @@ impl HasPrometheus for TestEnv {
         sync_prometheus_config_dir(
             prometheus_config_dir.clone(),
             group_name.clone(),
-            self.topology_snapshot(),
+            self.topology_snapshot_by_name(name),
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");
         sync_prometheus_config_dir_with_boundary_nodes(

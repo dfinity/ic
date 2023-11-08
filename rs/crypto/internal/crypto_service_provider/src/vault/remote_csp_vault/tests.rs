@@ -355,3 +355,85 @@ mod logging {
             );
     }
 }
+
+mod single_call_bincode {
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use rand::{Rng, RngCore};
+    use serde::Serialize;
+    use std::pin::Pin;
+    use tokio_serde::Serializer;
+
+    fn flip(bytes: &[u8]) -> Vec<u8> {
+        let mut result = bytes.to_vec();
+        for b in result.iter_mut() {
+            *b = !*b;
+        }
+        result
+    }
+
+    #[derive(Default)]
+    struct IncrementOnSerialization {
+        counter: std::cell::RefCell<usize>,
+        pub dummy: Vec<u8>,
+    }
+
+    impl IncrementOnSerialization {
+        pub fn counter(&self) -> usize {
+            *self.counter.borrow()
+        }
+    }
+
+    impl Serialize for IncrementOnSerialization {
+        // flips bits of `dummy` on serialization
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            *self.counter.borrow_mut() += 1;
+            flip(self.dummy.as_slice()).serialize(serializer)
+        }
+    }
+
+    #[test]
+    fn should_call_serialization_once_and_have_consistent_encoding() {
+        let rng = &mut reproducible_rng();
+        let len: usize = rng.gen_range(0..1000);
+        let mut dummy = vec![0; len];
+        rng.fill_bytes(dummy.as_mut_slice());
+        // tokio serde implemented the Bincode object using
+        // `Options::serialize()`, which calls the serialization twice: once to
+        // determine the size of the object and once to serialize it
+        let bytes_tokio_bincode = {
+            let inc_on_ser = IncrementOnSerialization {
+                dummy: dummy.clone(),
+                ..Default::default()
+            };
+            assert_eq!(inc_on_ser.counter(), 0);
+            let mut bincode = tokio_serde::formats::Bincode::<
+                IncrementOnSerialization,
+                IncrementOnSerialization,
+            >::default();
+            let bytes = Pin::new(&mut bincode)
+                .serialize(&inc_on_ser)
+                .expect("failed to serialize");
+            assert_eq!(inc_on_ser.counter(), 2);
+            bytes
+        };
+        // we implement the Bincode object using `Options::serialize_into()`,
+        // which should call the serialization only once
+        let bytes_our_bincode = {
+            let inc_on_ser = IncrementOnSerialization {
+                dummy,
+                ..Default::default()
+            };
+            assert_eq!(inc_on_ser.counter(), 0);
+            let mut bincode = crate::vault::remote_csp_vault::codec::Bincode::<
+                IncrementOnSerialization,
+                IncrementOnSerialization,
+            >::default();
+            let bytes = Pin::new(&mut bincode)
+                .serialize(&inc_on_ser)
+                .expect("failed to serialize");
+            assert_eq!(inc_on_ser.counter(), 1);
+            bytes
+        };
+        assert_eq!(bytes_tokio_bincode, bytes_our_bincode);
+    }
+}

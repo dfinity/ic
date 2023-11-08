@@ -17,9 +17,9 @@ http-serde = "1.1.2"
 ic-async-utils = { path = "../../async_utils" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
-ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-base-types = { path = "../../types/base_types" }
+ic-icos-sev = { path = "../../ic_os/sev" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-peer-manager = { path = "../../p2p/peer_manager" }
@@ -27,14 +27,14 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 quinn = { version = "0.10.2", features = ["ring"] }
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
 socket2 = { version = "0.5", features = ["all"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-metrics = "0.3.0"
 tokio-rustls = "0.24.0"
 tokio-util = { version = "0.7.4", features = ["codec", "time"] }
@@ -42,7 +42,6 @@ tower = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }

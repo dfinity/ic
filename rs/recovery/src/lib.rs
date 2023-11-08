@@ -103,6 +103,7 @@ pub struct RecoveryArgs {
     pub replica_version: Option<ReplicaVersion>,
     pub key_file: Option<PathBuf>,
     pub test_mode: bool,
+    pub skip_prompts: bool,
 }
 
 /// The recovery struct comprises working directories for the recovery of a
@@ -718,7 +719,7 @@ impl Recovery {
             }
 
             info!(logger, "Recovery CUP not yet present, retrying...");
-            thread::sleep(time::Duration::from_secs(10));
+            thread::sleep(time::Duration::from_secs(15));
         }
 
         if !cup_present {

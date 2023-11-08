@@ -11,7 +11,6 @@ contract CkEthDeposit {
     address payable private cketh_minter_main_address;
 
     event ReceivedEth(address indexed from, uint256 value, bytes32 indexed principal);
-    event SentEth(address indexed to, uint256 value);
 
     /**
      * @dev Set cketh_minter_main_address.

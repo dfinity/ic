@@ -1,7 +1,10 @@
 [package]
 name = "ic-p2p"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 bincode = "1.2.1"
@@ -21,15 +24,15 @@ linked-hash-map = "0.5.3"
 lru = { version = "0.7.8", default-features = false }
 parking_lot = "0.12.1"
 prometheus = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-strum = "0.23.0"
-strum_macros = "0.23.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 threadpool = "1.8.1"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tower = { workspace = true }
 
 [dev-dependencies]

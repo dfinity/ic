@@ -22,10 +22,13 @@ BASE_DEPENDENCIES = [
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:fs_extra",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:lazy_static",
+    "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
     "@crate_index//:strum",
+    "@crate_index//:tempfile",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -35,9 +38,6 @@ BASE_DEPENDENCIES = [
         "//rs/crypto/sha2",
         "//rs/nervous_system/common/test_keys",
         "//rs/nervous_system/root",
-        "//rs/nns/constants",
-        "//rs/nns/gtc",
-        "//rs/nns/test_utils",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/canister",
@@ -79,7 +79,14 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm",
     "//rs/nns/handlers/root/impl:root",
     "//rs/sns/swap",
-]
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/nns/gtc",
+    ],
+})
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/init:init--test_feature",
@@ -87,7 +94,14 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
     "//rs/sns/swap:swap--test_feature",
-]
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/nns/constants:constants--test_feature",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/nns/gtc:gtc--test_feature",
+    ],
+})
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
@@ -204,7 +218,9 @@ rust_test_suite_with_extra_srcs(
         ["src/**/*.rs"],
         exclude = [
             "src/lib.rs",
-            # governance mem test is tested in a separate rule below, it needs 5+ minutes to finish.
+            # Tests that are broken out into their own rules below,
+            # mostly due to long running times.
+            "src/copy_inactive_neurons_to_stable_memory.rs",
             "src/governance_mem_test.rs",
         ],
     ),
@@ -214,7 +230,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = ["src/lib.rs"],
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
 # To run this test use `bazel test --config=alltests //rs/nns/integration_tests:governance_mem_test`
@@ -232,5 +248,44 @@ rust_test(
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["manual"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         //rs/nns/integration_tests:copy_inactive_neurons_to_stable_memory_test
+#
+# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
+# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
+# is run. This authorizes the test to download the test data.
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+#
+# See the .bazelrc for more configuration information.
+rust_test(
+    name = "copy_inactive_neurons_to_stable_memory_test",
+    size = "large",
+    srcs = [
+        "src/copy_inactive_neurons_to_stable_memory.rs",
+        "src/lib.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/copy_inactive_neurons_to_stable_memory.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "manual",  # CI should not be downloading nns_state.tar.zst.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

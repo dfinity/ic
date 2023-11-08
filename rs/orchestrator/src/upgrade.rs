@@ -1,8 +1,8 @@
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::metrics::OrchestratorMetrics;
+use crate::process_manager::{Process, ProcessManager};
 use crate::registry_helper::RegistryHelper;
-use crate::replica_process::ReplicaProcess;
 use async_trait::async_trait;
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -24,6 +24,30 @@ use std::sync::{Arc, Mutex};
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
+pub struct ReplicaProcess {
+    version: ReplicaVersion,
+    binary: String,
+    args: Vec<String>,
+}
+
+impl Process for ReplicaProcess {
+    const NAME: &'static str = "Replica";
+
+    type Version = ReplicaVersion;
+
+    fn get_version(&self) -> &Self::Version {
+        &self.version
+    }
+
+    fn get_binary(&self) -> &str {
+        &self.binary
+    }
+
+    fn get_args(&self) -> &[String] {
+        &self.args
+    }
+}
+
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
 /// extracts this release package and exec's the orchestrator binary contained
@@ -31,7 +55,7 @@ const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<ReplicaProcess>>,
+    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     cup_provider: Arc<CatchUpPackageProvider>,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
@@ -50,7 +74,7 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<ReplicaProcess>>,
+        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         cup_provider: Arc<CatchUpPackageProvider>,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
@@ -380,7 +404,11 @@ impl Upgrade {
         self.replica_process
             .lock()
             .unwrap()
-            .start(replica_binary, replica_version, cmd)
+            .start(ReplicaProcess {
+                version: replica_version.clone(),
+                binary: replica_binary,
+                args: cmd,
+            })
             .map_err(|e| {
                 OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
             })

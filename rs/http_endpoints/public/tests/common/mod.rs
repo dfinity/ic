@@ -14,11 +14,10 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
-    time_source::SysTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_interfaces_state_manager::{CertifiedStateReader, Labeled, StateReader};
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -45,7 +44,7 @@ use ic_test_utilities::{
 };
 use ic_types::{
     artifact_kind::IngressArtifact,
-    batch::{BatchPayload, ReceivedEpochStats, ValidationContext},
+    batch::{BatchPayload, RawQueryStats, ValidationContext},
     consensus::{
         certification::{Certification, CertificationContent},
         dkg::Dealings,
@@ -159,10 +158,10 @@ pub fn default_read_certified_state(
 }
 
 pub fn default_certified_state_reader(
-) -> Option<Box<dyn CertifiedStateReader<State = ReplicatedState> + 'static>> {
-    struct FakeCertifiedStateReader(Arc<ReplicatedState>, MixedHashTree, Certification);
+) -> Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>> {
+    struct FakeCertifiedStateSnapshot(Arc<ReplicatedState>, MixedHashTree, Certification);
 
-    impl CertifiedStateReader for FakeCertifiedStateReader {
+    impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
         type State = ReplicatedState;
 
         fn get_state(&self) -> &ReplicatedState {
@@ -178,7 +177,7 @@ pub fn default_certified_state_reader(
     }
 
     let (state, hash_tree, certification) = default_read_certified_state(&LabeledTree::Leaf(()))?;
-    Some(Box::new(FakeCertifiedStateReader(
+    Some(Box::new(FakeCertifiedStateSnapshot(
         state,
         hash_tree,
         certification,
@@ -207,7 +206,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
-            ReceivedEpochStats::default(),
+            RawQueryStats::default(),
         )),
     )
 }
@@ -237,7 +236,7 @@ pub fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_latest_certified_height);
 
     mock_state_manager
-        .expect_get_certified_state_reader()
+        .expect_get_certified_state_snapshot()
         .returning(default_certified_state_reader);
 
     mock_state_manager
@@ -422,7 +421,6 @@ pub fn start_http_endpoint(
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
     let crypto = Arc::new(CryptoReturningOk::default());
 
-    let time_source = Arc::new(SysTimeSource::new());
     let (ingress_tx, ingress_rx) = crossbeam::channel::unbounded();
     let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
     ingress_pool_throtller
@@ -436,7 +434,6 @@ pub fn start_http_endpoint(
         query_exe,
         Arc::new(RwLock::new(ingress_pool_throtller)),
         ingress_tx,
-        time_source,
         state_manager,
         crypto as Arc<_>,
         registry_client,

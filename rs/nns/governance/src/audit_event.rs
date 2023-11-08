@@ -1,6 +1,6 @@
 use crate::{
     pb::v1::{audit_event::reset_aging::NeuronDissolveState, neuron::DissolveState, AuditEvent},
-    storage::AUDIT_EVENTS_LOG,
+    storage::with_audit_events_log,
 };
 
 use ic_stable_structures::Storable;
@@ -32,9 +32,7 @@ impl Storable for AuditEvent {
 
 #[allow(dead_code)]
 pub fn add_audit_event(event: AuditEvent) {
-    AUDIT_EVENTS_LOG.with(|log| {
-        log.borrow()
-            .append(&event)
-            .expect("failed to append an event");
+    with_audit_events_log(|log| {
+        log.append(&event).expect("failed to append an event");
     });
 }

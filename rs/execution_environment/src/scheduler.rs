@@ -13,15 +13,14 @@ use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
-use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionRoundType, RegistryExecutionSettings,
-};
+use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, Scheduler};
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
         execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
+        DEFAULT_QUEUE_CAPACITY,
     },
     page_map::PageAllocatorFileDescriptor,
     testing::ReplicatedStateTesting,
@@ -31,7 +30,9 @@ use ic_system_api::InstructionLimits;
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, StopCanisterContext},
+    messages::{
+        CallbackId, CanisterMessage, Ingress, MessageId, Payload, Response, StopCanisterContext,
+    },
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };
@@ -765,7 +766,6 @@ impl SchedulerImpl {
         // Distribute subnet available memory equally between the threads.
         let round_limits_per_thread = RoundLimits {
             instructions: round_limits.instructions,
-            execution_complexity: round_limits.execution_complexity.clone(),
             subnet_available_memory: (round_limits.subnet_available_memory
                 / self.config.scheduler_cores as i64),
             compute_allocation_used: round_limits.compute_allocation_used,
@@ -788,7 +788,6 @@ impl SchedulerImpl {
                 let deterministic_time_slicing = self.deterministic_time_slicing;
                 let round_limits = RoundLimits {
                     instructions: round_limits.instructions,
-                    execution_complexity: round_limits.execution_complexity.clone(),
                     subnet_available_memory: round_limits_per_thread.subnet_available_memory,
                     compute_allocation_used: round_limits.compute_allocation_used,
                 };
@@ -818,7 +817,6 @@ impl SchedulerImpl {
         let mut ingress_results = Vec::new();
         let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
-        let mut max_execution_complexity_per_thread = ExecutionComplexity::default();
         let mut heap_delta = NumBytes::from(0);
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
@@ -829,11 +827,6 @@ impl SchedulerImpl {
             total_instructions_executed += instructions_executed;
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
-
-            let execution_complexity = &round_limits_per_thread.execution_complexity
-                - &result.round_limits.execution_complexity;
-            max_execution_complexity_per_thread =
-                max_execution_complexity_per_thread.max(execution_complexity);
 
             self.metrics.compute_utilization_per_core.observe(
                 instructions_executed.get() as f64
@@ -853,8 +846,6 @@ impl SchedulerImpl {
         // Since there are multiple threads, we update the global limit using
         // the thread that executed the most instructions.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
-        round_limits.execution_complexity =
-            &round_limits.execution_complexity - &max_execution_complexity_per_thread;
 
         self.metrics
             .instructions_consumed_per_round
@@ -1248,6 +1239,85 @@ impl SchedulerImpl {
     }
 }
 
+// EXC-1510: Fix broken invariant on canister.
+// This code will be removed once it's deployed to production.
+fn fix_broken_canister_invariant(log: &ReplicaLogger, state: &mut ReplicatedState) {
+    use ic_base_types::PrincipalId;
+    let canister_id: CanisterId = CanisterId::unchecked_from_principal(
+        PrincipalId::from_str("rw3vb-eaaaa-aaaak-aet6a-cai").unwrap(),
+    );
+
+    if let Some(canister) = state.canister_state_mut(&canister_id) {
+        let num_callbacks = canister
+            .system_state
+            .call_context_manager()
+            .map(|ccm| ccm.callbacks().len())
+            .unwrap_or(0);
+        let num_reservations = canister
+            .system_state
+            .queues()
+            .input_queues_reservation_count();
+        // The canister may be handling additional responses at this time. If so, we do
+        // not want to have to guess which queue has the leaked reservation and which
+        // queue has a response (or a valid reservation). We will retry when all other
+        // responses and reservations are gone.
+        let num_responses = canister.system_state.queues().input_queues_response_count();
+        if num_callbacks == 0 && num_responses == 0 && num_reservations == 1 {
+            info!(
+                log,
+                "[EXC-1510] Found canister {} with broken invariant", canister_id
+            );
+
+            let mut peers: Vec<CanisterId> = canister
+                .system_state
+                .queues()
+                .available_output_request_slots()
+                .into_iter()
+                .filter(|(_, v)| *v == DEFAULT_QUEUE_CAPACITY - 1)
+                .map(|(k, _)| k)
+                .collect();
+            if peers.len() != 1 {
+                error!(
+                    log,
+                    "[EXC-1510] Expecting exactly one queue with one reservation, found {}. Aborting.",
+                    peers.len()
+                );
+                return;
+            }
+            assert_eq!(1, peers.len());
+            let peer = peers.pop().unwrap();
+
+            info!(
+                log,
+                "[EXC-1510] Enqueuing dummy response from canister {}", peer
+            );
+
+            use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
+            canister
+                .system_state
+                .queues_mut()
+                .push_input(
+                    Response {
+                        originator: canister_id,
+                        respondent: peer,
+                        originator_reply_callback: CallbackId::new(u64::MAX),
+                        refund: Cycles::zero(),
+                        response_payload: Payload::Data(vec![]),
+                    }
+                    .into(),
+                    InputQueueType::LocalSubnet,
+                )
+                .unwrap();
+
+            info!(
+                log,
+                "[EXC-1510] Canister invariant check after fix: {:?}",
+                canister.check_invariants(NumBytes::from(u64::MAX))
+            );
+        }
+    }
+}
+
 impl Scheduler for SchedulerImpl {
     type State = ReplicatedState;
 
@@ -1290,6 +1360,8 @@ impl Scheduler for SchedulerImpl {
                 &self.metrics,
                 &round_log,
             );
+
+            fix_broken_canister_invariant(&round_log, &mut state);
 
             long_running_canister_ids = state
                 .canister_states
@@ -1375,9 +1447,6 @@ impl Scheduler for SchedulerImpl {
                 instructions: as_round_instructions(
                     self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
                 ),
-                execution_complexity: ExecutionComplexity::with_cpu(
-                    self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
-                ),
                 subnet_available_memory: self.exec_env.subnet_available_memory(&state),
                 compute_allocation_used: state.total_compute_allocation(),
             }
@@ -1442,7 +1511,6 @@ impl Scheduler for SchedulerImpl {
             // messages that do not consume instructions. To allow that, we set
             // the number available instructions to 1 if it is not positive.
             round_limits.instructions = round_limits.instructions.max(RoundInstructions::from(1));
-            round_limits.execution_complexity.cpu = round_limits.instructions.get().into();
 
             state = self.drain_subnet_queues(
                 state,
@@ -1475,7 +1543,6 @@ impl Scheduler for SchedulerImpl {
                 as_round_instructions(self.config.max_instructions_per_round)
                     - as_round_instructions(max_instructions_per_slice)
                     + RoundInstructions::from(1);
-            round_limits.execution_complexity.cpu = round_limits.instructions.get().into();
         }
 
         // Scheduling.
@@ -1950,10 +2017,10 @@ fn observe_replicated_state_metrics(
                 for (origin, origin_time) in &old_call_contexts {
                     warn!(
                         logger,
-                        "Call context has been open for {:?}: origin: {:?}, respondent: {}",
-                        state.time().saturating_sub(*origin_time),
+                        "Call context on canister {} with origin {:?} has been open for {:?}",
+                        canister.canister_id(),
                         origin,
-                        canister.canister_id()
+                        state.time().saturating_sub(*origin_time),
                     );
                 }
             }
@@ -2085,7 +2152,7 @@ fn can_execute_msg(
     }
 
     if ongoing_long_install_code {
-        let maybe_instal_code_method = match msg {
+        let maybe_install_code_method = match msg {
             CanisterMessage::Ingress(ingress) => {
                 Ic00Method::from_str(ingress.method_name.as_str()).ok()
             }
@@ -2096,8 +2163,9 @@ fn can_execute_msg(
         };
 
         // Only one install code message allowed at a time.
-        if let Some(Ic00Method::InstallCode) = maybe_instal_code_method {
-            return false;
+        match maybe_install_code_method {
+            Some(Ic00Method::InstallCode) | Some(Ic00Method::InstallChunkedCode) => return false,
+            _ => {}
         }
     }
 
@@ -2157,7 +2225,7 @@ fn get_instructions_limits_for_subnet_message(
             | StoredChunks
             | DeleteChunks
             | ClearChunkStore => default_limits,
-            InstallCode => InstructionLimits::new(
+            InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,
                 config.max_instructions_per_install_code_slice,

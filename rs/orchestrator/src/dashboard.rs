@@ -1,11 +1,15 @@
+use crate::upgrade::ReplicaProcess;
 use crate::{
-    catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
-    replica_process::ReplicaProcess, ssh_access_manager::SshAccessParameters,
+    catch_up_package_provider::CatchUpPackageProvider, process_manager::ProcessManager,
+    registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
 };
 use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_types::{consensus::HasHeight, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{
+    consensus::HasHeight, hostos_version::HostosVersion, NodeId, RegistryVersion, ReplicaVersion,
+    SubnetId,
+};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
@@ -18,9 +22,10 @@ pub(crate) struct OrchestratorDashboard {
     node_id: NodeId,
     last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
-    replica_process: Arc<Mutex<ReplicaProcess>>,
+    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
     replica_version: ReplicaVersion,
+    hostos_version: Option<HostosVersion>,
     cup_provider: Arc<CatchUpPackageProvider>,
     logger: ReplicaLogger,
 }
@@ -39,6 +44,7 @@ impl Dashboard for OrchestratorDashboard {
              subnet id: {}\n\
              replica process id: {}\n\
              replica version: {}\n\
+             host os version: {}\n\
              scheduled upgrade: {}\n\
              {}\n\
              firewall config registry version: {}\n\
@@ -52,6 +58,10 @@ impl Dashboard for OrchestratorDashboard {
             self.get_subnet_id().await,
             self.get_pid(),
             self.replica_version,
+            self.hostos_version
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "None".to_string()),
             self.get_scheduled_upgrade().await,
             self.get_local_cup_info(),
             *self.last_applied_firewall_version.read().await,
@@ -73,9 +83,10 @@ impl OrchestratorDashboard {
         node_id: NodeId,
         last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
-        replica_process: Arc<Mutex<ReplicaProcess>>,
+        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         subnet_id: Arc<RwLock<Option<SubnetId>>>,
         replica_version: ReplicaVersion,
+        hostos_version: Option<HostosVersion>,
         cup_provider: Arc<CatchUpPackageProvider>,
         logger: ReplicaLogger,
     ) -> Self {
@@ -87,6 +98,7 @@ impl OrchestratorDashboard {
             replica_process,
             subnet_id,
             replica_version,
+            hostos_version,
             cup_provider,
             logger,
         }

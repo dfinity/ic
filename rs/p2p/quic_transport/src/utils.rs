@@ -12,12 +12,18 @@
 //!       encoded header and body and reconstructing it into a typed request.
 //! Response encoding Response<Bytes>:
 //!     - Same as request expect that the header contains a HeaderMap and a Statuscode.
-use axum::body::{Body, BoxBody, HttpBody};
+use axum::{
+    body::{Body, BoxBody, HttpBody},
+    extract::State,
+    middleware::Next,
+};
 use bincode::Options;
 use bytes::{Buf, BufMut, Bytes};
 use http::{Request, Response, StatusCode, Uri};
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
+
+use crate::metrics::QuicTransportMetrics;
 
 #[derive(Debug)]
 pub(crate) enum RecvError {
@@ -151,6 +157,23 @@ struct WireRequest<'a> {
     uri: Uri,
     #[serde(with = "serde_bytes")]
     body: &'a [u8],
+}
+
+/// Axum middleware to collect metrics
+pub(crate) async fn collect_metrics<B>(
+    State(state): State<QuicTransportMetrics>,
+    request: Request<B>,
+    next: Next<B>,
+) -> axum::response::Response {
+    state
+        .request_handle_total
+        .with_label_values(&[request.uri().path()])
+        .inc();
+    let _timer = state
+        .request_handle_duration
+        .with_label_values(&[request.uri().path()])
+        .start_timer();
+    next.run(request).await
 }
 
 // Copied from hyper. Used to transform `BoxBodyBytes` to `Bytes`.

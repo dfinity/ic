@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use dfn_core::CanisterId;
 use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha2::Sha224;
@@ -170,6 +170,12 @@ impl<'de> Deserialize<'de> for AccountIdentifier {
     }
 }
 
+impl From<Principal> for AccountIdentifier {
+    fn from(pid: Principal) -> Self {
+        AccountIdentifier::new(PrincipalId(pid), None)
+    }
+}
+
 impl From<PrincipalId> for AccountIdentifier {
     fn from(pid: PrincipalId) -> Self {
         AccountIdentifier::new(pid, None)
@@ -260,7 +266,7 @@ impl TryFrom<&Subaccount> for CanisterId {
     type Error = CanisterIdError;
 
     fn try_from(subaccount: &Subaccount) -> Result<Self, Self::Error> {
-        CanisterId::new(subaccount.try_into()?)
+        Ok(CanisterId::unchecked_from_principal(subaccount.try_into()?))
     }
 }
 

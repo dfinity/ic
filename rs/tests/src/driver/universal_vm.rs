@@ -141,7 +141,7 @@ impl UniversalVm {
                 }
                 UniversalVmConfig::Img(config_img) => config_img.to_path_buf(),
             };
-            let file_id = id_of_file(config_img.clone())?;
+            let mut file_id = id_of_file(config_img.clone())?;
 
             let upload = match farm.claim_file(&file_id)? {
                 ClaimResult::FileClaimed(file_expiration) => {
@@ -161,7 +161,7 @@ impl UniversalVm {
             };
 
             if upload {
-                let file_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
+                file_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
                 info!(env.logger(), "Uploaded image: {}", file_id);
             } else {
                 info!(

@@ -1,7 +1,10 @@
 [package]
 name = "ic-canister-client"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 backoff = "0.3.0"
@@ -17,14 +20,14 @@ ic-types = { path = "../types/types" }
 async-trait = "0.1.36"
 futures-util = "0.3.21"
 hyper = { version = "0.14.18", features = ["client", "tcp", "http1", "http2"] }
-hyper-tls = "0.5.0"
-itertools = "0.10.3"
-native-tls = { version = "0.2.7", features = ["alpn"] }
+hyper-rustls = { version = "0.24.0", features = ["http2"] }
+itertools = { workspace = true }
 prost = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
-serde_bytes = "0.11"
-serde_cbor = "0.11.1"
-tokio = { version = "1.32.0", features = ["macros", "time"] }
+rustls = { version = "^0.21.0", features = ["dangerous_configuration"] }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+tokio = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"
 
@@ -35,7 +38,6 @@ ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-validator = { path = "../validator" }
-openssl = "0.10.55"
 rand = "0.8"
 rand_chacha = "0.3"
 tokio-test = "0.4.0"

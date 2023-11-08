@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::util::mock_time;
 use ic_types::{
-    batch::{Batch, BatchMessages},
+    batch::{Batch, BatchMessages, BlockmakerMetrics},
     Height, Randomness, RegistryVersion, Time,
 };
 
@@ -23,6 +23,7 @@ impl Default for BatchBuilder {
                 registry_version: RegistryVersion::from(1),
                 time: mock_time(),
                 consensus_responses: vec![],
+                blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             },
         }
     }

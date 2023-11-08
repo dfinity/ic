@@ -26,9 +26,10 @@ where
     T: FnOnce(&mut ConsensusPoolImpl),
 {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-        let mut consensus_pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let mut consensus_pool = ConsensusPoolImpl::new(
+            node_test_id(0),
             subnet_test_id(0),
-            make_genesis(ic_types::consensus::dkg::Summary::fake()),
+            (&make_genesis(ic_types::consensus::dkg::Summary::fake())).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),

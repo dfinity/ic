@@ -1,5 +1,5 @@
 use candid::{encode_one, Principal};
-use pocket_ic::{common::blob::BlobCompression, PocketIc, WasmResult};
+use pocket_ic::{common::rest::BlobCompression, PocketIc, WasmResult};
 use std::{io::Read, time::SystemTime};
 
 #[test]
@@ -46,6 +46,8 @@ fn test_counter_canister() {
 
     let can_id = pic.create_canister(None);
     pic.add_cycles(can_id, 1_000_000_000_000_000_000);
+
+    // Open a wasm file and install it on the canister
     let wasm_path = std::env::var_os("COUNTER_WASM").expect("Missing counter wasm file");
     let counter_wasm = std::fs::read(wasm_path).unwrap();
     pic.install_canister(can_id, counter_wasm, vec![], None);
@@ -76,7 +78,7 @@ fn test_checkpoint() {
     let _canister_id = pic.create_canister(None);
 
     pic.create_checkpoint();
-    // todo: read from graph and assert
+    // Insert assertions, VER-2546
 }
 
 #[test]

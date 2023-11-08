@@ -15,7 +15,7 @@ use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::ReceivedEpochStats,
+    batch::RawQueryStats,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     xnet::QueueId,
@@ -371,7 +371,7 @@ pub struct ReplicatedState {
 
     /// Temporary query stats received during the current epoch.
     /// Reset during the start of each epoch.
-    pub epoch_query_stats: ReceivedEpochStats,
+    pub epoch_query_stats: RawQueryStats,
 }
 
 impl ReplicatedState {
@@ -382,7 +382,7 @@ impl ReplicatedState {
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
             consensus_queue: Vec::new(),
-            epoch_query_stats: ReceivedEpochStats::default(),
+            epoch_query_stats: RawQueryStats::default(),
         }
     }
 
@@ -391,7 +391,7 @@ impl ReplicatedState {
         canister_states: BTreeMap<CanisterId, CanisterState>,
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
-        epoch_query_stats: ReceivedEpochStats,
+        epoch_query_stats: RawQueryStats,
     ) -> Self {
         let mut res = Self {
             canister_states,
@@ -744,21 +744,18 @@ impl ReplicatedState {
     }
 
     /// Returns an immutable reference to `self.epoch_query_stats`.
-    pub fn query_stats(&self) -> &ReceivedEpochStats {
+    pub fn query_stats(&self) -> &RawQueryStats {
         &self.epoch_query_stats
     }
 
     /// Updates the byte size of responses in streams for each canister.
     fn update_stream_responses_size_bytes(&mut self) {
-        let stream_responses_size_bytes = self.metadata.streams.responses_size_bytes();
-        for (canister_id, canister_state) in self.canister_states.iter_mut() {
-            canister_state.set_stream_responses_size_bytes(
-                stream_responses_size_bytes
-                    .get(canister_id)
-                    .cloned()
-                    .unwrap_or_default(),
-            )
+        for (canister_id, responses_size_bytes) in self.metadata.streams.responses_size_bytes() {
+            if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
+                canister_state.set_stream_responses_size_bytes(*responses_size_bytes);
+            }
         }
+        Arc::make_mut(&mut self.metadata.streams).prune_zero_responses_size_bytes()
     }
 
     /// Returns the number of canisters in this `ReplicatedState`.
@@ -891,7 +888,7 @@ impl ReplicatedState {
             metadata,
             subnet_queues,
             consensus_queue,
-            epoch_query_stats: ReceivedEpochStats::default(), // Don't preserve query stats during subnet splitting.
+            epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
         })
     }
 
@@ -917,7 +914,7 @@ impl ReplicatedState {
         } = self;
 
         // Reset query stats after subnet split
-        self.epoch_query_stats = ReceivedEpochStats::default();
+        self.epoch_query_stats = RawQueryStats::default();
 
         metadata
             .split_from

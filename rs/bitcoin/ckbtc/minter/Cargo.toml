@@ -1,7 +1,10 @@
 [package]
 name = "ic-ckbtc-minter"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "ic-ckbtc-minter"
@@ -27,10 +30,11 @@ ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-ic00-types = { path = "../../../types/ic00_types" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
-ic-icrc1-client-cdk = { path = "../../../rosetta-api/icrc1/client/cdk" }
+icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
+ic-utils-ensure = { path = "../../../utils/ensure" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 lazy_static = "1.4.0"
 minicbor = { workspace = true }
@@ -38,9 +42,9 @@ minicbor-derive = { workspace = true }
 num-traits = "0.2.14"
 ripemd = "0.1.1"
 scopeguard = "1.1.0"
-serde = "1.0.136"
-serde_bytes = "0.11"
-serde_json = "1.0.96"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
@@ -52,4 +56,4 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-bitcoin-canister-mock = { path = "../../mock" }
 proptest = "1.0"
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }

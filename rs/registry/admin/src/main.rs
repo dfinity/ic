@@ -85,15 +85,16 @@ use ic_registry_client_helpers::{
     subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    get_node_record_node_id, is_node_record_key, make_api_boundary_node_record_key,
-    make_blessed_replica_versions_key, make_canister_migrations_record_key, make_crypto_node_key,
+    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
+    is_node_record_key, make_api_boundary_node_record_key, make_blessed_replica_versions_key,
+    make_canister_migrations_record_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    HOSTOS_VERSION_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
-    ROOT_SUBNET_ID_KEY,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -117,6 +118,7 @@ use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     p2p, CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
+use indexmap::IndexMap;
 use itertools::izip;
 use maplit::hashmap;
 use prost::Message;
@@ -151,6 +153,7 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
+use std::net::Ipv6Addr;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
@@ -163,7 +166,9 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
-use types::{ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord};
+use types::{
+    NodeDetails, ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord,
+};
 use url::Url;
 
 #[macro_use]
@@ -458,6 +463,8 @@ enum SubCommand {
     /// Sub-command to fetch an API Boundary Node record from the registry.
     /// Retrieve an API Boundary Node record
     GetApiBoundaryNode(GetApiBoundaryNodeCmd),
+    /// Retrieve all API Boundary Node Ids
+    GetApiBoundaryNodes,
 }
 
 /// Indicates whether a value should be added or removed.
@@ -2462,6 +2469,25 @@ struct ProposeToOpenSnsTokenSwap {
 
 impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
     fn from(cli_proposal: &ProposeToOpenSnsTokenSwap) -> OpenSnsTokenSwap {
+        let min_direct_participation_icp_e8s =
+            cli_proposal
+                .community_fund_investment_e8s
+                .map(|community_fund_investment_e8s| {
+                    cli_proposal
+                        .min_participant_icp_e8s
+                        .checked_sub(community_fund_investment_e8s)
+                        .unwrap()
+                });
+        let max_direct_participation_icp_e8s =
+            cli_proposal
+                .community_fund_investment_e8s
+                .map(|community_fund_investment_e8s| {
+                    cli_proposal
+                        .max_participant_icp_e8s
+                        .checked_sub(community_fund_investment_e8s)
+                        .unwrap()
+                });
+
         let ProposeToOpenSnsTokenSwap {
             target_swap_canister_id,
             min_participants,
@@ -2492,6 +2518,8 @@ impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
                 min_participants,
                 min_icp_e8s,
                 max_icp_e8s,
+                min_direct_participation_icp_e8s,
+                max_direct_participation_icp_e8s,
                 min_participant_icp_e8s,
                 max_participant_icp_e8s,
                 swap_due_timestamp_seconds,
@@ -3663,6 +3691,9 @@ struct ProposeToCreateServiceNervousSystemCmd {
     #[clap(long, value_parser=parse_tokens)]
     neurons_fund_investment_icp: nervous_system_pb::Tokens,
 
+    #[clap(long)]
+    neurons_fund_participation: Option<bool>,
+
     // Ledger
     // ------
     #[clap(long, value_parser=parse_tokens)]
@@ -3755,6 +3786,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             swap_start_time,
             swap_duration,
             neurons_fund_investment_icp,
+            neurons_fund_participation,
 
             transaction_fee,
             token_name,
@@ -3865,6 +3897,10 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
         let swap_parameters = {
             let minimum_participants = Some(swap_minimum_participants);
+            let minimum_direct_participation_icp =
+                swap_minimum_icp.checked_sub(&neurons_fund_investment_icp);
+            let maximum_direct_participation_icp =
+                swap_maximum_icp.checked_sub(&neurons_fund_investment_icp);
             let minimum_icp = Some(swap_minimum_icp);
             let maximum_icp = Some(swap_maximum_icp);
             let minimum_participant_icp = Some(swap_minimum_participant_icp);
@@ -3890,6 +3926,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 minimum_participants,
                 minimum_icp,
                 maximum_icp,
+                minimum_direct_participation_icp,
+                maximum_direct_participation_icp,
                 minimum_participant_icp,
                 maximum_participant_icp,
                 confirmation_text,
@@ -3898,6 +3936,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 start_time,
                 duration,
                 neurons_fund_investment_icp,
+                neurons_fund_participation,
             })
         };
 
@@ -4314,6 +4353,16 @@ async fn get_subnet_record(
     SubnetRecord::from(&value)
 }
 
+async fn get_subnet_record_with_details(
+    subnet_id: SubnetId,
+    registry_canister: &RegistryCanister,
+    all_nodes_with_details: &IndexMap<PrincipalId, NodeDetails>,
+) -> SubnetRecord {
+    get_subnet_record(registry_canister, subnet_id)
+        .await
+        .with_node_details(all_nodes_with_details)
+}
+
 /// `main()` method for the `ic-admin` utility.
 #[tokio::main]
 async fn main() {
@@ -4445,7 +4494,7 @@ async fn main() {
             .await;
         }
         SubCommand::GetNodeListSince(cmd) => {
-            let node_records = get_node_list_since(cmd.version, registry_canister).await;
+            let node_records = get_node_list_since(cmd.version, &registry_canister).await;
 
             let res = serde_json::to_string(&node_records)
                 .unwrap_or_else(|_| "Could not serialize node_records".to_string());
@@ -4458,47 +4507,66 @@ async fn main() {
             // data, there is no nice way to print the whole topology.
             // Instead, we print the surrounding structure in a not so nice way
             // and delegate pretty-printing to jq or other consumers.
-            // Also, this method is slow, as each fetch needs to happen in sequence (due to
+            // This method is slow, as each fetch needs to happen in sequence (due to
             // printing from it).
-            let subnet_ids = get_subnet_ids(&registry_canister).await;
-            let subnet_count = subnet_ids.len();
+            //
+            // Fetch a list of all nodes, with IP addresses and other details
+            let all_nodes_with_details = get_node_list_since(0, &registry_canister).await;
             let mut seen: HashSet<NodeId> = HashSet::new();
-            println!("{{ \"topology\": {{");
-            println!("\"subnets\": {{");
-            for (i, subnet_id) in subnet_ids.iter().enumerate() {
-                println!("\"{}\": ", subnet_id);
-                let record = print_and_get_last_value::<SubnetRecordProto>(
-                    make_subnet_record_key(*subnet_id).as_bytes().to_vec(),
+
+            #[derive(Serialize)]
+            struct Topology {
+                // IndexMap preserves the insertion order
+                subnets: IndexMap<SubnetId, SubnetRecord>,
+                api_boundary_nodes: Vec<NodeId>,
+                unassigned_nodes: IndexMap<NodeId, NodeDetails>,
+            }
+            let mut topology = Topology {
+                subnets: IndexMap::new(),
+                api_boundary_nodes: Vec::new(),
+                unassigned_nodes: IndexMap::new(),
+            };
+            eprintln!("INFO: Fetching subnets...");
+            let subnet_ids = get_subnet_ids(&registry_canister).await;
+            for subnet_id in subnet_ids.into_iter() {
+                let subnet_record = get_subnet_record_with_details(
+                    subnet_id,
                     &registry_canister,
-                    true,
+                    &all_nodes_with_details,
                 )
                 .await;
-                if i + 1 != subnet_count {
-                    println!(",")
-                }
+                topology.subnets.insert(subnet_id, subnet_record.clone());
 
-                for node in record
+                for node in subnet_record
                     .membership
                     .iter()
-                    .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).unwrap()))
+                    .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap()))
                 {
                     seen.insert(node);
                 }
             }
-            println!("}}");
-            let node_ids = get_node_list_since(0, registry_canister)
-                .await
+            eprintln!("INFO: Fetching API Boundary nodes...");
+            // list all API Boundary Nodes
+            let api_bn_node_ids = get_api_boundary_node_ids(opts.nns_url.clone())
+                .iter()
+                .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap()))
+                .collect();
+            seen.extend(&api_bn_node_ids);
+            topology.api_boundary_nodes = api_bn_node_ids;
+            // list all remaining nodes as unassigned nodes
+            let unassigned_node_ids = all_nodes_with_details
                 .into_iter()
-                .filter(|record| {
-                    let node_id = NodeId::from(PrincipalId::from_str(&record.node_id).unwrap());
-                    !seen.contains(&node_id)
+                .filter_map(|(node_id, node_details)| {
+                    let node_id = NodeId::from(node_id);
+                    if seen.contains(&node_id) {
+                        None
+                    } else {
+                        Some((node_id, node_details))
+                    }
                 })
-                .collect::<Vec<_>>();
-            println!(
-                ",\"unassigned_nodes\": {}",
-                serde_json::to_string_pretty(&node_ids).unwrap()
-            );
-            println!("}}}}");
+                .collect::<IndexMap<_, _>>();
+            topology.unassigned_nodes = unassigned_node_ids;
+            println!("{}", serde_json::to_string_pretty(&topology).unwrap());
         }
         SubCommand::ConvertNumericNodeIdToPrincipalId(
             convert_numeric_node_id_to_principal_id_cmd,
@@ -5620,6 +5688,14 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::GetApiBoundaryNodes => {
+            let records = get_api_boundary_node_ids(opts.nns_url.clone());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&records)
+                    .expect("Failed to serialize the records to JSON")
+            );
+        }
     }
 }
 
@@ -6070,18 +6146,12 @@ fn get_firewall_ruleset_hash(cmd: GetFirewallRulesetHashCmd) {
     println!("{}", compute_firewall_ruleset_hash(&rules));
 }
 
-/// Encapsulates a node/node operator id pair.
-#[derive(Serialize)]
-struct NodeAndNodeOperatorId {
-    node_id: String,
-    node_operator_id: String,
-}
-
 /// Fetches the list of nodes that were added since `version` to the registry.
 async fn get_node_list_since(
     version: u64,
-    registry: RegistryCanister,
-) -> Vec<NodeAndNodeOperatorId> {
+    registry: &RegistryCanister,
+) -> IndexMap<PrincipalId, NodeDetails> {
+    eprintln!("INFO: Fetching a list of all nodes from the registry...");
     let (nns_subnet_id_vec, _) = registry
         .get_value(ROOT_SUBNET_ID_KEY.as_bytes().to_vec(), None)
         .await
@@ -6111,13 +6181,20 @@ async fn get_node_list_since(
     // pagination. This is why we loop here.
     let mut deltas = vec![];
     let mut current_version = version;
+    let mut errs = 0;
     loop {
         match registry
             .get_certified_changes_since(current_version, &nns_pub_key)
             .await
         {
-            Err(err) => panic!("Couldn't fetch registry delta: {:?}", err),
+            Err(err) => {
+                errs += 1;
+                if errs > 10 {
+                    panic!("Couldn't fetch registry delta: {:?}", err)
+                }
+            }
             Ok((mut v, _, _)) => {
+                errs = 0;
                 current_version = v[v.len() - 1].version.get();
                 deltas.append(&mut v);
                 if current_version >= latest_version {
@@ -6127,40 +6204,70 @@ async fn get_node_list_since(
         };
     }
 
-    let mut node_map = BTreeMap::new();
+    let mut node_map: IndexMap<PrincipalId, NodeRecord> = IndexMap::new();
+    let mut node_operator_map: IndexMap<PrincipalId, NodeOperatorRecord> = IndexMap::new();
     deltas.into_iter().for_each(|versioned_record| {
         // Since RegistryVersionedRecord's are strongly typed; we must filter those
         // with the relevant keys.
         if is_node_record_key(&versioned_record.key) {
+            let node_id = get_node_record_node_id(&versioned_record.key).unwrap();
             match versioned_record.value {
                 Some(v) => {
-                    let decoded_v = NodeRecord::decode(v.as_slice()).unwrap();
-                    node_map
-                        .entry(versioned_record.key)
-                        .and_modify(|e: &mut Vec<NodeRecord>| e.push(decoded_v.clone()))
-                        .or_insert_with(|| vec![decoded_v]);
+                    let record = NodeRecord::decode(v.as_slice()).unwrap();
+                    *node_map.entry(node_id).or_default() = record;
                 }
                 None => {
-                    node_map.remove(&versioned_record.key);
+                    node_map.remove(&node_id);
+                }
+            };
+        } else if is_node_operator_record_key(&versioned_record.key) {
+            let node_operator_id =
+                get_node_operator_id_from_record_key(&versioned_record.key).unwrap();
+            match versioned_record.value {
+                Some(v) => {
+                    let record = NodeOperatorRecord::decode(v.as_slice()).unwrap();
+                    *node_operator_map.entry(node_operator_id).or_default() = record;
+                }
+                None => {
+                    node_operator_map.remove(&node_operator_id);
                 }
             };
         }
     });
 
-    let node_records: Vec<NodeAndNodeOperatorId> = node_map
-        .iter()
-        .filter_map(|(k, v)| {
-            v.last().map(|res| NodeAndNodeOperatorId {
-                node_id: format!("{}", get_node_record_node_id(k).unwrap()),
-                node_operator_id: format!(
-                    "{}",
-                    PrincipalId::try_from(res.node_operator_id.clone()).unwrap()
+    let result: IndexMap<PrincipalId, NodeDetails> = node_map
+        .into_iter()
+        .map(|(node_id, node_record): (PrincipalId, NodeRecord)| {
+            let node_operator_id =
+                PrincipalId::try_from(node_record.node_operator_id).unwrap_or_default();
+            let (node_provider_id, dc_id) = match node_operator_map.get(&node_operator_id) {
+                Some(node_operator_record) => (
+                    PrincipalId::try_from(&node_operator_record.node_provider_principal_id)
+                        .unwrap_or_default(),
+                    node_operator_record.dc_id.clone(),
                 ),
-            })
+                None => (PrincipalId::default(), "".to_string()),
+            };
+            (
+                node_id,
+                NodeDetails {
+                    node_operator_id,
+                    ipv6: node_record
+                        .http
+                        .as_ref()
+                        .map(|conn| {
+                            Ipv6Addr::from_str(&conn.ip_addr)
+                                .unwrap_or_else(|_| Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0))
+                        })
+                        .unwrap_or_else(|| Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
+                    node_provider_id,
+                    dc_id,
+                },
+            )
         })
         .collect();
 
-    node_records
+    result
 }
 
 /// Parses the URL of a proposal.
@@ -6284,6 +6391,35 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
         }
         Err(error) => panic!("Error getting value from registry: {:?}", error),
     }
+}
+
+fn get_api_boundary_node_ids(nns_url: Url) -> Vec<String> {
+    let registry_client = RegistryClientImpl::new(
+        Arc::new(NnsDataProvider::new(
+            tokio::runtime::Handle::current(),
+            vec![nns_url],
+        )),
+        None,
+    );
+    // maximum number of retries, let the user ctrl+c if necessary
+    registry_client
+        .try_polling_latest_version(usize::MAX)
+        .unwrap();
+    let keys = registry_client
+        .get_key_family(
+            API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
+            registry_client.get_latest_version(),
+        )
+        .unwrap();
+    let records = keys
+        .iter()
+        .map(|k| {
+            k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
+                .unwrap()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    records
 }
 
 /// Writes a threshold signing public key to the given path.

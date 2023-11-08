@@ -175,7 +175,7 @@ pub struct IDkgDealingInternal {
 impl IDkgDealingInternal {
     pub fn new(
         shares: &SecretShares,
-        curve: EccCurveType,
+        signature_curve: EccCurveType,
         seed: Seed,
         threshold: usize,
         recipients: &[MEGaPublicKey],
@@ -189,12 +189,6 @@ impl IDkgDealingInternal {
             ));
         }
 
-        for recipient in recipients {
-            if recipient.curve_type() != curve {
-                return Err(ThresholdEcdsaError::InvalidRecipients);
-            }
-        }
-
         let num_coefficients = threshold;
 
         let mut poly_rng = seed
@@ -205,8 +199,8 @@ impl IDkgDealingInternal {
 
         let (commitment, ciphertext, proof) = match shares {
             SecretShares::Random => {
-                let values = Polynomial::random(curve, num_coefficients, &mut poly_rng); // omega in paper
-                let mask = Polynomial::random(curve, num_coefficients, &mut poly_rng); // omega' in paper
+                let values = Polynomial::random(signature_curve, num_coefficients, &mut poly_rng); // omega in paper
+                let mask = Polynomial::random(signature_curve, num_coefficients, &mut poly_rng); // omega' in paper
 
                 let (ciphertext, commitment) = encrypt_and_commit_pair_of_polynomials(
                     &values,
@@ -221,7 +215,7 @@ impl IDkgDealingInternal {
                 (commitment, ciphertext, None)
             }
             SecretShares::ReshareOfUnmasked(secret) => {
-                if secret.curve_type() != curve {
+                if secret.curve_type() != signature_curve {
                     return Err(ThresholdEcdsaError::InvalidSecretShare);
                 }
 
@@ -241,7 +235,8 @@ impl IDkgDealingInternal {
                 (commitment, ciphertext, None)
             }
             SecretShares::ReshareOfMasked(secret, masking) => {
-                if secret.curve_type() != curve || masking.curve_type() != curve {
+                if secret.curve_type() != signature_curve || masking.curve_type() != signature_curve
+                {
                     return Err(ThresholdEcdsaError::InvalidSecretShare);
                 }
 
@@ -267,9 +262,9 @@ impl IDkgDealingInternal {
                 (commitment, ciphertext, Some(proof))
             }
             SecretShares::UnmaskedTimesMasked(left_value, (right_value, right_masking)) => {
-                if left_value.curve_type() != curve
-                    || right_value.curve_type() != curve
-                    || right_masking.curve_type() != curve
+                if left_value.curve_type() != signature_curve
+                    || right_value.curve_type() != signature_curve
+                    || right_masking.curve_type() != signature_curve
                 {
                     return Err(ThresholdEcdsaError::InvalidSecretShare);
                 }
@@ -277,7 +272,7 @@ impl IDkgDealingInternal {
                 // Generate secret polynomials
                 let product = left_value.mul(right_value)?;
 
-                let product_masking = EccScalar::random(curve, &mut poly_rng);
+                let product_masking = EccScalar::random(signature_curve, &mut poly_rng);
 
                 let values =
                     Polynomial::random_with_constant(&product, num_coefficients, &mut poly_rng)?;
@@ -320,7 +315,8 @@ impl IDkgDealingInternal {
 
     pub fn publicly_verify(
         &self,
-        curve_type: EccCurveType,
+        key_curve: EccCurveType,
+        signature_curve: EccCurveType,
         transcript_type: &IDkgTranscriptOperationInternal,
         reconstruction_threshold: NumberOfNodes,
         dealer_index: NodeIndex,
@@ -329,10 +325,6 @@ impl IDkgDealingInternal {
     ) -> ThresholdEcdsaResult<()> {
         if self.commitment.len() != reconstruction_threshold.get() as usize {
             return Err(ThresholdEcdsaError::InvalidCommitment);
-        }
-
-        if self.commitment.curve_type() != curve_type {
-            return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
         self.ciphertext.check_validity(
@@ -347,9 +339,9 @@ impl IDkgDealingInternal {
         match (transcript_type, self.proof.as_ref()) {
             (Op::Random, None) => {
                 self.commitment
-                    .verify_is(PolynomialCommitmentType::Pedersen, curve_type)?;
+                    .verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
                 self.ciphertext
-                    .verify_is(MEGaCiphertextType::Pairs, curve_type)?;
+                    .verify_is(MEGaCiphertextType::Pairs, key_curve, signature_curve)?;
                 // no ZK proof for this transcript type
                 Ok(())
             }
@@ -358,10 +350,14 @@ impl IDkgDealingInternal {
                 Some(ZkProof::ProofOfMaskedResharing(proof)),
             ) => {
                 self.commitment
-                    .verify_is(PolynomialCommitmentType::Simple, curve_type)?;
-                previous_commitment.verify_is(PolynomialCommitmentType::Pedersen, curve_type)?;
-                self.ciphertext
-                    .verify_is(MEGaCiphertextType::Single, curve_type)?;
+                    .verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                previous_commitment
+                    .verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
+                self.ciphertext.verify_is(
+                    MEGaCiphertextType::Single,
+                    key_curve,
+                    signature_curve,
+                )?;
 
                 proof.verify(
                     &previous_commitment.evaluate_at(dealer_index)?,
@@ -374,10 +370,13 @@ impl IDkgDealingInternal {
 
             (Op::ReshareOfUnmasked(previous_commitment), None) => {
                 self.commitment
-                    .verify_is(PolynomialCommitmentType::Simple, curve_type)?;
-                previous_commitment.verify_is(PolynomialCommitmentType::Simple, curve_type)?;
-                self.ciphertext
-                    .verify_is(MEGaCiphertextType::Single, curve_type)?;
+                    .verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                previous_commitment.verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                self.ciphertext.verify_is(
+                    MEGaCiphertextType::Single,
+                    key_curve,
+                    signature_curve,
+                )?;
 
                 match previous_commitment {
                     PolynomialCommitment::Pedersen(_) => {
@@ -397,11 +396,11 @@ impl IDkgDealingInternal {
             }
             (Op::UnmaskedTimesMasked(lhs, rhs), Some(ZkProof::ProofOfProduct(proof))) => {
                 self.commitment
-                    .verify_is(PolynomialCommitmentType::Pedersen, curve_type)?;
+                    .verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
                 self.ciphertext
-                    .verify_is(MEGaCiphertextType::Pairs, curve_type)?;
-                lhs.verify_is(PolynomialCommitmentType::Simple, curve_type)?;
-                rhs.verify_is(PolynomialCommitmentType::Pedersen, curve_type)?;
+                    .verify_is(MEGaCiphertextType::Pairs, key_curve, signature_curve)?;
+                lhs.verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                rhs.verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
 
                 proof.verify(
                     &lhs.evaluate_at(dealer_index)?,
@@ -419,20 +418,29 @@ impl IDkgDealingInternal {
     #[allow(clippy::too_many_arguments)]
     pub fn privately_verify(
         &self,
-        curve_type: EccCurveType,
+        key_curve: EccCurveType,
+        signature_curve: EccCurveType,
         private_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
         associated_data: &[u8],
         dealer_index: NodeIndex,
         recipient_index: NodeIndex,
     ) -> ThresholdEcdsaResult<()> {
-        if private_key.curve_type() != curve_type || public_key.curve_type() != curve_type {
+        if private_key.curve_type() != key_curve || public_key.curve_type() != key_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
-        if self.commitment.constant_term().curve_type() != curve_type {
+        if self.commitment.curve_type() != signature_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
+
+        let mega_type = match self.commitment.ctype() {
+            PolynomialCommitmentType::Simple => MEGaCiphertextType::Single,
+            PolynomialCommitmentType::Pedersen => MEGaCiphertextType::Pairs,
+        };
+
+        self.ciphertext
+            .verify_is(mega_type, key_curve, signature_curve)?;
 
         let _opening = self.ciphertext.decrypt_and_check(
             &self.commitment,

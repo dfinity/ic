@@ -3,14 +3,15 @@ use candid::{types::number::Nat, Principal};
 use dfn_candid::{ArgumentDecoder, ArgumentEncoder};
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_icrc1_client::{ICRC1Client, Runtime};
 use ic_ledger_core::{block::BlockIndex, Tokens};
 pub use ic_nervous_system_common::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
+use icrc_ledger_client::{ICRC1Client, Runtime};
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::{Memo, TransferArg},
 };
+use num_traits::ToPrimitive;
 
 // A ICRC1 client runtime that uses dfn_* functionalities
 struct DfnRuntime {}
@@ -27,14 +28,7 @@ impl Runtime for DfnRuntime {
         In: ArgumentEncoder + Send,
         Out: for<'a> ArgumentDecoder<'a>,
     {
-        let principal_id = CanisterId::new(PrincipalId::from(id)).map_err(|e| {
-            // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
-            // check does nothing.
-            (
-                0, /* TODO */
-                format!("Invalid canisterId {}: {}", id, e),
-            )
-        })?;
+        let principal_id = CanisterId::unchecked_from_principal(PrincipalId::from(id));
         dfn_core::api::call_with_cleanup(principal_id, method, dfn_candid::candid_multi_arity, args)
             .await
             .map_err(|(code, msg)| (code.unwrap_or_default(), msg))
@@ -87,11 +81,12 @@ impl ICRC1Ledger for LedgerCanister {
                 err
             ))
         })
+        .map(|n| n.0.to_u64().expect("nat does not fit into u64"))
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         self.client.total_supply().await
-            .map(Tokens::from_e8s)
+            .map(|n| Tokens::from_e8s(n.0.to_u64().expect("nat does not fit into u64")))
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(
                     format!(
@@ -104,7 +99,7 @@ impl ICRC1Ledger for LedgerCanister {
 
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
         self.client.balance_of(account).await
-            .map(Tokens::from_e8s)
+            .map(|n| Tokens::from_e8s(n.0.to_u64().expect("nat does not fit into u64")))
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(
                     format!(
@@ -117,8 +112,6 @@ impl ICRC1Ledger for LedgerCanister {
 
     fn canister_id(&self) -> CanisterId {
         let principal_id = PrincipalId::from(self.client.ledger_canister_id);
-        // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
-        // check does nothing.
-        CanisterId::new(principal_id).expect("Expected the Ledger's target to be a Canister")
+        CanisterId::unchecked_from_principal(principal_id)
     }
 }

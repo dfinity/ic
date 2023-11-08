@@ -1,10 +1,8 @@
-use crate::eth_rpc::into_nat;
-use crate::transactions::EthWithdrawalRequest;
+use crate::state::transactions::EthWithdrawalRequest;
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use minicbor::{Decode, Encode};
-use serde::Serialize;
 use std::fmt::{Display, Formatter};
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
@@ -18,14 +16,14 @@ pub struct Eip1559TransactionPrice {
 impl From<TransactionPrice> for Eip1559TransactionPrice {
     fn from(value: TransactionPrice) -> Self {
         Self {
-            gas_limit: into_nat(value.gas_limit),
+            gas_limit: value.gas_limit.into(),
             max_fee_per_gas: value.max_fee_per_gas.into(),
             max_priority_fee_per_gas: value.max_priority_fee_per_gas.into(),
             max_transaction_fee: value.max_transaction_fee().into(),
         }
     }
 }
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthTransaction {
     pub transaction_hash: String,
 }
@@ -38,14 +36,12 @@ impl From<&SignedEip1559TransactionRequest> for EthTransaction {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
-#[derive(
-    CandidType, Debug, Default, Serialize, Deserialize, Clone, Encode, Decode, PartialEq, Eq,
-)]
+#[derive(CandidType, Debug, Default, Deserialize, Clone, Encode, Decode, PartialEq, Eq)]
 #[cbor(index_only)]
 pub enum CandidBlockTag {
     /// The latest mined block.
@@ -72,14 +68,24 @@ impl From<EthWithdrawalRequest> for RetrieveEthRequest {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub enum RetrieveEthStatus {
     NotFound,
     Pending,
     TxCreated,
-    TxSigned(EthTransaction),
     TxSent(EthTransaction),
-    TxConfirmed(EthTransaction),
+    TxFinalized(TxFinalizedStatus),
+}
+
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub enum TxFinalizedStatus {
+    Success(EthTransaction),
+    PendingReimbursement(EthTransaction),
+    Reimbursed {
+        transaction_hash: String,
+        reimbursed_amount: Nat,
+        reimbursed_in_block: Nat,
+    },
 }
 
 impl Display for RetrieveEthStatus {
@@ -88,9 +94,22 @@ impl Display for RetrieveEthStatus {
             RetrieveEthStatus::NotFound => write!(f, "Not Found"),
             RetrieveEthStatus::Pending => write!(f, "Pending"),
             RetrieveEthStatus::TxCreated => write!(f, "Created"),
-            RetrieveEthStatus::TxSigned(tx) => write!(f, "Signed({})", tx.transaction_hash),
             RetrieveEthStatus::TxSent(tx) => write!(f, "Sent({})", tx.transaction_hash),
-            RetrieveEthStatus::TxConfirmed(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
+            RetrieveEthStatus::TxFinalized(tx_status) => match tx_status {
+                TxFinalizedStatus::Success(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
+                TxFinalizedStatus::PendingReimbursement(tx) => {
+                    write!(f, "PendingReimbursement({})", tx.transaction_hash)
+                }
+                TxFinalizedStatus::Reimbursed {
+                    reimbursed_in_block,
+                    transaction_hash,
+                    reimbursed_amount,
+                } => write!(
+                    f,
+                    "Failure({}, reimbursed: {} Wei in block: {})",
+                    transaction_hash, reimbursed_amount, reimbursed_in_block
+                ),
+            },
         }
     }
 }
@@ -101,11 +120,12 @@ pub struct WithdrawalArg {
     pub recipient: String,
 }
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub enum WithdrawalError {
     AmountTooLow { min_withdrawal_amount: Nat },
     InsufficientFunds { balance: Nat },
     InsufficientAllowance { allowance: Nat },
+    RecipientAddressBlocked { address: String },
     TemporarilyUnavailable(String),
 }
 
@@ -146,6 +166,7 @@ pub mod events {
     use crate::lifecycle::init::InitArg;
     use crate::lifecycle::upgrade::UpgradeArg;
     use candid::{CandidType, Deserialize, Nat, Principal};
+    use serde_bytes::ByteBuf;
 
     #[derive(CandidType, Deserialize, Debug, Clone)]
     pub struct GetEventsArg {
@@ -169,6 +190,41 @@ pub mod events {
     pub struct EventSource {
         pub transaction_hash: String,
         pub log_index: Nat,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub struct AccessListItem {
+        pub address: String,
+        pub storage_keys: Vec<ByteBuf>,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub struct UnsignedTransaction {
+        pub chain_id: Nat,
+        pub nonce: Nat,
+        pub max_priority_fee_per_gas: Nat,
+        pub max_fee_per_gas: Nat,
+        pub gas_limit: Nat,
+        pub destination: String,
+        pub value: Nat,
+        pub data: ByteBuf,
+        pub access_list: Vec<AccessListItem>,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub enum TransactionStatus {
+        Success,
+        Failure,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub struct TransactionReceipt {
+        pub block_hash: String,
+        pub block_number: Nat,
+        pub effective_gas_price: Nat,
+        pub gas_used: Nat,
+        pub status: TransactionStatus,
+        pub transaction_hash: String,
     }
 
     #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -198,18 +254,29 @@ pub mod events {
             withdrawal_amount: Nat,
             destination: String,
             ledger_burn_index: Nat,
+            from: Principal,
+            from_subaccount: Option<[u8; 32]>,
         },
-        SignedTx {
+        CreatedTransaction {
             withdrawal_id: Nat,
-            raw_tx: String,
+            transaction: UnsignedTransaction,
         },
-        SentTransaction {
+        SignedTransaction {
             withdrawal_id: Nat,
-            transaction_hash: String,
+            raw_transaction: String,
+        },
+        ReplacedTransaction {
+            withdrawal_id: Nat,
+            transaction: UnsignedTransaction,
         },
         FinalizedTransaction {
             withdrawal_id: Nat,
-            transaction_hash: String,
+            transaction_receipt: TransactionReceipt,
+        },
+        ReimbursedEthWithdrawal {
+            reimbursed_in_block: Nat,
+            withdrawal_id: Nat,
+            reimbursed_amount: Nat,
         },
     }
 }

@@ -151,6 +151,10 @@ impl InstallCodeHelper {
         self.canister.memory_usage()
     }
 
+    pub fn canister_message_memory_usage(&self) -> NumBytes {
+        self.canister.message_memory_usage()
+    }
+
     /// Returns a struct with all the necessary information to replay the
     /// performed `install_code` steps in subsequent rounds.
     pub fn pause(self) -> PausedInstallCodeHelper {
@@ -268,6 +272,7 @@ impl InstallCodeHelper {
                 self.canister.system_state.freeze_threshold,
                 self.canister.memory_allocation(),
                 self.canister.memory_usage(),
+                self.canister.message_memory_usage(),
                 self.canister.compute_allocation(),
                 original.subnet_size,
                 self.canister.system_state.reserved_balance(),
@@ -413,6 +418,7 @@ impl InstallCodeHelper {
                 reserved_cycles_limit: None,
             },
             self.canister.memory_usage(),
+            self.canister.message_memory_usage(),
             self.canister.memory_allocation(),
             &round_limits.subnet_available_memory,
             &original.execution_parameters.subnet_memory_saturation,

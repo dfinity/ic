@@ -26,6 +26,7 @@ rust_library(
         exclude = [
             "src/main.rs",
             "src/dashboard.rs",
+            "src/dashboard/tests.rs",
         ],
     ),
     crate_name = "ic_cketh_minter",
@@ -35,19 +36,21 @@ rust_library(
     ],
     version = "0.1.0",
     deps = [
+        "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/ecdsa_secp256k1",
         "//rs/crypto/sha3",
         "//rs/phantom_newtype",
         "//rs/types/ic00_types",
+        "//rs/utils/ensure",
         "@crate_index//:candid",
-        "@crate_index//:ciborium",
         "@crate_index//:ethnum",
         "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:hex-literal",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
@@ -77,23 +80,31 @@ rust_test(
     crate = ":minter",
     deps = [
         ":minter",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:assert_matches",
         "@crate_index//:ethers-core",
+        "@crate_index//:maplit",
         "@crate_index//:proptest",
+        "@crate_index//:rand_0_8_4",
     ],
 )
 
 rust_test(
     name = "unit_tests",
+    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_cketh_minter",
     data = [":cketh_minter.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
     },
+    deps = [
+        ":minter",
+        "@crate_index//:scraper",
+    ],
 )
 
-rust_canister(
-    name = "cketh_minter",
+[rust_canister(
+    name = "cketh_minter" + target_suffix,
     srcs = [
         "src/dashboard.rs",
         "src/main.rs",
@@ -102,6 +113,7 @@ rust_canister(
         "templates/dashboard.html",
         "templates/principal_to_bytes.js",
     ],
+    crate_features = features,
     crate_name = "ic_cketh_minter_canister",
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
@@ -109,13 +121,12 @@ rust_canister(
     service_file = "cketh_minter.did",
     deps = [
         ":minter",
+        "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/ecdsa_secp256k1",
-        "//rs/rosetta-api/icrc1/client/cdk",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
-        "@crate_index//:ciborium",
         "@crate_index//:ethabi",
         "@crate_index//:futures",
         "@crate_index//:hex",
@@ -123,9 +134,17 @@ rust_canister(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
     ],
-)
+) for (target_suffix, features) in [
+    ("", []),
+    (
+        "_debug",
+        ["debug_checks"],
+    ),
+]]
 
 rust_binary(
     name = "principal_to_hex",
@@ -140,18 +159,21 @@ rust_test(
     name = "integration_tests",
     srcs = ["tests/tests.rs"],
     data = [
-        ":cketh_minter.wasm",
+        ":cketh_minter_debug.wasm",
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
-        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter.wasm)",
+        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
     deps = [
         ":minter",
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -161,11 +183,14 @@ rust_test(
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:ethers-core",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:num-traits",
+        "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
+        "@crate_index//:strum",
     ],
 )
 

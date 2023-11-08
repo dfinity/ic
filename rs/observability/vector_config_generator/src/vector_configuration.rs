@@ -257,21 +257,25 @@ mod tests {
                 _type: JobType::NodeExporter(NodeOS::Guest),
                 port: 9100,
                 endpoint: "/metrics",
+                scheme: "http",
             },
             Job {
                 _type: JobType::NodeExporter(NodeOS::Host),
                 port: 9100,
                 endpoint: "/metrics",
+                scheme: "http",
             },
             Job {
                 _type: JobType::Orchestrator,
                 port: 9091,
                 endpoint: "/",
+                scheme: "https",
             },
             Job {
                 _type: JobType::Replica,
                 port: 9090,
                 endpoint: "/",
+                scheme: "https",
             },
         ]
     }

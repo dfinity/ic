@@ -3,7 +3,7 @@ mod tests;
 
 use crate::address::Address;
 use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
-use crate::eth_rpc_client::{DefaultTransport, EthRpcClient};
+use crate::eth_rpc_client::{DefaultTransport, EthRpcClient, MultiCallError};
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LogIndex, Wei};
 use crate::state::read_state;
@@ -11,14 +11,13 @@ use candid::Principal;
 use hex_literal::hex;
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct ReceivedEthEvent {
     #[n(0)]
     pub transaction_hash: Hash,
@@ -49,9 +48,7 @@ impl fmt::Debug for ReceivedEthEvent {
 
 /// A unique identifier of the event source: the source transaction hash and the log
 /// entry index.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct EventSource {
     #[n(0)]
     pub transaction_hash: Hash,
@@ -78,7 +75,7 @@ pub async fn last_received_eth_events(
     contract_address: Address,
     from: BlockNumber,
     to: BlockNumber,
-) -> (Vec<ReceivedEthEvent>, Vec<ReceivedEthEventError>) {
+) -> Result<(Vec<ReceivedEthEvent>, Vec<ReceivedEthEventError>), MultiCallError<Vec<LogEntry>>> {
     use crate::eth_rpc::GetLogsParam;
 
     if from > to {
@@ -88,15 +85,14 @@ pub async fn last_received_eth_events(
         ));
     }
 
-    let result: Vec<LogEntry> = read_state(EthRpcClient::<DefaultTransport>::from_state)
+    let result = read_state(EthRpcClient::<DefaultTransport>::from_state)
         .eth_get_logs(GetLogsParam {
             from_block: from.into(),
             to_block: to.into(),
             address: vec![contract_address],
             topics: vec![FixedSizeData(RECEIVED_ETH_EVENT_TOPIC)],
         })
-        .await
-        .expect("HTTP call failed");
+        .await?;
 
     let (ok, not_ok): (Vec<_>, Vec<_>) = result
         .into_iter()
@@ -104,7 +100,7 @@ pub async fn last_received_eth_events(
         .partition(Result::is_ok);
     let valid_transactions: Vec<ReceivedEthEvent> = ok.into_iter().map(Result::unwrap).collect();
     let errors: Vec<ReceivedEthEventError> = not_ok.into_iter().map(Result::unwrap_err).collect();
-    (valid_transactions, errors)
+    Ok((valid_transactions, errors))
 }
 
 pub fn report_transaction_error(error: ReceivedEthEventError) {
@@ -133,7 +129,7 @@ pub enum ReceivedEthEventError {
     },
 }
 
-#[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum EventSourceError {
     #[error("failed to decode principal from bytes {invalid_principal}")]
     InvalidPrincipal { invalid_principal: FixedSizeData },
@@ -164,6 +160,15 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
             transaction_hash,
             log_index,
         };
+
+        if entry.removed {
+            return Err(ReceivedEthEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(
+                    "this event has been removed from the chain".to_string(),
+                ),
+            });
+        }
 
         if entry.topics.len() != 3 {
             return Err(ReceivedEthEventError::InvalidEventSource {

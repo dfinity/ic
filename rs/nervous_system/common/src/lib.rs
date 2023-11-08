@@ -23,6 +23,7 @@ use std::{
     str::FromStr,
 };
 
+pub mod binary_search;
 pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
@@ -762,15 +763,38 @@ pub fn total_memory_size_bytes() -> usize {
     0
 }
 
-/// Returns the amount of stable memory that the calling canister has allocated.
+/// Returns the number of stable memory pages that the calling canister has allocated.
 #[cfg(target_arch = "wasm32")]
-pub fn stable_memory_size_bytes() -> usize {
-    dfn_core::api::stable_memory_size_in_pages() as usize * WASM_PAGE_SIZE_BYTES
+pub fn stable_memory_num_pages() -> u64 {
+    dfn_core::stable::stable64_size()
 }
 
 #[cfg(not(any(target_arch = "wasm32")))]
-pub fn stable_memory_size_bytes() -> usize {
+pub fn stable_memory_num_pages() -> u64 {
     0
+}
+
+/// Returns the amount of stable memory that the calling canister has allocated.
+#[cfg(target_arch = "wasm32")]
+pub fn stable_memory_size_bytes() -> u64 {
+    dfn_core::stable::stable64_size() * (WASM_PAGE_SIZE_BYTES as u64)
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn stable_memory_size_bytes() -> u64 {
+    0
+}
+
+// Given 2 numbers `dividend`` and `divisor`, break the dividend to `divisor * quotient + remainder`
+// where `remainder < divisor`, using safe arithmetic. Returns `(quotient, remainder)`.
+fn checked_div_mod(dividend: usize, divisor: usize) -> (usize, usize) {
+    let quotient = dividend
+        .checked_div(divisor)
+        .expect("Failed to calculate quotient");
+    let remainder = dividend
+        .checked_rem(divisor)
+        .expect("Failed to calculate remainder");
+    (quotient, remainder)
 }
 
 #[cfg(test)]

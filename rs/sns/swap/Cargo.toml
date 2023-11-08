@@ -1,7 +1,10 @@
 [package]
 name = "ic-sns-swap"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "sns-swap-canister"
@@ -15,8 +18,7 @@ name = "swap-test"
 path = "tests/swap.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 async-trait = "0.1.42"
 candid = { workspace = true }
@@ -33,34 +35,33 @@ ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
+ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-stable-structures = { workspace = true }
 ic-sns-governance = { path = "../governance" }
 # TODO(NNS1-1589): Delete hack, and uncomment this.
 # ic-sns-root = { path = "../root" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-itertools = "0.10.5"
+itertools = { workspace = true }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 prost = { workspace = true }
 rust_decimal = "1.25"
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }
 
 [dev-dependencies]
 proptest = "1.0"
-pretty_assertions = "1.0"
+pretty_assertions = { workspace = true }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 futures = { workspace = true }
 tempfile = "3.1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-test = "0.4.2"
 
 [features]

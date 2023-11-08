@@ -1352,15 +1352,91 @@ pub struct ProposalData {
     #[prost(message, optional, tag = "20")]
     pub derived_proposal_information: ::core::option::Option<DerivedProposalInformation>,
     /// This structure contains data for settling the Neurons' Fund participation at the end of a swap.
-    /// This data is however not sufficient, as settling a swap requires knowing the ultimate result
-    /// (Aborted or Committed) and, if Committed, the overall direct participation amount. For more
-    /// details, refer to `SettleNeuronsFundParticipationRequest`.
     ///
     /// TODO\[NNS1-2566\]: deprecate `original_total_community_fund_maturity_e8s_equivalent` and
     /// `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
     #[prost(message, optional, tag = "21")]
-    pub neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    pub neurons_fund_data: ::core::option::Option<NeuronsFundData>,
 }
+/// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundData {
+    /// Initial Neurons' Fund reserves computed at the time of execution of the proposal through which
+    /// the SNS swap is created.
+    #[prost(message, optional, tag = "1")]
+    pub initial_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    /// Final Neurons' Fund participation computed at the time of swap finalization. This field should
+    /// remain unspecified until either (1) the `settle_neurons_fund_participation` function is called
+    /// or (2) the NNS handles an error at the SNS deployment stage.
+    ///
+    /// If specified, this must be a subset of `initial_neurons_fund_participation`.
+    #[prost(message, optional, tag = "2")]
+    pub final_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    /// Refunds for any leftover Neurons' Fund maturity that could not be used to participate in
+    /// the swap. This field should remain unspecified `settle_neurons_fund_participation` is called.
+    ///
+    /// If specified, this must be equal to the following set-difference:
+    /// `initial_neurons_fund_participation.neurons_fund_reserves`
+    /// set-minus `final_neurons_fund_participation.neurons_fund_reserves`.
+    #[prost(message, optional, tag = "3")]
+    pub neurons_fund_refunds: ::core::option::Option<NeuronsFundSnapshot>,
+}
+/// This is a view of the NeuronsFundData returned by API queries and is NOT used for storage.
+/// Currently, the structure is identical to NeuronsFundData, but this may change over time.
+/// Some of the fields, e.g., actual IDs of neurons, are anonymized.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundAuditInfo {
+    /// See documentation for NeuronsFundData.neurons_fund_participation
+    #[prost(message, optional, tag = "1")]
+    pub initial_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    /// See documentation for NeuronsFundData.final_neurons_fund_participation
+    #[prost(message, optional, tag = "2")]
+    pub final_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    /// See documentation for NeuronsFundData.neurons_fund_refunds
+    #[prost(message, optional, tag = "3")]
+    pub neurons_fund_refunds: ::core::option::Option<NeuronsFundSnapshot>,
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetNeuronsFundAuditInfoRequest {
+    /// ID of the NNS proposal that resulted in the creation of the corresponding Swap.
+    #[prost(message, optional, tag = "1")]
+    pub nns_proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetNeuronsFundAuditInfoResponse {
+    #[prost(oneof = "get_neurons_fund_audit_info_response::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<get_neurons_fund_audit_info_response::Result>,
+}
+/// Nested message and enum types in `GetNeuronsFundAuditInfoResponse`.
+pub mod get_neurons_fund_audit_info_response {
+    /// Request was completed successfully.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Ok {
+        /// Represents public information suitable for auditing Neurons' Fund participation in an SNS swap.
+        #[prost(message, optional, tag = "1")]
+        pub neurons_fund_audit_info: ::core::option::Option<super::NeuronsFundAuditInfo>,
+    }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Err(super::GovernanceError),
+        #[prost(message, tag = "2")]
+        Ok(Ok),
+    }
+}
+/// Information for deciding how the Neurons' Fund should participate in an SNS Swap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1376,10 +1452,34 @@ pub struct NeuronsFundParticipation {
         ::core::option::Option<IdealMatchedParticipationFunction>,
     /// The snapshot of the Neurons' Fund allocation of its maximum swap participation amount among
     /// its neurons. This snapshot is computed at the execution time of the NNS proposal leading
-    /// to the swap opening; it is then used at the end of a swap to compute the refund amounts
-    /// per Neuron' Fund neuron.
+    /// to the swap opening.
     #[prost(message, optional, tag = "2")]
-    pub neurons_fund_snapshot: ::core::option::Option<NeuronsFundSnapshot>,
+    pub neurons_fund_reserves: ::core::option::Option<NeuronsFundSnapshot>,
+    /// Absolute constraints for direct participants of this swap needed in Matched Funding
+    /// computations.
+    #[prost(message, optional, tag = "3")]
+    pub swap_participation_limits: ::core::option::Option<SwapParticipationLimits>,
+    /// Neurons' Fund participation is computed for this amount of direct participation.
+    #[prost(uint64, optional, tag = "4")]
+    pub direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Total amount of maturity in the Neurons' Fund at the time when the Neurons' Fund participation
+    /// was created.
+    #[prost(uint64, optional, tag = "5")]
+    pub total_maturity_equivalent_icp_e8s: ::core::option::Option<u64>,
+    /// Maximum amount that the Neurons' Fund will participate with in this SNS swap, regardless of how
+    /// large the value of `direct_participation_icp_e8s` is.
+    #[prost(uint64, optional, tag = "6")]
+    pub max_neurons_fund_swap_participation_icp_e8s: ::core::option::Option<u64>,
+    /// How much the Neurons' Fund would ideally like to participate with in this SNS swap, given
+    /// the direct participation amount (`direct_participation_icp_e8s`) and matching function
+    /// (`ideal_matched_participation_function`).
+    #[prost(uint64, optional, tag = "7")]
+    pub intended_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
+    /// How much from `intended_neurons_fund_participation_icp_e8s` was the Neurons' Fund actually able
+    /// to allocate, given the specific composition of neurons at the time of execution of the proposal
+    /// through which this SNS was created and the participation limits of this SNS.
+    #[prost(uint64, optional, tag = "8")]
+    pub allocated_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
 /// This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
 /// try to follow, but may deviate from in order to satisfy SNS-specific participation constraints
@@ -1405,7 +1505,8 @@ pub struct IdealMatchedParticipationFunction {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronsFundSnapshot {
     #[prost(message, repeated, tag = "1")]
-    pub neurons_fund_neurons: ::prost::alloc::vec::Vec<neurons_fund_snapshot::NeuronsFundNeuron>,
+    pub neurons_fund_neuron_portions:
+        ::prost::alloc::vec::Vec<neurons_fund_snapshot::NeuronsFundNeuronPortion>,
 }
 /// Nested message and enum types in `NeuronsFundSnapshot`.
 pub mod neurons_fund_snapshot {
@@ -1413,21 +1514,40 @@ pub mod neurons_fund_snapshot {
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct NeuronsFundNeuron {
+    pub struct NeuronsFundNeuronPortion {
         /// The NNS neuron ID of the participating neuron.
-        #[prost(uint64, optional, tag = "1")]
-        pub nns_neuron_id: ::core::option::Option<u64>,
-        /// The amount of Neurons' Fund participation associated with this neuron.
+        #[prost(message, optional, tag = "1")]
+        pub nns_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
+        /// Portion of maturity taken from this neuron. Must be less than or equal to
+        /// `maturity_equivalent_icp_e8s`.
         #[prost(uint64, optional, tag = "2")]
         pub amount_icp_e8s: ::core::option::Option<u64>,
+        /// Overall amount of maturity of the neuron from which this portion is taken.
+        #[prost(uint64, optional, tag = "3")]
+        pub maturity_equivalent_icp_e8s: ::core::option::Option<u64>,
         /// The principal that can vote on behalf of this neuron.
-        #[prost(message, optional, tag = "3")]
+        #[prost(message, optional, tag = "4")]
         pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
-        /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
-        /// has been capped to reflect the maximum participation amount for this SNS swap.
-        #[prost(bool, optional, tag = "4")]
+        /// Whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
+        /// participation constraints.
+        #[prost(bool, optional, tag = "5")]
         pub is_capped: ::core::option::Option<bool>,
     }
+}
+/// Absolute constraints of this swap needed that the Neurons' Fund need to be aware of.
+/// The fields correspond to those in Swap's `Init` message.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SwapParticipationLimits {
+    #[prost(uint64, optional, tag = "1")]
+    pub min_direct_participation_icp_e8s: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "2")]
+    pub max_direct_participation_icp_e8s: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub min_participant_icp_e8s: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "4")]
+    pub max_participant_icp_e8s: ::core::option::Option<u64>,
 }
 /// This message has a couple of unusual features.
 ///
@@ -1682,8 +1802,8 @@ pub struct NetworkEconomics {
     /// The transaction fee that must be paid for each ledger transaction.
     #[prost(uint64, tag = "9")]
     pub transaction_fee_e8s: u64,
-    /// The maximum number of proposals to keep, per topic. When the
-    /// total number of proposals for a given topic is greater than this
+    /// The maximum number of proposals to keep, per topic for eligible topics.
+    /// When the total number of proposals for a given topic is greater than this
     /// number, the oldest proposals that have reached a "final" state
     /// may be deleted.
     ///
@@ -1903,6 +2023,12 @@ pub mod create_service_nervous_system {
         pub minimum_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
         #[prost(message, optional, tag = "3")]
         pub maximum_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "12")]
+        pub minimum_direct_participation_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "13")]
+        pub maximum_direct_participation_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
         #[prost(message, optional, tag = "4")]
         pub minimum_participant_icp:
             ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
@@ -1929,6 +2055,10 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "11")]
         pub neurons_fund_investment_icp:
             ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        /// Whether Neurons' Fund participation is requested.
+        /// Cannot be set to true until Matched Funding is released
+        #[prost(bool, optional, tag = "14")]
+        pub neurons_fund_participation: ::core::option::Option<bool>,
     }
     /// Nested message and enum types in `SwapParameters`.
     pub mod swap_parameters {
@@ -2129,6 +2259,10 @@ pub struct Governance {
     /// Migration related data.
     #[prost(message, optional, tag = "21")]
     pub migrations: ::core::option::Option<governance::Migrations>,
+    /// A Structure used during upgrade to store the index of topics for neurons to their followers.
+    /// This is the inverse of what is stored in a Neuron (its followees).
+    #[prost(map = "int32, message", tag = "22")]
+    pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2363,6 +2497,29 @@ pub mod governance {
         pub neuron_indexes_migration: ::core::option::Option<Migration>,
         #[prost(message, optional, tag = "2")]
         pub copy_inactive_neurons_to_stable_memory_migration: ::core::option::Option<Migration>,
+    }
+    /// A map of followees to their followers.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct FollowersMap {
+        /// The key is the neuron ID of the followee.
+        #[prost(map = "fixed64, message", tag = "1")]
+        pub followers_map: ::std::collections::HashMap<u64, followers_map::Followers>,
+    }
+    /// Nested message and enum types in `FollowersMap`.
+    pub mod followers_map {
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct Followers {
+            /// The followers of the neuron with the given ID.
+            /// These values will be non-repeating, and order does not matter.
+            #[prost(message, repeated, tag = "1")]
+            pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+        }
     }
 }
 /// Proposals with restricted voting are not included unless the caller
@@ -2737,7 +2894,7 @@ pub mod settle_neurons_fund_participation_response {
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Ok {
         #[prost(message, repeated, tag = "1")]
-        pub neurons_fund_neurons: ::prost::alloc::vec::Vec<NeuronsFundNeuron>,
+        pub neurons_fund_neuron_portions: ::prost::alloc::vec::Vec<NeuronsFundNeuron>,
     }
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]

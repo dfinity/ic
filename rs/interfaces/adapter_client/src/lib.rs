@@ -1,21 +1,29 @@
 use std::time::Duration;
 use strum_macros::IntoStaticStr;
+use thiserror::Error;
 
 /// Describe RPC error -- can be either related to transport (i.e.
 /// failure to transport) or to server (i.e. server responded, but
 /// gave us a message indicating an error).
-#[derive(Debug, IntoStaticStr)]
+#[derive(Debug, IntoStaticStr, Error)]
 pub enum RpcError {
     /// Failure at transport.
+    #[error("ConnectionBroken")]
     ConnectionBroken,
+
     /// The adapter is unavailable at the moment and is not able to serve requests.
     // Likely a transient error. For example in the BTC feature, this error may mean
     // the adapter is still syncing the header chain up to the latest checkpoint.
     // You can retry the operation.
+    #[error("Unavailable({0})")]
     Unavailable(String),
+
     /// The adapter request was cancelled by the adapter client. Likely a timeout.
+    #[error("Cancelled({0})")]
     Cancelled(String),
+
     /// Catch-all for unexpected errors in the bitcoin client. Likely a fatal error.
+    #[error("Unknown({0})")]
     Unknown(String),
 }
 
@@ -23,16 +31,6 @@ pub type RpcResult<T> = Result<T, RpcError>;
 
 pub struct Options {
     pub timeout: Duration,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            // Since we are allowed to block only for few milliseconds the consensus thread,
-            // set reasonable defaults.
-            timeout: Duration::from_millis(50),
-        }
-    }
 }
 
 /// Sync interface for communicating with an adapter.

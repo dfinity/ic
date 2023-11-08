@@ -142,6 +142,25 @@ pub struct SnsInitPayload {
     /// `min_participants * min_participant_icp_e8s`.
     #[prost(uint64, optional, tag = "28")]
     pub max_icp_e8s: ::core::option::Option<u64>,
+    /// The amount of ICP that is required to be directly contributed for this
+    /// token swap to take place. This number + the minimum NF contribution divided
+    /// by the number of SNS tokens being offered gives the seller's reserve price
+    /// for the swap, i.e., the minimum number of ICP per SNS tokens that the
+    /// seller of SNS tokens is willing to accept. If this amount is not achieved,
+    /// the swap will be aborted (instead of committed) when the due date/time
+    /// occurs. Must be smaller than or equal to `max_icp_e8s`.
+    #[prost(uint64, optional, tag = "38")]
+    pub min_direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// The amount of ICP that this token swap is "targeting" for direct
+    /// contribution. If this amount is achieved with sufficient participation, the
+    /// swap will be triggered immediately, without waiting for the due date
+    /// (`end_timestamp_seconds`). This means that an investor knows the minimum
+    /// number of SNS tokens received per invested ICP. If this amount is achieved
+    /// without reaching sufficient_participation, the swap will abort without
+    /// waiting for the due date. Must be at least
+    /// `min_participants * min_participant_icp_e8s`.
+    #[prost(uint64, optional, tag = "39")]
+    pub max_direct_participation_icp_e8s: ::core::option::Option<u64>,
     /// The minimum amount of ICP that each buyer must contribute to
     /// participate. Must be greater than zero.
     #[prost(uint64, optional, tag = "29")]
@@ -176,6 +195,9 @@ pub struct SnsInitPayload {
     /// swap.
     #[prost(uint64, optional, tag = "34")]
     pub nns_proposal_id: ::core::option::Option<u64>,
+    /// Whether or not the neurons' fund is participating
+    #[prost(bool, optional, tag = "40")]
+    pub neurons_fund_participation: ::core::option::Option<bool>,
     /// The Neurons' Fund participants of this SNS decentralization swap.
     #[prost(message, optional, tag = "35")]
     pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,

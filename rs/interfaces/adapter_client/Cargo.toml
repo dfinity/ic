@@ -1,7 +1,11 @@
 [package]
 name = "ic-interfaces-adapter-client"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-strum_macros = "0.24"
+strum_macros = { workspace = true }
+thiserror = "1.0"

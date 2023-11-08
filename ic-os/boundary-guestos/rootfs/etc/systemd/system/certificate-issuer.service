@@ -32,6 +32,7 @@ ExecStart=/bin/bash -c '                                                        
         ${TASK_DELAY_SEC:+         --task-delay-sec        "${TASK_DELAY_SEC}"}        \
         ${TASK_ERROR_DELAY_SEC:+   --task-error-delay-sec  "${TASK_ERROR_DELAY_SEC}"}  \
         ${PEEK_SLEEP_SEC:+         --peek-sleep-sec        "${PEEK_SLEEP_SEC}"}        \
+        ${IMPORTANT_DOMAINS:+      --important-domains     "${IMPORTANT_DOMAINS}"}     \
 '
 
 [Install]

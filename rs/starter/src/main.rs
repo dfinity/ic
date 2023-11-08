@@ -95,7 +95,7 @@ fn main() -> Result<()> {
                 p2p_addr: SocketAddr::from_str("0.0.0.0:0").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: vec![],
+                chip_id: None,
             },
         );
 

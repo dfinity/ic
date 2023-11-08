@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 54
+assertion_line: 55
 expression: out
 ---
 (module
@@ -21,7 +21,7 @@ expression: out
   (import "ic0" "msg_cycles_available" (func (;6;) (type 1)))
   (func (;7;) (type 1) (result i64)
     global.get 0
-    i64.const 1
+    i64.const 2
     i64.sub
     global.set 0
     global.get 0
@@ -34,7 +34,7 @@ expression: out
   )
   (func (;8;) (type 2) (param i64) (result i64)
     global.get 0
-    i64.const 6
+    i64.const 7
     i64.sub
     global.set 0
     global.get 0
@@ -48,7 +48,7 @@ expression: out
   )
   (func (;9;) (type 3) (param i32)
     global.get 0
-    i64.const 11
+    i64.const 12
     i64.sub
     global.set 0
     global.get 0

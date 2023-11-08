@@ -162,8 +162,8 @@ mod tests {
                             port: 2457,
                         }),
                         node_operator_id: vec![],
-                        chip_id: vec![],
                         hostos_version_id: None,
+                        chip_id: None,
                     },
                 )
             })

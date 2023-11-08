@@ -5,12 +5,13 @@ use crate::{
     pb::v1::{
         error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
         set_mode_call_result::SetModeResult,
-        settle_community_fund_participation_result,
+        settle_community_fund_participation_result, settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
         ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
         OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
-        SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
+        SettleCommunityFundParticipationResult, SettleNeuronsFundParticipationResult,
+        SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
     swap::is_valid_principal,
 };
@@ -34,17 +35,10 @@ pub fn validate_principal(p: &str) -> Result<(), String> {
 }
 
 pub fn validate_canister_id(p: &str) -> Result<(), String> {
-    let pp = PrincipalId::from_str(p).map_err(|x| {
+    let _pp = PrincipalId::from_str(p).map_err(|x| {
         format!(
             "Couldn't validate CanisterId. String \"{}\" could not be converted to PrincipalId: {}",
             p, x
-        )
-    })?;
-    let _cid = CanisterId::new(pp).map_err(|x| {
-        format!(
-            "Couldn't validate CanisterId. PrincipalId \"{}\" could not be converted to CanisterId: {}",
-            pp,
-            x
         )
     })?;
     Ok(())
@@ -96,8 +90,7 @@ impl ErrorRefundIcpResponse {
 
 fn principal_string_to_canister_id(s: &str) -> Result<CanisterId, String> {
     let principal_id = PrincipalId::from_str(s).map_err(|err| err.to_string())?;
-    let canister_id = CanisterId::new(principal_id).map_err(|err| err.to_string())?;
-    Ok(canister_id)
+    Ok(CanisterId::unchecked_from_principal(principal_id))
 }
 
 /// Represents outcomes of consistency checking two data sources.
@@ -245,7 +238,7 @@ impl Init {
     /// `Option<DataConsistencyAnalysisOutcome>`, preserving the `is_none()` and
     /// `is_some()` properties of all the elements. The set is represented via
     /// a table from `SnsInitPayload` field names to set elements (the keys
-    /// facilitate testing and improve error reporting and debuggablility).
+    /// facilitate testing and improve error reporting and debuggability).
     ///
     /// If `open_request` is `Some(r)`, analyzes the consistency of the provided
     /// `OpenRequest` instance `r` w.r.t. the swap opening fields of `self`.
@@ -274,26 +267,26 @@ impl Init {
                     })
                     .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
             }), // 17
-            "min_icp_e8s".to_string() => self.min_icp_e8s.as_ref().map(|x| {
+            "min_direct_participation_icp_e8s".to_string() => self.min_direct_participation_icp_e8s.as_ref().map(|x| {
                 open_request
                     .map(|r| {
                         r.params
                             .as_ref()
-                            .map(|p| m(*x == p.min_icp_e8s))
+                            .map(|p| m(Some(*x) == p.min_direct_participation_icp_e8s))
                             .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
                     })
                     .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
-            }), // 18
-            "max_icp_e8s".to_string() => self.max_icp_e8s.as_ref().map(|x| {
+            }), // 30
+            "max_direct_participation_icp_e8s".to_string() => self.max_direct_participation_icp_e8s.as_ref().map(|x| {
                 open_request
                     .map(|r| {
                         r.params
                             .as_ref()
-                            .map(|p| m(*x == p.max_icp_e8s))
+                            .map(|p| m(Some(*x) == p.max_direct_participation_icp_e8s))
                             .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
                     })
                     .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
-            }), // 19
+            }), // 31
             "min_participant_icp_e8s".to_string() => self.min_participant_icp_e8s.as_ref().map(|x| {
                 open_request
                     .map(|r| {
@@ -367,7 +360,7 @@ impl Init {
             "neurons_fund_participants".to_string() => self.neurons_fund_participants.as_ref().map(|x| {
                 open_request
                     .map(|r|
-                    // Ignore the possibility of permutted yet equivalent vector
+                    // Ignore the possibility of permuted yet equivalent vector
                     // fields. This allows not worrying about the efficiency of
                     // this function, e.g., even if the number of participants
                     // is very large.
@@ -406,30 +399,71 @@ impl Init {
     /// - `self.is_swap_init_for_single_proposal()`
     pub fn mk_open_sns_request(&self) -> OpenRequest {
         assert!(
-            self.is_swap_init_for_one_proposal_flow(),
+            self.validate_swap_init_for_one_proposal_flow().is_ok(),
             "cannot make an `OpenRequest` instance from a legacy `SnsInitPayload`"
         );
+        // This is checked by the previous assert, but repeating here to be explicit
+        assert!(self.min_direct_participation_icp_e8s.is_some());
+        assert!(self.max_direct_participation_icp_e8s.is_some());
+
         let params = Params {
-            min_participants: self.min_participants.unwrap(),
-            min_icp_e8s: self.min_icp_e8s.unwrap(),
-            max_icp_e8s: self.max_icp_e8s.unwrap(),
-            min_participant_icp_e8s: self.min_participant_icp_e8s.unwrap(),
-            max_participant_icp_e8s: self.max_participant_icp_e8s.unwrap(),
-            swap_due_timestamp_seconds: self.swap_due_timestamp_seconds.unwrap(),
-            sns_token_e8s: self.sns_token_e8s.unwrap(),
+            min_participants: unwrap_verbosely(self.min_participants, "Swap.init.min_participants"),
+            min_direct_participation_icp_e8s: self.min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s: self.max_direct_participation_icp_e8s,
+            min_participant_icp_e8s: unwrap_verbosely(
+                self.min_participant_icp_e8s,
+                "Swap.init.min_participant_icp_e8s",
+            ),
+            max_participant_icp_e8s: unwrap_verbosely(
+                self.max_participant_icp_e8s,
+                "Swap.init.max_participant_icp_e8s",
+            ),
+            swap_due_timestamp_seconds: unwrap_verbosely(
+                self.swap_due_timestamp_seconds,
+                "Swap.init.swap_due_timestamp_seconds",
+            ),
+            sns_token_e8s: unwrap_verbosely(self.sns_token_e8s, "Swap.init.sns_token_e8s"),
             neuron_basket_construction_parameters: self
                 .neuron_basket_construction_parameters
                 .clone(),
             sale_delay_seconds: None,
+
+            // Deprecated fields
+            // These have to be kept in the struct for backwards compatibility,
+            // but aren't used in any of the swap's logic.
+            min_icp_e8s: self.min_icp_e8s.unwrap_or_else(|| {
+                unwrap_verbosely(
+                    self.min_direct_participation_icp_e8s,
+                    "Swap.init.min_direct_participation_icp_e8s",
+                )
+            }),
+
+            max_icp_e8s: self.max_icp_e8s.unwrap_or_else(
+                // Only happens after Matched Funding is enabled
+                // In that case The NF will never contribute more than twice the
+                // direct contribution.
+                || {
+                    unwrap_verbosely(
+                        self.max_direct_participation_icp_e8s,
+                        "Swap.init.max_direct_participation_icp_e8s",
+                    )
+                    .saturating_add(
+                        self.neurons_fund_participation_constraints
+                            .as_ref()
+                            .and_then(|x| x.max_neurons_fund_participation_icp_e8s)
+                            .unwrap_or(0),
+                    )
+                },
+            ),
         };
         OpenRequest {
             params: Some(params),
-            cf_participants: self
-                .neurons_fund_participants
-                .as_ref()
-                .unwrap()
-                .cf_participants
-                .to_vec(),
+            cf_participants: unwrap_verbosely(
+                self.neurons_fund_participants.as_ref(),
+                "Swap.init.neurons_fund_participants",
+            )
+            .cf_participants
+            .to_vec(),
             open_sns_token_swap_proposal_id: self.nns_proposal_id,
         }
     }
@@ -437,19 +471,53 @@ impl Init {
     /// Indicates whether this swap `Init` payload matches the legacy structure,
     /// i.e., all of its swap-opening fields (see `swap_opening_field_states`)
     /// are **unset**, as they will be passed explicitly via the `Swap.open` API.
-    pub fn is_swap_init_for_legacy(&self) -> bool {
-        self.swap_opening_field_states(None)
-            .values()
-            .all(|x| x.is_none())
+    pub fn validate_swap_init_for_legacy(&self) -> Result<(), String> {
+        let unexpected_fields: Vec<String> = self
+            .swap_opening_field_states(None)
+            .iter()
+            .filter_map(|(field_name, outcome)| {
+                if outcome.is_some() {
+                    Some(field_name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if unexpected_fields.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Swap Init cannot be used for legacy flow as there are {} unexpected fields: {}.",
+                unexpected_fields.len(),
+                unexpected_fields.join(", "),
+            ))
+        }
     }
 
     /// Indicates whether this swap `Init` payload matches the new structure,
     /// i.e., all of its swap-opening fields (see `swap_opening_field_states`)
     /// are **set**.
-    pub fn is_swap_init_for_one_proposal_flow(&self) -> bool {
-        self.swap_opening_field_states(None)
-            .values()
-            .all(|x| x.is_some())
+    pub fn validate_swap_init_for_one_proposal_flow(&self) -> Result<(), String> {
+        let missing_fields: Vec<String> = self
+            .swap_opening_field_states(None)
+            .iter()
+            .filter_map(|(field_name, outcome)| {
+                if outcome.is_none() {
+                    Some(field_name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if missing_fields.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Swap Init cannot be used for 1-proposal as there are {} missing fields: {}.",
+                missing_fields.len(),
+                missing_fields.join(", "),
+            ))
+        }
     }
 
     /// Indicates whether an `OpenRequest` instance contradicts this swap `Init`
@@ -493,11 +561,14 @@ impl Init {
 
         // TODO[NNS1-2362] Re-validate also the fields that were filled out by
         // TODO[NNS1-2362] trusted code.
-
-        if !self.is_swap_init_for_legacy() && !self.is_swap_init_for_one_proposal_flow() {
-            return Err(
-                "fields listed in `swap_opening_field_states` must either all be set (for 1-proposal) or all be unset (legacy).".to_string()
-            );
+        if let (Err(legacy_error), Err(one_proposal_error)) = (
+            self.validate_swap_init_for_legacy(),
+            self.validate_swap_init_for_one_proposal_flow(),
+        ) {
+            return Err(format!(
+                "Swap Init is inconsistent. On the one hand, {}. But on the other hand, {}.",
+                legacy_error, one_proposal_error,
+            ));
         }
 
         if self.should_auto_finalize.is_none() {
@@ -508,9 +579,17 @@ impl Init {
     }
 }
 
+#[track_caller]
+fn unwrap_verbosely<T>(x: Option<T>, err: &str) -> T {
+    let Some(x) = x else {
+        panic!("Cannot unwrap {}.", err);
+    };
+    x
+}
+
 impl Params {
     const MIN_SALE_DURATION_SECONDS: u64 = SECONDS_PER_DAY;
-    const MAX_SALE_DURATION_SECONDS: u64 = 90 * SECONDS_PER_DAY;
+    const MAX_SALE_DURATION_SECONDS: u64 = 14 * SECONDS_PER_DAY;
 
     pub fn validate(&self, init: &Init) -> Result<(), String> {
         if self.min_icp_e8s == 0 {
@@ -644,7 +723,7 @@ impl Params {
         Ok(())
     }
 
-    pub fn is_valid_if_initiated_at(&self, now_seconds: u64) -> bool {
+    pub fn is_valid_if_initiated_at(&self, now_seconds: u64) -> Result<(), String> {
         let sale_delay_seconds = self.sale_delay_seconds.unwrap_or(0);
 
         let open_timestamp_seconds = now_seconds.saturating_add(sale_delay_seconds);
@@ -652,16 +731,27 @@ impl Params {
             .swap_due_timestamp_seconds
             .saturating_sub(open_timestamp_seconds);
 
-        // Swap must be at least MIN_SALE_DURATION_SECONDS long
         if duration_seconds < Self::MIN_SALE_DURATION_SECONDS {
-            return false;
+            return Err(format!(
+                "If the swap were initiated at the requested time ({}), its duration would be \
+                    {} seconds, but MIN_SALE_DURATION_SECONDS = {}.",
+                now_seconds,
+                duration_seconds,
+                Self::MIN_SALE_DURATION_SECONDS,
+            ));
         }
         // Swap can be at most MAX_SALE_DURATION_SECONDS long
         if duration_seconds > Self::MAX_SALE_DURATION_SECONDS {
-            return false;
+            return Err(format!(
+                "If the swap were initiated at the requested time ({}), its duration would be \
+                    {} seconds, but MAX_SALE_DURATION_SECONDS = {}.",
+                now_seconds,
+                duration_seconds,
+                Self::MAX_SALE_DURATION_SECONDS,
+            ));
         }
 
-        true
+        Ok(())
     }
 }
 
@@ -675,6 +765,7 @@ impl BuyerState {
                 amount_transferred_e8s: Some(0),
                 transfer_fee_paid_e8s: Some(0),
             }),
+            has_created_neuron_recipes: Some(false),
         }
     }
     pub fn validate(&self) -> Result<(), String> {
@@ -799,8 +890,8 @@ impl OpenRequest {
                 defects.push("The parameters of the swap are missing.".to_string());
             }
             Some(params) => {
-                if !params.is_valid_if_initiated_at(current_timestamp_seconds) {
-                    defects.push("The parameters of the swap are invalid.".to_string());
+                if let Err(err) = params.is_valid_if_initiated_at(current_timestamp_seconds) {
+                    defects.push(err);
                 } else if let Err(err) = params.validate(init) {
                     defects.push(err);
                 }
@@ -889,6 +980,17 @@ impl CfParticipant {
 }
 
 impl CfNeuron {
+    pub fn try_new(nns_neuron_id: u64, amount_icp_e8s: u64) -> Result<Self, String> {
+        let cf_neuron = Self {
+            nns_neuron_id,
+            amount_icp_e8s,
+            has_created_neuron_recipes: Some(false),
+        };
+
+        cf_neuron.validate()?;
+        Ok(cf_neuron)
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.nns_neuron_id == 0 {
             return Err("nns_neuron_id must be specified".to_string());
@@ -1043,6 +1145,30 @@ impl FinalizeSwapResponse {
         self.set_mode_call_result = Some(set_mode_call_result);
     }
 
+    pub fn set_create_sns_neuron_recipes_result(
+        &mut self,
+        create_sns_neuron_recipes_result: SweepResult,
+    ) {
+        if !create_sns_neuron_recipes_result.is_successful_sweep() {
+            self.set_error_message(
+                "Creating SnsNeuronRecipes did not complete fully, some data was invalid or failed. Halting swap finalization".to_string()
+            );
+        }
+        self.create_sns_neuron_recipes_result = Some(create_sns_neuron_recipes_result);
+    }
+
+    pub fn set_settle_neurons_fund_participation_result(
+        &mut self,
+        settle_neurons_fund_participation_result: SettleNeuronsFundParticipationResult,
+    ) {
+        if !settle_neurons_fund_participation_result.is_successful_settle() {
+            self.set_error_message(
+                "Settling the Neurons' Fund participation did not succeed. Halting swap finalization".to_string());
+        }
+        self.settle_neurons_fund_participation_result =
+            Some(settle_neurons_fund_participation_result);
+    }
+
     pub fn has_error_message(&self) -> bool {
         self.error_message.is_some()
     }
@@ -1131,6 +1257,37 @@ impl From<ClaimedSwapNeuronStatus> for ClaimedStatus {
     }
 }
 
+impl SettleNeuronsFundParticipationResult {
+    fn is_successful_settle(&self) -> bool {
+        use settle_neurons_fund_participation_result::Possibility;
+        matches!(&self.possibility, Some(Possibility::Ok(_)))
+    }
+
+    pub fn new_error(error_message: String) -> Self {
+        use settle_neurons_fund_participation_result::{Error, Possibility};
+
+        SettleNeuronsFundParticipationResult {
+            possibility: Some(Possibility::Err(Error {
+                message: Some(error_message),
+            })),
+        }
+    }
+
+    pub fn new_ok(
+        neurons_fund_participation_icp_e8s: u64,
+        neurons_fund_neurons_count: u64,
+    ) -> Self {
+        use settle_neurons_fund_participation_result::{Ok, Possibility};
+
+        SettleNeuronsFundParticipationResult {
+            possibility: Some(Possibility::Ok(Ok {
+                neurons_fund_participation_icp_e8s: Some(neurons_fund_participation_icp_e8s),
+                neurons_fund_neurons_count: Some(neurons_fund_neurons_count),
+            })),
+        }
+    }
+}
+
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
 impl From<[u8; 32]> for SaleNeuronId {
@@ -1163,6 +1320,90 @@ impl TryInto<NeuronId> for SaleNeuronId {
     }
 }
 
+/// Internal definition of a NeuronsFundNeuron. This is the simplified version with
+/// all options removed.
+///
+#[derive(Clone, Debug)]
+pub(crate) struct NeuronsFundNeuron {
+    pub(crate) nns_neuron_id: u64,
+    pub(crate) amount_icp_e8s: u64,
+    pub(crate) hotkey_principal: PrincipalId,
+    #[allow(unused)]
+    pub(crate) is_capped: bool,
+}
+
+impl NeuronsFundNeuron {
+    pub fn try_new(
+        nns_neuron_id: u64,
+        amount_icp_e8s: u64,
+        hotkey_principal: String,
+        is_capped: bool,
+    ) -> Result<Self, String> {
+        let hotkey_principal = PrincipalId::from_str(&hotkey_principal)
+            .map_err(|_| format!("Invalid hotkey principal {}", hotkey_principal))?;
+        Self {
+            nns_neuron_id,
+            amount_icp_e8s,
+            hotkey_principal,
+            is_capped,
+        }
+        .validate()
+    }
+
+    fn validate(self) -> Result<Self, String> {
+        if self.nns_neuron_id == 0 {
+            return Err("nns_neuron_id must be specified".to_string());
+        }
+
+        if self.amount_icp_e8s == 0 {
+            return Err("amount_icp_e8s must be specified".to_string());
+        }
+
+        Ok(self)
+    }
+}
+
+impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron>
+    for NeuronsFundNeuron
+{
+    type Error = String;
+
+    fn try_from(
+        value: crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron,
+    ) -> Result<Self, Self::Error> {
+        let crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron {
+            nns_neuron_id,
+            amount_icp_e8s,
+            hotkey_principal,
+            is_capped,
+        } = value;
+
+        match (
+            nns_neuron_id,
+            amount_icp_e8s,
+            hotkey_principal.clone(),
+            is_capped,
+        ) {
+            (
+                Some(nns_neuron_id),
+                Some(amount_icp_e8s),
+                Some(hotkey_principal),
+                Some(is_capped),
+            ) => NeuronsFundNeuron::try_new(
+                nns_neuron_id,
+                amount_icp_e8s,
+                hotkey_principal,
+                is_capped,
+            ),
+            _ => Err(format!(
+                "Expected all fields to be set. nns_neuron_id({:?}), \
+                amount_icp_e8s({:?}), hotkey_principal({:?}), is_capped({:?})",
+                nns_neuron_id, amount_icp_e8s, hotkey_principal, is_capped
+            )),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1185,10 +1426,12 @@ mod tests {
     const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
 
     const PARAMS: Params = Params {
-        max_icp_e8s: 1_000 * E8,
         max_participant_icp_e8s: 1_000 * E8,
-        min_icp_e8s: 10 * E8,
         min_participant_icp_e8s: 5 * E8,
+        max_icp_e8s: 1_000 * E8,
+        min_icp_e8s: 10 * E8,
+        max_direct_participation_icp_e8s: Some(1_000 * E8),
+        min_direct_participation_icp_e8s: Some(10 * E8),
         sns_token_e8s: 5_000 * E8,
         min_participants: 10,
         swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS + 14 * SECONDS_PER_DAY,
@@ -1204,10 +1447,7 @@ mod tests {
             params: Some(PARAMS),
             cf_participants: vec![CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(423939).to_string(),
-                cf_neurons: vec![CfNeuron {
-                    nns_neuron_id: 42,
-                    amount_icp_e8s: 99,
-                }],
+                cf_neurons: vec![CfNeuron::try_new(42 ,99).unwrap()],
             },],
             open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         };
@@ -1226,7 +1466,7 @@ mod tests {
         let mut init = INIT.clone();
 
         let sns_token_e8s = PARAMS.min_participant_icp_e8s as u128 * PARAMS.sns_token_e8s as u128
-            / PARAMS.max_icp_e8s as u128;
+            / PARAMS.max_direct_participation_icp_e8s.unwrap() as u128;
         let neuron_basket_count = PARAMS
             .neuron_basket_construction_parameters
             .as_ref()
@@ -1262,6 +1502,7 @@ mod tests {
             min_participants: 500,
             // max_icp_e8s must be enough for all of min_participants to participate
             max_icp_e8s: 500 * PARAMS.min_participant_icp_e8s,
+            max_direct_participation_icp_e8s: Some(500 * PARAMS.min_participant_icp_e8s),
             ..PARAMS
         };
         params.validate(&INIT).unwrap();
@@ -1331,14 +1572,8 @@ mod tests {
         let participant = CfParticipant {
             hotkey_principal: "".to_string(),
             cf_neurons: vec![
-                CfNeuron {
-                    nns_neuron_id: 0,
-                    amount_icp_e8s: u64::MAX,
-                },
-                CfNeuron {
-                    nns_neuron_id: 0,
-                    amount_icp_e8s: u64::MAX,
-                },
+                CfNeuron::try_new(1, u64::MAX).unwrap(),
+                CfNeuron::try_new(2, u64::MAX).unwrap(),
             ],
         };
         let total = participant.participant_total_icp_e8s();
@@ -1354,10 +1589,7 @@ mod tests {
         let cf_participant = CfParticipant {
             hotkey_principal: PrincipalId::new_user_test_id(789362).to_string(),
             cf_neurons: (0..neurons_per_principal)
-                .map(|_| CfNeuron {
-                    nns_neuron_id: 592523,
-                    amount_icp_e8s: 1_000 * E8,
-                })
+                .map(|_| CfNeuron::try_new(592523, 1_000 * E8).unwrap())
                 .collect(),
         };
 
@@ -1423,14 +1655,14 @@ mod tests {
     }
 
     #[test]
-    fn sale_cannot_be_open_more_than_90_days() {
+    fn sale_cannot_be_open_more_than_14_days() {
         // Should be valid with the swap deadline set to MAX_SALE_DURATION_SECONDS from now.
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(0));
+        assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1438,7 +1670,10 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_eq!(
+            params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
+            Ok(())
+        );
 
         // Should be invalid with the swap deadline set MAX_SALE_DURATION_SECONDS + 1 second from now.
         let params = Params {
@@ -1446,7 +1681,7 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(0));
+        assert!(params.is_valid_if_initiated_at(0).is_err());
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1455,11 +1690,13 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert!(params
+            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+            .is_err());
     }
 
     #[test]
-    fn sale_cannot_be_open_more_than_90_days_takes_into_account_delay() {
+    fn sale_cannot_be_open_more_than_14_days_takes_into_account_delay() {
         // Would normally be invalid with MAX_SALE_DURATION_SECONDS + 1 second, but 1 second
         // of sale_delay makes the real period only MAX_SALE_DURATION_SECONDS, which is allowed.
         let params = Params {
@@ -1467,7 +1704,7 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(0));
+        assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1476,7 +1713,10 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_eq!(
+            params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
+            Ok(())
+        );
     }
 
     #[test]
@@ -1487,7 +1727,7 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(0));
+        assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1495,7 +1735,10 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_eq!(
+            params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
+            Ok(())
+        );
 
         // Should fail with the swap length set to one second less than MIN_SALE_DURATION_SECONDS.
         let params = Params {
@@ -1503,7 +1746,7 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(0));
+        assert!(params.is_valid_if_initiated_at(0).is_err());
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1512,7 +1755,9 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert!(params
+            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+            .is_err());
     }
 
     #[test]
@@ -1524,7 +1769,7 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(0));
+        assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1533,7 +1778,10 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_eq!(
+            params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
+            Ok(())
+        );
 
         // Should be invalid with the swap deadline set to MIN_SALE_DURATION_SECONDS from now
         // with a swap delay of 1 second.
@@ -1542,7 +1790,7 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(0));
+        assert!(params.is_valid_if_initiated_at(0).is_err());
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1550,7 +1798,9 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert!(params
+            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+            .is_err());
     }
 
     #[test]
@@ -1559,7 +1809,7 @@ mod tests {
         // fields are `None`).
         {
             let default_init: Init = Default::default();
-            assert!(default_init.is_swap_init_for_legacy());
+            assert!(default_init.validate_swap_init_for_legacy().is_ok());
         }
         // There exists some `SnsInitPayload` that is not suitable for both
         // single-proposal and legacy flows.
@@ -1569,14 +1819,18 @@ mod tests {
                 ..Default::default()
             };
             assert!(
-                !incorrect_init.is_swap_init_for_one_proposal_flow()
-                    && !incorrect_init.is_swap_init_for_legacy()
+                incorrect_init
+                    .validate_swap_init_for_one_proposal_flow()
+                    .is_err()
+                    && incorrect_init.validate_swap_init_for_legacy().is_err()
             );
         }
         let mut init = Init {
             min_participants: Some(17_u32),
             min_icp_e8s: Some(18_u64),
             max_icp_e8s: Some(19_000_u64),
+            min_direct_participation_icp_e8s: Some(18_u64),
+            max_direct_participation_icp_e8s: Some(19_000_u64),
             min_participant_icp_e8s: Some(20_u64),
             max_participant_icp_e8s: Some(21_u64),
             swap_start_timestamp_seconds: Some(22_u64),
@@ -1594,32 +1848,20 @@ mod tests {
         };
         // There exists some `SnsInitPayload` that is suitable for the new
         // single-proposal flow.
-        assert!(init.is_swap_init_for_one_proposal_flow());
+        assert!(init.validate_swap_init_for_one_proposal_flow().is_ok());
 
         let neurons_fund_participant_a = CfParticipant {
             hotkey_principal: "HotKeyA".to_string(),
             cf_neurons: vec![
-                CfNeuron {
-                    nns_neuron_id: 26_101_u64,
-                    amount_icp_e8s: 26_101_u64,
-                },
-                CfNeuron {
-                    nns_neuron_id: 26_102_u64,
-                    amount_icp_e8s: 26_102_u64,
-                },
+                CfNeuron::try_new(26_101_u64, 26_101_u64).unwrap(),
+                CfNeuron::try_new(26_102_u64, 26_102_u64).unwrap(),
             ],
         };
         let neurons_fund_participant_b = CfParticipant {
             hotkey_principal: "HotKeyB".to_string(),
             cf_neurons: vec![
-                CfNeuron {
-                    nns_neuron_id: 26_201_u64,
-                    amount_icp_e8s: 26_201_u64,
-                },
-                CfNeuron {
-                    nns_neuron_id: 26_202_u64,
-                    amount_icp_e8s: 26_202_u64,
-                },
+                CfNeuron::try_new(26_201_u64, 26_201_u64).unwrap(),
+                CfNeuron::try_new(26_202_u64, 26_202_u64).unwrap(),
             ],
         };
         init.neurons_fund_participants = Some(NeuronsFundParticipants {

@@ -165,7 +165,7 @@ impl Service<Request<Bytes>> for CanisterReadStateService {
                 )
             };
             let certified_state_reader =
-                match state_reader_executor.get_certified_state_reader().await {
+                match state_reader_executor.get_certified_state_snapshot().await {
                     Ok(Some(reader)) => reader,
                     Ok(None) => return Ok(make_service_unavailable_response()),
                     Err(HttpError { status, message }) => {
@@ -260,10 +260,7 @@ fn verify_paths(
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
                 can_read_canister_metadata(
                     user,
-                    &CanisterId::new(principal_id).map_err(|_| HttpError {
-                        status: StatusCode::BAD_REQUEST,
-                        message: format!("Invalid canister id {}.", principal_id),
-                    })?,
+                    &CanisterId::unchecked_from_principal(principal_id),
                     &name,
                     state,
                 )?
@@ -392,7 +389,7 @@ mod test {
         state::insert_dummy_canister,
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
     };
-    use ic_types::batch::ReceivedEpochStats;
+    use ic_types::batch::RawQueryStats;
     use ic_validator::CanisterIdSet;
     use std::collections::BTreeMap;
 
@@ -513,7 +510,7 @@ mod test {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
-            ReceivedEpochStats::default(),
+            RawQueryStats::default(),
         );
         assert_eq!(
             verify_paths(

@@ -1,9 +1,10 @@
 mod checkpoint;
 pub mod int_map;
 mod page_allocator;
+mod storage;
 
-use checkpoint::Checkpoint;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
+use ic_config::flag_status::FlagStatus;
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_utils::{deterministic_operations::deterministic_copy_from_slice, fs::write_all_vectored};
@@ -11,10 +12,9 @@ pub use page_allocator::{
     allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
     PageDeltaSerialization, PageSerialization,
 };
+use storage::Storage;
+pub use storage::StorageSerialization;
 
-// NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
-// operation. This allows us to simplify canister state management: we can
-// simply have a copy of the whole PageMap in every canister snapshot.
 use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
 use int_map::{Bounds, IntMap};
 use libc::off_t;
@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
 use std::os::unix::io::RawFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 // When persisting data we expand dirty pages to an aligned bucket of given size.
@@ -64,6 +64,10 @@ impl<'a> WriteBuffer<'a> {
 }
 
 /// `PageDelta` represents a changeset of the module heap.
+///
+/// NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
+/// operation. This allows us to simplify canister state management: we can
+/// simply have a copy of the whole PageMap in every canister snapshot.
 #[derive(Clone, Default, Debug)]
 struct PageDelta(IntMap<Page>);
 
@@ -231,6 +235,22 @@ pub enum MemoryMapOrData<'a> {
     Data(&'a [u8]),
 }
 
+/// For write operations, whether the delta should be written to a base file or an overlay file
+pub enum PersistDestination {
+    BaseFile(PathBuf),
+    OverlayFile(PathBuf),
+}
+
+impl PersistDestination {
+    /// Helper function to simplify the typical match statement to construct this enum
+    pub fn new(base_file: PathBuf, overlay_file: PathBuf, lsmt_storage: FlagStatus) -> Self {
+        match lsmt_storage {
+            FlagStatus::Enabled => PersistDestination::OverlayFile(overlay_file),
+            FlagStatus::Disabled => PersistDestination::BaseFile(base_file),
+        }
+    }
+}
+
 /// PageMap is a data structure that represents an image of a canister virtual
 /// memory.  The memory is viewed as a collection of _pages_. `PageMap` uses
 /// 4KiB host OS pages to track the heap contents, not 64KiB Wasm pages.
@@ -250,12 +270,12 @@ pub enum MemoryMapOrData<'a> {
 pub struct PageMap {
     /// The checkpoint that is used for all the pages that can not be found in
     /// the `page_delta`.
-    checkpoint: Checkpoint,
+    storage: Storage,
 
     /// The height of the checkpoint that backs the page map.
     pub base_height: Option<Height>,
 
-    /// The map containing pages overriding pages from the `checkpoint`.
+    /// The map containing pages overriding pages from `storage`.
     /// We need these pages to be able to reconstruct the full heap.
     /// It is reset when `strip_all_deltas()` method is called.
     page_delta: PageDelta,
@@ -279,7 +299,7 @@ impl PageMap {
     /// the page map is instantiated with.
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         Self {
-            checkpoint: Default::default(),
+            storage: Default::default(),
             base_height: Default::default(),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
@@ -291,7 +311,7 @@ impl PageMap {
     /// Creates a new page map for testing purposes.
     pub fn new_for_testing() -> Self {
         Self {
-            checkpoint: Default::default(),
+            storage: Default::default(),
             base_height: Default::default(),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
@@ -304,13 +324,18 @@ impl PageMap {
     ///
     /// Note that the file is assumed to be read-only.
     pub fn open(
-        heap_file: &Path,
+        base_file: &Path,
+        overlays: &[PathBuf],
         base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
-        let checkpoint = Checkpoint::open(heap_file)?;
+        let base = if base_file.exists() {
+            Some(base_file)
+        } else {
+            None
+        };
         Ok(Self {
-            checkpoint,
+            storage: Storage::load(base, overlays)?,
             base_height: Some(base_height),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
@@ -322,7 +347,7 @@ impl PageMap {
     /// Returns a serialization-friendly representation of the page-map.
     pub fn serialize(&self) -> PageMapSerialization {
         PageMapSerialization {
-            checkpoint: self.checkpoint.serialize(),
+            storage: self.storage.serialize(),
             base_height: self.base_height,
             page_delta: self
                 .page_allocator
@@ -344,14 +369,14 @@ impl PageMap {
         page_map: PageMapSerialization,
         registry: &PageAllocatorRegistry,
     ) -> Result<Self, PersistenceError> {
-        let checkpoint = Checkpoint::deserialize(page_map.checkpoint)?;
+        let storage = Storage::deserialize(page_map.storage)?;
         let page_allocator = PageAllocator::deserialize(page_map.page_allocator, registry);
         let page_delta =
             PageDelta::from(page_allocator.deserialize_page_delta(page_map.page_delta));
         let unflushed_delta =
             PageDelta::from(page_allocator.deserialize_page_delta(page_map.unflushed_delta));
         Ok(Self {
-            checkpoint,
+            storage,
             base_height: page_map.base_height,
             page_delta,
             unflushed_delta,
@@ -388,14 +413,26 @@ impl PageMap {
 
     /// Persists the heap delta contained in this page map to the specified
     /// destination.
-    pub fn persist_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.persist_to_file(&self.page_delta, dst)
+    pub fn persist_delta(&self, dst: PersistDestination) -> Result<(), PersistenceError> {
+        match dst {
+            PersistDestination::BaseFile(dst) => self.persist_to_file(&self.page_delta, &dst),
+            PersistDestination::OverlayFile(_dst) => {
+                //TODO (IC-1306)
+                unimplemented!();
+            }
+        }
     }
 
     /// Persists the unflushed delta contained in this page map to the specified
     /// destination.
-    pub fn persist_unflushed_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.persist_to_file(&self.unflushed_delta, dst)
+    pub fn persist_unflushed_delta(&self, dst: PersistDestination) -> Result<(), PersistenceError> {
+        match dst {
+            PersistDestination::BaseFile(dst) => self.persist_to_file(&self.unflushed_delta, &dst),
+            PersistDestination::OverlayFile(_dst) => {
+                //TODO (IC-1306)
+                unimplemented!();
+            }
+        }
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.
@@ -417,7 +454,7 @@ impl PageMap {
     pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
         match self.page_delta.get_page(page_index) {
             Some(page) => page,
-            None => self.checkpoint.get_page(page_index),
+            None => self.storage.get_page(page_index),
         }
     }
 
@@ -551,6 +588,8 @@ impl PageMap {
             false,
         );
 
+        //TODO (IC-1306): Memory instructions from overlays
+
         MemoryInstructions {
             range: result_range,
             instructions,
@@ -562,7 +601,7 @@ impl PageMap {
     /// The intention is that the instructions from this function are applied first and only once. The more expensive
     /// instructions from `get_memory_instructions(range)` are then applied on top.
     pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
-        self.checkpoint.get_memory_instructions()
+        self.storage.get_base_memory_instructions()
     }
 
     /// Removes the page delta from this page map.
@@ -612,7 +651,7 @@ impl PageMap {
     /// ∀ n . n ≥ self.num_host_pages() ⇒ self.get_page(n) = ZERO_PAGE
     /// ```
     pub fn num_host_pages(&self) -> usize {
-        let pages_in_checkpoint = self.checkpoint.num_pages();
+        let pages_in_checkpoint = self.storage.num_host_pages();
         pages_in_checkpoint.max(
             self.page_delta
                 .max_page_index()
@@ -624,7 +663,7 @@ impl PageMap {
     /// Switches the checkpoint file of the current page map to the one provided
     /// by the given page map. Page deltas of both page maps must be empty.
     pub fn switch_to_checkpoint(&mut self, checkpointed_page_map: &PageMap) {
-        self.checkpoint = checkpointed_page_map.checkpoint.clone();
+        self.storage = checkpointed_page_map.storage.clone();
         // Also copy the base height to reflect the height of the new checkpoint.
         self.base_height = checkpointed_page_map.base_height;
         assert!(self.page_delta.is_empty());
@@ -858,7 +897,7 @@ impl std::fmt::Debug for PageMap {
 /// need `unflushed_delta`, but the field is kept for consistency here.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PageMapSerialization {
-    pub checkpoint: CheckpointSerialization,
+    pub storage: StorageSerialization,
     pub base_height: Option<Height>,
     pub page_delta: PageDeltaSerialization,
     pub unflushed_delta: PageDeltaSerialization,

@@ -1,10 +1,41 @@
-use crate::common::{
-    blob::{BlobCompression, BlobId},
-    rest::{
-        ApiResponse, CreateInstanceResponse, InstanceId, RawAddCycles, RawCanisterCall,
-        RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory, RawTime,
-        RawWasmResult,
-    },
+//! # PocketIC: A Canister Testing Platform
+//!
+//! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
+//!
+//! It consists of the PocketIC-server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
+//!
+//! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
+//!
+//! ```rust
+//! use candid;
+//! use pocket_ic;
+//!
+//!  #[test]
+//!  fn test_counter_canister() {
+//!     let pic = PocketIc::new();
+//!     // Create an empty canister as the anonymous principal.
+//!     let canister_id = pic.create_canister(None);
+//!     pic.add_cycles(canister_id, 1_000_000_000_000_000);
+//!     let wasm_bytes = load_counter_wasm(...);
+//!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
+//!     // 'inc' is a counter canister method.
+//!     call_counter_canister(&pic, canister_id, "inc");
+//!     // Check if it had the desired effect.
+//!     let reply = call_counter_canister(&pic, canister_id, "read");
+//!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
+//!  }
+//!
+//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
+//!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
+//!         .expect("Failed to call counter canister")
+//! }
+//! ```
+//! For more information, see the [README](https://crates.io/crates/pocket-ic).
+//!
+use crate::common::rest::{
+    ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, InstanceId, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory,
+    RawStableMemory, RawTime, RawWasmResult,
 };
 use candid::{
     decode_args, encode_args,
@@ -19,24 +50,37 @@ use ic_cdk::api::management_canister::{
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     time::{Duration, Instant, SystemTime},
 };
+use tracing::{debug, instrument};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::EnvFilter;
 pub mod common;
 
 const PROCESSING_TIME_HEADER: &str = "processing-timeout-ms";
 const PROCESSING_TIME_VALUE_MS: u64 = 300_000;
 const LOCALHOST: &str = "127.0.0.1";
 
+const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
+const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
+
+/// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
+    /// The unique ID of this PocketIC instance.
     pub instance_id: InstanceId,
     server_url: Url,
     reqwest_client: reqwest::blocking::Client,
+    _log_guard: Option<WorkerGuard>,
 }
 
 impl PocketIc {
+    /// Creates a new PocketIC instance on the server. The server is started if it's not already running.
     pub fn new() -> Self {
+        let parent_pid = std::os::unix::process::parent_id();
+        let log_guard = setup_tracing(parent_pid);
+
         let server_url = crate::start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
         use CreateInstanceResponse::*;
@@ -50,16 +94,19 @@ impl PocketIc {
             Created { instance_id } => instance_id,
             Error { message } => panic!("{}", message),
         };
+        debug!("instance_id={} New instance created.", instance_id);
 
         Self {
             instance_id,
             server_url,
             reqwest_client,
+            _log_guard: log_guard,
         }
     }
 
+    /// Upload and store a binary blob to the PocketIC server.
+    #[instrument(ret(Display), skip(self, blob), fields(instance_id=self.instance_id, blob_len = %blob.len(), compression = ?compression))]
     pub fn upload_blob(&self, blob: Vec<u8>, compression: BlobCompression) -> BlobId {
-        // TODO: check if the hash of the blob already exists and if yes, don't upload.
         let mut request = self
             .reqwest_client
             .post(self.server_url.join("blobstore/").unwrap())
@@ -78,6 +125,9 @@ impl PocketIc {
         BlobId(hash.expect("Invalid hash"))
     }
 
+    /// Set stable memory of a canister. Optional GZIP compression can be used for reduced
+    /// data traffic.
+    #[instrument(skip(self, data), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), data_len = %data.len(), compression = ?compression))]
     pub fn set_stable_memory(
         &self,
         canister_id: Principal,
@@ -95,6 +145,8 @@ impl PocketIc {
         );
     }
 
+    /// Get stable memory of a canister.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub fn get_stable_memory(&self, canister_id: Principal) -> Vec<u8> {
         let endpoint = "read/get_stable_memory";
         let RawStableMemory { blob } = self.post(
@@ -106,6 +158,8 @@ impl PocketIc {
         blob
     }
 
+    /// List all instances and their status.
+    #[instrument(ret)]
     pub fn list_instances() -> Vec<String> {
         let url = crate::start_or_reuse_server().join("instances").unwrap();
         let instances: Vec<String> = reqwest::blocking::Client::new()
@@ -117,6 +171,8 @@ impl PocketIc {
         instances
     }
 
+    /// Verify a canister signature.
+    #[instrument(skip_all, fields(instance_id=self.instance_id))]
     pub fn verify_canister_signature(
         &self,
         msg: Vec<u8>,
@@ -139,26 +195,30 @@ impl PocketIc {
             .expect("Failed to get json")
     }
 
+    /// Make the IC produce and progress by one block.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn tick(&self) {
         let endpoint = "update/tick";
         self.post::<(), _>(endpoint, "");
     }
 
+    /// Get the root key of this IC instance
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn root_key(&self) -> Vec<u8> {
         let endpoint = "read/root_key";
         self.post::<Vec<u8>, _>(endpoint, "")
     }
 
+    /// Get the current time of the IC.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
     pub fn get_time(&self) -> SystemTime {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint);
         SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
     }
 
-    pub fn time(&self) -> SystemTime {
-        self.get_time()
-    }
-
+    /// Set the current time of the IC.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
     pub fn set_time(&self, time: SystemTime) {
         let endpoint = "update/set_time";
         self.post::<(), _>(
@@ -172,11 +232,15 @@ impl PocketIc {
         );
     }
 
+    /// Advance the time on the IC by some nanoseconds.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, duration = ?duration))]
     pub fn advance_time(&self, duration: Duration) {
         let now = self.get_time();
         self.set_time(now + duration);
     }
 
+    /// Get the current cycles balance of a canister.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub fn cycle_balance(&self, canister_id: Principal) -> u128 {
         let endpoint = "read/get_cycles";
         let result: RawCycles = self.post(
@@ -188,6 +252,8 @@ impl PocketIc {
         result.cycles
     }
 
+    /// Add cycles to a canister. Returns the new balance.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), amount = %amount))]
     pub fn add_cycles(&self, canister_id: Principal, amount: u128) -> u128 {
         let endpoint = "update/add_cycles";
         let result: RawCycles = self.post(
@@ -200,6 +266,8 @@ impl PocketIc {
         result.cycles
     }
 
+    /// Execute an update call on a canister.
+    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn update_call(
         &self,
         canister_id: Principal,
@@ -211,6 +279,8 @@ impl PocketIc {
         self.canister_call(endpoint, canister_id, sender, method, payload)
     }
 
+    /// Execute a query call on a canister.
+    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn query_call(
         &self,
         canister_id: Principal,
@@ -222,6 +292,8 @@ impl PocketIc {
         self.canister_call(endpoint, canister_id, sender, method, payload)
     }
 
+    /// Create a canister with default settings.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn create_canister(&self, sender: Option<Principal>) -> CanisterId {
         let CanisterIdRecord { canister_id } = call_candid_as(
             self,
@@ -235,6 +307,8 @@ impl PocketIc {
         canister_id
     }
 
+    /// Create a canister with custom settings.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, settings = ?settings, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn create_canister_with_settings(
         &self,
         settings: Option<CanisterSettings>,
@@ -252,6 +326,8 @@ impl PocketIc {
         canister_id
     }
 
+    /// Install a WASM module on an existing canister.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn install_canister(
         &self,
         canister_id: CanisterId,
@@ -274,6 +350,8 @@ impl PocketIc {
         .unwrap();
     }
 
+    /// Upgrade a canister with a new WASM module.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn upgrade_canister(
         &self,
         canister_id: CanisterId,
@@ -295,6 +373,8 @@ impl PocketIc {
         )
     }
 
+    /// Reinstall a canister WASM module.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn reinstall_canister(
         &self,
         canister_id: CanisterId,
@@ -316,6 +396,8 @@ impl PocketIc {
         )
     }
 
+    /// Start a canister.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn start_canister(
         &self,
         canister_id: CanisterId,
@@ -330,6 +412,8 @@ impl PocketIc {
         )
     }
 
+    /// Stop a canister.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn stop_canister(
         &self,
         canister_id: CanisterId,
@@ -344,6 +428,8 @@ impl PocketIc {
         )
     }
 
+    /// Delete a canister.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn delete_canister(
         &self,
         canister_id: CanisterId,
@@ -358,6 +444,8 @@ impl PocketIc {
         )
     }
 
+    /// Checks whether the provided canister exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub fn canister_exists(&self, canister_id: CanisterId) -> bool {
         let endpoint = "read/canister_exists";
         let result: bool = self.post(
@@ -369,17 +457,18 @@ impl PocketIc {
         result
     }
 
+    /// Triggers the creation of a checkpoint on the IC.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn create_checkpoint(&self) {
         let endpoint = "update/create_checkpoint";
         self.post::<(), &str>(endpoint, "");
     }
 
     fn instance_url(&self) -> Url {
-        let instance_id = self.instance_id;
         self.server_url
             .join("/instances/")
             .unwrap()
-            .join(&format!("{instance_id}/"))
+            .join(&format!("{}/", self.instance_id))
             .unwrap()
     }
 
@@ -466,7 +555,7 @@ impl Drop for PocketIc {
 }
 
 /// Call a canister candid method, authenticated.
-/// The state machine executes update calls synchronously, so there is no need to poll for the result.
+/// PocketIC executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid_as<Input, Output>(
     env: &PocketIc,
     canister_id: Principal,
@@ -484,7 +573,7 @@ where
 }
 
 /// Call a canister candid method, anonymous.
-/// The state machine executes update calls synchronously, so there is no need to poll for the result.
+/// PocketIC executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid<Input, Output>(
     env: &PocketIc,
     canister_id: Principal,
@@ -555,6 +644,33 @@ where
     }
 }
 
+fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
+    use tracing_subscriber::prelude::*;
+    match std::env::var(LOG_DIR_PATH_ENV_NAME).map(std::path::PathBuf::from) {
+        Ok(p) => {
+            std::fs::create_dir_all(&p).expect("Could not create directory");
+
+            let file_name = format!("pocket_ic_client_{pid}.log");
+            let appender = tracing_appender::rolling::never(&p, file_name);
+            let (non_blocking_appender, guard) = tracing_appender::non_blocking(appender);
+            let log_dir_filter: EnvFilter =
+                tracing_subscriber::EnvFilter::try_from_env(LOG_DIR_LEVELS_ENV_NAME)
+                    .unwrap_or_else(|_| "trace".parse().unwrap());
+
+            let layers = vec![tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking_appender)
+                // disable color escape codes in files
+                .with_ansi(false)
+                .with_filter(log_dir_filter)
+                .boxed()];
+            let _ = tracing_subscriber::registry().with(layers).try_init();
+            Some(guard)
+        }
+        _ => None,
+    }
+}
+
+/// Error type for [`TryFrom<u64>`].
 #[derive(Clone, Copy, Debug)]
 pub enum TryFromError {
     ValueOutOfRange(u64),
@@ -682,12 +798,14 @@ impl std::fmt::Display for ErrorCode {
     }
 }
 
-/// The error that is sent back to users of IC if something goes
+/// The error that is sent back to users from the IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
-/// can persist it in ingress history.
+/// can persist it in the ingress history.
 #[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserError {
+    /// The error code.
     pub code: ErrorCode,
+    /// A human-readable description of the error.
     pub description: String,
 }
 
@@ -698,33 +816,61 @@ impl std::fmt::Display for UserError {
     }
 }
 
+/// This enum describes the different error types when invoking a canister.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum CallError {
     Reject(String),
     UserError(UserError),
 }
 
-/// This struct describes the different types that executing a Wasm function in
-/// a canister can produce
+/// This struct describes the different types that executing a WASM function in
+/// a canister can produce.
 #[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WasmResult {
-    /// Raw response, returned in a "happy" case
+    /// Raw response, returned in a successful case.
     Reply(#[serde(with = "serde_bytes")] Vec<u8>),
     /// Returned with an error message when the canister decides to reject the
-    /// message
+    /// message.
     Reject(String),
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
+    let bin_path = match std::env::var_os("POCKET_IC_BIN") {
+        None => "./pocket-ic".to_string(),
+        Some(path) => path
+            .clone()
+            .into_string()
+            .unwrap_or_else(|_| panic!("Invalid string path for {path:?}")),
+    };
+
+    if !Path::new(&bin_path).exists() {
+        panic!("
+Could not find the PocketIC binary.
+
+The PocketIC binary could not be found at {:?}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
+or place it in your current working directory (you are running PocketIC from {:?}).
+
+Run the following commands to get the binary:
+    curl -sLO https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/$platform/pocket-ic.gz
+    gzip -d pocket-ic.gz
+    chmod +x pocket-ic
+where $platform is 'x86_64-linux' for Linux and 'x86_64-darwin' for Intel/rosetta-enabled Darwin.
+        ", &bin_path, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
+    }
+
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
-    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
     let parent_pid = std::os::unix::process::parent_id();
-    Command::new(PathBuf::from(bin_path))
-        .arg("--pid")
-        .arg(parent_pid.to_string())
-        .spawn()
-        .expect("Failed to start PocketIC binary");
+    let mut cmd = Command::new(PathBuf::from(bin_path));
+
+    cmd.arg("--pid").arg(parent_pid.to_string());
+
+    if std::env::var("POCKET_IC_INHERIT_STREAMS").is_err() {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
+    }
+
+    cmd.spawn().expect("Failed to start PocketIC binary");
 
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));

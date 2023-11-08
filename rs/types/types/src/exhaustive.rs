@@ -182,6 +182,12 @@ impl<T: ExhaustiveSet, const N: usize> ExhaustiveSet for [T; N] {
     }
 }
 
+impl<T> ExhaustiveSet for std::marker::PhantomData<T> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        vec![std::marker::PhantomData]
+    }
+}
+
 impl ExhaustiveSet for () {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
         vec![()]
@@ -274,7 +280,7 @@ impl ExhaustiveSet for CanisterId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         PrincipalId::exhaustive_set(rng)
             .into_iter()
-            .map(|id| CanisterId::new(id).unwrap())
+            .map(CanisterId::unchecked_from_principal)
             .collect()
     }
 }

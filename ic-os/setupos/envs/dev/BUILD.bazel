@@ -13,5 +13,6 @@ icos_build(
     image_deps_func = image_deps,
     upgrades = False,
     upload_prefix = "setup-os",
+    visibility = ["//visibility:public"],
     vuln_scan = False,
 )

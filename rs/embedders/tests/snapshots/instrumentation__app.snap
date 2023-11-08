@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 54
+assertion_line: 55
 expression: out
 ---
 (module
@@ -20,7 +20,7 @@ expression: out
   (func (;5;) (type 0) (param i32) (result i32)
     (local i32 i32)
     global.get 0
-    i64.const 18
+    i64.const 19
     i64.sub
     global.set 0
     global.get 0
@@ -111,7 +111,7 @@ expression: out
   )
   (func (;6;) (type 0) (param i32) (result i32)
     global.get 0
-    i64.const 3
+    i64.const 4
     i64.sub
     global.set 0
     global.get 0

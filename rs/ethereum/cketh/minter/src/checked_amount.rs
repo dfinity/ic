@@ -20,19 +20,26 @@ use crate::eth_rpc::into_nat;
 /// ```
 /// use ic_cketh_minter::checked_amount::CheckedAmountOf;
 ///
-/// enum MetricApple{}
+/// enum MetricApple {}
 /// type Apples = CheckedAmountOf<MetricApple>;
+///
+/// enum MetricOrange {}
+/// type Oranges = CheckedAmountOf<MetricOrange>;
+///
+/// enum OrangesPerAppleUnit {}
+/// type OrangesPerApple = CheckedAmountOf<OrangesPerAppleUnit>;
+///
 /// let three_apples = Apples::from(3_u8);
 ///
-/// //Checked addition
+/// // Checked addition
 /// assert_eq!(three_apples.checked_add(Apples::TWO), Some(Apples::from(5_u8)));
 /// assert_eq!(Apples::MAX.checked_add(Apples::ONE), None);
 ///
-/// //Checked subtraction
+/// // Checked subtraction
 /// assert_eq!(three_apples.checked_sub(Apples::TWO), Some(Apples::ONE));
 /// assert_eq!(Apples::TWO.checked_sub(three_apples), None);
 ///
-/// //Checked multiplication by scalar
+/// // Checked multiplication by scalar
 /// assert_eq!(three_apples.checked_mul(2_u8), Some(Apples::from(6_u8)));
 /// assert_eq!(Apples::MAX.checked_mul(2_u8), None);
 ///
@@ -74,6 +81,10 @@ impl<Unit> CheckedAmountOf<Unit> {
         Self(value, PhantomData)
     }
 
+    pub const fn into_inner(self) -> ethnum::u256 {
+        self.0
+    }
+
     #[inline]
     pub const fn from_words(hi: u128, lo: u128) -> Self {
         Self::from_inner(ethnum::u256::from_words(hi, lo))
@@ -107,10 +118,12 @@ impl<Unit> CheckedAmountOf<Unit> {
         self.0.checked_sub(other.0).map(Self::from_inner)
     }
 
-    pub fn checked_mul<T: Into<ethnum::u256>>(self, other: T) -> Option<Self> {
-        self.0
-            .checked_mul(other.into())
-            .map(|res| Self(res, PhantomData))
+    pub fn change_units<NewUnits>(self) -> CheckedAmountOf<NewUnits> {
+        CheckedAmountOf::<NewUnits>::from_inner(self.0)
+    }
+
+    pub fn checked_mul<T: Into<ethnum::u256>>(self, factor: T) -> Option<Self> {
+        self.0.checked_mul(factor.into()).map(Self::from_inner)
     }
 
     pub fn checked_div_ceil<T: Into<ethnum::u256>>(self, rhs: T) -> Option<Self> {

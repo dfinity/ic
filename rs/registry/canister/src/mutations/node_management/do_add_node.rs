@@ -87,8 +87,8 @@ impl Registry {
                 endpoint: Some(p2p_endpoint),
             }],
             node_operator_id: caller.into_vec(),
-            chip_id: vec![],
             hostos_version_id: None,
+            chip_id: payload.chip_id.clone(),
         };
 
         // 6. Insert node, public keys, and crypto keys
@@ -127,6 +127,7 @@ pub struct AddNodePayload {
     pub xnet_endpoint: String,
     pub http_endpoint: String,
 
+    pub chip_id: Option<Vec<u8>>,
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub p2p_flow_endpoints: Vec<String>,
     pub prometheus_metrics_endpoint: String,
@@ -298,6 +299,7 @@ mod tests {
             http_endpoint: "127.0.0.1:8123".to_string(),
             p2p_flow_endpoints: vec![],
             prometheus_metrics_endpoint: "".to_string(),
+            chip_id: None,
         };
     }
 

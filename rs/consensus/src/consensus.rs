@@ -59,7 +59,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{ConsensusMessageId, PriorityFn},
+    artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
     artifact_kind::ConsensusArtifact,
     consensus::{ConsensusMessageAttribute, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
@@ -94,6 +94,10 @@ enum ConsensusSubcomponent {
 /// subnet has not managed to get a certified statement from the
 /// registry for longer than this, the subnet should halt.
 pub const HALT_AFTER_REGISTRY_UNREACHABLE: Duration = Duration::from_secs(60 * 60);
+
+/// When purging consensus or certification artifacts, we always keep a
+/// minimum chain length below the catch-up height.
+pub(crate) const MINIMUM_CHAIN_LENGTH: u64 = 50;
 
 /// Describe expected version and artifact version when there is a mismatch.
 #[derive(Debug)]
@@ -616,13 +620,15 @@ impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
 
     /// Return a filter that represents what artifacts are needed above the
     /// filter height.
-    fn get_filter(&self) -> Height {
+    fn get_filter(&self) -> ConsensusMessageFilter {
         let expected_batch_height = self.message_routing.expected_batch_height();
         assert!(
             expected_batch_height > Height::from(0),
             "Expected batch height must be 1 more higher"
         );
-        expected_batch_height.decrement()
+        ConsensusMessageFilter {
+            height: expected_batch_height.decrement(),
+        }
     }
 }
 

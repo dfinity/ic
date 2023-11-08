@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::AlgorithmId;
@@ -7,9 +8,70 @@ use ic_types::*;
 use rand::{seq::IteratorRandom, Rng};
 use std::collections::BTreeMap;
 
+#[derive(Copy, Clone, Debug)]
+pub struct TestConfig {
+    signature_curve: EccCurveType,
+    key_curve: EccCurveType,
+}
+
+impl TestConfig {
+    pub fn all() -> Vec<Self> {
+        vec![
+            Self::new(EccCurveType::K256),
+            Self::new(EccCurveType::P256),
+            Self::new_mixed(EccCurveType::P256, EccCurveType::K256),
+        ]
+    }
+
+    pub fn new(curve: EccCurveType) -> Self {
+        Self::new_mixed(curve, curve)
+    }
+
+    pub fn new_mixed(signature_curve: EccCurveType, key_curve: EccCurveType) -> Self {
+        Self {
+            signature_curve,
+            key_curve,
+        }
+    }
+
+    pub fn signature_curve(&self) -> EccCurveType {
+        self.signature_curve
+    }
+
+    pub fn key_curve(&self) -> EccCurveType {
+        self.key_curve
+    }
+}
+
+fn verify_ecdsa_signature_using_third_party(
+    alg: AlgorithmId,
+    pk: &[u8],
+    sig: &[u8],
+    msg: &[u8],
+) -> bool {
+    match alg {
+        AlgorithmId::ThresholdEcdsaSecp256k1 => {
+            use k256::ecdsa::signature::Verifier;
+            let vk =
+                k256::ecdsa::VerifyingKey::from_sec1_bytes(pk).expect("Failed to parse public key");
+            let sig = k256::ecdsa::Signature::try_from(sig).expect("Failed to parse signature");
+            vk.verify(msg, &sig).is_ok()
+        }
+        AlgorithmId::ThresholdEcdsaSecp256r1 => {
+            use p256::ecdsa::signature::Verifier;
+            let vk =
+                p256::ecdsa::VerifyingKey::from_sec1_bytes(pk).expect("Failed to parse public key");
+            let sig = p256::ecdsa::Signature::try_from(sig).expect("Failed to parse signature");
+            vk.verify(msg, &sig).is_ok()
+        }
+        _ => panic!("Unexpected algorithm ID for checking ECDSA signature"),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ProtocolSetup {
     alg: AlgorithmId,
+    cfg: TestConfig,
     threshold: NumberOfNodes,
     receivers: usize,
     ad: Vec<u8>,
@@ -21,18 +83,14 @@ pub struct ProtocolSetup {
 
 impl ProtocolSetup {
     pub fn new(
-        curve: EccCurveType,
+        cfg: TestConfig,
         receivers: usize,
         threshold: usize,
         seed: Seed,
     ) -> Result<Self, ThresholdEcdsaError> {
-        let alg = match curve {
+        let alg = match cfg.signature_curve() {
             EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
-            _ => {
-                return Err(ThresholdEcdsaError::InvalidArguments(
-                    "Unsupported curve".to_string(),
-                ))
-            }
+            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
         };
 
         let rng = &mut seed.into_rng();
@@ -42,7 +100,7 @@ impl ProtocolSetup {
         let mut pk = Vec::with_capacity(receivers);
 
         for _i in 0..receivers {
-            let k = MEGaPrivateKey::generate(curve, rng);
+            let k = MEGaPrivateKey::generate(cfg.key_curve(), rng);
             pk.push(k.public_key());
             sk.push(k);
         }
@@ -51,6 +109,7 @@ impl ProtocolSetup {
 
         Ok(Self {
             alg,
+            cfg,
             threshold,
             receivers,
             ad,
@@ -59,6 +118,14 @@ impl ProtocolSetup {
             seed: Seed::from_rng(rng),
             protocol_round: std::cell::Cell::new(0),
         })
+    }
+
+    pub fn signature_curve(&self) -> EccCurveType {
+        self.cfg.signature_curve()
+    }
+
+    pub fn key_curve(&self) -> EccCurveType {
+        self.cfg.key_curve()
     }
 
     pub fn next_dealing_seed(&self) -> Seed {
@@ -616,7 +683,67 @@ impl ProtocolRound {
     ) {
         let number_of_receivers = NumberOfNodes::from(setup.receivers as u32);
 
-        let publicly_invalid = publicly_verify_dealing(
+        dealing
+            .publicly_verify(
+                setup.key_curve(),
+                setup.signature_curve(),
+                transcript_type,
+                setup.threshold,
+                dealer_index,
+                number_of_receivers,
+                &setup.ad,
+            )
+            .expect("Dealing should pass public verification");
+
+        // wrong dealer index -> invalid
+        assert_eq!(
+            dealing.publicly_verify(
+                setup.key_curve(),
+                setup.signature_curve(),
+                transcript_type,
+                setup.threshold,
+                dealer_index + 1,
+                number_of_receivers,
+                &setup.ad,
+            ),
+            Err(ThresholdEcdsaError::InvalidProof)
+        );
+
+        // wrong number of receivers -> invalid
+        assert_eq!(
+            dealing.publicly_verify(
+                setup.key_curve(),
+                setup.signature_curve(),
+                transcript_type,
+                setup.threshold,
+                dealer_index,
+                NumberOfNodes::from(1 + setup.receivers as u32),
+                &setup.ad,
+            ),
+            Err(ThresholdEcdsaError::InvalidRecipients)
+        );
+
+        // wrong associated data -> invalid
+        assert_eq!(
+            dealing.publicly_verify(
+                setup.key_curve(),
+                setup.signature_curve(),
+                transcript_type,
+                setup.threshold,
+                dealer_index,
+                number_of_receivers,
+                "wrong ad".as_bytes(),
+            ),
+            Err(ThresholdEcdsaError::InvalidProof)
+        );
+
+        /*
+         * This function assumes the MEGa keys are secp256k1 (CRP-2236)
+         *
+         * So for setup.key_curve() == K256 we expect success, and other
+         * curves should fail.
+         */
+        let top_level_dealing_verify_result = publicly_verify_dealing(
             setup.alg,
             dealing,
             transcript_type,
@@ -624,48 +751,16 @@ impl ProtocolRound {
             dealer_index,
             number_of_receivers,
             &setup.ad,
-        )
-        .is_err();
+        );
 
-        if publicly_invalid {
-            panic!("Created a publicly invalid dealing");
+        if setup.key_curve() == EccCurveType::K256 {
+            assert!(top_level_dealing_verify_result.is_ok());
+        } else {
+            assert_matches!(
+                top_level_dealing_verify_result.unwrap_err(),
+                IDkgVerifyDealingInternalError::InternalError(_)
+            );
         }
-
-        // wrong dealer index -> invalid
-        assert!(publicly_verify_dealing(
-            setup.alg,
-            dealing,
-            transcript_type,
-            setup.threshold,
-            dealer_index + 1,
-            number_of_receivers,
-            &setup.ad
-        )
-        .is_err());
-
-        // wrong number of receivers -> invalid
-        assert!(publicly_verify_dealing(
-            setup.alg,
-            dealing,
-            transcript_type,
-            setup.threshold,
-            dealer_index,
-            NumberOfNodes::from(1 + setup.receivers as u32),
-            &setup.ad
-        )
-        .is_err());
-
-        // wrong associated data -> invalid
-        assert!(publicly_verify_dealing(
-            setup.alg,
-            dealing,
-            transcript_type,
-            setup.threshold,
-            dealer_index,
-            number_of_receivers,
-            "wrong ad".as_bytes()
-        )
-        .is_err());
     }
 
     pub fn constant_term(&self) -> EccPoint {
@@ -685,13 +780,13 @@ pub struct SignatureProtocolSetup {
 
 impl SignatureProtocolSetup {
     pub fn new(
-        curve: EccCurveType,
+        cfg: TestConfig,
         number_of_dealers: usize,
         threshold: usize,
         number_of_dealings_corrupted: usize,
         seed: Seed,
     ) -> ThresholdEcdsaResult<Self> {
-        let setup = ProtocolSetup::new(curve, number_of_dealers, threshold, seed)?;
+        let setup = ProtocolSetup::new(cfg, number_of_dealers, threshold, seed)?;
 
         let key = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
         let kappa = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
@@ -737,8 +832,13 @@ impl SignatureProtocolSetup {
     }
 
     pub fn public_key(&self, path: &DerivationPath) -> Result<EcdsaPublicKey, ThresholdEcdsaError> {
+        let mpk_alg = match self.setup.alg {
+            AlgorithmId::ThresholdEcdsaSecp256r1 => AlgorithmId::EcdsaP256,
+            AlgorithmId::ThresholdEcdsaSecp256k1 => AlgorithmId::EcdsaSecp256k1,
+            _ => panic!("Unknown algorithm in ProtocolSetup"),
+        };
         let master_public_key = MasterEcdsaPublicKey {
-            algorithm_id: AlgorithmId::EcdsaSecp256k1,
+            algorithm_id: mpk_alg,
             public_key: self.key.transcript.constant_term().serialize(),
         };
         ic_crypto_internal_threshold_sig_ecdsa::sign::derive_public_key(&master_public_key, path)
@@ -850,15 +950,12 @@ impl SignatureProtocolExecution {
         // If verification succeeded, check with RustCrypto's ECDSA also
         let pk = self.setup.public_key(&self.derivation_path)?;
 
-        use k256::ecdsa::signature::Verifier;
-
-        let vk = k256::ecdsa::VerifyingKey::from_sec1_bytes(&pk.public_key)
-            .expect("Failed to parse public key");
-
-        let sig = k256::ecdsa::Signature::try_from(sig.serialize().as_ref())
-            .expect("Failed to parse signature");
-
-        assert!(vk.verify(&self.signed_message, &sig).is_ok());
+        assert!(verify_ecdsa_signature_using_third_party(
+            self.setup.setup.alg,
+            &pk.public_key,
+            &sig.serialize(),
+            &self.signed_message
+        ));
 
         Ok(())
     }

@@ -878,6 +878,7 @@ impl SystemTestGroup {
                     start_times: BTreeMap::new(),
                     end_times: BTreeMap::new(),
                     log: group_ctx.logger(),
+                    test_name: group_ctx.group_base_name.clone(),
                 };
                 info!(group_ctx.log(), "Generated task_scheduler");
                 task_scheduler.execute(args.debug_keepalive);
@@ -891,7 +892,7 @@ impl SystemTestGroup {
                 //     }
                 // }
 
-                let report = task_scheduler.create_report();
+                let report = task_scheduler.create_report(group_ctx.group_base_name.clone());
                 if !args.no_summary_report {
                     let event: log_events::LogEvent<_> = report.clone().into();
                     // Emit a json log event, to be consumed by log post-processing tools.

@@ -40,9 +40,6 @@ NEURON_ID=${5:-$NEURON_ID}
 ensure_variable_set NNS_URL || help
 ensure_variable_set NEURON_ID || help
 
-# Allow overriding PEM file, but default to shared identity
-export PEM=${PEM:-$NNS_TOOLS_DIR/test_user.pem}
-
 ENCODED_ARGS_FILE=""
 if [ ! -z "$CANDID_ARGS" ]; then
     ENCODED_ARGS_FILE=$(encode_candid_args_in_file "$CANDID_ARGS")

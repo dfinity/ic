@@ -120,18 +120,21 @@ REPOS_TO_SCAN = [
         ],
         DEFAULT_NODE_VERSION,
     ),
-    Repository(
-        "ic-docutrack",
-        "https://github.com/dfinity/ic-docutrack",
-        [
-            Project(
-                name="frontend",
-                path="ic-docutrack/frontend",
-                owner=Team.EXECUTION_TEAM,
-            )
-        ],
-        DEFAULT_NODE_VERSION,
-    ),
+    # Removing ic-docutrack temporarily since it supports
+    # only pnpm and not npm
+    #
+    # Repository(
+    #     "ic-docutrack",
+    #     "https://github.com/dfinity/ic-docutrack",
+    #     [
+    #         Project(
+    #             name="frontend",
+    #             path="ic-docutrack/frontend",
+    #             owner=Team.EXECUTION_TEAM,
+    #         )
+    #     ],
+    #     DEFAULT_NODE_VERSION,
+    # ),
 ]
 
 if __name__ == "__main__":

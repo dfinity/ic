@@ -5,7 +5,7 @@ use futures_util::future::ready;
 use hyper::client::connect::dns::Name;
 use reqwest::dns::{Addrs, Resolve, Resolving};
 
-use crate::snapshot::RoutingTable;
+use crate::snapshot::RegistrySnapshot;
 
 const UNUSED_PORT: u16 = 0;
 
@@ -14,11 +14,11 @@ const UNUSED_PORT: u16 = 0;
 pub struct DnsError(String);
 
 pub struct DnsResolver {
-    rt: Arc<ArcSwapOption<RoutingTable>>,
+    rt: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl DnsResolver {
-    pub fn new(rt: Arc<ArcSwapOption<RoutingTable>>) -> Self {
+    pub fn new(rt: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
         Self { rt }
     }
 }

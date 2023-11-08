@@ -11,6 +11,7 @@ fish
 clang
 iproute2
 shellcheck
+xxd
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool

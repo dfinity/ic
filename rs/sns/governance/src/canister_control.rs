@@ -28,14 +28,7 @@ pub fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, 
         )
     })?;
 
-    CanisterId::new(canister_id).map_err(|err| {
-        // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
-        // code will never be executed.
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!("Specified canister ID was invalid: {:?}", err,),
-        )
-    })
+    Ok(CanisterId::unchecked_from_principal(canister_id))
 }
 
 /// Upgrades a canister controlled by governance.
@@ -90,7 +83,7 @@ pub async fn upgrade_canister_directly(
 }
 
 /// Installs a new wasm to a canister id (target canister must be controlled by governance).
-pub async fn install_code(
+async fn install_code(
     env: &dyn Environment,
     canister_id: CanisterId,
     wasm: Vec<u8>,
@@ -127,7 +120,7 @@ pub async fn install_code(
 }
 
 /// Starts a canister with a given id (target canister must be controlled by governance).
-pub async fn start_canister(
+async fn start_canister(
     env: &dyn Environment,
     canister_id: CanisterId,
 ) -> Result<(), GovernanceError> {
@@ -150,55 +143,56 @@ pub async fn start_canister(
 }
 
 /// Stops a canister with a given id (target canister must be controlled by governance).
-pub async fn stop_canister(
+async fn stop_canister(
     env: &dyn Environment,
     canister_id: CanisterId,
 ) -> Result<(), GovernanceError> {
-    let serialize_canister_id = candid::Encode!(&CanisterIdRecord::from(canister_id))
+    let serialized_canister_id = candid::Encode!(&CanisterIdRecord::from(canister_id))
         .expect("Unable to encode stop_canister args.");
 
-    env.call_canister(
-        CanisterId::ic_00(),
-        "stop_canister",
-        serialize_canister_id.clone(),
-    )
-    .await
-    .map_err(|err| {
-        let err = GovernanceError::new_with_message(
-            ErrorType::External,
-            format!("Unable to stop the target canister: {:?}", err),
-        );
-        log!(ERROR, "{}{:?}", log_prefix(), err);
-        err
-    })?;
+    match env
+        .call_canister(
+            CanisterId::ic_00(),
+            "stop_canister",
+            serialized_canister_id.clone(),
+        )
+        .await
+        .map_err(|err| {
+            let err = GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Unable to stop the target canister: {:?}", err),
+            );
+            log!(ERROR, "{}{:?}", log_prefix(), err);
+            err
+        }) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            log!(
+                ERROR,
+                "{}Attempting to restart canister {}",
+                log_prefix(),
+                canister_id
+            );
+            Err(match start_canister(env, canister_id).await {
+                Ok(_) => err,
+                Err(extra_err) => GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "{}Error restarting canister \
+                         {} after failed start: {}.  Error stopping: {}",
+                        log_prefix(),
+                        canister_id,
+                        extra_err,
+                        err
+                    ),
+                ),
+            })
+        }
+    }?;
 
     // Wait until canister is in the stopped state.
     loop {
-        let result = env
-            .call_canister(
-                CanisterId::ic_00(),
-                "canister_status",
-                serialize_canister_id.clone(),
-            )
-            .await;
-        let status = match result {
-            Ok(ok) => Decode!(&ok, CanisterStatusResultFromManagementCanister)
-                .expect("Unable to decode canister_status response."),
-
-            // This is probably a permanent error, so we give up right away.
-            Err(err) => {
-                let err = GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "An error occurred while waiting for the target canister to stop: {:?}",
-                        err
-                    ),
-                );
-                log!(ERROR, "{}{:?}", log_prefix(), err);
-                return Err(err);
-            }
-        };
-
+        let status = canister_status(env, canister_id).await?;
         if status.status == CanisterStatusType::Stopped {
             return Ok(());
         }
@@ -210,6 +204,42 @@ pub async fn stop_canister(
             canister_id,
             status
         );
+    }
+}
+
+async fn canister_status(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Result<CanisterStatusResultFromManagementCanister, GovernanceError> {
+    let serialized_canister_id = candid::Encode!(&CanisterIdRecord::from(canister_id))
+        .expect("Unable to encode stop_canister args.");
+
+    let result = env
+        .call_canister(
+            CanisterId::ic_00(),
+            "canister_status",
+            serialized_canister_id.clone(),
+        )
+        .await;
+    match result {
+        Ok(ok) => {
+            let decoded = Decode!(&ok, CanisterStatusResultFromManagementCanister)
+                .expect("Unable to decode canister_status response.");
+            Ok(decoded)
+        }
+
+        // This is probably a permanent error, so we give up right away.
+        Err(err) => {
+            let err = GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "An error occurred while waiting for the target canister to stop: {:?}",
+                    err
+                ),
+            );
+            log!(ERROR, "{}{:?}", log_prefix(), err);
+            Err(err)
+        }
     }
 }
 

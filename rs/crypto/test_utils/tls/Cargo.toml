@@ -1,15 +1,24 @@
 [package]
 name = "ic-crypto-test-utils-tls"
-version = "0.8.0"
-edition = "2021"
 description = "Test utility for TLS"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
+ic-crypto-ecdsa-secp256r1 = { path = "../../ecdsa_secp256r1" }
+ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
+ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-registry-client-fake = { path = "../../../registry/fake" }
 ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
-openssl = "0.10.55"
-tokio = { version = "1.32.0", features = ["net"] }
-tokio-openssl = "0.6.0"
+pkcs8 = { workspace = true }
+signature = { workspace = true }
+time = "0.3.20"
+tokio = { workspace = true }
+tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
+x509-cert = { workspace = true }

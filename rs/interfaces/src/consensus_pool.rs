@@ -1,6 +1,6 @@
 //! The consensus pool public interface.
 
-use crate::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
+use crate::artifact_pool::UnvalidatedArtifact;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -21,6 +21,19 @@ use std::sync::Arc;
 
 /// The height, at which we consider a replica to be behind
 pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
+
+/// Validated artifact
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValidatedArtifact<T> {
+    pub msg: T,
+    pub timestamp: Time,
+}
+
+impl<T> AsRef<T> for ValidatedArtifact<T> {
+    fn as_ref(&self) -> &T {
+        &self.msg
+    }
+}
 
 pub type ChangeSet = Vec<ChangeAction>;
 
@@ -275,14 +288,17 @@ pub trait HeightIndexedPool<T> {
 }
 // end::interface[]
 
+/// Reader of time in the latest/highest finalized block.
+pub trait ConsensusTime: Send + Sync {
+    /// Return the time as recorded in the latest/highest finalized block.
+    /// Return None if there has not been any finalized block since genesis.
+    fn consensus_time(&self) -> Option<Time>;
+}
+
 /// Reader of consensus related states.
 pub trait ConsensusPoolCache: Send + Sync {
     /// Return the latest/highest finalized block.
     fn finalized_block(&self) -> Block;
-
-    /// Return the time as recorded in the latest/highest finalized block.
-    /// Return None if there has not been any finalized block since genesis.
-    fn consensus_time(&self) -> Option<Time>;
 
     /// Return the latest/highest CatchUpPackage.
     fn catch_up_package(&self) -> CatchUpPackage;

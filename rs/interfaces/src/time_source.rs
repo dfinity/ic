@@ -52,6 +52,14 @@ impl TimeSource for SysTimeSource {
     }
 }
 
+pub struct RealClock;
+
+impl TimeSource for RealClock {
+    fn get_relative_time(&self) -> Time {
+        system_time_now()
+    }
+}
+
 /// Return the current system time. Note that the value returned is not
 /// guaranteed to be monotonic.
 fn system_time_now() -> Time {

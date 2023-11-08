@@ -233,7 +233,7 @@ fn cannot_submit_proposals_with_insufficient_funds() {
             .command
             .expect("Making NNS proposal failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::PreconditionFailed);
+    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::InsufficientFunds);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron doesn't have enough minted stake to submit proposal"));
 }
 

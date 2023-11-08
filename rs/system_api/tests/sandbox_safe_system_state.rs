@@ -69,6 +69,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
+            NumBytes::from(0),
             request.clone(),
             Cycles::zero(),
             Cycles::zero(),
@@ -119,6 +120,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
+            NumBytes::from(0),
             request.clone(),
             prepayment_for_response_execution,
             prepayment_for_response_transmission
@@ -155,6 +157,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
 
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
+            NumBytes::from(0),
             NumBytes::from(0),
             RequestBuilder::default()
                 .sender(canister_test_id(0))
@@ -210,6 +213,7 @@ fn correct_charging_source_canister_for_a_request() {
     // Enqueue the Request.
     sandbox_safe_system_state
         .push_output_request(
+            NumBytes::from(0),
             NumBytes::from(0),
             request,
             prepayment_for_response_execution,
@@ -436,6 +440,7 @@ fn test_inter_canister_call(
     // Enqueue the Request.
     sandbox_safe_system_state
         .push_output_request(
+            NumBytes::from(0),
             NumBytes::from(0),
             request,
             prepayment_for_response_execution,

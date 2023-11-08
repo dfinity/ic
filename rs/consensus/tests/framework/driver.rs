@@ -9,11 +9,12 @@ use ic_interfaces::{
     certification,
     consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
-    time_source::{SysTimeSource, TimeSource},
+    time_source::TimeSource,
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
+use ic_test_utilities::MockTimeSource;
 use ic_types::{consensus::ConsensusMessage, NodeId};
 use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
@@ -39,6 +40,7 @@ impl<'a> ConsensusDriver<'a> {
     ) -> ConsensusDriver<'a> {
         let ingress_pool = RefCell::new(TestIngressPool::new(node_id, pool_config.clone()));
         let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
+            node_id,
             pool_config,
             logger.clone(),
             metrics_registry,
@@ -108,7 +110,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let dkg_pool = &mut self.dkg_pool.write().unwrap();
-                dkg_pool.apply_changes(&SysTimeSource::new(), changeset);
+                dkg_pool.apply_changes(&MockTimeSource::new(), changeset);
             }
         }
         loop {
@@ -129,7 +131,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let mut certification_pool = self.certification_pool.write().unwrap();
-                certification_pool.apply_changes(&SysTimeSource::new(), changeset);
+                certification_pool.apply_changes(&MockTimeSource::new(), changeset);
             }
         }
         to_deliver

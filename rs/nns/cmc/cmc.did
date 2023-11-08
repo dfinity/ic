@@ -17,6 +17,35 @@ type NotifyTopUpArg = record {
   canister_id : principal;
 };
 
+
+type SubnetSelection = variant {
+    /// Choose a specific subnet
+    Subnet : record {
+      subnet: principal;
+    };
+    /// Choose a random subnet that fulfills the specified properties
+    Filter : SubnetFilter;
+};
+
+type SubnetFilter = record {
+  subnet_type: opt text;
+};
+
+// The argument of the [create_canister] method.
+type CreateCanisterArg = record {
+  // Optional canister settings that, if set, are applied to the newly created canister.
+  // If not specified, the caller is the controller of the canister and the other settings are set to default values.
+  settings : opt CanisterSettings;
+
+  // An optional subnet type that, if set, determines what type of subnet
+  // the new canister will be created on.
+  // Deprecated. Use subnet_selection instead.
+  subnet_type: opt text;
+
+  // Optional instructions to select on which subnet the new canister will be created on.
+  subnet_selection: opt SubnetSelection;
+};
+
 // The argument of the [notify_create_canister] method.
 type NotifyCreateCanisterArg = record {
   // Index of the block on the ICP ledger that contains the payment.
@@ -27,11 +56,35 @@ type NotifyCreateCanisterArg = record {
 
   // An optional subnet type that, if set, determines what type of subnet
   // the new canister will be created on.
+  // Deprecated. Use subnet_selection instead.
   subnet_type: opt text;
 
+  // Optional instructions to select on which subnet the new canister will be created on.
+  // vec may contain no more than one element.
+  subnet_selection: opt vec SubnetSelection;
+
   // Optional canister settings that, if set, are applied to the newly created canister.
-  // If not specified, the caller is the controller of the canister, and the other settings are set to default values.
+  // If not specified, the caller is the controller of the canister and the other settings are set to default values.
   settings : opt CanisterSettings;
+};
+
+// Canister creation failed and the cycles attached to the call were returned to the calling canister.
+// A small fee may be charged.
+type CreateCanisterError = variant {
+  Refunded : record {
+    // The amount of cycles returned to the calling canister
+    refund_amount: nat;
+
+    // The reason why creating a canister failed.
+    create_error: text;
+  };
+  RefundFailed : record {
+    // The reason why creating a canister failed.
+    create_error: text;
+
+    // The reason why refunding cycles failed.
+    refund_error: text;
+  };
 };
 
 type NotifyError = variant {
@@ -66,6 +119,12 @@ type NotifyTopUpResult = variant {
   // The amount of cycles sent to the specified canister.
   Ok : Cycles;
   Err : NotifyError;
+};
+
+type CreateCanisterResult = variant {
+  // The principal of the newly created canister.
+  Ok : principal;
+  Err : CreateCanisterError;
 };
 
 type NotifyCreateCanisterResult = variant {
@@ -137,6 +196,9 @@ service : (opt CyclesCanisterInitPayload) -> {
   // Prompts the cycles minting canister to process a payment by converting ICP
   // into cycles and sending the cycles the specified canister.
   notify_top_up : (NotifyTopUpArg) -> (NotifyTopUpResult);
+
+  // Creates a canister using the cycles attached to the function call.
+  create_canister : (CreateCanisterArg) -> (CreateCanisterResult);
 
   // Prompts the cycles minting canister to process a payment for canister creation.
   notify_create_canister : (NotifyCreateCanisterArg) -> (NotifyCreateCanisterResult);

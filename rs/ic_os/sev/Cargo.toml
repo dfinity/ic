@@ -1,21 +1,27 @@
 [package]
 name = "ic-icos-sev"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 async-trait = "0.1.41"
-ic-icos-sev-interfaces = { path = "../sev_interfaces" }
+ic-types = { path = "../../types/types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-base-types = { path = "../../types/base_types" }
-serde_cbor = "0.11"
-serde = { version = "1.0.99", features = ["derive"] }
+serde_cbor = { workspace = true }
+serde = { workspace = true }
 sha2 = "0.9.1"
 thiserror = "1"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 openssl = "0.10.55"
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
-sev = { version = "1.2.0", features = ["openssl"] }
+sev = { version = "1.2.1", features = ["openssl"] }
+
+[dev-dependencies]
+assert_matches = "1.5.0"

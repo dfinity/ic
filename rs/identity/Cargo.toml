@@ -1,12 +1,14 @@
 [package]
 name = "ic-identity"
-version = "0.8.0"
-edition = "2021"
 description = "A tool to generate necessary crypto keys for IC admins and users."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.31"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 ed25519-consensus = "2.0.1"
 rand = "0.8"
 ic-crypto-utils-basic-sig = { path = "../crypto/utils/basic_sig" }

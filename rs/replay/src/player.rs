@@ -10,6 +10,7 @@ use ic_artifact_pool::{
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
 use ic_consensus::{certification::VerifierImpl, consensus::batch_delivery::deliver_batches};
+use ic_consensus_utils::membership::Membership;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_consensus_utils::{crypto_hashable_to_seed, lookup_replica_version};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
@@ -48,7 +49,7 @@ use ic_registry_transport::{
 };
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
-use ic_types::batch::BatchMessages;
+use ic_types::batch::{BatchMessages, BlockmakerMetrics};
 use ic_types::consensus::certification::CertificationShare;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
@@ -110,6 +111,7 @@ pub struct Player {
     state_manager: Arc<StateManagerImpl>,
     message_routing: Arc<dyn MessageRouting>,
     consensus_pool: Option<ConsensusPoolImpl>,
+    membership: Option<Arc<Membership>>,
     validator: Option<ReplayValidator>,
     crypto: Arc<dyn CryptoComponentForVerificationOnly>,
     http_query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
@@ -166,12 +168,13 @@ impl Player {
             .join(replica_version.to_string());
         // Extract the genesis CUP and instantiate a new pool.
         let cup_file = backup::cup_file_name(&backup_dir, Height::from(start_height));
-        let initial_cup =
-            backup::read_cup_file(&cup_file).expect("CUP of the starting block should be valid");
+        let initial_cup_proto = backup::read_cup_proto_file(&cup_file)
+            .expect("CUP of the starting block should be valid");
         // This would create a new pool with just the genesis CUP.
-        let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let pool = ConsensusPoolImpl::new(
+            NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
-            initial_cup,
+            initial_cup_proto,
             artifact_pool_config,
             MetricsRegistry::new(),
             log.clone(),
@@ -204,6 +207,7 @@ impl Player {
             // recovery.
             artifact_pool_config.persistent_pool_read_only = true;
             let consensus_pool = ConsensusPoolImpl::from_uncached(
+                NodeId::from(PrincipalId::new_anonymous()),
                 UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
                 MetricsRegistry::new(),
                 log.clone(),
@@ -308,6 +312,7 @@ impl Player {
         ));
         let certification_pool = consensus_pool.as_ref().map(|_| {
             CertificationPoolImpl::new(
+                NodeId::from(PrincipalId::new_anonymous()),
                 ArtifactPoolConfig::from(cfg.artifact_pool.clone()),
                 log.clone(),
                 metrics_registry.clone(),
@@ -328,10 +333,18 @@ impl Player {
                 log.clone(),
             )
         });
+        let membership = consensus_pool.as_ref().map(|pool| {
+            Arc::new(Membership::new(
+                pool.get_cache(),
+                registry.clone(),
+                subnet_id,
+            ))
+        });
         Player {
             state_manager,
             message_routing,
             consensus_pool,
+            membership,
             validator,
             crypto,
             http_query_handler: execution_service.sync_query_handler,
@@ -368,16 +381,21 @@ impl Player {
         &self,
         extra: F,
     ) -> ReplayResult {
-        let (inspection_required, invalid_artifacts) =
-            if let (Some(consensus_pool), Some(certification_pool), Some(validator)) = (
-                &self.consensus_pool,
-                &self.certification_pool,
-                &self.validator,
-            ) {
-                self.replay_consensus_pool(consensus_pool, certification_pool, validator)?
-            } else {
-                Default::default()
-            };
+        let (inspection_required, invalid_artifacts) = if let (
+            Some(consensus_pool),
+            Some(certification_pool),
+            Some(validator),
+            Some(membership),
+        ) = (
+            &self.consensus_pool,
+            &self.certification_pool,
+            &self.validator,
+            &self.membership,
+        ) {
+            self.replay_consensus_pool(consensus_pool, membership, certification_pool, validator)?
+        } else {
+            Default::default()
+        };
 
         let (latest_context_time, extra_batch_delivery) = self.deliver_extra_batch(
             self.message_routing.as_ref(),
@@ -425,6 +443,7 @@ impl Player {
     fn replay_consensus_pool(
         &self,
         consensus_pool: &ConsensusPoolImpl,
+        membership: &Membership,
         certification_pool: &CertificationPoolImpl,
         validator: &ReplayValidator,
     ) -> Result<(bool, Vec<InvalidArtifact>), ReplayError> {
@@ -447,7 +466,7 @@ impl Player {
         let mut invalid_artifacts = Vec::new();
         invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
             consensus_pool,
-            self.get_latest_cup(),
+            self.get_latest_cup_proto(),
             target_height.unwrap(),
         )?);
         if !invalid_artifacts.is_empty() {
@@ -455,8 +474,12 @@ impl Player {
             invalid_artifacts.iter().for_each(|a| println!("{:?}", a));
         }
 
-        let last_batch_height =
-            self.deliver_batches(self.message_routing.as_ref(), pool_reader, target_height);
+        let last_batch_height = self.deliver_batches(
+            self.message_routing.as_ref(),
+            pool_reader,
+            membership,
+            target_height,
+        );
         self.wait_for_state(last_batch_height);
 
         // Redeliver certifications to state manager. It will panic if there is any
@@ -645,12 +668,14 @@ impl Player {
         &self,
         message_routing: &dyn MessageRouting,
         pool: &PoolReader<'_>,
+        membership: &Membership,
         replay_target_height: Option<Height>,
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
         let last_batch_height = loop {
             match deliver_batches(
                 message_routing,
+                membership,
                 pool,
                 &*self.registry,
                 self.subnet_id,
@@ -717,6 +742,7 @@ impl Player {
             registry_version,
             time,
             consensus_responses: Vec::new(),
+            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         };
         let context_time = extra_batch.time;
         let extra_msgs = extra(self, context_time);
@@ -764,7 +790,7 @@ impl Player {
         };
         match self.http_query_handler.query(
             query,
-            self.state_manager.get_latest_state().take(),
+            self.state_manager.get_latest_state(),
             Vec::new(),
         ) {
             Ok(wasm_result) => match wasm_result {
@@ -799,7 +825,7 @@ impl Player {
         };
         match self.http_query_handler.query(
             query,
-            self.state_manager.get_latest_state().take(),
+            self.state_manager.get_latest_state(),
             Vec::new(),
         ) {
             Ok(wasm_result) => match wasm_result {
@@ -835,7 +861,7 @@ impl Player {
         };
         match self.http_query_handler.query(
             query,
-            self.state_manager.get_latest_state().take(),
+            self.state_manager.get_latest_state(),
             Vec::new(),
         ) {
             Ok(wasm_result) => match wasm_result {
@@ -865,7 +891,7 @@ impl Player {
         };
         match self.http_query_handler.query(
             query,
-            self.state_manager.get_latest_state().take(),
+            self.state_manager.get_latest_state(),
             Vec::new(),
         ) {
             Ok(wasm_result) => match wasm_result {
@@ -934,6 +960,7 @@ impl Player {
             let last_batch_height = self.deliver_batches(
                 self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
+                self.membership.as_ref().unwrap(),
                 self.replay_target_height.map(Height::from),
             );
             self.wait_for_state(last_batch_height);
@@ -1320,6 +1347,7 @@ mod tests {
     fn test_get_share_certified_hashes() {
         let tmp = tempfile::tempdir().expect("Could not create a temp dir");
         let pool = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(tmp.path().to_path_buf()),
             no_op_logger(),
             MetricsRegistry::new(),

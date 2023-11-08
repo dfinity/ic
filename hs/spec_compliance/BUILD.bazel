@@ -1,4 +1,5 @@
 load("@rules_haskell//haskell:defs.bzl", "haskell_binary", "haskell_library")
+load("//bazel:candid.bzl", "did_git_test")
 
 STACK_DEPS = [
     "@stackage//:aeson",
@@ -132,6 +133,11 @@ haskell_binary(
         ":IC-Version",
         ":SourceId",
     ],
+)
+
+did_git_test(
+    name = "ic_did_git_test",
+    did = "ic.did",
 )
 
 haskell_library(

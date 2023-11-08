@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.41" 
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 
 [lib]
 name = "ic_dashboard"

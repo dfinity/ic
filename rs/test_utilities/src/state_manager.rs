@@ -5,7 +5,7 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateReader, Labeled,
+    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled,
     PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
     StateManagerResult, StateReader, TransientStateHashError::*, CERT_ANY, CERT_CERTIFIED,
     CERT_UNCERTIFIED,
@@ -310,9 +310,9 @@ impl StateReader for FakeStateManager {
         None
     }
 
-    fn get_certified_state_reader(
+    fn get_certified_state_snapshot(
         &self,
-    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>> {
+    ) -> Option<Box<dyn CertifiedStateSnapshot<State = Self::State> + 'static>> {
         None
     }
 }
@@ -611,9 +611,9 @@ impl StateReader for RefMockStateManager {
         self.mock.read().unwrap().read_certified_state(paths)
     }
 
-    fn get_certified_state_reader(
+    fn get_certified_state_snapshot(
         &self,
-    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>> {
-        self.mock.read().unwrap().get_certified_state_reader()
+    ) -> Option<Box<dyn CertifiedStateSnapshot<State = Self::State> + 'static>> {
+        self.mock.read().unwrap().get_certified_state_snapshot()
     }
 }

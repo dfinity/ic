@@ -64,7 +64,7 @@ pub fn split(
     // Load latest checkpoint under `root`.
     let config = Config::new(root);
     let state_layout =
-        StateLayout::try_new(log.clone(), config.state_root, metrics_registry).unwrap();
+        StateLayout::try_new(log.clone(), config.state_root.clone(), metrics_registry).unwrap();
 
     // A thread pool to use for reading and writing checkpoints.
     let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
@@ -98,6 +98,7 @@ pub fn split(
         &cp,
         &mut thread_pool,
         fd_factory,
+        &config,
         &metrics,
         log,
     )
@@ -174,6 +175,7 @@ fn write_checkpoint(
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    config: &Config,
     metrics: &StateManagerMetrics,
     log: ReplicaLogger,
 ) -> Result<(), String> {
@@ -181,12 +183,18 @@ fn write_checkpoint(
 
     let mut tip_handler = state_layout.capture_tip_handler();
     tip_handler
-        .reset_tip_to(&state_layout, old_cp, Some(thread_pool))
+        .reset_tip_to(
+            &state_layout,
+            old_cp,
+            config.lsmt_storage,
+            Some(thread_pool),
+        )
         .map_err(|e| e.to_string())?;
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
         tip_handler,
         state_layout,
+        config.lsmt_storage,
         metrics.clone(),
         MaliciousFlags::default(),
     );

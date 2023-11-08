@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-for-verification-only = { path = "../../crypto/for_verification_only" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
@@ -27,7 +27,7 @@ slog = { version = "2.5.2", features = [
     "release_max_level_debug",
 ] }
 tempfile = "3.1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 url = "2.1.1"
 
 [[bin]]

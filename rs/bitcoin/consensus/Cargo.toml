@@ -1,11 +1,16 @@
 [package]
 name = "ic-btc-consensus"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
+ic-config = { path = "../../config" }
 ic-btc-interface = { workspace = true }
 ic-btc-types-internal = { path = "../types/internal" }
+ic-error-types = { path = "../../types/error_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }

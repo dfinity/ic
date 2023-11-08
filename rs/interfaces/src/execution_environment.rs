@@ -5,6 +5,7 @@ pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_ic00_types::EcdsaKeyId;
+use ic_interfaces_state_manager::Labeled;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -15,7 +16,7 @@ use ic_types::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, HttpQueryResponse,
         MessageId, SignedIngressContent, UserQuery,
     },
-    CpuComplexity, Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -75,95 +76,12 @@ pub enum SubnetAvailableMemoryError {
 /// Performance counter type.
 #[derive(Debug)]
 pub enum PerformanceCounterType {
-    // The number of WebAssembly instructions the canister has executed based on
-    // the given `i64` instruction counter.
+    // The number of WebAssembly instructions the canister has executed since
+    // the beginning of the current message execution.
     Instructions(i64),
-}
-
-/// Tracks the execution complexity.
-///
-/// Each execution has an associated complexity, i.e. how much CPU, memory,
-/// disk or network bandwidth it takes.
-///
-/// For now, the complexity counters do not translate into Cycles, but they are rather
-/// used to prevent too complex messages to slow down the whole subnet.
-///
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct ExecutionComplexity {
-    /// Accumulated CPU complexity, in instructions.
-    pub cpu: CpuComplexity,
-    /// The number of dirty pages in stable memory.
-    pub stable_dirty_pages: NumPages,
-}
-
-impl ExecutionComplexity {
-    /// Execution complexity with maximum values.
-    pub const MAX: Self = Self {
-        cpu: CpuComplexity::new(i64::MAX),
-        stable_dirty_pages: NumPages::new(u64::MAX),
-    };
-
-    /// Creates execution complexity with a specified CPU complexity.
-    pub fn with_cpu(cpu: NumInstructions) -> Self {
-        Self {
-            cpu: (cpu.get() as i64).into(),
-            ..Default::default()
-        }
-    }
-
-    /// Returns true if the CPU complexity reached the specified
-    /// instructions limit.
-    pub fn cpu_reached(&self, limit: NumInstructions) -> bool {
-        self.cpu.get() >= limit.get() as i64
-    }
-
-    /// Returns the maximum of each complexity.
-    pub fn max(&self, rhs: Self) -> Self {
-        Self {
-            cpu: self.cpu.max(rhs.cpu),
-            stable_dirty_pages: self.stable_dirty_pages.max(rhs.stable_dirty_pages),
-        }
-    }
-}
-
-impl ops::Add for &ExecutionComplexity {
-    type Output = ExecutionComplexity;
-
-    fn add(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
-        ExecutionComplexity {
-            cpu: self.cpu + rhs.cpu,
-            stable_dirty_pages: self
-                .stable_dirty_pages
-                .get()
-                .saturating_add(rhs.stable_dirty_pages.get())
-                .into(),
-        }
-    }
-}
-
-impl ops::Sub for &ExecutionComplexity {
-    type Output = ExecutionComplexity;
-
-    fn sub(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
-        ExecutionComplexity {
-            cpu: self.cpu - rhs.cpu,
-            stable_dirty_pages: self
-                .stable_dirty_pages
-                .get()
-                .saturating_sub(rhs.stable_dirty_pages.get())
-                .into(),
-        }
-    }
-}
-
-impl fmt::Display for ExecutionComplexity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{{ cpu = {} stable_dirty_pages = {} }}",
-            self.cpu, self.stable_dirty_pages,
-        )
-    }
+    // The number of WebAssembly instructions the canister has executed since
+    // the creation of the current call context.
+    CallContextInstructions(i64),
 }
 
 /// Tracks the available memory on a subnet. The main idea is to separately track
@@ -175,7 +93,7 @@ impl fmt::Display for ExecutionComplexity {
 /// Note that there are situations where execution available memory is smaller than
 /// the wasm custom sections memory, i.e. when the memory is consumed by something
 /// other than wasm custom sections.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub struct SubnetAvailableMemory {
     /// The execution memory available on the subnet, i.e. the canister memory
     /// (Wasm binary, Wasm memory, stable memory) without message memory.
@@ -390,7 +308,7 @@ pub trait QueryHandler: Send + Sync {
     fn query(
         &self,
         query: UserQuery,
-        state: Arc<Self::State>,
+        state: Labeled<Arc<Self::State>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError>;
 }
@@ -443,11 +361,7 @@ pub trait OutOfInstructionsHandler {
     // If it is impossible to recover from the out-of-instructions error then
     // the function returns `Err(HypervisorError::InstructionLimitExceeded)`.
     // Otherwise, the function returns a new positive instruction counter.
-    fn out_of_instructions(
-        &self,
-        instruction_counter: i64,
-        execution_complexity: ExecutionComplexity,
-    ) -> HypervisorResult<i64>;
+    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -485,12 +399,6 @@ pub enum StableGrowOutcome {
 
 /// A trait for providing all necessary imports to a Wasm module.
 pub trait SystemApi {
-    /// Stores the complexity accumulated during the message execution.
-    fn set_execution_complexity(&mut self, complexity: ExecutionComplexity);
-
-    /// Returns the accumulated execution complexity.
-    fn execution_complexity(&self) -> &ExecutionComplexity;
-
     /// Stores the execution error, so that the user can evaluate it later.
     fn set_execution_error(&mut self, error: HypervisorError);
 
@@ -523,6 +431,9 @@ pub trait SystemApi {
 
     /// Returns the number of instructions executed in the current slice.
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions;
+
+    /// Return the total number of instructions executed in the call context.
+    fn call_context_instructions_executed(&self) -> NumInstructions;
 
     /// Canister id of the executing canister.
     fn canister_id(&self) -> ic_types::CanisterId;
@@ -828,6 +739,9 @@ pub trait SystemApi {
     ///     0 : instruction counter. The number of WebAssembly
     ///         instructions the system has determined that the canister
     ///         has executed.
+    ///     1 : call context instruction counter. The number of WebAssembly
+    ///         instructions the canister has executed within the call context
+    ///         of the current Message Execution since the Call Context creation.
     ///
     /// Note: as the instruction counters are not available on the SystemApi level,
     /// the `ic0_performance_counter_helper()` in `wasmtime_embedder` module does
@@ -1012,6 +926,20 @@ pub trait SystemApi {
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
     fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32>;
+
+    /// Burns the provided `amount` cycles.
+    /// Removes cycles from the canister's balance.
+    ///
+    /// Removes no more cycles than `amount`.
+    ///
+    /// If the canister does not have enough cycles, it burns as much
+    /// as possible while the canister does not freeze.
+    fn ic0_cycles_burn128(
+        &mut self,
+        amount: Cycles,
+        dst: u32,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1090,6 +1018,20 @@ pub trait Scheduler: Send {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
+}
+
+/// Synchronous interface for use in testing
+/// to filter out ingress messages that
+/// the canister is not willing to accept.
+pub trait IngressFilter: Send + Sync {
+    type State;
+
+    fn should_accept_ingress_message(
+        &self,
+        state: Arc<Self::State>,
+        provisional_whitelist: &ProvisionalWhitelist,
+        ingress: &SignedIngressContent,
+    ) -> Result<(), UserError>;
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

@@ -1,8 +1,10 @@
 [package]
 name = "tests"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.31"
@@ -15,11 +17,12 @@ bincode = "1.3.3"
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
 chacha20poly1305 = "0.10.0"
+discower_bowndary = { path = "../boundary_node/discower_bowndary"}
 proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
-chrono = { version = "0.4.19", features = ["serde"] }
-clap = { version = "3.1.6", features = ["derive"] }
+chrono = { workspace = true }
+clap = { workspace = true }
 crossbeam-channel = "0.5.5"
 crossbeam-utils = "0.8.11"
 cycles-minting-canister = { path = "../nns/cmc" }
@@ -50,6 +53,7 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cup-explorer = { path = "../cup_explorer" }
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-icrc1 = { path = "../rosetta-api/icrc1" }
@@ -102,7 +106,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
-indoc = "1.0.6"
+indoc = "1.0.9"
 json5 = "0.4.1"
 k256 = { workspace = true }
 hyper = "0.14.18"
@@ -112,13 +116,12 @@ icp-ledger = { path = "../rosetta-api/icp_ledger" }
 leb128 = "0.2.5"
 libflate = "1.3.0"
 lifeline = { path = "../nns/handlers/lifeline/impl" }
-itertools = "0.10.0"
+itertools = { workspace = true }
 maplit = "1.0.2"
-nix = "0.23.0"
+nix = { workspace = true }
 num_cpus = "1.13.1"
 on_wire = { path = "../rust_canisters/on_wire" }
 openssh-keys = "0.5.0"
-openssl = "0.10.55"
 pem = "1.0.1"
 phantom_newtype = { path = "../phantom_newtype" }
 proptest = "1.0"
@@ -137,12 +140,13 @@ reqwest = { version = "0.11.1", features = [
     "rustls-tls",
 ] }
 ring = { version = "0.16.11", features = ["std"] }
+rsa = { version = "0.9.2", features = ["sha2"] }
 rustls = "0.21.0"
 rust_decimal = "1.25"
-serde = { version = "1.0.115", features = ["derive"] }
-serde_bytes = "0.11"
-serde_cbor = "0.11.1"
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = { version = "2.5.2", features = ["release_max_level_trace"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
@@ -151,7 +155,7 @@ tempfile = "3.1.0"
 thiserror = "1.0"
 time = "^0.3.20"
 walkdir = "2.3.1"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"
 utils = { path = "../utils", package = "ic-utils" }
@@ -608,3 +612,15 @@ path = "consensus/tecdsa/tecdsa_performance.rs"
 [[bin]]
 name = "ic-systest-boundary-node-performance"
 path = "boundary_nodes/boundary_node_performance_test.rs"
+
+[[bin]]
+name = "ic-systest-api-boundary-node-decentralization"
+path = "boundary_nodes/api_boundary_node_decentralization_test.rs"
+
+[[bin]]
+name = "ic-systest-mainnet-boundary-node-performance"
+path = "boundary_nodes/mainnet_boundary_node_performance_test.rs"
+
+[[bin]]
+name = "ic-systest-nested-registration"
+path = "nested/registration.rs"

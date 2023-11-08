@@ -9,13 +9,7 @@ use ic00::{
     CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
 };
 use ic_base_types::PrincipalId;
-use ic_config::{
-    embedders::Config as EmbeddersConfig,
-    embedders::MeteringType,
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
-};
-use ic_embedders::wasmtime_embedder::system_api_complexity::{cpu, overhead};
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{
     self as ic00, BoundedHttpHeaders, CanisterIdRecord, CanisterStatusType, DerivationPath,
@@ -29,9 +23,6 @@ use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::ExportedFunctions;
-use ic_state_machine_tests::{
-    PayloadBuilder, StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult,
-};
 use ic_test_utilities::types::ids::message_test_id;
 use ic_test_utilities::{
     mock_time,
@@ -68,139 +59,65 @@ fn assert_floats_are_equal(val0: f64, val1: f64) {
     }
 }
 
-struct SystemCallLimits {
-    system_calls_per_slice: usize,
-    system_calls_per_round: usize,
-    system_calls_per_message: usize,
-}
+#[test]
+fn fix_broken_invariant_test() {
+    let mut test = SchedulerTestBuilder::new().build();
 
-fn complexity_env(
-    subnet_type: SubnetType,
-    scheduler_cores: usize,
-    SystemCallLimits {
-        system_calls_per_slice,
-        system_calls_per_round,
-        system_calls_per_message,
-    }: SystemCallLimits,
-) -> StateMachine {
-    let subnet_config = SubnetConfig::new(subnet_type);
-    let performance_counter_complexity = cpu::PERFORMANCE_COUNTER.get() as u64;
-    let msg_reply_complexity = cpu::MSG_REPLY.get() as u64;
-    let msg_arg_data_size_complexity = cpu::MSG_ARG_DATA_SIZE.get() as u64;
+    // Create a canister with the same ID as the one with the broken invariant on mainnet.
+    let canister_id: CanisterId = CanisterId::unchecked_from_principal(
+        PrincipalId::from_str("rw3vb-eaaaa-aaaak-aet6a-cai").unwrap(),
+    );
+    test.create_canister_with_id(canister_id);
 
-    let slice_complexity = performance_counter_complexity;
-    let total_complexity =
-        performance_counter_complexity + msg_reply_complexity + msg_arg_data_size_complexity;
-
-    let max_instructions_per_round = system_calls_per_round as u64 * total_complexity;
-    let max_instructions_per_message = system_calls_per_message as u64 * slice_complexity;
-    let max_instructions_per_message_without_dts = system_calls_per_slice as u64 * slice_complexity;
-    let max_instructions_per_slice = system_calls_per_slice as u64 * slice_complexity;
-
-    StateMachineBuilder::new()
-        .with_subnet_type(subnet_type)
-        .with_config(Some(StateMachineConfig::new(
-            SubnetConfig {
-                scheduler_config: SchedulerConfig {
-                    scheduler_cores,
-                    max_instructions_per_round: max_instructions_per_round.into(),
-                    max_instructions_per_message: max_instructions_per_message.into(),
-                    max_instructions_per_message_without_dts:
-                        max_instructions_per_message_without_dts.into(),
-                    max_instructions_per_slice: max_instructions_per_slice.into(),
-                    instruction_overhead_per_message: 0.into(),
-                    instruction_overhead_per_canister: 0.into(),
-                    ..subnet_config.scheduler_config
-                },
-                ..subnet_config
-            },
-            HypervisorConfig {
-                deterministic_time_slicing: FlagStatus::Enabled,
-                embedders_config: EmbeddersConfig {
-                    cost_to_compile_wasm_instruction: 0.into(),
-                    metering_type: MeteringType::Old,
-                    ..EmbeddersConfig::default()
-                },
-                ..Default::default()
-            },
-        )))
-        .build()
-}
-
-fn complexity_canister(env: &StateMachine) -> CanisterId {
-    // The canister executes a `ic0.performance_counter` System API in a loop.
-    // This system API has a CPU overhead 200 Instructions, which is less than
-    // its execution CPU complexity of 50ns * 5 = 250 Instructions.
-    //
-    // So executing this system API in a loop we should hit the complexity limit
-    // before the instruction limit.
-    let wat = r#"
-        (module
-            (import "ic0" "performance_counter"
-                (func $ic0_performance_counter (param i32) (result i64)))
-            (import "ic0" "msg_reply" (func $ic0_msg_reply))
-            (import "ic0" "msg_arg_data_size"
-                (func $ic0_msg_arg_data_size (result i32)))
-            (memory 1)
-
-            (func (export "canister_update system_calls")
-                (local $i i32)
-                (local.set $i (call $ic0_msg_arg_data_size))
-                (loop $loop
-                    (drop (call $ic0_performance_counter (i32.const 0)))
-                    (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 1))))
-                )
-                (call $ic0_msg_reply)
-            )
-        )"#;
-    let binary = wat::parse_str(wat).unwrap();
-
-    env.install_canister_with_cycles(binary, vec![], None, Cycles::new(100_000_000_000))
-        .unwrap()
-}
-
-fn execute_system_calls(
-    env: &StateMachine,
-    canister_id: &CanisterId,
-    system_calls: usize,
-) -> MessageId {
-    env.send_ingress(
-        PrincipalId::new_anonymous(),
-        *canister_id,
-        "system_calls",
-        vec![0; system_calls],
-    )
-}
-
-fn execute_batch_of_messages_with_system_calls(
-    env: &StateMachine,
-    canister_ids: &[CanisterId],
-    messages: usize,
-    system_calls: usize,
-) -> Vec<MessageId> {
-    // Create ingress messages
-    let mut builder = PayloadBuilder::new();
-    for _ in 0..messages {
-        for canister_id in canister_ids {
-            builder = builder.ingress(
-                PrincipalId::new_anonymous(),
-                *canister_id,
-                "system_calls",
-                vec![0; system_calls],
-            );
-        }
+    fn callback_stats(canister: &CanisterState) -> (usize, usize, usize) {
+        let num_callbacks = canister
+            .system_state
+            .call_context_manager()
+            .map(|ccm| ccm.callbacks().len())
+            .unwrap_or(0);
+        let num_responses = canister.system_state.queues().input_queues_response_count();
+        let num_reservations = canister
+            .system_state
+            .queues()
+            .input_queues_reservation_count();
+        (num_callbacks, num_responses, num_reservations)
     }
-    let ingress_ids = builder.ingress_ids();
-    // Deliver the batch and execute the first round.
-    env.execute_payload(builder);
-    ingress_ids
-}
 
-fn ingress_state(env: &StateMachine, message_id: &MessageId) -> IngressState {
-    match env.ingress_status(message_id) {
-        IngressStatus::Known { state, .. } => state,
-        IngressStatus::Unknown => unreachable!("Expected a known ingress status."),
-    }
+    let destination = CanisterId::from_u64(13);
+
+    // Manually break the invariant.
+    let canister = test.canister_state_mut(canister_id);
+    canister
+        .push_output_request(
+            RequestBuilder::default()
+                .sender(canister_id)
+                .receiver(destination)
+                .build()
+                .into(),
+            mock_time(),
+        )
+        .unwrap();
+    canister
+        .system_state
+        .queues_mut()
+        .pop_canister_output(&destination);
+
+    // Invariant is now broken.
+    assert_eq!(
+        canister.check_invariants(NumBytes::from(u64::MAX)),
+        Err(ic_replicated_state::StateError::InvariantBroken("Canister rw3vb-eaaaa-aaaak-aet6a-cai: Number of callbacks (0) is different than the accumulated number of reservations and responses (1)".to_string()))
+    );
+    // And there's an orphan callback.
+    assert_eq!((0, 0, 1), callback_stats(canister));
+
+    // Execute a round, which should fix the invariant.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Inveriant is re-established.
+    let canister = test.canister_state(canister_id);
+    assert!(canister.check_invariants(NumBytes::from(u64::MAX)).is_ok());
+    // And there's no more orphan callback.
+    assert_eq!((0, 0, 0), callback_stats(canister));
 }
 
 #[test]
@@ -472,276 +389,6 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
         2
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
-}
-
-#[test]
-fn inner_loop_stops_when_max_complexity_per_round_consumed() {
-    // Create a canister with 3 input messages. 2 of them consume all
-    // the complexity per round. The 2 messages are executed in the first
-    // iteration of the loop and then the loop breaks.
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::new(100),
-            max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
-            max_instructions_per_slice: NumInstructions::new(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
-        .build();
-
-    let canister_id = test.create_canister();
-    for _ in 0..3 {
-        test.send_ingress(
-            canister_id,
-            instructions(1).execution_complexity(ExecutionComplexity::with_cpu(50.into())),
-        );
-    }
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    assert_eq!(test.ingress_queue_size(canister_id), 1);
-    let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.execute_round_called.get(), 1);
-    assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 1);
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        1
-    );
-    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
-}
-
-#[test]
-fn each_too_complex_message_aborts_execution() {
-    let env = complexity_env(
-        SubnetType::Application,
-        2,
-        SystemCallLimits {
-            system_calls_per_slice: 1,
-            system_calls_per_round: 1,
-            system_calls_per_message: 1,
-        },
-    );
-    let canister_id = complexity_canister(&env);
-
-    for _ in 0..10 {
-        let message_id = execute_system_calls(&env, &canister_id, 2);
-
-        // Message limit is set to one system call, while we're executing two.
-        let state = ingress_state(&env, &message_id);
-        let err = match state {
-            IngressState::Failed(err) => err,
-            _ => unreachable!("Expected a failed state but got: {state:?}"),
-        };
-        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
-        assert!(err.description().contains("too many System API calls"));
-        env.tick();
-    }
-}
-
-#[test]
-fn each_too_complex_message_on_system_subnet_does_not_abort_execution() {
-    let env = complexity_env(
-        SubnetType::System,
-        2,
-        SystemCallLimits {
-            system_calls_per_slice: 1,
-            system_calls_per_round: 1,
-            system_calls_per_message: 1,
-        },
-    );
-    let canister_id = complexity_canister(&env);
-
-    for _ in 0..10 {
-        let message_id = execute_system_calls(&env, &canister_id, 2);
-
-        // Message limit is set to one system call, while we're executing two.
-        let state = ingress_state(&env, &message_id);
-        let err = match state {
-            IngressState::Failed(err) => err,
-            _ => unreachable!("Expected a failed state but got: {state:?}"),
-        };
-        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
-        assert!(!err.description().contains("too many System API calls"));
-        env.tick();
-    }
-}
-
-#[test]
-fn each_too_complex_message_aborts_dts_execution() {
-    // The overhead of the performance counter is 200, while its complexity is 250, so:
-    //     11 * 200 (executed instructions) < 10 * 250 (instructions limit)
-    // but
-    //     11 * 250 (observed complexity) > 10 * 250 (instructions limit)
-    // So we're sure the execution aborts due to the complexity.
-    let system_calls_per_message = 10;
-    let env = complexity_env(
-        SubnetType::Application,
-        2,
-        SystemCallLimits {
-            system_calls_per_slice: 1,
-            system_calls_per_round: 1,
-            system_calls_per_message,
-        },
-    );
-    let canister_id = complexity_canister(&env);
-
-    for _ in 0..10 {
-        let message_id = execute_system_calls(&env, &canister_id, system_calls_per_message + 1);
-
-        // Message limit is set to 10 system calls, while we're executing 11.
-        // As we slice execution using instructions, not complexity, to execute
-        // 11 system calls ~200 instructions each it will take 11*200/250 = ~9 rounds
-        // After the first 8 rounds the message should be still in progress.
-        for _ in 1..8 {
-            let state = ingress_state(&env, &message_id);
-            assert_eq!(IngressState::Processing, state);
-            env.tick();
-        }
-
-        // After the fifth round the message should fail.
-        let state = ingress_state(&env, &message_id);
-
-        let err = match state {
-            IngressState::Failed(err) => err,
-            _ => unreachable!("Expected a failed state but got: {state:?}"),
-        };
-        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
-        assert!(err.description().contains("too many System API calls"));
-    }
-}
-
-#[test]
-fn too_complex_messages_break_round_execution() {
-    let system_calls_per_round = 10;
-    let env = complexity_env(
-        SubnetType::Application,
-        2,
-        SystemCallLimits {
-            system_calls_per_slice: 1,
-            system_calls_per_round,
-            system_calls_per_message: 2,
-        },
-    );
-    let canister_id = complexity_canister(&env);
-
-    let message_ids = execute_batch_of_messages_with_system_calls(
-        &env,
-        &[canister_id],
-        system_calls_per_round * 2,
-        1,
-    );
-
-    // After the first round `system_calls_per_round` messages
-    // should be completed.
-    for message_id in message_ids.iter().take(system_calls_per_round) {
-        let state = ingress_state(&env, message_id);
-        assert_eq!(IngressState::Completed(WasmResult::Reply(vec![])), state);
-    }
-    for message_id in message_ids.iter().skip(system_calls_per_round) {
-        let state = ingress_state(&env, message_id);
-        assert_eq!(IngressState::Received, state);
-    }
-
-    // After the second round all messages must be completed.
-    env.tick();
-    for message_id in &message_ids {
-        let state = ingress_state(&env, message_id);
-        assert_eq!(IngressState::Completed(WasmResult::Reply(vec![])), state);
-    }
-}
-
-#[test]
-fn too_complex_messages_in_different_canisters_break_round_execution() {
-    let scheduler_cores = 2;
-    let system_calls_per_round = 10;
-    let env = complexity_env(
-        SubnetType::Application,
-        scheduler_cores,
-        SystemCallLimits {
-            system_calls_per_slice: 1,
-            system_calls_per_round,
-            system_calls_per_message: 2,
-        },
-    );
-    let canister_ids = (0..4)
-        .map(|_| complexity_canister(&env))
-        .collect::<Vec<_>>();
-
-    let message_ids =
-        execute_batch_of_messages_with_system_calls(&env, &canister_ids, system_calls_per_round, 1);
-
-    // After the first round `system_calls_per_round` messages times
-    // `scheduler_cores` should be completed.
-    let completed_messages = message_ids
-        .iter()
-        .filter_map(|id| {
-            if let IngressState::Completed(_) = ingress_state(&env, id) {
-                Some(())
-            } else {
-                None
-            }
-        })
-        .count();
-    assert_eq!(system_calls_per_round * scheduler_cores, completed_messages);
-    // In the second round all the messages must be complete
-    env.tick();
-    for message_id in &message_ids {
-        let state = ingress_state(&env, message_id);
-        assert_eq!(IngressState::Completed(WasmResult::Reply(vec![])), state);
-    }
-}
-
-#[test]
-fn too_complex_messages_on_system_subnet_do_not_break_round_execution() {
-    let scheduler_cores = 2;
-    let system_calls_per_round = 10;
-    let performance_counter_overhead = overhead::old::PERFORMANCE_COUNTER.get() as usize;
-    let performance_counter_complexity = cpu::PERFORMANCE_COUNTER.get() as usize;
-    let system_calls_limited_by_instructions =
-        performance_counter_complexity * system_calls_per_round / performance_counter_overhead;
-    // There should be enough system calls per round to distinguish between
-    // instructions and complexity.
-    assert!(system_calls_limited_by_instructions > system_calls_per_round);
-    let env = complexity_env(
-        SubnetType::System,
-        scheduler_cores,
-        SystemCallLimits {
-            system_calls_per_slice: 1,
-            system_calls_per_round,
-            system_calls_per_message: 2,
-        },
-    );
-    let canister_ids = (0..4)
-        .map(|_| complexity_canister(&env))
-        .collect::<Vec<_>>();
-
-    let message_ids =
-        execute_batch_of_messages_with_system_calls(&env, &canister_ids, system_calls_per_round, 1);
-
-    // There should be more completed messages as the complexity limits
-    // are not enforced on the system subnets.
-    let completed_messages = message_ids
-        .iter()
-        .filter_map(|id| {
-            if let IngressState::Completed(_) = ingress_state(&env, id) {
-                Some(())
-            } else {
-                None
-            }
-        })
-        .count();
-    assert!(completed_messages > system_calls_per_round * scheduler_cores);
-    // In the second round all the messages must be complete
-    env.tick();
-    for message_id in &message_ids {
-        let state = ingress_state(&env, message_id);
-        assert_eq!(IngressState::Completed(WasmResult::Reply(vec![])), state);
-    }
 }
 
 #[test]

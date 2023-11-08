@@ -19,6 +19,9 @@ mod autonomy;
 mod bad_input;
 
 #[cfg(test)]
+mod copy_inactive_neurons_to_stable_memory;
+
+#[cfg(test)]
 mod cycles_minting_canister;
 
 #[cfg(test)]

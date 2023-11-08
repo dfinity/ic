@@ -35,8 +35,8 @@ ic-sns-root = { path = "../../sns/root" }
 ic-types = { path = "../../types/types" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.85"
+serde = { workspace = true }
+serde_json = { workspace = true }
 prost = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
@@ -50,7 +50,7 @@ ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
@@ -61,7 +61,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-pretty_assertions = "1.2.1"
+pretty_assertions = { workspace = true }
 
 [features]
 test = ["ic-sns-init/test"]

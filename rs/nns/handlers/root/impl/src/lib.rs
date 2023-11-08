@@ -134,8 +134,7 @@ fn principal_name(principal_id: PrincipalId) -> String {
         };
     }
 
-    CanisterId::new(principal_id)
-        .ok()
+    Some(CanisterId::unchecked_from_principal(principal_id))
         .and_then(|canister_id| CANISTER_ID_TO_NAME.get(&canister_id))
         .map(|name| format!("{}_canister", name))
         .unwrap_or_else(|| principal_id.to_string())

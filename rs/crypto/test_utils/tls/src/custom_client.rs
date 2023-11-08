@@ -2,47 +2,40 @@
 //! implementation. It is purely for testing the server.
 #![allow(clippy::unwrap_used)]
 use crate::x509_certificates::CertWithPrivateKey;
+use crate::CipherSuite;
+use crate::CipherSuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
+use crate::TlsVersion;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
-use openssl::pkey::{PKey, Private};
-use openssl::ssl::{ConnectConfiguration, SslConnector, SslContextBuilder, SslMethod, SslVersion};
-use openssl::x509::store::{X509Store, X509StoreBuilder};
-use openssl::x509::X509;
-use std::pin::Pin;
-use tokio::io::{AsyncReadExt, ReadHalf};
+use rustls::{ClientConfig, ServerName};
+use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio_openssl::SslStream;
+use tokio_rustls::rustls;
+use tokio_rustls::TlsConnector;
 
-const DEFAULT_MAX_PROTO_VERSION: SslVersion = SslVersion::TLS1_3;
-const DEFAULT_ALLOWED_CIPHER_SUITES: &str = "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384";
-const DEFAULT_ALLOWED_SIGNATURE_ALGORITHMS: &str = "ed25519";
+static DEFAULT_PROTOCOL_VERSIONS: &[TlsVersion] = &[TlsVersion::TLS1_3];
+static DEFAULT_ALLOWED_CIPHER_SUITES: &[CipherSuite] =
+    &[TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384];
 
 /// A builder that allows to configure and build a `CustomClient` using a fluent
 /// API.
 pub struct CustomClientBuilder {
-    max_proto_version: Option<SslVersion>,
-    allowed_cipher_suites: Option<String>,
-    allowed_signature_algorithms: Option<String>,
+    protocol_versions: Option<Vec<TlsVersion>>,
+    allowed_cipher_suites: Option<Vec<CipherSuite>>,
     expected_error: Option<String>,
-    client_auth_data: Option<(PKey<Private>, X509)>,
-    extra_chain_certs: Option<Vec<X509>>,
-    msg_expected_from_server: Option<String>,
+    client_auth_data: Option<CertWithPrivateKey>,
+    extra_chain_certs: Option<Vec<TlsPublicKeyCert>>,
 }
 
 impl CustomClientBuilder {
-    pub fn with_max_protocol_version(mut self, version: SslVersion) -> Self {
-        self.max_proto_version = Some(version);
+    pub fn with_protocol_versions(mut self, protocol_versions: Vec<TlsVersion>) -> Self {
+        self.protocol_versions = Some(protocol_versions);
         self
     }
 
-    pub fn with_allowed_cipher_suites(mut self, allowed_cipher_suites: &str) -> Self {
-        self.allowed_cipher_suites = Some(allowed_cipher_suites.to_string());
-        self
-    }
-
-    /// The list of allowed values for TLS 1.3 can be found in https://tools.ietf.org/html/rfc8446#appendix-B.3.1.3
-    pub fn with_allowed_signature_algorithms(mut self, allowed_signature_algorithms: &str) -> Self {
-        self.allowed_signature_algorithms = Some(allowed_signature_algorithms.to_string());
+    pub fn with_allowed_cipher_suites(mut self, allowed_cipher_suites: Vec<CipherSuite>) -> Self {
+        self.allowed_cipher_suites = Some(allowed_cipher_suites);
         self
     }
 
@@ -60,7 +53,7 @@ impl CustomClientBuilder {
     }
 
     pub fn with_client_auth(mut self, cert: CertWithPrivateKey) -> Self {
-        self.client_auth_data = Some((cert.key_pair(), cert.x509()));
+        self.client_auth_data = Some(cert);
         self
     }
 
@@ -69,35 +62,27 @@ impl CustomClientBuilder {
         self
     }
 
-    pub fn with_extra_chain_certs(mut self, extra_chain_certs: Vec<X509>) -> Self {
+    pub fn with_extra_chain_certs(mut self, extra_chain_certs: Vec<TlsPublicKeyCert>) -> Self {
         self.extra_chain_certs = Some(extra_chain_certs);
         self
     }
 
-    pub fn expect_msg_from_server(mut self, msg: &str) -> Self {
-        self.msg_expected_from_server = Some(msg.to_string());
-        self
-    }
-
     pub fn build(self, server_cert: X509PublicKeyCert) -> CustomClient {
-        let max_proto_version = self.max_proto_version.unwrap_or(DEFAULT_MAX_PROTO_VERSION);
+        let protocol_versions = self
+            .protocol_versions
+            .unwrap_or(DEFAULT_PROTOCOL_VERSIONS.to_vec());
         let allowed_cipher_suites = self
             .allowed_cipher_suites
-            .unwrap_or_else(|| DEFAULT_ALLOWED_CIPHER_SUITES.to_string());
-        let allowed_signature_algorithms = self
-            .allowed_signature_algorithms
-            .unwrap_or_else(|| DEFAULT_ALLOWED_SIGNATURE_ALGORITHMS.to_string());
+            .unwrap_or_else(|| DEFAULT_ALLOWED_CIPHER_SUITES.to_vec());
         let server_cert =
-            X509::from_der(&server_cert.certificate_der).expect("Unable to parse server cert.");
+            TlsPublicKeyCert::try_from(server_cert).expect("Unable to parse server cert.");
         CustomClient {
             client_auth_data: self.client_auth_data,
             extra_chain_certs: self.extra_chain_certs,
             server_cert,
-            max_proto_version,
+            protocol_versions,
             allowed_cipher_suites,
-            allowed_signature_algorithms,
             expected_error: self.expected_error,
-            msg_expected_from_server: self.msg_expected_from_server,
         }
     }
 }
@@ -105,26 +90,22 @@ impl CustomClientBuilder {
 /// A custom, configurable TLS client that does not rely on the crypto
 /// implementation. It is purely for testing the server.
 pub struct CustomClient {
-    client_auth_data: Option<(PKey<Private>, X509)>,
-    extra_chain_certs: Option<Vec<X509>>,
-    server_cert: X509,
-    max_proto_version: SslVersion,
-    allowed_cipher_suites: String,
-    allowed_signature_algorithms: String,
+    client_auth_data: Option<CertWithPrivateKey>,
+    extra_chain_certs: Option<Vec<TlsPublicKeyCert>>,
+    server_cert: TlsPublicKeyCert,
+    protocol_versions: Vec<TlsVersion>,
+    allowed_cipher_suites: Vec<CipherSuite>,
     expected_error: Option<String>,
-    msg_expected_from_server: Option<String>,
 }
 
 impl CustomClient {
     pub fn builder() -> CustomClientBuilder {
         CustomClientBuilder {
-            max_proto_version: None,
+            protocol_versions: None,
             allowed_cipher_suites: None,
-            allowed_signature_algorithms: None,
             expected_error: None,
             client_auth_data: None,
             extra_chain_certs: None,
-            msg_expected_from_server: None,
         }
     }
 
@@ -135,17 +116,54 @@ impl CustomClient {
             .await
             .expect("failed to connect");
 
-        let tls_connector = self.tls_connector();
-        let tls_state = tls_connector
-            // Even though the domain is irrelevant here because hostname verification is disabled,
-            // it is important that the domain is well-formed because some TLS implementations
-            // (e.g., Rustls) abort the handshake if parsing of the domain fails (e.g., for SNI when
-            // sent to the server)
-            .into_ssl("www.domain-is-irrelevant-because-hostname-verification-is-disabled.com")
-            .expect("failed to convert TLS connector to state object");
-        let mut tls_stream = tokio_openssl::SslStream::new(tls_state, tcp_stream)
-            .expect("failed to create tokio_openssl::SslStream");
-        let result = Pin::new(&mut tls_stream).connect().await;
+        let cipher_suites: Vec<_> = self
+            .allowed_cipher_suites
+            .iter()
+            .map(rustls::SupportedCipherSuite::from)
+            .collect();
+        let protocol_versions: Vec<_> = self
+            .protocol_versions
+            .iter()
+            .map(<&rustls::SupportedProtocolVersion>::from)
+            .collect();
+        let matching_end_entity_cert_verifier = MatchingEndEntityCertVerifier {
+            end_entity: self.server_cert.clone(),
+        };
+
+        let config_builder = ClientConfig::builder()
+            .with_cipher_suites(&cipher_suites)
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&protocol_versions)
+            .expect("invalid rustls client config")
+            .with_custom_certificate_verifier(Arc::new(matching_end_entity_cert_verifier)); // disables hostname verification
+
+        let config = if let Some(cert_with_key) = &self.client_auth_data {
+            let key_der = rustls::PrivateKey(cert_with_key.key_pair().serialize_for_rustls());
+            let mut cert_chain = vec![rustls::Certificate(cert_with_key.cert_der())];
+            if let Some(extra_chain_certs) = &self.extra_chain_certs {
+                extra_chain_certs
+                    .iter()
+                    .map(|x| rustls::Certificate(x.as_der().clone()))
+                    .for_each(|cert| cert_chain.push(cert));
+            }
+            config_builder
+                .with_client_auth_cert(cert_chain, key_der)
+                .expect("failed to set client auth data")
+        } else {
+            config_builder.with_no_client_auth()
+        };
+
+        // Even though the domain is irrelevant here because hostname verification is disabled,
+        // it is important that the domain is well-formed because some TLS implementations
+        // (e.g., Rustls) abort the handshake if parsing of the domain fails (e.g., for SNI when
+        // sent to the server)
+        let irrelevant_domain =
+            ServerName::try_from("domain.is-irrelevant-as-hostname-verification-is.disabled")
+                .expect("failed to create domain");
+        let result = TlsConnector::from(Arc::new(config))
+            .connect(irrelevant_domain, tcp_stream)
+            .await
+            .map_err(|e| format!("TlsConnector::connect failed: {e}"));
 
         if let Some(expected_error) = &self.expected_error {
             let error = result.expect_err("expected error");
@@ -161,115 +179,48 @@ impl CustomClient {
                     "expected the client result to be ok but got error: {}",
                     error
                 ),
-                Ok(()) => {
-                    let (mut tls_read_half, _tls_write_half) = tokio::io::split(tls_stream);
-                    self.expect_msg_from_server_if_configured(&mut tls_read_half)
-                        .await;
-                }
+                Ok(_tls_stream) => (),
             }
         }
-    }
-
-    fn tls_connector(&self) -> ConnectConfiguration {
-        let mut builder = SslConnector::builder(SslMethod::tls_client())
-            .expect("Failed to initialize connector.");
-        self.restrict_tls_version_and_cipher_suites_and_sig_algs(&mut builder);
-        set_peer_verification_cert_store(vec![self.server_cert.clone()], &mut builder);
-        builder.set_verify_depth(0);
-        if let Some((private_key, cert)) = &self.client_auth_data {
-            builder
-                .set_private_key(private_key)
-                .expect("Failed to set the private key.");
-            builder
-                .set_certificate(cert)
-                .expect("Failed to set the client certificate.");
-            builder
-                .check_private_key()
-                .expect("Inconsistent private key and certificate.");
-        }
-        if let Some(extra_chain_certs) = &self.extra_chain_certs {
-            for extra_chain_cert in extra_chain_certs {
-                builder
-                    .add_extra_chain_cert(extra_chain_cert.clone())
-                    .expect("Failed to add extra chain certificate.");
-            }
-        }
-        let mut connect_config = builder
-            .build()
-            .configure()
-            .expect("Failed to build the connector configuration.");
-        connect_config.set_verify_hostname(false);
-        connect_config
-    }
-
-    fn restrict_tls_version_and_cipher_suites_and_sig_algs(&self, builder: &mut SslContextBuilder) {
-        builder
-            .set_max_proto_version(Some(self.max_proto_version))
-            .expect("Failed to set the maximum protocol version.");
-        builder
-            .set_ciphersuites(self.allowed_cipher_suites.as_str())
-            .expect("Failed to set the ciphersuites.");
-        builder
-            .set_sigalgs_list(self.allowed_signature_algorithms.as_str())
-            .expect("Failed to set the sigalgs list.");
     }
 
     /// Returns the certificate used for client authentication.
     pub fn client_auth_cert(&self) -> X509PublicKeyCert {
-        if let Some((_, cert)) = &self.client_auth_data {
-            return X509PublicKeyCert {
-                certificate_der: cert.to_der().expect("failed to DER encode client_cert"),
-            };
+        if let Some(cert_with_private_key) = &self.client_auth_data {
+            return cert_with_private_key.x509().to_proto();
         }
         panic!("no certificate since client auth is disabled")
     }
+}
 
-    async fn expect_msg_from_server_if_configured(
+/// A server cert verifier for testing that considers a
+/// certificate chain valid iff
+/// * the `end_entity` exactly matches a given reference
+///   certificate, and
+/// * the `intermediates` certs are empty.
+/// All other parameters (server name, time, etc.) are ignored.
+struct MatchingEndEntityCertVerifier {
+    end_entity: TlsPublicKeyCert,
+}
+
+impl rustls::client::ServerCertVerifier for MatchingEndEntityCertVerifier {
+    fn verify_server_cert(
         &self,
-        tls_read_half: &mut ReadHalf<SslStream<TcpStream>>,
-    ) {
-        if let Some(msg_expected_from_server) = &self.msg_expected_from_server {
-            let mut bytes_from_server = Vec::new();
-            tls_read_half
-                .read_to_end(&mut bytes_from_server)
-                .await
-                .expect("error in read_to_end");
-            let msg_from_server = String::from_utf8(bytes_from_server.to_vec()).unwrap();
-            assert_eq!(msg_from_server, msg_expected_from_server.clone());
+        end_entity: &rustls::Certificate,
+        intermediates: &[rustls::Certificate],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        if end_entity.0 != *self.end_entity.as_der() {
+            return Err(rustls::Error::General("not an exact match".to_string()));
         }
+        if !intermediates.is_empty() {
+            return Err(rustls::Error::General(
+                "intermediates not empty".to_string(),
+            ));
+        }
+        Ok(rustls::client::ServerCertVerified::assertion())
     }
-}
-
-/// Sets the peer verification cert store for the `SslContext` to a store
-/// containing `certs`.
-///
-/// # Panics
-/// * if the store cannot be set for the `SSLContext`.
-fn set_peer_verification_cert_store(certs: Vec<X509>, builder: &mut SslContextBuilder) {
-    // `SslConnector::builder` calls `set_default_verify_paths`, automatically
-    // adding many CA certificates to the context's `cert_store`. Thus, we overwrite
-    // the cert_store with an empty one:
-    set_empty_cert_store(builder);
-    let store = cert_store(certs);
-    builder
-        .set_verify_cert_store(store)
-        .expect("Failed to set the verify_cert_store.");
-}
-
-fn set_empty_cert_store(builder: &mut SslContextBuilder) {
-    let empty_cert_store = X509StoreBuilder::new()
-        .expect("Failed to init X509 store builder.")
-        .build();
-    builder.set_cert_store(empty_cert_store);
-}
-
-fn cert_store(certs: Vec<X509>) -> X509Store {
-    let mut cert_store_builder =
-        X509StoreBuilder::new().expect("Failed to init X509 store builder.");
-    for cert in certs {
-        cert_store_builder
-            .add_cert(cert.clone())
-            .expect("Failed to add the certificate to the cert_store.");
-    }
-    cert_store_builder.build()
 }

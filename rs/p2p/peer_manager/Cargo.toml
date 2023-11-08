@@ -13,9 +13,9 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 prometheus = { workspace = true }
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 
 [dev-dependencies]
 ic-p2p-test-utils = { path = "../test_utils" }

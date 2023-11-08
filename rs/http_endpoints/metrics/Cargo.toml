@@ -1,7 +1,10 @@
 [package]
 name = "ic-http-endpoints-metrics"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 hyper = { version = "0.14.18", features = ["full"] }
@@ -12,10 +15,10 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 thiserror = "1.0.37"
-tokio = "1.32.0"
+tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
 tower = { workspace = true }
 

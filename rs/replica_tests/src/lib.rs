@@ -12,9 +12,8 @@ use ic_ic00_types::{
     IC_00,
 };
 use ic_interfaces::{
-    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
+    artifact_pool::UnvalidatedArtifactEvent,
     execution_environment::{IngressHistoryReader, QueryHandler},
-    time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -73,11 +72,7 @@ fn process_ingress(
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-            message: msg,
-            peer_id: node_test_id(1),
-            timestamp: SysTimeSource::new().get_relative_time(),
-        }))
+        .send(UnvalidatedArtifactEvent::Insert((msg, node_test_id(1))))
         .unwrap();
 
     let start = Instant::now();
@@ -223,7 +218,7 @@ pub fn get_ic_config() -> IcConfig {
             p2p_addr: SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
-            chip_id: vec![],
+            chip_id: None,
         },
     );
 
@@ -628,11 +623,9 @@ impl LocalTestRuntime {
             ingress_expiry: 0,
             nonce: None,
         };
-        let result = self.query_handler.query(
-            query,
-            self.state_reader.get_latest_state().take(),
-            Vec::new(),
-        );
+        let result =
+            self.query_handler
+                .query(query, self.state_reader.get_latest_state(), Vec::new());
         if let Ok(WasmResult::Reply(result)) = result.clone() {
             info!(
                 "Response{}: {}",

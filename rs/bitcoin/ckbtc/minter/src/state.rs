@@ -20,29 +20,9 @@ use ic_base_types::CanisterId;
 pub use ic_btc_interface::Network;
 use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_canister_log::log;
+use ic_utils_ensure::{ensure, ensure_eq};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
-
-// Like assert_eq, but returns an error instead of panicking.
-macro_rules! ensure_eq {
-    ($lhs:expr, $rhs:expr, $msg:expr $(, $args:expr)* $(,)*) => {
-        if $lhs != $rhs {
-            return Err(format!("{} ({:?}) != {} ({:?}): {}",
-                               std::stringify!($lhs), $lhs,
-                               std::stringify!($rhs), $rhs,
-                               format!($msg $(,$args)*)));
-        }
-    }
-}
-macro_rules! ensure {
-    ($cond:expr, $msg:expr $(, $args:expr)* $(,)*) => {
-        if !$cond {
-            return Err(format!("Condition {} is false: {}",
-                               std::stringify!($cond),
-                               format!($msg $(,$args)*)));
-        }
-    }
-}
 
 /// The maximum number of finalized BTC retrieval requests that we keep in the
 /// history.

@@ -10,8 +10,9 @@ use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
+    generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
 };
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
 use ic_logger::ReplicaLogger;
@@ -20,12 +21,13 @@ use ic_test_utilities::consensus::fake::*;
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    ecdsa_msg_id, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
-    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
-    EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
-    IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef,
-    QuadrupleId, RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef,
-    TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
+    self, EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent,
+    EcdsaKeyTranscript, EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload,
+    EcdsaReshareRequest, EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes,
+    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
+    PreSignatureQuadrupleRef, QuadrupleId, RequestId, ReshareOfMaskedParams,
+    ThresholdEcdsaSigInputsRef, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
+    UnmaskedTranscript,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -1143,7 +1145,7 @@ pub(crate) fn is_moved_to_validated(
 ) -> bool {
     for action in change_set {
         if let EcdsaChangeAction::MoveToValidated(msg) = action {
-            if ecdsa_msg_id(msg) == *msg_id {
+            if EcdsaArtifactId::from(msg) == *msg_id {
                 return true;
             }
         }
@@ -1221,4 +1223,58 @@ pub(crate) fn create_reshare_request(num_nodes: u64, registry_version: u64) -> E
 
 pub(crate) fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
     TempCryptoComponent::builder().build_arc()
+}
+
+pub(crate) fn set_up_ecdsa_payload(
+    rng: &mut ReproducibleRng,
+    subnet_id: SubnetId,
+    nodes_count: usize,
+    should_create_key_transcript: bool,
+) -> (
+    EcdsaPayload,
+    CanisterThresholdSigTestEnvironment,
+    TestEcdsaBlockReader,
+) {
+    let env = CanisterThresholdSigTestEnvironment::new(nodes_count, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+
+    let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+    let mut block_reader = TestEcdsaBlockReader::new();
+
+    if should_create_key_transcript {
+        let key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            rng,
+        );
+        let key_transcript_ref =
+            ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
+
+        ecdsa_payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
+            key_transcript.to_attributes(),
+            key_transcript_ref,
+        ));
+
+        block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
+    }
+
+    (ecdsa_payload, env, block_reader)
+}
+
+pub(crate) trait EcdsaPayloadTestHelper {
+    fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
+    fn peek_next_quadruple_id(&self) -> QuadrupleId;
+}
+
+impl EcdsaPayloadTestHelper for EcdsaPayload {
+    fn peek_next_transcript_id(&self) -> IDkgTranscriptId {
+        self.uid_generator.clone().next_transcript_id()
+    }
+
+    fn peek_next_quadruple_id(&self) -> QuadrupleId {
+        self.uid_generator.clone().next_quadruple_id()
+    }
 }

@@ -253,6 +253,7 @@ mod tests {
             ),
             globals,
             canister_current_memory_usage: NumBytes::from(0),
+            canister_current_message_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
             subnet_available_memory: SubnetAvailableMemory::new(
                 i64::MAX / 2,
@@ -281,6 +282,7 @@ mod tests {
             ),
             globals,
             canister_current_memory_usage: NumBytes::from(0),
+            canister_current_message_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
             subnet_available_memory: SubnetAvailableMemory::new(
                 i64::MAX / 2,

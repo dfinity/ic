@@ -79,18 +79,6 @@ class RcloneUpload:
 
     def upload_artifacts(self, local_path, remote_subdir, version):
         """Upload artifacts from local_path to the CDN in remote_subdir."""
-        if os.environ.get("CI_COMMIT_REF_PROTECTED") == "true":
-            # The first build of blessed binaries (prepared on verified builders) is also stored at /blessed
-            # The /blessed folder is already prioritized when downloading from the HTTPS endpoint,
-            # see dfinity-lab/infra#1604
-            # I.e. curl https://download.dfinity.systems/ic/some/binary will first try to download from
-            # dfinity-download-public/blessed/ic/some/binary and fallback to dfinity-download-public/ic/some/binary.
-            self._upload(
-                local_path=local_path,
-                remote_subdir=f"blessed/ic/{version}/{remote_subdir}",
-                other_options=["--immutable"],
-            )
-
         self._upload(
             local_path=local_path,
             remote_subdir=f"ic/{version}/{remote_subdir}",

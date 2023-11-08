@@ -5,6 +5,7 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
+use ic_config::state_manager::lsmt_storage_default;
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -121,7 +122,7 @@ fn read_write_roundtrip() {
         let (tmp, _) = new_state_layout(log.clone());
         let root = tmp.path().to_path_buf();
         let metrics_registry = MetricsRegistry::new();
-        let layout = StateLayout::try_new(log.clone(), root, &metrics_registry).unwrap();
+        let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
         let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
         // Sanity check: ensure that we have a single checkpoint.
         assert_eq!(1, layout.checkpoint_heights().unwrap().len());
@@ -146,6 +147,7 @@ fn read_write_roundtrip() {
             &cp,
             &mut thread_pool,
             fd_factory,
+            &Config::new(root),
             &metrics,
             log.clone(),
         )
@@ -327,6 +329,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         log,
         tip_handler,
         layout.clone(),
+        lsmt_storage_default(),
         state_manager_metrics.clone(),
         MaliciousFlags::default(),
     );

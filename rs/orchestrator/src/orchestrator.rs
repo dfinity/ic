@@ -2,10 +2,11 @@ use crate::args::OrchestratorArgs;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::dashboard::{Dashboard, OrchestratorDashboard};
 use crate::firewall::Firewall;
+use crate::hostos_upgrade::HostosUpgrader;
 use crate::metrics::OrchestratorMetrics;
+use crate::process_manager::ProcessManager;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
-use crate::replica_process::ReplicaProcess;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
@@ -19,6 +20,7 @@ use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
+use ic_types::hostos_version::HostosVersion;
 use ic_types::{ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
 use std::net::SocketAddr;
@@ -35,6 +37,7 @@ pub struct Orchestrator {
     _async_log_guard: AsyncGuard,
     _metrics_runtime: MetricsHttpEndpoint,
     upgrade: Option<Upgrade>,
+    hostos_upgrade: Option<HostosUpgrader>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
@@ -183,7 +186,7 @@ impl Orchestrator {
             registry_local_store.clone(),
         );
 
-        let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
+        let replica_process = Arc::new(Mutex::new(ProcessManager::new(slog_logger.clone())));
         let ic_binary_directory = args
             .ic_binary_directory
             .as_ref()
@@ -221,6 +224,30 @@ impl Orchestrator {
             .await,
         );
 
+        let hostos_version = UtilityCommand::request_hostos_version().and_then(|v| {
+            HostosVersion::try_from(v)
+                .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
+        });
+
+        let hostos_upgrade = match hostos_version.clone() {
+            Err(e) => {
+                // When there is an error finding the HostOS version, don't
+                // spawn the upgrade loop, to avoid unnecessarily upgrading.
+                error!(logger, "{}", e);
+
+                None
+            }
+            Ok(hostos_version) => Some(
+                HostosUpgrader::new(
+                    Arc::clone(&registry),
+                    hostos_version,
+                    node_id,
+                    logger.clone(),
+                )
+                .await,
+            ),
+        };
+
         let firewall = Firewall::new(
             node_id,
             Arc::clone(&registry),
@@ -243,6 +270,7 @@ impl Orchestrator {
             replica_process,
             Arc::clone(&subnet_id),
             replica_version,
+            hostos_version.ok(),
             cup_provider,
             logger.clone(),
         ));
@@ -254,6 +282,7 @@ impl Orchestrator {
             _async_log_guard,
             _metrics_runtime,
             upgrade,
+            hostos_upgrade,
             firewall: Some(firewall),
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
@@ -314,6 +343,20 @@ impl Orchestrator {
                 warn!(log, "{}", e);
             }
             info!(log, "Shut down the replica process");
+        }
+
+        async fn hostos_upgrade_checks(
+            mut upgrade: HostosUpgrader,
+            exit_signal: Receiver<bool>,
+            log: ReplicaLogger,
+        ) {
+            // This timeout is a last resort trying to revive the upgrade monitoring
+            // in case it gets stuck in an unexpected situation for longer than 15 minutes.
+            let timeout = Duration::from_secs(60 * 15);
+            upgrade
+                .upgrade_loop(exit_signal, CHECK_INTERVAL_SECS, timeout)
+                .await;
+            info!(log, "Shut down the HostOS upgrade loop");
         }
 
         async fn tecdsa_key_rotation_check(
@@ -378,6 +421,15 @@ impl Orchestrator {
             )));
         }
 
+        if let Some(hostos_upgrade) = self.hostos_upgrade.take() {
+            info!(self.logger, "Spawning the HostOS upgrade loop");
+            self.task_handles.push(tokio::spawn(hostos_upgrade_checks(
+                hostos_upgrade,
+                self.exit_signal.clone(),
+                self.logger.clone(),
+            )));
+        }
+
         if let (Some(ssh), Some(firewall)) = (self.ssh_access_manager.take(), self.firewall.take())
         {
             info!(
@@ -416,7 +468,7 @@ impl Orchestrator {
     /// Shuts down the orchestrator: stops async tasks and the replica process
     pub async fn shutdown(self) {
         info!(self.logger, "Shutting down orchestrator...");
-        // Communicate to async tasks that the y should exit.
+        // Communicate to async tasks that they should exit.
         self.exit_sender
             .send(true)
             .expect("Failed to send exit signal");

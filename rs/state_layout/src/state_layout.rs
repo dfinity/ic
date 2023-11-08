@@ -2,6 +2,7 @@ use crate::error::LayoutError;
 use crate::utils::do_copy;
 
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
@@ -20,7 +21,7 @@ use ic_replicated_state::{
 };
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
-    batch::TotalCanisterQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
+    batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
     ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation, NumInstructions,
     PrincipalId,
 };
@@ -159,7 +160,7 @@ pub struct CanisterStateBits {
     pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
-    pub total_query_stats: TotalCanisterQueryStats,
+    pub total_query_stats: TotalQueryStats,
 }
 
 #[derive(Clone)]
@@ -316,6 +317,7 @@ impl TipHandler {
         &mut self,
         state_layout: &StateLayout,
         cp: &CheckpointLayout<ReadOnly>,
+        lsmt_storage: FlagStatus,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let tip = self.tip_path();
@@ -331,13 +333,17 @@ impl TipHandler {
 
         let file_copy_instruction = |path: &Path| {
             if path.extension() == Some(OsStr::new("pbuf")) {
-                // Do not copy protobufs
+                // Do not copy protobufs.
                 CopyInstruction::Skip
-            } else if path.extension() == Some(OsStr::new("bin")) {
-                // PageMap files need to be modified in the tip
+            } else if path.extension() == Some(OsStr::new("bin"))
+                && lsmt_storage == FlagStatus::Disabled
+            {
+                // PageMap files need to be modified in the tip,
+                // but only with non-LSMT storage layer that modifies these files.
+                // With LSMT we always write additional overlay files instead.
                 CopyInstruction::ReadWrite
             } else {
-                // Everything else should be readonly
+                // Everything else should be readonly.
                 CopyInstruction::ReadOnly
             }
         };
@@ -1184,11 +1190,10 @@ fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
         )
     })?;
 
-    CanisterId::new(
+    Ok(CanisterId::unchecked_from_principal(
         PrincipalId::try_from(&blob[..])
             .map_err(|err| format!("failed to parse principal ID: {}", err))?,
-    )
-    .map_err(|err| format!("failed to create canister ID: {}", err))
+    ))
 }
 
 /// Parses the canister ID from a relative path, if it is the path of a canister
@@ -1375,16 +1380,81 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join(CANISTER_FILE).into()
     }
 
+    /// List all overlay files with a particular name ending.
+    ///
+    /// All overlay files have the format {number}{name_end}`, where `name_end` distinguises
+    /// between wasm memory, stable memory etc, and the number imposes an ordering of the
+    /// overlay files, with higher number denoting a higher-priority overlay. The number is
+    /// typically the height when the overlay was written.
+    fn overlays_impl(&self, name_end: &str) -> Result<Vec<PathBuf>, LayoutError> {
+        let map_error = |err| LayoutError::IoError {
+            path: self.canister_root.clone(),
+            message: "Failed list overlays".to_string(),
+            io_err: err,
+        };
+
+        let files = std::fs::read_dir(&self.canister_root).map_err(map_error)?;
+        let mut result = Vec::default();
+        for file in files {
+            let path = file.map_err(map_error)?.path();
+            match path.to_str() {
+                Some(p) if p.ends_with(name_end) => {
+                    result.push(path);
+                }
+                _ => (),
+            }
+        }
+        result.sort();
+
+        Ok(result)
+    }
+
+    /// Base file for wasm memory.
     pub fn vmemory_0(&self) -> PathBuf {
         self.canister_root.join("vmemory_0.bin")
     }
 
+    /// List of existing overlay files for wasm memory.
+    pub fn vmemory_0_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_vmemory_0.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the wasm memory written at `height`.
+    pub fn vmemory_0_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_vmemory_0.overlay", height.get()))
+    }
+
+    /// Base file for stable memory.
     pub fn stable_memory_blob(&self) -> PathBuf {
         self.canister_root.join("stable_memory.bin")
     }
 
+    /// List of existing overlay files for stable memory.
+    pub fn stable_memory_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_stable_memory.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the stable memory written at `height`.
+    pub fn stable_memory_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_stable_memory.overlay", height.get()))
+    }
+
+    /// Base file for wasm chunk store.
     pub fn wasm_chunk_store(&self) -> PathBuf {
         self.canister_root.join("wasm_chunk_store.bin")
+    }
+
+    /// List of existing overlay files for wasm chunk store.
+    pub fn wasm_chunk_store_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_wasm_chunk_store.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the wasm chunk store written at `height`.
+    pub fn wasm_chunk_store_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_wasm_chunk_store.overlay", height.get()))
     }
 }
 

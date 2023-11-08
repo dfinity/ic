@@ -503,7 +503,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
                             app_rt
                         };
                         let from_account = AccountIdentifier::new(*princ, None);
-                        Canister::new(rt, CanisterId::new(*princ).unwrap())
+                        Canister::new(rt, CanisterId::unchecked_from_principal(*princ))
                             .update_(
                                 "check_and_send",
                                 candid::<Option<u64>, _>,

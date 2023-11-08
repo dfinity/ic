@@ -1,11 +1,9 @@
 use crate::{
     consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps},
     height_index::{HeightIndex, Indexes, SelectIndex},
+    HasTimestamp, IntoInner,
 };
-use ic_interfaces::{
-    artifact_pool::{HasTimestamp, IntoInner},
-    consensus_pool::{HeightIndexedPool, HeightRange, OnlyError, PoolSection},
-};
+use ic_interfaces::consensus_pool::{HeightIndexedPool, HeightRange, OnlyError, PoolSection};
 use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
     artifact::ConsensusMessageId,
@@ -286,7 +284,7 @@ pub mod test {
     use std::collections::HashSet;
 
     use super::*;
-    use ic_interfaces::artifact_pool::ValidatedArtifact;
+    use ic_interfaces::consensus_pool::ValidatedArtifact;
     use ic_test_utilities::consensus::{fake::*, make_genesis};
 
     fn make_summary(genesis_height: Height) -> ic_types::consensus::dkg::Summary {

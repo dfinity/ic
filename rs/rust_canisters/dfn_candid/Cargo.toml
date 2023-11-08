@@ -1,10 +1,13 @@
 [package]
 name = "dfn_candid"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-serde = "1.0.99"
+serde = { workspace = true }
 candid = { workspace = true }
 on_wire = { path = "../on_wire" }
 dfn_core = { path = "../dfn_core" }

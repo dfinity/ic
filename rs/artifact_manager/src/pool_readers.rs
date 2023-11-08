@@ -12,6 +12,7 @@ use ic_types::{
     chunkable::*,
     consensus::{
         certification::CertificationMessage,
+        dkg::DkgMessageId,
         dkg::Message as DkgMessage,
         ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage, ConsensusMessageAttribute,
@@ -19,7 +20,6 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     single_chunked::*,
-    Height,
 };
 use std::sync::{Arc, RwLock};
 
@@ -29,12 +29,12 @@ pub struct ConsensusClient<Pool, T> {
     /// reference counting.
     pool: Arc<RwLock<Pool>>,
     /// The `ConsensusGossip` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> ConsensusClient<Pool, T> {
     /// The constructor creates a `ConsensusClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -63,12 +63,15 @@ impl<
     }
 
     /// The method returns the *Consensus* message filter.
-    fn get_filter(&self) -> Height {
+    fn get_filter(&self) -> ConsensusMessageFilter {
         self.priority_fn_and_filter.get_filter()
     }
 
     /// The method returns all adverts for validated *Consensus* artifacts.
-    fn get_all_validated_by_filter(&self, filter: &Height) -> Vec<Advert<ConsensusArtifact>> {
+    fn get_all_validated_by_filter(
+        &self,
+        filter: &ConsensusMessageFilter,
+    ) -> Vec<Advert<ConsensusArtifact>> {
         self.pool
             .read()
             .unwrap()
@@ -95,7 +98,7 @@ pub struct IngressClient<Pool, T> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
@@ -104,7 +107,7 @@ impl<Pool, T> IngressClient<Pool, T> {
     /// The constructor creates an `IngressClient` instance.
     pub fn new(
         pool: Arc<RwLock<Pool>>,
-        priority_fn_and_filter: T,
+        priority_fn_and_filter: Arc<T>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
@@ -154,12 +157,12 @@ pub struct CertificationClient<Pool, T> {
     /// reference counting.
     pool: Arc<RwLock<Pool>>,
     /// The `PriorityFnAndFilterProducer` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> CertificationClient<Pool, T> {
     /// The constructor creates a `CertificationClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -191,12 +194,15 @@ impl<
     }
 
     /// The method returns the certification message filter.
-    fn get_filter(&self) -> Height {
+    fn get_filter(&self) -> CertificationMessageFilter {
         self.priority_fn_and_filter.get_filter()
     }
 
     /// The method returns all adverts for validated certification messages.
-    fn get_all_validated_by_filter(&self, filter: &Height) -> Vec<Advert<CertificationArtifact>> {
+    fn get_all_validated_by_filter(
+        &self,
+        filter: &CertificationMessageFilter,
+    ) -> Vec<Advert<CertificationArtifact>> {
         self.pool
             .read()
             .unwrap()
@@ -224,12 +230,12 @@ pub struct DkgClient<Pool, T> {
     /// counting.
     pool: Arc<RwLock<Pool>>,
     /// The `DkgGossip` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> DkgClient<Pool, T> {
     /// The constructor creates a `DkgClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -258,7 +264,7 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(&self) -> PriorityFn<DkgMessageId, DkgMessageAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<DkgMessageId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }
@@ -272,11 +278,11 @@ impl<
 /// The ECDSA client.
 pub struct EcdsaClient<Pool, T> {
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> EcdsaClient<Pool, T> {
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -313,11 +319,11 @@ impl<
 /// The CanisterHttp Client
 pub struct CanisterHttpClient<Pool, T> {
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> CanisterHttpClient<Pool, T> {
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -344,9 +350,7 @@ impl<
             .get_validated_by_identifier(msg_id)
     }
 
-    fn get_priority_function(
-        &self,
-    ) -> PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<CanisterHttpResponseId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }

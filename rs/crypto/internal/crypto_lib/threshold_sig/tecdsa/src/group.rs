@@ -97,10 +97,10 @@ impl EccCurveType {
         }
     }
 
-    pub(crate) fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
+    pub fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
         match alg_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Some(EccCurveType::K256),
-            //AlgorithmId::ThresholdEcdsaSecp256r1 => Some(EccCurveType::P256),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => Some(EccCurveType::P256),
             _ => None,
         }
     }
@@ -396,6 +396,16 @@ impl<'de> Deserialize<'de> for EccScalar {
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalarBytes {
     K256(Box<[u8; 32]>),
+    P256(Box<[u8; 32]>),
+}
+
+impl EccScalarBytes {
+    pub fn curve_type(&self) -> EccCurveType {
+        match self {
+            Self::K256(_) => EccCurveType::K256,
+            Self::P256(_) => EccCurveType::P256,
+        }
+    }
 }
 
 impl TryFrom<&EccScalarBytes> for EccScalar {
@@ -404,6 +414,7 @@ impl TryFrom<&EccScalarBytes> for EccScalar {
     fn try_from(bytes: &EccScalarBytes) -> ThresholdEcdsaSerializationResult<Self> {
         match bytes {
             EccScalarBytes::K256(raw) => EccScalar::deserialize(EccCurveType::K256, raw.as_ref()),
+            EccScalarBytes::P256(raw) => EccScalar::deserialize(EccCurveType::P256, raw.as_ref()),
         }
     }
 }
@@ -418,8 +429,10 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
                     ThresholdEcdsaSerializationError(format!("{:?}", e))
                 })?))
             }
-            _ => {
-                panic!("we don't support other curves yet at the higher layers");
+            EccCurveType::P256 => {
+                Ok(Self::P256(scalar.serialize().try_into().map_err(|e| {
+                    ThresholdEcdsaSerializationError(format!("{:?}", e))
+                })?))
             }
         }
     }
@@ -672,7 +685,7 @@ impl EccPoint {
         Ok(())
     }
 
-    pub fn is_precopmuted(&self) -> bool {
+    pub fn is_precomputed(&self) -> bool {
         self.precompute.is_some()
     }
 
@@ -714,7 +727,7 @@ impl EccPoint {
                 Ok(())
             }
             None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                "No precopmuted information in EccPoint. Forgot to call precopmute()?",
+                "No precomputed information in EccPoint. Forgot to call precompute()?",
             ))),
         }
     }
@@ -808,7 +821,7 @@ impl EccPoint {
             match &pt.precompute {
                 Some(lut) => Ok(lut),
                 None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                    "No precopmuted information in EccPoint. Forgot to call precompute()?",
+                    "No precomputed information in EccPoint. Forgot to call precompute()?",
                 ))),
             }
         };
@@ -927,8 +940,8 @@ impl EccPoint {
 
     pub fn mul_by_g(scalar: &EccScalar) -> Self {
         match scalar {
-            EccScalar::K256(s) => secp256k1::Point::generator().mul(s).into(),
-            EccScalar::P256(s) => secp256r1::Point::generator().mul(s).into(),
+            EccScalar::K256(s) => secp256k1::Point::mul_by_g(s).into(),
+            EccScalar::P256(s) => secp256r1::Point::mul_by_g(s).into(),
         }
     }
 

@@ -68,6 +68,7 @@ impl From<ErrorCode> for RejectCode {
             IngressMessageTimeout => SysTransient,
             CanisterQueueNotEmpty => SysTransient,
             IngressHistoryFull => SysTransient,
+            CanisterIdAlreadyExists => SysTransient,
             CanisterInvalidController => CanisterError,
             CanisterNotFound => DestinationInvalid,
             CanisterMethodNotFound => DestinationInvalid,
@@ -110,6 +111,7 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInMemoryGrow => CanisterError,
             ReservedCyclesLimitExceededInMemoryAllocation => CanisterError,
             ReservedCyclesLimitExceededInMemoryGrow => CanisterError,
+            InsufficientCyclesInMessageMemoryGrow => CanisterError,
         }
     }
 }
@@ -130,6 +132,7 @@ pub enum ErrorCode {
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
+    CanisterIdAlreadyExists = 205,
     CanisterNotFound = 301,
     CanisterMethodNotFound = 302,
     CanisterAlreadyInstalled = 303,
@@ -172,6 +175,7 @@ pub enum ErrorCode {
     InsufficientCyclesInMemoryGrow = 532,
     ReservedCyclesLimitExceededInMemoryAllocation = 533,
     ReservedCyclesLimitExceededInMemoryGrow = 534,
+    InsufficientCyclesInMessageMemoryGrow = 535,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -184,6 +188,7 @@ impl TryFrom<u64> for ErrorCode {
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
+            205 => Ok(ErrorCode::CanisterIdAlreadyExists),
             301 => Ok(ErrorCode::CanisterNotFound),
             302 => Ok(ErrorCode::CanisterMethodNotFound),
             303 => Ok(ErrorCode::CanisterAlreadyInstalled),
@@ -226,6 +231,7 @@ impl TryFrom<u64> for ErrorCode {
             532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
             533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
             534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
+            535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -307,6 +313,7 @@ impl UserError {
             | ErrorCode::InsufficientMemoryAllocation
             | ErrorCode::InsufficientCyclesForCreateCanister
             | ErrorCode::SubnetNotFound
+            | ErrorCode::CanisterIdAlreadyExists
             | ErrorCode::CanisterNotHostedBySubnet
             | ErrorCode::CanisterOutOfCycles
             | ErrorCode::CanisterTrapped
@@ -340,7 +347,8 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMemoryAllocation
             | ErrorCode::InsufficientCyclesInMemoryGrow
             | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
-            | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow => false,
+            | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+            | ErrorCode::InsufficientCyclesInMessageMemoryGrow => false,
         }
     }
 

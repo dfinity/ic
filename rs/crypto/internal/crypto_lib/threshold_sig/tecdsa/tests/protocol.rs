@@ -18,180 +18,201 @@ fn insufficient_dealings(r: Result<ProtocolRound, ThresholdEcdsaError>) {
 
 #[test]
 fn should_reshare_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
-    let random_seed = Seed::from_rng(&mut reproducible_rng());
-    let setup = ProtocolSetup::new(EccCurveType::K256, 4, 2, random_seed)?;
+    let mut rng = &mut reproducible_rng();
 
-    let no_corruption = 0; // number of corrupted dealings == 0
-    let corrupted_dealings = 1;
+    for cfg in TestConfig::all() {
+        let random_seed = Seed::from_rng(&mut rng);
+        let setup = ProtocolSetup::new(cfg, 4, 2, random_seed)?;
 
-    // First create a transcript of random dealings
-    let random = ProtocolRound::random(&setup, 4, corrupted_dealings)?;
+        let no_corruption = 0; // number of corrupted dealings == 0
+        let corrupted_dealings = 1;
 
-    // Now reshare the random value twice
+        // First create a transcript of random dealings
+        let random = ProtocolRound::random(&setup, 4, corrupted_dealings)?;
 
-    // 1 dealing is not sufficient
-    insufficient_dealings(ProtocolRound::reshare_of_masked(
-        &setup,
-        &random,
-        1,
-        no_corruption,
-    ));
+        // Now reshare the random value twice
 
-    // 2, 3, or 4 works:
-    let reshared2 = ProtocolRound::reshare_of_masked(&setup, &random, 2, corrupted_dealings)?;
-    let reshared3 = ProtocolRound::reshare_of_masked(&setup, &random, 3, corrupted_dealings)?;
-    let reshared4 = ProtocolRound::reshare_of_masked(&setup, &random, 4, corrupted_dealings)?;
+        // 1 dealing is not sufficient
+        insufficient_dealings(ProtocolRound::reshare_of_masked(
+            &setup,
+            &random,
+            1,
+            no_corruption,
+        ));
 
-    // The same value is committed in the resharings despite different dealing cnt
-    assert_eq!(reshared2.constant_term(), reshared3.constant_term());
-    assert_eq!(reshared2.constant_term(), reshared4.constant_term());
+        // 2, 3, or 4 works:
+        let reshared2 = ProtocolRound::reshare_of_masked(&setup, &random, 2, corrupted_dealings)?;
+        let reshared3 = ProtocolRound::reshare_of_masked(&setup, &random, 3, corrupted_dealings)?;
+        let reshared4 = ProtocolRound::reshare_of_masked(&setup, &random, 4, corrupted_dealings)?;
 
-    // Now reshare the now-unmasked value
-    insufficient_dealings(ProtocolRound::reshare_of_unmasked(
-        &setup,
-        &reshared2,
-        1,
-        no_corruption,
-    ));
-    let unmasked = ProtocolRound::reshare_of_unmasked(&setup, &reshared2, 2, corrupted_dealings)?;
-    assert_eq!(reshared2.constant_term(), unmasked.constant_term());
+        // The same value is committed in the resharings despite different dealing cnt
+        assert_eq!(reshared2.constant_term(), reshared3.constant_term());
+        assert_eq!(reshared2.constant_term(), reshared4.constant_term());
 
-    // Now multiply the masked and umasked values
-    // We need 3 dealings to multiply
-    insufficient_dealings(ProtocolRound::multiply(
-        &setup,
-        &random,
-        &unmasked,
-        1,
-        no_corruption,
-    ));
-    insufficient_dealings(ProtocolRound::multiply(
-        &setup,
-        &random,
-        &unmasked,
-        2,
-        no_corruption,
-    ));
-    let _product = ProtocolRound::multiply(&setup, &random, &unmasked, 3, corrupted_dealings)?;
+        // Now reshare the now-unmasked value
+        insufficient_dealings(ProtocolRound::reshare_of_unmasked(
+            &setup,
+            &reshared2,
+            1,
+            no_corruption,
+        ));
+        let unmasked =
+            ProtocolRound::reshare_of_unmasked(&setup, &reshared2, 2, corrupted_dealings)?;
+        assert_eq!(reshared2.constant_term(), unmasked.constant_term());
+
+        // Now multiply the masked and umasked values
+        // We need 3 dealings to multiply
+        insufficient_dealings(ProtocolRound::multiply(
+            &setup,
+            &random,
+            &unmasked,
+            1,
+            no_corruption,
+        ));
+        insufficient_dealings(ProtocolRound::multiply(
+            &setup,
+            &random,
+            &unmasked,
+            2,
+            no_corruption,
+        ));
+        let _product = ProtocolRound::multiply(&setup, &random, &unmasked, 3, corrupted_dealings)?;
+    }
 
     Ok(())
 }
 
 #[test]
 fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
-    let random_seed = Seed::from_rng(&mut reproducible_rng());
-    let setup = ProtocolSetup::new(EccCurveType::K256, 4, 2, random_seed)?;
+    let mut rng = &mut reproducible_rng();
 
-    let dealers = 4;
-    let corrupted_dealings = 1;
+    for cfg in TestConfig::all() {
+        let random_seed = Seed::from_rng(&mut rng);
+        let setup = ProtocolSetup::new(cfg, 4, 2, random_seed)?;
 
-    // First create two random transcripts
-    let random_a = ProtocolRound::random(&setup, dealers, corrupted_dealings)?;
-    let random_b = ProtocolRound::random(&setup, dealers, corrupted_dealings)?;
+        let dealers = 4;
+        let corrupted_dealings = 1;
 
-    // Now reshare them both
-    let random_c =
-        ProtocolRound::reshare_of_masked(&setup, &random_a, dealers, corrupted_dealings)?;
-    let random_d =
-        ProtocolRound::reshare_of_masked(&setup, &random_b, dealers, corrupted_dealings)?;
+        // First create two random transcripts
+        let random_a = ProtocolRound::random(&setup, dealers, corrupted_dealings)?;
+        let random_b = ProtocolRound::random(&setup, dealers, corrupted_dealings)?;
 
-    // Now multiply A*D and B*C (which will be the same numbers)
-    let product_ad =
-        ProtocolRound::multiply(&setup, &random_a, &random_d, dealers, corrupted_dealings)?;
-    let product_bc =
-        ProtocolRound::multiply(&setup, &random_b, &random_c, dealers, corrupted_dealings)?;
+        // Now reshare them both
+        let random_c =
+            ProtocolRound::reshare_of_masked(&setup, &random_a, dealers, corrupted_dealings)?;
+        let random_d =
+            ProtocolRound::reshare_of_masked(&setup, &random_b, dealers, corrupted_dealings)?;
 
-    // Now reshare AD and BC
-    let reshare_ad =
-        ProtocolRound::reshare_of_masked(&setup, &product_ad, dealers, corrupted_dealings)?;
-    let reshare_bc =
-        ProtocolRound::reshare_of_masked(&setup, &product_bc, dealers, corrupted_dealings)?;
+        // Now multiply A*D and B*C (which will be the same numbers)
+        let product_ad =
+            ProtocolRound::multiply(&setup, &random_a, &random_d, dealers, corrupted_dealings)?;
+        let product_bc =
+            ProtocolRound::multiply(&setup, &random_b, &random_c, dealers, corrupted_dealings)?;
 
-    // The committed values of AD and BC should be the same:
-    assert_eq!(reshare_ad.constant_term(), reshare_bc.constant_term());
+        // Now reshare AD and BC
+        let reshare_ad =
+            ProtocolRound::reshare_of_masked(&setup, &product_ad, dealers, corrupted_dealings)?;
+        let reshare_bc =
+            ProtocolRound::reshare_of_masked(&setup, &product_bc, dealers, corrupted_dealings)?;
+
+        // The committed values of AD and BC should be the same:
+        assert_eq!(reshare_ad.constant_term(), reshare_bc.constant_term());
+    }
 
     Ok(())
 }
 
 #[test]
 fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
-    let random_seed = Seed::from_rng(&mut reproducible_rng());
-    let mut setup = ProtocolSetup::new(EccCurveType::K256, 5, 2, random_seed)?;
+    let mut rng = &mut reproducible_rng();
 
-    let no_corruption = 0; // number of corrupted dealings == 0
-    let corrupted_dealings = 1;
+    for cfg in TestConfig::all() {
+        let random_seed = Seed::from_rng(&mut rng);
+        let mut setup = ProtocolSetup::new(cfg, 5, 2, random_seed)?;
 
-    let random_a = ProtocolRound::random(&setup, 5, corrupted_dealings)?;
+        let no_corruption = 0; // number of corrupted dealings == 0
+        let corrupted_dealings = 1;
 
-    insufficient_dealings(ProtocolRound::reshare_of_masked(
-        &setup,
-        &random_a,
-        1,
-        no_corruption,
-    ));
-    let reshared_b = ProtocolRound::reshare_of_masked(&setup, &random_a, 2, corrupted_dealings)?;
+        let random_a = ProtocolRound::random(&setup, 5, corrupted_dealings)?;
 
-    setup.modify_threshold(1);
-    setup.remove_nodes(2);
-    insufficient_dealings(ProtocolRound::reshare_of_unmasked(
-        &setup,
-        &reshared_b,
-        1,
-        no_corruption,
-    ));
+        insufficient_dealings(ProtocolRound::reshare_of_masked(
+            &setup,
+            &random_a,
+            1,
+            no_corruption,
+        ));
+        let reshared_b =
+            ProtocolRound::reshare_of_masked(&setup, &random_a, 2, corrupted_dealings)?;
 
-    let reshared_c =
-        ProtocolRound::reshare_of_unmasked(&setup, &reshared_b, 2, corrupted_dealings)?;
-    let reshared_d =
-        ProtocolRound::reshare_of_unmasked(&setup, &reshared_b, 3, corrupted_dealings)?;
+        setup.modify_threshold(1);
+        setup.remove_nodes(2);
+        insufficient_dealings(ProtocolRound::reshare_of_unmasked(
+            &setup,
+            &reshared_b,
+            1,
+            no_corruption,
+        ));
 
-    // b, c, and d all have the same value
-    assert_eq!(reshared_b.constant_term(), reshared_c.constant_term());
-    assert_eq!(reshared_b.constant_term(), reshared_d.constant_term());
+        let reshared_c =
+            ProtocolRound::reshare_of_unmasked(&setup, &reshared_b, 2, corrupted_dealings)?;
+        let reshared_d =
+            ProtocolRound::reshare_of_unmasked(&setup, &reshared_b, 3, corrupted_dealings)?;
+
+        // b, c, and d all have the same value
+        assert_eq!(reshared_b.constant_term(), reshared_c.constant_term());
+        assert_eq!(reshared_b.constant_term(), reshared_d.constant_term());
+    }
 
     Ok(())
 }
 
 #[test]
 fn should_multiply_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
-    let random_seed = Seed::from_rng(&mut reproducible_rng());
-    let mut setup = ProtocolSetup::new(EccCurveType::K256, 5, 2, random_seed)?;
+    let mut rng = &mut reproducible_rng();
 
-    let corrupted_dealings = 1;
+    for cfg in TestConfig::all() {
+        let random_seed = Seed::from_rng(&mut rng);
+        let mut setup = ProtocolSetup::new(cfg, 5, 2, random_seed)?;
 
-    let random_a = ProtocolRound::random(&setup, 5, corrupted_dealings)?;
-    let random_b = ProtocolRound::random(&setup, 5, corrupted_dealings)?;
+        let corrupted_dealings = 1;
 
-    let reshared_c = ProtocolRound::reshare_of_masked(&setup, &random_a, 3, corrupted_dealings)?;
+        let random_a = ProtocolRound::random(&setup, 5, corrupted_dealings)?;
+        let random_b = ProtocolRound::random(&setup, 5, corrupted_dealings)?;
 
-    setup.modify_threshold(1);
-    setup.remove_nodes(2);
-    insufficient_dealings(ProtocolRound::multiply(
-        &setup,
-        &random_b,
-        &reshared_c,
-        1,
-        0,
-    ));
-    insufficient_dealings(ProtocolRound::multiply(
-        &setup,
-        &random_b,
-        &reshared_c,
-        2,
-        0,
-    ));
+        let reshared_c =
+            ProtocolRound::reshare_of_masked(&setup, &random_a, 3, corrupted_dealings)?;
 
-    let _product = ProtocolRound::multiply(&setup, &random_b, &reshared_c, 3, corrupted_dealings)?;
+        setup.modify_threshold(1);
+        setup.remove_nodes(2);
+        insufficient_dealings(ProtocolRound::multiply(
+            &setup,
+            &random_b,
+            &reshared_c,
+            1,
+            0,
+        ));
+        insufficient_dealings(ProtocolRound::multiply(
+            &setup,
+            &random_b,
+            &reshared_c,
+            2,
+            0,
+        ));
+
+        let _product =
+            ProtocolRound::multiply(&setup, &random_b, &reshared_c, 3, corrupted_dealings)?;
+    }
 
     Ok(())
 }
-fn random_subset(
+
+fn random_subset<R: rand::Rng>(
     shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
     include: usize,
+    rng: &mut R,
 ) -> BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal> {
     assert!(include <= shares.len());
 
-    let rng = &mut reproducible_rng();
     let mut result = BTreeMap::new();
 
     let keys = shares.keys().collect::<Vec<_>>();
@@ -225,55 +246,58 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
     let number_of_dealings_corrupted = threshold;
 
     let rng = &mut reproducible_rng();
-    let random_seed = Seed::from_rng(rng);
 
-    let setup = SignatureProtocolSetup::new(
-        EccCurveType::K256,
-        nodes,
-        threshold,
-        number_of_dealings_corrupted,
-        random_seed,
-    )?;
+    for cfg in TestConfig::all() {
+        let random_seed = Seed::from_rng(rng);
 
-    let alg = setup.alg();
+        let setup = SignatureProtocolSetup::new(
+            cfg,
+            nodes,
+            threshold,
+            number_of_dealings_corrupted,
+            random_seed,
+        )?;
 
-    let signed_message = rng.gen::<[u8; 32]>().to_vec();
-    let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let alg = setup.alg();
 
-    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
-    let proto = SignatureProtocolExecution::new(
-        setup.clone(),
-        signed_message.clone(),
-        random_beacon,
-        derivation_path.clone(),
-    );
+        let signed_message = rng.gen::<[u8; 32]>().to_vec();
+        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
 
-    let shares = proto.generate_shares()?;
+        let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+        let proto = SignatureProtocolExecution::new(
+            setup.clone(),
+            signed_message.clone(),
+            random_beacon,
+            derivation_path.clone(),
+        );
 
-    for i in 0..=nodes {
-        let shares = random_subset(&shares, i);
+        let shares = proto.generate_shares()?;
 
-        if shares.len() < threshold {
-            assert!(proto.generate_signature(&shares).is_err());
-        } else {
-            let sig = proto.generate_signature(&shares).unwrap();
-            test_sig_serialization(alg, &sig)?;
-            assert!(proto.verify_signature(&sig).is_ok());
+        for i in 0..=nodes {
+            let shares = random_subset(&shares, i, rng);
+
+            if shares.len() < threshold {
+                assert!(proto.generate_signature(&shares).is_err());
+            } else {
+                let sig = proto.generate_signature(&shares).unwrap();
+                test_sig_serialization(alg, &sig)?;
+                assert!(proto.verify_signature(&sig).is_ok());
+            }
         }
+
+        // Test that another run of the protocol generates signatures
+        // which are not verifiable in the earlier one (due to different rho)
+        let random_beacon2 = Randomness::from(rng.gen::<[u8; 32]>());
+        let proto2 =
+            SignatureProtocolExecution::new(setup, signed_message, random_beacon2, derivation_path);
+
+        let shares = proto2.generate_shares()?;
+        let sig = proto2.generate_signature(&shares).unwrap();
+        test_sig_serialization(alg, &sig)?;
+
+        assert!(proto.verify_signature(&sig).is_err());
+        assert!(proto2.verify_signature(&sig).is_ok());
     }
-
-    // Test that another run of the protocol generates signatures
-    // which are not verifiable in the earlier one (due to different rho)
-    let random_beacon2 = Randomness::from(rng.gen::<[u8; 32]>());
-    let proto2 =
-        SignatureProtocolExecution::new(setup, signed_message, random_beacon2, derivation_path);
-
-    let shares = proto2.generate_shares()?;
-    let sig = proto2.generate_signature(&shares).unwrap();
-    test_sig_serialization(alg, &sig)?;
-
-    assert!(proto.verify_signature(&sig).is_err());
-    assert!(proto2.verify_signature(&sig).is_ok());
 
     Ok(())
 }
@@ -285,64 +309,67 @@ fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
     let number_of_dealings_corrupted = 0;
 
     let rng = &mut reproducible_rng();
-    let random_seed = Seed::from_rng(rng);
 
-    let setup = SignatureProtocolSetup::new(
-        EccCurveType::K256,
-        nodes,
-        threshold,
-        number_of_dealings_corrupted,
-        random_seed,
-    )?;
+    for cfg in TestConfig::all() {
+        let random_seed = Seed::from_rng(rng);
 
-    let alg = setup.alg();
+        let setup = SignatureProtocolSetup::new(
+            cfg,
+            nodes,
+            threshold,
+            number_of_dealings_corrupted,
+            random_seed,
+        )?;
 
-    let signed_message = rng.gen::<[u8; 32]>().to_vec();
-    let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let alg = setup.alg();
 
-    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
-    let proto =
-        SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
+        let signed_message = rng.gen::<[u8; 32]>().to_vec();
+        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
 
-    let shares = proto.generate_shares()?;
+        let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+        let proto =
+            SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
 
-    let sig = proto.generate_signature(&shares).unwrap();
+        let shares = proto.generate_shares()?;
 
-    assert_eq!(proto.verify_signature(&sig), Ok(()));
+        let sig = proto.generate_signature(&shares).unwrap();
 
-    let sig = sig.serialize();
+        assert_eq!(proto.verify_signature(&sig), Ok(()));
 
-    assert_eq!(sig.len() % 2, 0);
+        let sig = sig.serialize();
 
-    let half_sig = sig.len() / 2;
+        assert_eq!(sig.len() % 2, 0);
 
-    let sig_with_r_eq_zero = {
-        let mut sig_with_r_eq_zero = sig.clone();
-        sig_with_r_eq_zero[..half_sig].fill(0);
-        ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_r_eq_zero).unwrap()
-    };
+        let half_sig = sig.len() / 2;
 
-    assert!(proto.verify_signature(&sig_with_r_eq_zero).is_err());
+        let sig_with_r_eq_zero = {
+            let mut sig_with_r_eq_zero = sig.clone();
+            sig_with_r_eq_zero[..half_sig].fill(0);
+            ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_r_eq_zero).unwrap()
+        };
 
-    let sig_with_s_eq_zero = {
-        let mut sig_with_s_eq_zero = sig.clone();
-        sig_with_s_eq_zero[half_sig..].fill(0);
-        ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_s_eq_zero).unwrap()
-    };
+        assert!(proto.verify_signature(&sig_with_r_eq_zero).is_err());
 
-    assert!(proto.verify_signature(&sig_with_s_eq_zero).is_err());
+        let sig_with_s_eq_zero = {
+            let mut sig_with_s_eq_zero = sig.clone();
+            sig_with_s_eq_zero[half_sig..].fill(0);
+            ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_s_eq_zero).unwrap()
+        };
 
-    let sig_with_high_s = {
-        let s = EccScalar::deserialize(EccCurveType::K256, &sig[half_sig..])
-            .unwrap()
-            .negate();
+        assert!(proto.verify_signature(&sig_with_s_eq_zero).is_err());
 
-        let mut sig_with_high_s = sig;
-        sig_with_high_s[half_sig..].copy_from_slice(&s.serialize());
-        ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_high_s).unwrap()
-    };
+        let sig_with_high_s = {
+            let s = EccScalar::deserialize(cfg.signature_curve(), &sig[half_sig..])
+                .unwrap()
+                .negate();
 
-    assert!(proto.verify_signature(&sig_with_high_s).is_err());
+            let mut sig_with_high_s = sig;
+            sig_with_high_s[half_sig..].copy_from_slice(&s.serialize());
+            ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_high_s).unwrap()
+        };
+
+        assert!(proto.verify_signature(&sig_with_high_s).is_err());
+    }
 
     Ok(())
 }

@@ -201,6 +201,13 @@ impl<'de> Deserialize<'de> for U256 {
             {
                 Ok(U256::from(value))
             }
+
+            fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(U256::from(value))
+            }
         }
 
         deserializer.deserialize_any(U256Visitor)

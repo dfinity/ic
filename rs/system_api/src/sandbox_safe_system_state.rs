@@ -8,7 +8,7 @@ use ic_cycles_account_manager::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CreateCanisterArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
+    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
@@ -211,6 +211,8 @@ impl SystemStateChanges {
         match method {
             Ok(Ic00Method::InstallCode) => InstallCodeArgsV2::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::InstallChunkedCode) => InstallChunkedCodeArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::CreateCanister) => CreateCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::UpdateSettings) => UpdateSettingsArgs::decode(payload)
@@ -333,7 +335,7 @@ impl SystemStateChanges {
                             msg.method_payload.as_slice(),
                             own_subnet_id,
                         )
-                        .map(|id| CanisterId::new(id).unwrap())
+                        .map(CanisterId::unchecked_from_principal)
                         {
                             Ok(destination_subnet) => {
                                 msg.receiver = destination_subnet;
@@ -613,7 +615,7 @@ impl SandboxSafeSystemState {
         let mut ic00_aliases: BTreeSet<CanisterId> = network_topology
             .subnets
             .keys()
-            .map(|id| CanisterId::new(id.get()).unwrap())
+            .map(|id| CanisterId::unchecked_from_principal(id.get()))
             .collect();
         ic00_aliases.insert(CanisterId::ic_00());
         let ic00_available_request_slots = ic00_aliases
@@ -771,6 +773,33 @@ impl SandboxSafeSystemState {
         result
     }
 
+    /// Burns min(balance - freezing_treshold, amount_to_burn) cycles from the canister's
+    /// balance and returns the number of burned cycles.
+    pub(super) fn cycles_burn128(
+        &mut self,
+        amount_to_burn: Cycles,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
+    ) -> Cycles {
+        let mut new_balance = self.cycles_balance();
+        let burned_cycles = self.cycles_account_manager.cycles_burn(
+            &mut new_balance,
+            amount_to_burn,
+            self.freeze_threshold,
+            self.memory_allocation,
+            canister_current_memory_usage,
+            canister_current_message_memory_usage,
+            self.compute_allocation,
+            self.subnet_size,
+            self.reserved_balance(),
+        );
+        self.update_balance_change_consuming(
+            new_balance,
+            &[(CyclesUseCase::BurnedCycles, burned_cycles)],
+        );
+        burned_cycles
+    }
+
     pub(super) fn refund_cycles(&mut self, cycles: Cycles) {
         let mut new_balance = self.cycles_balance();
         new_balance += cycles;
@@ -828,6 +857,7 @@ impl SandboxSafeSystemState {
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         amount: Cycles,
     ) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
@@ -838,6 +868,7 @@ impl SandboxSafeSystemState {
                 self.freeze_threshold,
                 self.memory_allocation,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 self.compute_allocation,
                 &mut new_balance,
                 amount,
@@ -853,6 +884,7 @@ impl SandboxSafeSystemState {
     pub fn push_output_request(
         &mut self,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         msg: Request,
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
@@ -864,6 +896,7 @@ impl SandboxSafeSystemState {
             self.freeze_threshold,
             self.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             self.compute_allocation,
             &msg,
             prepayment_for_response_execution,
@@ -930,6 +963,7 @@ impl SandboxSafeSystemState {
     pub(super) fn check_freezing_threshold_for_memory_grow(
         &self,
         api_type: &ApiType,
+        current_message_memory_usage: NumBytes,
         old_memory_usage: NumBytes,
         new_memory_usage: NumBytes,
     ) -> HypervisorResult<()> {
@@ -948,6 +982,7 @@ impl SandboxSafeSystemState {
                     self.freeze_threshold,
                     self.memory_allocation,
                     new_memory_usage,
+                    current_message_memory_usage,
                     self.compute_allocation,
                     self.subnet_size,
                     self.reserved_balance(),
@@ -962,6 +997,47 @@ impl SandboxSafeSystemState {
                     })
                 }
             }
+        }
+    }
+
+    /// Checks the cycles balance against the freezing threshold with the new
+    /// message memory usage if that's needed for the given API type.
+    ///
+    /// If the old message memory usage is higher than the new message memory usage,
+    /// then no check is performed.
+    ///
+    /// Returns `Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow)`
+    /// if the canister would become frozen with the new message memory usage.
+    /// Otherwise, returns `Ok(())`.
+    pub(super) fn check_freezing_threshold_for_message_memory_grow(
+        &self,
+        api_type: &ApiType,
+        current_memory_usage: NumBytes,
+        old_message_memory_usage: NumBytes,
+        new_message_memory_usage: NumBytes,
+    ) -> HypervisorResult<()> {
+        let should_check = self.should_check_freezing_threshold_for_memory_grow(api_type);
+        if !should_check || old_message_memory_usage >= new_message_memory_usage {
+            return Ok(());
+        }
+
+        let threshold = self.cycles_account_manager.freeze_threshold_cycles(
+            self.freeze_threshold,
+            self.memory_allocation,
+            current_memory_usage,
+            new_message_memory_usage,
+            self.compute_allocation,
+            self.subnet_size,
+            self.reserved_balance(),
+        );
+        if self.cycles_balance() >= threshold {
+            Ok(())
+        } else {
+            Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow {
+                bytes: new_message_memory_usage - old_message_memory_usage,
+                available: self.cycles_balance(),
+                threshold,
+            })
         }
     }
 

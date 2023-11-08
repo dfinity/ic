@@ -1,13 +1,16 @@
 [package]
 name = "ic-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 hex = "0.4.2"
 prost = { workspace = true }
 scoped_threadpool = "0.1.*"
-serde = { version = "1.0.99", default-features = false }
+serde = { workspace = true }
 
 [target.'cfg(target_family = "unix")'.dependencies]
 rand = "0.8.3"
@@ -16,10 +19,10 @@ rand = "0.8.3"
 cvt = "0.1.1"
 ic-sys = { path = "../sys" }
 libc = "0.2.91"
-nix = "0.23.0"
+nix = { workspace = true }
 thiserror = "1.0"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
 tempfile = "3.1.0"
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }

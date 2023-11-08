@@ -107,6 +107,9 @@ options may be specified:
     monitoring (e.g., prometheus) traffic. Multiple block may be specified separated by
     commas.
 
+  --canary-proxy-port
+    the portnumber to run the canary proxy on. Canary proxy disabled if not provided
+
   --require_seo_certification
     flag to enforce certification for all crawler and bot requests that are redirected
     to icx-proxy to bypass the service worker.
@@ -244,8 +247,12 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS REQUIRE_SEO_CERTIFICATION REQUIRE_UNDERSCORE_CERTIFICATION
-
+    # Firewall
+    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
+    # Flags
+    local REQUIRE_SEO_CERTIFICATION REQUIRE_UNDERSCORE_CERTIFICATION
+    # Canary Proxy
+    local CANARY_PROXY_PORT
     # Custom domains
     local CERTIFICATE_ORCHESTRATOR_URI CERTIFICATE_ORCHESTRATOR_CANISTER_ID CERTIFICATE_ISSUER_DELEGATION_DOMAIN
     local CERTIFICATE_ISSUER_ACME_PROVIDER_URL CERTIFICATE_ISSUER_CLOUDFLARE_API_URL CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY
@@ -325,6 +332,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ipv6_monitoring_ips)
                 IPV6_MONITORING_IPS="$2"
+                ;;
+            --canary-proxy-port)
+                CANARY_PROXY_PORT="$2"
                 ;;
             --require_seo_certification)
                 REQUIRE_SEO_CERTIFICATION="$2"
@@ -518,6 +528,7 @@ EOF
     cat >"${BN_VARS_PATH}" <<EOF
 $(printf "system_domains=%s\n" "${SYSTEM_DOMAINS[@]}")
 $(printf "application_domains=%s\n" "${APPLICATION_DOMAINS[@]}")
+canary_proxy_port=${CANARY_PROXY_PORT:-}
 denylist_url=${DENYLIST_URL:-}
 env=${ENV:-}
 elasticsearch_url=${ELASTICSEARCH_URL}

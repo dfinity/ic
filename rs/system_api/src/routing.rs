@@ -6,10 +6,10 @@ use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
-    BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgsV2,
-    Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SignWithECDSAArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs,
+    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
+    SignWithECDSAArgs, StoredChunksArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -69,6 +69,18 @@ pub(super) fn resolve_destination(
             // Find the destination canister from the payload.
             let args = InstallCodeArgsV2::decode(payload)?;
             let canister_id = args.get_canister_id();
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
+                })
+        }
+        Ok(Ic00Method::InstallChunkedCode) => {
+            // Find the destination canister from the payload.
+            let args = InstallChunkedCodeArgs::decode(payload)?;
+            let canister_id = args.target_canister_id();
             network_topology
                 .routing_table
                 .route(canister_id.get())
@@ -199,14 +211,35 @@ pub(super) fn resolve_destination(
                     ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::UploadChunk)
                 })
         }
-        Ok(Ic00Method::StoredChunks)
-        | Ok(Ic00Method::DeleteChunks)
-        | Ok(Ic00Method::ClearChunkStore) => {
-            Err(ResolveDestinationError::UserError(UserError::new(
-                ic_error_types::ErrorCode::CanisterRejectedMessage,
-                "Chunked upload API is not yet implemented",
-            )))
+        Ok(Ic00Method::ClearChunkStore) => {
+            let args = ClearChunkStoreArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(
+                        canister_id,
+                        Ic00Method::ClearChunkStore,
+                    )
+                })
         }
+        Ok(Ic00Method::StoredChunks) => {
+            let args = StoredChunksArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::StoredChunks)
+                })
+        }
+        Ok(Ic00Method::DeleteChunks) => Err(ResolveDestinationError::UserError(UserError::new(
+            ic_error_types::ErrorCode::CanisterRejectedMessage,
+            "Chunked upload API is not yet implemented",
+        ))),
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
         )),

@@ -3,8 +3,13 @@ use crate::{
     pb::v1::governance::{migration::MigrationStatus, Migration, Migrations},
 };
 
-pub fn neuron_stable_indexes_building_is_enabled() -> bool {
-    cfg! { any(test, feature = "test") }
+impl MigrationStatus {
+    pub fn is_terminal(self) -> bool {
+        match self {
+            Self::Unspecified | Self::InProgress => false,
+            Self::Succeeded | Self::Failed => true,
+        }
+    }
 }
 
 impl Migration {
@@ -19,7 +24,7 @@ pub(crate) fn maybe_run_migrations(
     mut migrations: Migrations,
     neuron_store: &mut NeuronStore,
 ) -> Migrations {
-    if neuron_stable_indexes_building_is_enabled() {
+    if crate::neuron_stable_indexes_building_is_enabled() {
         migrations.neuron_indexes_migration =
             Some(neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes());
     }

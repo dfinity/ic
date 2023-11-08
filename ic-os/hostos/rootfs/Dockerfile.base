@@ -147,7 +147,7 @@ RUN \
         find /boot -name "*.old" | xargs -L 1 unlink && \
         find /boot -name "*generic" | xargs rm && \
         find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf && \
-        touch /var/run/SEV && \
+        mkdir -p /opt/ic/share && touch /opt/ic/share/SEV && \
         rm -rf /tmp/snp-release-2023-05-24 ; \
     fi
 

@@ -158,6 +158,7 @@ pub fn test(env: TestEnv) {
         replica_version: Some(ic_version.clone()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
+        skip_prompts: true,
     };
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
@@ -171,6 +172,7 @@ pub fn test(env: TestEnv) {
         parent_nns_host_ip: Some(parent_nns_node.get_ip_addr()),
         replacement_nodes: Some(replacement_nodes),
         next_step: None,
+        skip: None,
     };
 
     let mut subnet_recovery = NNSRecoveryFailoverNodes::new(
@@ -178,7 +180,6 @@ pub fn test(env: TestEnv) {
         recovery_args,
         /*neuron_args=*/ None,
         subnet_args,
-        /*interactive=*/ false,
     );
 
     // let's take f+1 nodes and break them.

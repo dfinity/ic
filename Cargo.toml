@@ -2,6 +2,8 @@
 
 members = [
   "packages/icrc-ledger-agent",
+  "packages/icrc-ledger-client",
+  "packages/icrc-ledger-client-cdk",
   "packages/icrc-ledger-types",
   "packages/ic-ledger-hash-of",
   "packages/ic-starter-tests",
@@ -21,11 +23,13 @@ members = [
   "rs/bitcoin/consensus",
   "rs/bitcoin/mock",
   "rs/bitcoin/types/internal",
+  "rs/boundary_node/canary_proxy",
   "rs/boundary_node/certificate_issuance/certificate_issuer",
   "rs/boundary_node/certificate_issuance/certificate_orchestrator",
   "rs/boundary_node/certificate_issuance/certificate_syncer",
   "rs/boundary_node/control_plane",
   "rs/boundary_node/denylist_updater",
+  "rs/boundary_node/discower_bowndary",
   "rs/boundary_node/ic_balance_exporter",
   "rs/boundary_node/ic_boundary",
   "rs/boundary_node/icx_proxy",
@@ -121,12 +125,13 @@ members = [
   "rs/http_endpoints/metrics",
   "rs/http_utils",
   "rs/ic_os/deterministic_ips",
+  "rs/ic_os/guestos_tool",
   "rs/ic_os/launch-single-vm",
   "rs/ic_os/setupos-inject-configuration",
+  "rs/ic_os/partition_tools",
   "rs/ic_os/setupos-disable-checks",
-  "rs/ic_os/sev_interfaces",
   "rs/ic_os/sev",
-  "rs/ic_os/sevctl",
+  "rs/ic_os/snptool",
   "rs/ic_os/vsock/guest",
   "rs/ic_os/vsock/host",
   "rs/ic_os/vsock/vsock_lib",
@@ -136,10 +141,12 @@ members = [
   "rs/ingress_manager",
   "rs/interfaces",
   "rs/interfaces/adapter_client",
-  "rs/interfaces/state_manager",
-  "rs/interfaces/state_manager/mocks",
+  "rs/interfaces/certified_stream_store",
+  "rs/interfaces/certified_stream_store/mocks",
   "rs/interfaces/registry",
   "rs/interfaces/registry/mocks",
+  "rs/interfaces/state_manager",
+  "rs/interfaces/state_manager/mocks",
   "rs/interfaces/transport",
   "rs/interfaces/transport/mocks",
   "rs/memory_tracker",
@@ -193,6 +200,9 @@ members = [
   "rs/observability/config_writer_common",
   "rs/observability/vector_config_generator",
   "rs/observability/prometheus_config_updater",
+  "rs/observability/multiservice_discovery",
+  "rs/observability/multiservice_discovery_downloader",
+  "rs/observability/multiservice_discovery_shared",
   "rs/orchestrator",
   "rs/orchestrator/dashboard",
   "rs/orchestrator/registry_replicator",
@@ -248,8 +258,6 @@ members = [
   "rs/rosetta-api/icrc1",
   "rs/rosetta-api/icrc1/benchmark/generator",
   "rs/rosetta-api/icrc1/benchmark/worker",
-  "rs/rosetta-api/icrc1/client",
-  "rs/rosetta-api/icrc1/client/cdk",
   "rs/rosetta-api/icrc1/index",
   "rs/rosetta-api/icrc1/index-ng",
   "rs/rosetta-api/icrc1/ledger",
@@ -337,6 +345,7 @@ members = [
   "rs/types/wasm_types",
   "rs/universal_canister/lib",
   "rs/utils",
+  "rs/utils/ensure",
   "rs/utils/lru_cache",
   "rs/utils/rustfmt",
   "rs/validator",
@@ -352,6 +361,13 @@ members = [
 resolver = "2"
 
 exclude = ["universal_canister/impl", "typescript/service-worker/test_utils"]
+
+[workspace.package]
+version = "0.9.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Autonomous serverless cloud functionality for the public Internet."
+documentation = "https://internetcomputer.org/docs/"
+edition = "2021"
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
@@ -379,19 +395,29 @@ opt-level = 'z'
 [profile.dev.package.ic_bls12_381]
 opt-level = 3
 
+[profile.dev.package.k256]
+opt-level = 3
+
+[profile.dev.package.p256]
+opt-level = 3
+
 [patch.crates-io]
 # Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
 # released this can be removed.
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
-# This version pins prost 0.11. Please remove after the next pprof release.
-pprof = { git = "https://github.com/tikv/pprof-rs", rev = "059d3c80395c74e9f82ca1f9cbb3c013acfffb75" }
 
 [workspace.dependencies]
 base64 = { version = "0.13.1" }
+# build-info and build-info-build MUST be kept in sync!
+build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764" }
+build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764", default_features = false }
 bytes = "1.5.0"
-candid = { version = "0.9.5", features = ["parser"] }
+candid = { version = "0.9.10", features = ["parser"] }
+chrono = { version = "0.4.19", features = ["serde"] }
 ciborium = "0.2.1"
+clap = { version = "3.2.25", features = ["derive"] }
 ethnum = { version = "1.3.2", features = ["serde"] }
+flate2 = "1.0.28"
 futures = "0.3.28"
 ic-agent = { version = "0.27.0", features = ["hyper"] }
 ic-cdk = "0.10.0"
@@ -400,22 +426,46 @@ ic-cdk-timers = "0.4.0"
 ic-stable-structures = "0.5.4"
 ic-utils = { version = "0.27.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c" }
+indexmap = "2.1.0"
+itertools = "0.10.5"
 k256 = { version = "0.13", default_features = false, features = [
   "arithmetic",
   "ecdsa",
+  "pem",
   "pkcs8",
+  "precomputed-tables",
+  "std",
 ] }
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
+nix = "0.24.3"
 p256 = { version = "0.13", default_features = false, features = [
   "arithmetic",
   "ecdsa",
   "pem",
   "pkcs8",
 ] }
+pkcs8 = "0.10.2"
+pretty_assertions = "1.4.0"
 prometheus = { version = "0.13.3", features = ["process"] }
 prost = "0.11.9"
 prost-build = "0.11.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = "0.11"
+serde_bytes_repr = "0.1.5"
+serde_cbor = "0.11.2"
+serde_derive = "1.0"
+serde_json = { version = "1.0.107", features = ["std"] }
+serde_millis = "0.1"
+serde_with = "1.6.2"
+serde_yaml = "0.8.24"
+signature = "2.1.0"
+simple_asn1 = "0.6.2"
+strum = { version = "0.24.1", features = ["derive"] }
+strum_macros = "0.24.1"
+syn = { version = "1.0.109", features = ["fold", "full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 tonic = "0.9.2"
 tonic-build = "0.9.2"
 tower = { version = "0.4.13", features = ["full"] }
+x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }

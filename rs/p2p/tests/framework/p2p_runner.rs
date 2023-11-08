@@ -1,12 +1,10 @@
-use crate::framework::file_tree_artifact_mgr::ArtifactChunkingTestImpl;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::{subnet_config::SubnetConfig, transport::TransportConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
-use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::Transport;
-use ic_logger::{debug, info, ReplicaLogger};
+use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
@@ -108,6 +106,7 @@ fn execute_test(
         let cup = make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id);
 
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
+            node_id,
             subnet_id,
             pb::CatchUpPackage::from(&cup),
             artifact_pool_config.clone(),
@@ -145,7 +144,6 @@ fn execute_test(
             fake_local_store_certified_time_reader,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
             0,
-            Arc::new(SysTimeSource::new()),
         );
 
         let mut p2p_test_context = P2PTestContext::new(
@@ -224,113 +222,6 @@ pub fn replica_run_till_height(p2p_test_context: &P2PTestContext, till_height: u
         .wait_on_barrier(P2P_TEST_END_BARRIER.to_string());
 }
 
-#[allow(clippy::too_many_arguments)]
-fn execute_test_chunking_pool(
-    node_num: u64,
-    replica_config: ReplicaConfig,
-    registry: Arc<dyn RegistryClient>,
-    transport: Arc<dyn Transport>,
-    test_synchronizer: P2PTestSynchronizer,
-    log: ReplicaLogger,
-    test: impl FnOnce(&mut P2PTestContext) + Send + Sync + 'static,
-    rt_handle: tokio::runtime::Handle,
-) {
-    ic_test_utilities::artifact_pool_config::with_test_pool_config(|artifact_pool_config| {
-        let _rt_guard = rt_handle.enter();
-        let metrics_registry = MetricsRegistry::new();
-        let state_manager = Arc::new(FakeStateManager::new());
-        let node_id = replica_config.node_id;
-        let subnet_id = replica_config.subnet_id;
-        let transport_config = get_replica_transport_config();
-        debug!(log, "Spawning Replica with config {:?}", transport_config);
-        let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
-            Arc::clone(&state_manager) as Arc<_>,
-        ));
-
-        let message_router =
-            FakeMessageRouting::with_state_manager(Arc::clone(&state_manager) as Arc<_>);
-        let message_router = Arc::new(message_router);
-        let xnet_payload_builder = FakeXNetPayloadBuilder::new();
-        let xnet_payload_builder = Arc::new(xnet_payload_builder);
-        let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
-        let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
-        let query_stats_payload_builder = MockBatchPayloadBuilder::new();
-        let query_stats_payload_builder = Box::new(query_stats_payload_builder);
-        let fake_crypto = CryptoReturningOk::default();
-        let fake_crypto = Arc::new(fake_crypto);
-        let node_pool_dir = test_synchronizer.get_test_group_directory();
-        let state_sync_client = Box::new(ArtifactChunkingTestImpl::new(node_pool_dir, node_id));
-        let state_sync_client =
-            P2PStateSyncClient::TestChunkingPool(state_sync_client.clone(), state_sync_client);
-        let subnet_config = SubnetConfig::new(SubnetType::System);
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
-            SubnetType::System,
-            subnet_id,
-            subnet_config.cycles_account_manager_config,
-        ));
-        let time_source = FastForwardTimeSource::new();
-        let fake_local_store_certified_time_reader =
-            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source));
-
-        let cup = make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id);
-        let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
-            subnet_id,
-            pb::CatchUpPackage::from(&cup),
-            artifact_pool_config.clone(),
-            metrics_registry.clone(),
-            log.clone(),
-        )));
-
-        let (_, _, p2p_runner) = setup_consensus_and_p2p(
-            &log,
-            &metrics_registry,
-            &rt_handle,
-            artifact_pool_config,
-            transport_config,
-            Default::default(),
-            node_id,
-            subnet_id,
-            Some(transport),
-            Arc::clone(&fake_crypto) as Arc<_>,
-            Arc::new(FakeTlsHandshake::new()),
-            Arc::clone(&state_manager) as Arc<_>,
-            Arc::clone(&state_manager) as Arc<_>,
-            consensus_pool,
-            cup,
-            state_sync_client,
-            xnet_payload_builder,
-            self_validating_payload_builder,
-            query_stats_payload_builder,
-            message_router,
-            Arc::clone(&fake_crypto) as Arc<_>,
-            Arc::clone(&fake_crypto) as Arc<_>,
-            Arc::clone(&fake_crypto) as Arc<_>,
-            registry.clone(),
-            ingress_hist_reader,
-            cycles_account_manager,
-            fake_local_store_certified_time_reader,
-            Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
-            0,
-            Arc::new(SysTimeSource::new()),
-        );
-        let mut p2p_test_context = P2PTestContext::new(
-            node_num,
-            subnet_id,
-            metrics_registry,
-            test_synchronizer.clone(),
-            p2p_runner,
-        );
-
-        std::thread::sleep(Duration::from_millis(1000));
-        println!("\n \n \n Starting p2p (SMS) test \n \n \n ");
-        // Call the test
-        test_synchronizer.wait_on_barrier(P2P_TEST_START_BARRIER.to_string());
-        test(&mut p2p_test_context);
-        test_synchronizer.wait_on_barrier(P2P_TEST_END_BARRIER.to_string());
-    })
-}
-
 /// Runs a test group by spawning replicas as threads
 ///
 /// # Parameters
@@ -338,7 +229,6 @@ fn execute_test_chunking_pool(
 /// - test                    p2p test callback that need to be invoked for each
 ///   replica
 pub fn spawn_replicas_as_threads(
-    real_artifact_pool: bool,
     num_replicas: u16,
     test: impl FnOnce(&mut P2PTestContext) + Copy + Send + Sync + 'static,
 ) {
@@ -414,29 +304,17 @@ pub fn spawn_replicas_as_threads(
             .name(format!("Thread Node {}", i))
             .spawn(move || {
                 // Spawn System
-                if real_artifact_pool {
-                    execute_test(
-                        i as u64,
-                        replica_config,
-                        replica_registry,
-                        tp,
-                        replica_test_synchronizer,
-                        replica_log.clone(),
-                        test,
-                        rt_handle,
-                    );
-                } else {
-                    execute_test_chunking_pool(
-                        i as u64,
-                        replica_config,
-                        replica_registry,
-                        tp,
-                        replica_test_synchronizer,
-                        replica_log,
-                        test,
-                        rt_handle,
-                    );
-                }
+
+                execute_test(
+                    i as u64,
+                    replica_config,
+                    replica_registry,
+                    tp,
+                    replica_test_synchronizer,
+                    replica_log.clone(),
+                    test,
+                    rt_handle,
+                );
             })
             .unwrap();
         join_handles.push(jh);

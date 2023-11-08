@@ -637,6 +637,7 @@ struct OriginalContext {
     freezing_threshold: Cycles,
     canister_id: CanisterId,
     subnet_memory_reservation: NumBytes,
+    instructions_executed: NumInstructions,
 }
 
 /// Struct used to hold necessary information for the
@@ -862,6 +863,7 @@ pub fn execute_response(
         clean_canister.system_state.freeze_threshold,
         clean_canister.system_state.memory_allocation,
         clean_canister.memory_usage(),
+        clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
         clean_canister.system_state.reserved_balance(),
@@ -879,6 +881,7 @@ pub fn execute_response(
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
         subnet_memory_reservation,
+        instructions_executed: call_context.instructions_executed(),
     };
 
     let mut helper =
@@ -912,6 +915,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             execution_parameters.execution_mode.clone(),
+            call_context.instructions_executed(),
         ),
         Payload::Reject(context) => ApiType::reject_callback(
             time,
@@ -921,6 +925,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             execution_parameters.execution_mode.clone(),
+            call_context.instructions_executed(),
         ),
     };
 
@@ -932,6 +937,7 @@ pub fn execute_response(
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
         helper.canister().memory_usage(),
+        helper.canister().message_memory_usage(),
         execution_parameters.clone(),
         func_ref,
         round_limits,
@@ -992,10 +998,12 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
+            call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
         helper.canister().memory_usage(),
+        helper.canister().message_memory_usage(),
         execution_parameters.clone(),
         func_ref,
         round_limits,

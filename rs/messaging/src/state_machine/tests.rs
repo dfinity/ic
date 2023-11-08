@@ -20,7 +20,7 @@ use ic_test_utilities::{
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_types::batch::{CanisterQueryStats, EpochStatsMessages, QueryStatsMessage};
+use ic_types::batch::{CanisterQueryStats, QueryStats, QueryStatsPayload};
 use ic_types::messages::SignedIngress;
 use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterEcdsaPublicKey};
 use ic_types::{Height, PrincipalId, QueryStatsEpoch, SubnetId, Time};
@@ -292,7 +292,7 @@ fn fetch_critical_error_batch_time_regression_count(
 /// Tests that we correctly collect temporary query stats in the replicated state throughout an epoch.
 #[test]
 pub fn test_query_stats() {
-    let test_canister_stats = CanisterQueryStats {
+    let test_canister_stats = QueryStats {
         num_calls: 1,
         num_instructions: 2,
         ingress_payload_size: 3,
@@ -304,10 +304,10 @@ pub fn test_query_stats() {
         .batch_number(Height::new(1))
         .time(Time::from_nanos_since_unix_epoch(1))
         .messages(BatchMessages {
-            query_stats: Some(EpochStatsMessages {
+            query_stats: Some(QueryStatsPayload {
                 epoch: QueryStatsEpoch::from(1),
                 proposer,
-                stats: vec![QueryStatsMessage {
+                stats: vec![CanisterQueryStats {
                     canister_id: uninstalled_canister,
                     stats: test_canister_stats.clone(),
                 }],

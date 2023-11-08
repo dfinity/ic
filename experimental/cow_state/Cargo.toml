@@ -1,7 +1,10 @@
 [package]
 name = "ic-cow-state"
-version = "0.8.0"
-edition = "2021"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,7 +15,7 @@ ic-sys = { path = "../../rs/sys" }
 ic-utils = { path = "../../rs/utils" }
 libc = "0.2.91"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "1cf86b5cc09947e94a787065cadd163a42ef7f18" }
-nix = "0.23.0"
+nix = { workspace = true }
 num-integer = "0.1.43"
 parking_lot = "0.12.1"
 lazy_static = "1.4.0"

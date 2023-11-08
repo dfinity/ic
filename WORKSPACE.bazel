@@ -65,8 +65,8 @@ gazelle_dependencies(go_repository_default_config = "//:WORKSPACE.bazel")
 
 http_archive(
     name = "rules_rust",
-    sha256 = "db89135f4d1eaa047b9f5518ba4037284b43fc87386d08c1d1fe91708e3730ae",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.27.0/rules_rust-v0.27.0.tar.gz"],
+    sha256 = "6357de5982dd32526e02278221bb8d6aa45717ba9bbacf43686b130aa2c72e1e",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.30.0/rules_rust-v0.30.0.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
@@ -122,11 +122,17 @@ load("//bazel/openssl_static_env:defs.bzl", "openssl_static_env")
 openssl_static_env(name = "openssl_static_env")
 
 load("@openssl_static_env//:defs.bzl", "DFINITY_OPENSSL_STATIC")
+load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
+
+sanitizers_enabled_env(name = "sanitizers_enabled_env")
+
+load("@sanitizers_enabled_env//:defs.bzl", "SANITIZERS_ENABLED")
 
 external_crates_repository(
     name = "crate_index",
-    cargo_lockfile = "//:Cargo.Bazel.StaticOpenSSL.toml.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.toml.lock",
-    lockfile = "//:Cargo.Bazel.StaticOpenSSL.json.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.json.lock",
+    cargo_lockfile = "//:Cargo.Bazel.StaticOpenSSL.toml.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.Fuzzing.toml.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.toml.lock",
+    lockfile = "//:Cargo.Bazel.StaticOpenSSL.json.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock",
+    sanitizers_enabled = SANITIZERS_ENABLED,
     static_openssl = DFINITY_OPENSSL_STATIC,
 )
 
@@ -461,6 +467,16 @@ load("//bazel:dfx.bzl", "dfx")
 
 dfx(name = "dfx")
 
+# sns-quill for SNS testing
+load("//bazel:sns_quill.bzl", "sns_quill")
+
+sns_quill(name = "sns_quill")
+
+# idl2json for SNS testing
+load("//bazel:idl2json.bzl", "idl_to_json")
+
+idl_to_json(name = "idl2json")
+
 load("//bazel:jq.bzl", "jq_repository")
 
 jq_repository(name = "jq")
@@ -508,15 +524,15 @@ new_git_repository(
 http_file(
     name = "mainnet_nns_registry_canister",
     downloaded_file_path = "registry-canister.wasm.gz",
-    sha256 = "9bc9448335cb3d459199bd2f8254a79bd6ca30922ede1d07d1ac2cc45c2acff6",
-    url = "https://download.dfinity.systems/ic/8b60ab1c8c5a6e4cf29d6413debe190e6cd8a6af/canisters/registry-canister.wasm.gz",
+    sha256 = "07cb794acb1454525b1686c1d0ba4c1f68dacd700db932f300b9fb2536bff970",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/registry-canister.wasm.gz",
 )
 
 http_file(
     name = "mainnet_nns_governance_canister",
     downloaded_file_path = "governance-canister.wasm.gz",
-    sha256 = "4dd34e7277e2d53fd653e4a6189597bf9fcfb3383d8fd9113ffdaeb9548cf8da",
-    url = "https://download.dfinity.systems/ic/8b60ab1c8c5a6e4cf29d6413debe190e6cd8a6af/canisters/governance-canister.wasm.gz",
+    sha256 = "59744b5a9833c747d324316f7b5fc62f725e6eba48e9733da3d26e4b811a7aaa",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/governance-canister.wasm.gz",
 )
 
 http_file(
@@ -568,8 +584,8 @@ http_file(
 http_file(
     name = "mainnet_nns_sns-wasm-canister",
     downloaded_file_path = "sns-wasm-canister.wasm.gz",
-    sha256 = "727238fdf0081b271f24952a058e9796a68f39d93dbb1269137c16e121cb1549",
-    url = "https://download.dfinity.systems/ic/9bb8f35cccd013b38657c67964c39d48fac6353f/canisters/sns-wasm-canister.wasm.gz",
+    sha256 = "c07b57fac0037ae5e2e979e4217e88e05bd039e4be9f52a5a1b38582edc04b21",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/sns-wasm-canister.wasm.gz",
 )
 
 # Deployed SNS canisters

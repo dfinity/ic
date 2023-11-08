@@ -8,7 +8,7 @@ use crate::{
 use ic_base_types::NodeId;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor},
-    artifact_pool::{ChangeResult, UnvalidatedArtifact, UnvalidatedArtifactEvent},
+    artifact_pool::{ChangeResult, UnvalidatedArtifactEvent},
     state_sync_client::StateSyncClient,
     time_source::{SysTimeSource, TimeSource},
 };
@@ -16,12 +16,12 @@ use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     artifact::{
-        Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncMessage,
+        Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncFilter,
+        StateSyncMessage,
     },
     chunkable::{ArtifactChunk, ChunkId, Chunkable, ChunkableArtifact},
     crypto::crypto_hash,
     state_sync::FileGroupChunks,
-    time::UNIX_EPOCH,
     Height,
 };
 use std::sync::{Arc, Mutex};
@@ -74,6 +74,7 @@ impl ArtifactKind for StateSyncArtifact {
     type Id = StateSyncArtifactId;
     type Message = StateSyncMessage;
     type Attribute = ();
+    type Filter = StateSyncFilter;
 
     fn message_to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
         let size: u64 = msg
@@ -163,8 +164,11 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
     }
 
     // Enumerates all recent fully certified (i.e. referenced in a CUP) states that
-    // are above the filter height.
-    fn get_all_validated_by_filter(&self, filter: &Height) -> Vec<Advert<StateSyncArtifact>> {
+    // is above the filter height.
+    fn get_all_validated_by_filter(
+        &self,
+        filter: &StateSyncFilter,
+    ) -> Vec<Advert<StateSyncArtifact>> {
         let heights = match self.state_manager.state_layout.checkpoint_heights() {
             Ok(heights) => heights,
             Err(err) => {
@@ -180,7 +184,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         heights
             .into_iter()
             .filter_map(|h| {
-                if h > *filter {
+                if h > filter.height {
                     let metadata = states.states_metadata.get(&h)?;
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
@@ -279,12 +283,14 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
     /// state_manager already has.
     ///
     /// Return the highest certified height as the filter.
-    fn get_filter(&self) -> Height {
-        *self
-            .state_manager
-            .list_state_heights(CERT_CERTIFIED)
-            .last()
-            .unwrap_or(&Height::from(0))
+    fn get_filter(&self) -> StateSyncFilter {
+        StateSyncFilter {
+            height: *self
+                .state_manager
+                .list_state_heights(CERT_CERTIFIED)
+                .last()
+                .unwrap_or(&Height::from(0)),
+        }
     }
 
     /// Returns requested state as a Chunkable artifact for StateSync.
@@ -304,11 +310,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
         // Processes received state sync artifacts.
         for artifact_event in artifact_events {
             match artifact_event {
-                UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message,
-                    peer_id,
-                    timestamp: _,
-                }) => {
+                UnvalidatedArtifactEvent::Insert((message, peer_id)) => {
                     let height = message.height;
                     info!(
                         self.log,
@@ -340,7 +342,9 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
             }
         }
 
-        let filter = self.state_manager.states.read().last_advertised;
+        let filter = StateSyncFilter {
+            height: self.state_manager.states.read().last_advertised,
+        };
         let adverts = self.get_all_validated_by_filter(&filter);
         if let Some(artifact) = adverts.last() {
             self.state_manager.states.write().last_advertised = artifact.id.height;
@@ -349,7 +353,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
         ChangeResult {
             adverts,
             purged: Vec::new(),
-            changed: false,
+            poll_immediately: false,
         }
     }
 }
@@ -359,7 +363,9 @@ impl StateSyncClient for StateSync {
     fn available_states(&self) -> Vec<StateSyncArtifactId> {
         // Using height 0 here is sane because for state sync `get_all_validated_by_filter`
         // return at most the number of states present on the node. Currently this is usually 1-2.
-        let filter = Height::from(0);
+        let filter = StateSyncFilter {
+            height: Height::from(0),
+        };
         self.get_all_validated_by_filter(&filter)
             .into_iter()
             .map(|a| a.id)
@@ -392,11 +398,7 @@ impl StateSyncClient for StateSync {
     fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
         let _ = self.process_changes(
             &SysTimeSource::new(),
-            vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                message: msg,
-                peer_id,
-                timestamp: UNIX_EPOCH,
-            })],
+            vec![UnvalidatedArtifactEvent::Insert((msg, peer_id))],
         );
     }
 }

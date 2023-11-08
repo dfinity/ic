@@ -13,7 +13,7 @@ use std::{
 
 use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, Linker, Memory, Module, Mutability, OptLevel, Store, Val,
+    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store, Val,
     ValType,
 };
 
@@ -31,7 +31,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, NumInstructions, NumPages,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
@@ -41,7 +41,9 @@ use crate::wasm_utils::instrumentation::{
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     INSTRUCTIONS_COUNTER_GLOBAL_NAME,
 };
-use crate::{serialized_module::SerializedModuleBytes, wasm_utils::validation::ensure_determinism};
+use crate::{
+    serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
+};
 
 use super::InstanceRunResult;
 
@@ -161,13 +163,6 @@ struct WasmMemoryInfo {
     dirty_page_tracking: DirtyPageTracking,
 }
 
-/// Explicitly disable Wasm features which aren't handled in validation and
-/// instrumentation.
-fn disable_unused_features(config: &mut wasmtime::Config) {
-    config.wasm_function_references(false);
-    config.wasm_relaxed_simd(false);
-}
-
 pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
     config: EmbeddersConfig,
@@ -191,11 +186,12 @@ impl WasmtimeEmbedder {
     /// contains all the wasmtime configuration used to actually run the
     /// canisters __except__ the `host_memory`.
     #[doc(hidden)]
-    pub fn initial_wasmtime_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
-        let mut config = wasmtime::Config::default();
-        config.cranelift_opt_level(OptLevel::None);
-        ensure_determinism(&mut config);
-        disable_unused_features(&mut config);
+    pub fn wasmtime_execution_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
+        let mut config = wasmtime_validation_config(embedder_config);
+
+        // Wasmtime features that differ between Wasm validation and execution.
+        // Currently these are multi-memories and the 64-bit memory needed for
+        // the Wasm-native stable memory implementation.
         if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled
             || embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled
         {
@@ -205,27 +201,10 @@ impl WasmtimeEmbedder {
             config.wasm_memory64(true);
         }
         config
-            // The maximum size in bytes where a linear memory is considered
-            // static. Setting this to maximum Wasm memory size will guarantee
-            // the memory is always static.
-            //
-            // If there is a change in the size of the largest memories we
-            // expect to see then the changes will likely need to be coordinated
-            // with a change in how we create the memories in the implementation
-            // of `wasmtime::MemoryCreator`.
-            .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
-            .max_wasm_stack(embedder_config.max_wasm_stack_size)
-            // Disabling the address map saves about 20% of compile code size.
-            .generate_address_map(false)
-            // Disable Wasm backtraces since we don't use them and don't have
-            // address maps.
-            .wasm_backtrace(false);
-
-        config
     }
 
     fn create_engine(&self) -> HypervisorResult<Engine> {
-        let mut config = Self::initial_wasmtime_config(&self.config);
+        let mut config = Self::wasmtime_execution_config(&self.config);
         let mem_creator = Arc::new(WasmtimeMemoryCreator::new(Arc::clone(
             &self.created_memories,
         )));
@@ -243,11 +222,31 @@ impl WasmtimeEmbedder {
                     format!("{:?}", e),
                 ))
             })?;
-        // Note that a wasmtime::Module object is cheaply clonable (just doing
+        Ok(module)
+    }
+
+    pub fn pre_instantiate(&self, module: &Module) -> HypervisorResult<InstancePre<StoreData>> {
+        let mut linker: wasmtime::Linker<StoreData> = Linker::new(module.engine());
+        system_api::syscalls(
+            &mut linker,
+            self.config.feature_flags,
+            self.config.stable_memory_dirty_page_limit,
+            self.config.stable_memory_accessed_page_limit,
+            self.config.metering_type,
+        );
+
+        let instance_pre = linker.instantiate_pre(module).map_err(|e| {
+            HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(format!(
+                "{:?}",
+                e
+            )))
+        })?;
+
+        // Note that a wasmtime::InstancePre object is cheaply clonable (just doing
         // a bit of reference counting, i.e. it is a "shallow copy"). This is
         // important because EmbedderCache is cloned frequently, and that must
         // not be an expensive operation.
-        Ok(module)
+        Ok(instance_pre)
     }
 
     pub fn deserialize_module(
@@ -266,6 +265,14 @@ impl WasmtimeEmbedder {
                 },
             )
         }
+    }
+
+    pub fn deserialize_module_and_pre_instantiate(
+        &self,
+        serialized_module: &SerializedModuleBytes,
+    ) -> HypervisorResult<InstancePre<StoreData>> {
+        let module = self.deserialize_module(serialized_module)?;
+        self.pre_instantiate(&module)
     }
 
     fn list_memory_infos(
@@ -321,33 +328,25 @@ impl WasmtimeEmbedder {
         modification_tracking: ModificationTracking,
         system_api: Option<SystemApiImpl>,
     ) -> Result<WasmtimeInstance, (HypervisorError, Option<SystemApiImpl>)> {
-        let module = match cache
-            .downcast::<HypervisorResult<wasmtime::Module>>()
-            .expect("incompatible embedder cache, expected HypervisorResult<wasmtime::Module>")
+        let instance_pre = match cache
+            .downcast::<HypervisorResult<InstancePre<StoreData>>>()
+            .expect("incompatible embedder cache, expected HypervisorResult<wasmtime::InstancePre<StoreData>>>")
         {
             Ok(x) => x,
             Err(err) => return Err((err.clone(), system_api)),
         };
 
         let mut store = Store::new(
-            module.engine(),
+            instance_pre.module().engine(),
             StoreData {
                 system_api,
                 num_instructions_global: None,
                 log: self.log.clone(),
+                num_stable_dirty_pages_from_non_native_writes: NumPages::from(0),
             },
         );
 
-        let mut linker = Linker::new(store.engine());
-        system_api::syscalls(
-            &mut linker,
-            self.config.feature_flags,
-            self.config.stable_memory_dirty_page_limit,
-            self.config.stable_memory_accessed_page_limit,
-            self.config.metering_type,
-        );
-
-        let instance = match linker.instantiate(&mut store, module) {
+        let instance = match instance_pre.instantiate(&mut store) {
             Ok(instance) => instance,
             Err(err) => {
                 error!(
@@ -647,6 +646,8 @@ pub struct StoreData {
     pub system_api: Option<SystemApiImpl>,
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
+    /// Tracks the number of dirty pages in stable memory in non-native stable mode
+    pub num_stable_dirty_pages_from_non_native_writes: NumPages,
 }
 
 impl StoreData {
@@ -927,7 +928,7 @@ impl WasmtimeInstance {
 
         match result {
             Ok(_) => Ok(InstanceRunResult {
-                exported_globals: self.get_exported_globals(),
+                exported_globals: self.get_exported_globals()?,
                 dirty_pages: access.dirty_pages,
                 stable_memory_dirty_pages,
             }),
@@ -1088,7 +1089,7 @@ impl WasmtimeInstance {
     }
 
     /// Returns a list of exported globals.
-    pub fn get_exported_globals(&mut self) -> Vec<Global> {
+    pub fn get_exported_globals(&mut self) -> HypervisorResult<Vec<Global>> {
         let globals = get_exported_globals(
             self.wasm_native_stable_memory,
             &self.instance,
@@ -1098,11 +1099,21 @@ impl WasmtimeInstance {
         globals
             .iter()
             .map(|g| match g.ty(&self.store).content() {
-                ValType::I32 => Global::I32(g.get(&mut self.store).i32().expect("global i32")),
-                ValType::I64 => Global::I64(g.get(&mut self.store).i64().expect("global i64")),
-                ValType::F32 => Global::F32(g.get(&mut self.store).f32().expect("global f32")),
-                ValType::F64 => Global::F64(g.get(&mut self.store).f64().expect("global f64")),
-                _ => panic!("unexpected global value type"),
+                ValType::I32 => Ok(Global::I32(
+                    g.get(&mut self.store).i32().expect("global i32"),
+                )),
+                ValType::I64 => Ok(Global::I64(
+                    g.get(&mut self.store).i64().expect("global i64"),
+                )),
+                ValType::F32 => Ok(Global::F32(
+                    g.get(&mut self.store).f32().expect("global f32"),
+                )),
+                ValType::F64 => Ok(Global::F64(
+                    g.get(&mut self.store).f64().expect("global f64"),
+                )),
+                _ => Err(HypervisorError::WasmEngineError(WasmEngineError::Other(
+                    "unexpected global value type".to_string(),
+                ))),
             })
             .collect()
     }

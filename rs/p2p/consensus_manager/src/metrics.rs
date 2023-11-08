@@ -1,137 +1,259 @@
-use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::artifact::ArtifactKind;
-use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntCounterVec, IntGauge};
+
+pub(crate) const PEER_LABEL: &str = "peer_id";
+pub(crate) const DOWNLOAD_TASK_RESULT_LABEL: &str = "result";
+pub(crate) const DOWNLOAD_TASK_RESULT_COMPLETED: &str = "completed";
+pub(crate) const DOWNLOAD_TASK_RESULT_DROP: &str = "drop";
+pub(crate) const DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED: &str = "all_peers_removed";
 
 #[derive(Clone)]
-
 pub(crate) struct ConsensusManagerMetrics {
-    pub active_downloads: IntGauge,
-    /// free slots in the slot table of the send side.
-    pub free_slots: IntGauge,
+    // Download management
+    pub download_task_started_total: IntCounter,
+    pub download_task_finished_total: IntCounter,
+    pub download_task_duration: Histogram,
+    pub download_task_result_total: IntCounterVec,
+    pub download_task_stashed_total: IntCounter,
+    pub download_task_artifact_download_duration: Histogram,
+    pub download_task_restart_after_join_total: IntCounter,
+    pub download_task_artifact_download_errors_total: IntCounter,
 
-    // Slots in use per peer on receive side.
-    pub slots_in_use_per_peer: IntCounterVec,
+    // Slot table
+    pub slot_table_updates_total: IntCounter,
+    pub slot_table_updates_with_artifact_total: IntCounter,
+    pub slot_table_overwrite_total: IntCounter,
+    pub slot_table_stale_total: IntCounter,
+    pub slot_table_new_entry_total: IntCounterVec,
+    pub slot_table_seen_id_total: IntCounter,
+    pub slot_table_removals_total: IntCounter,
 
-    /// The capacity of the slot table on the send side.
-    pub maximum_slots_total: IntCounter,
+    // Topology update
+    pub topology_updates_total: IntCounter,
 
-    /// Number of adverts sent to peers from this node.
-    pub adverts_to_send_total: IntCounter,
+    // Send view
+    pub send_view_consensus_new_adverts_total: IntCounter,
+    pub send_view_consensus_dup_adverts_total: IntCounter,
+    pub send_view_consensus_purge_active_total: IntCounter,
+    pub send_view_consensus_dup_purge_total: IntCounter,
+    pub send_view_send_to_peer_total: IntCounter,
+    pub send_view_send_to_peer_delivered_total: IntCounter,
 
-    pub adverts_to_purge_total: IntCounter,
-
-    pub artifacts_pushed_total: IntCounter,
-
-    /// Number of adverts received from peers.
-    pub adverts_received_total: IntCounter,
-
-    /// Number of adverts received from after joining the task and already deleted the advert.
-    pub peer_advertising_after_deletion_total: IntCounter,
-
-    /// Number of adverts that were stashed at least once.
-    pub adverts_stashed_total: IntCounter,
-
-    /// Download attempts for an advert
-    pub advert_download_attempts: Histogram,
-
-    /// Dropped adverts
-    pub adverts_dropped_total: IntCounter,
-
-    /// Active advert being sent to peers.
-    pub active_advert_transmits: IntGauge,
-
-    pub receive_new_adverts_total: IntCounter,
-
-    pub receive_seen_adverts_total: IntCounter,
-
-    pub receive_slot_table_removals_total: IntCounter,
-
-    pub active_download_removals_total: IntCounter,
-
-    pub receive_used_slot_to_overwrite_total: IntCounter,
-
-    pub receive_used_slot_stale_total: IntCounter,
+    // Slot manager
+    pub slot_manager_used_slots: IntGauge,
+    pub slot_manager_maximum_slots_total: IntCounter,
 }
 
 impl ConsensusManagerMetrics {
     pub fn new<Artifact: ArtifactKind>(metrics_registry: &MetricsRegistry) -> Self {
-        let prefix = Artifact::TAG.to_string().to_lowercase();
+        let prefix = Artifact::TAG.to_string();
+        let const_labels_string = labels! {"client".to_string() => prefix.clone()};
+        let const_labels = labels! {"client" => prefix.as_str()};
         Self {
-            active_downloads: metrics_registry.int_gauge(
-                format!("{prefix}_manager_active_downloads").as_str(),
-                "TODO.",
+            download_task_started_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_download_task_started_total",
+                    "Artifact download tasks started.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            free_slots: metrics_registry
-                .int_gauge(format!("{prefix}_manager_free_slots").as_str(), "TODO."),
-            maximum_slots_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_maximum_slots_total").as_str(),
-                "TODO.",
+            download_task_finished_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_download_task_finished_total",
+                    "Artifact download tasks finished.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            slots_in_use_per_peer: metrics_registry.int_counter_vec(
-                format!("{prefix}_manager_slots_in_use_per_peer").as_str(),
-                "TODO",
-                &["peer_id"],
+            download_task_duration: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "ic_consensus_manager_download_task_duration",
+                    "Duration for which the download task was alive. This includes downloading and waiting for close.",
+                    decimal_buckets(0, 2),
+                    const_labels_string.clone(),
+                ))
+                .unwrap(),
             ),
-            adverts_to_send_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_adverts_to_send_total").as_str(),
-                "TODO.",
+            download_task_result_total: metrics_registry.register(
+                IntCounterVec::new(
+                    opts!(
+                        "ic_consensus_manager_download_task_result_total",
+                        "Download task result.",
+                        const_labels.clone(),
+                    ),
+                    &[DOWNLOAD_TASK_RESULT_LABEL],
+                )
+                .unwrap(),
             ),
-            adverts_to_purge_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_adverts_to_purge_total").as_str(),
-                "TODO.",
+            download_task_stashed_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_download_task_stashed_total",
+                    "Adverts stashed at least once.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            artifacts_pushed_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_artifacts_pushed_total").as_str(),
-                "TODO.",
+            download_task_artifact_download_duration: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "ic_consensus_manager_download_task_artifact_download_duration",
+                    "Download time for artifact.",
+                    decimal_buckets(-2, 0),
+                    const_labels_string.clone(),
+                ))
+                .unwrap(),
             ),
-            adverts_received_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_adverts_received_total").as_str(),
-                "TODO.",
+            download_task_restart_after_join_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_download_task_restart_after_join_total",
+                    "Download task immediately restarted due to advert appearing when closing.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            peer_advertising_after_deletion_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_peer_advertising_after_deletion_total").as_str(),
-                "TODO.",
+            download_task_artifact_download_errors_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_download_task_artifact_download_errors_total",
+                    "Error occured when downloading artifact.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            adverts_stashed_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_adverts_stashed_total").as_str(),
-                "TODO.",
+
+            slot_table_updates_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_table_updates_total",
+                    "Slot table updates.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            advert_download_attempts: metrics_registry.histogram(
-                format!("{prefix}_manager_advert_download_attempts").as_str(),
-                "TODO.",
-                decimal_buckets_with_zero(0, 1),
+            slot_table_updates_with_artifact_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_table_updates_with_artifact_total",
+                    "Slot table updates that contained artifact itself.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            active_advert_transmits: metrics_registry.int_gauge(
-                format!("{prefix}_manager_active_advert_transmits").as_str(),
-                "TODO.",
+            slot_table_overwrite_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_table_overwrite_total",
+                    "Existing slot updated.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            adverts_dropped_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_adverts_dropped_total").as_str(),
-                "TODO.",
+            slot_table_stale_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_table_stale_total",
+                    "Slot not updated because it referred to an older version.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            receive_new_adverts_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_receive_new_adverts_total").as_str(),
-                "TODO.",
+            slot_table_new_entry_total: metrics_registry.register(
+                IntCounterVec::new(
+                    opts!(
+                        "ic_consensus_manager_slot_table_new_entry_total",
+                        "Slot updates for new slot.",
+                        const_labels.clone(),
+                    ),
+                    &[PEER_LABEL],
+                )
+                .unwrap(),
             ),
-            receive_seen_adverts_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_receive_seen_adverts_total").as_str(),
-                "TODO.",
+            slot_table_seen_id_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_table_seen_id_total",
+                    "Added peer to existing download.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            receive_slot_table_removals_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_receive_slot_table_removals_total").as_str(),
-                "TODO.",
+            slot_table_removals_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_table_removals_total",
+                    "Peer removed from active download task.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            active_download_removals_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_active_download_removals_total").as_str(),
-                "TODO.",
+
+            topology_updates_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_topology_updates_total",
+                    "Slot table pruning due to topology update.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            receive_used_slot_to_overwrite_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_receive_used_slot_to_overwrite_total").as_str(),
-                "TODO.",
+
+            send_view_consensus_new_adverts_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_consensus_new_adverts_total",
+                    "New adverts received from consensus.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
-            receive_used_slot_stale_total: metrics_registry.int_counter(
-                format!("{prefix}_manager_receive_used_slot_stale_total").as_str(),
-                "TODO.",
+            send_view_consensus_dup_adverts_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_consnsus_dup_adverts_total",
+                    "Adverts received from consensus that are already in the send view.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            send_view_consensus_purge_active_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_consensus_purge_active_total",
+                    "Purges to currently active downloads.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            send_view_consensus_dup_purge_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_consensus_dup_purge_total",
+                    "Purges for adverts with no existing download task.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            send_view_send_to_peer_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_send_to_peer_total",
+                    "Slot updates sent to peers.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            send_view_send_to_peer_delivered_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_send_to_peer_delivered_total",
+                    "Slot updates delivered to peers.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+
+            slot_manager_used_slots: metrics_registry.register(
+                IntGauge::with_opts(opts!(
+                    "ic_consensus_manager_slot_manager_used_slots",
+                    "Active slots in use.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            slot_manager_maximum_slots_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_manager_maximum_slots_total",
+                    "Maxumum of slots simultaneously used.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
             ),
         }
     }

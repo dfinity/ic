@@ -9,24 +9,28 @@ pub const JOB_REPLICA: Job = Job {
     _type: JobType::Replica,
     port: 9090,
     endpoint: "/",
+    scheme: "http",
 };
 
 pub const JOB_NODE_EXPORTER_GUEST: Job = Job {
     _type: JobType::NodeExporter(NodeOS::Guest),
     port: 9100,
     endpoint: "/metrics",
+    scheme: "https",
 };
 
 pub const JOB_NODE_EXPORTER_HOST: Job = Job {
     _type: JobType::NodeExporter(NodeOS::Host),
     port: 9100,
     endpoint: "/metrics",
+    scheme: "https",
 };
 
 pub const JOB_ORCHESTRATOR: Job = Job {
     _type: JobType::Orchestrator,
     port: 9091,
     endpoint: "/",
+    scheme: "http",
 };
 
 pub fn jobs_list() -> Vec<Job> {

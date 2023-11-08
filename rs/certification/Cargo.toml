@@ -1,7 +1,10 @@
 [package]
 name = "ic-certification"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -9,8 +12,8 @@ ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-types = { path = "../types/types" }
 hex = "0.4.2"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 
 [dev-dependencies]

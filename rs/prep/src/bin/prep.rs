@@ -27,17 +27,17 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 
 /// the filename of the update disk image, as published on the cdn
-const UPD_IMG_FILENAME: &str = "update-img.tar.gz";
+const UPD_IMG_FILENAME: &str = "update-img.tar.zst";
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// fetch the sha256 of the corresponding image.
 const UPD_IMG_DEFAULT_SHA256_URL: &str =
-    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/SHA256SUMS";
+    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/SHA256SUMS";
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// specify the update image.
 const UPD_IMG_DEFAULT_URL: &str =
-    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.gz";
+    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/update-img.tar.zst";
 const CDN_HTTP_ATTEMPTS: usize = 3;
 const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
@@ -58,7 +58,7 @@ struct CliArgs {
     /// If replica-version is specified and both release-package-download-url
     /// and release-package-sha256-hex are unspecified, the
     /// release-package-download-url will default to
-    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.gz
+    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.zst
     #[clap(long, parse(try_from_str = url::Url::parse))]
     pub release_package_download_url: Option<Url>,
 
@@ -69,7 +69,7 @@ struct CliArgs {
     /// If replica-version is specified and both release-package-download-url
     /// and release-package-sha256-hex are unspecified, the
     /// release-package-download-url will downloaded from
-    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/SHA256SUMS
+    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/SHA256SUMS
     #[clap(long)]
     pub release_package_sha256_hex: Option<String>,
 
@@ -502,7 +502,7 @@ mod test_flag_node_parser {
                 p2p_addr: "1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: vec![],
+                chip_id: None,
             },
         };
 

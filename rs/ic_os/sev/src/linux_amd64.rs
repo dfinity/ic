@@ -2,9 +2,6 @@
 
 References:
   https://github.com/virtee/sev
-  https://github.com/virtee/sevctl
-  https://github.com/AMDESE/sev-tool
-  https://github.com/AMDESE/sev-guest
 
   Convert:
     openssl::x509::X509::from_pem(pem_bytes)
@@ -13,9 +10,10 @@ References:
     x509.to_pem()
 */
 
+use crate::SnpError;
+use crate::{ValidateAttestationError, ValidateAttestedStream};
 use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, node::NodeRegistry};
 use openssl::ecdsa::EcdsaSig;
@@ -24,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use sev::firmware::guest::AttestationReport;
 use sha2::Digest;
 use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -132,7 +131,7 @@ where
             });
         }
         let chip_id = transport_info.chip_id;
-        if chip_id.is_empty() {
+        if chip_id.is_none() {
             return Err(ValidateAttestationError::HandshakeError {
                 description: "missing chip_id".into(),
             });
@@ -234,9 +233,10 @@ where
                 description: "attestation report invalid".to_string(),
             });
         }
-        if chip_id != peer_package.report.chip_id {
+        if chip_id != Some(peer_package.report.chip_id.to_vec()) {
             return Err(ValidateAttestationError::HandshakeError {
-                description: "chip_id mismatch".to_string(),
+                description: "Peer package chip_id does not match chip_id from registry"
+                    .to_string(),
             });
         }
         let peer_tls_cert_hash = peer_package.report.report_data;
@@ -337,9 +337,33 @@ async fn read_into_buffer<T: AsyncRead + Unpin>(
     }
 }
 
+pub fn get_chip_id() -> Result<Vec<u8>, SnpError> {
+    // Check if /dev/sev-guest exists
+    let sev_guest_device = Path::new("/dev/sev-guest");
+    if !sev_guest_device.exists() {
+        return Err(SnpError::SnpNotEnabled {
+            description: "/dev/sev-guest does not exist. Snp is not enabled on this Guest".into(),
+        });
+    }
+
+    let mut guest_firmware =
+        sev::firmware::guest::Firmware::open().map_err(|error| SnpError::FirmwareError {
+            description: format!("unable to open sev guest firmware: {}", error),
+        })?;
+
+    let report = guest_firmware
+        .get_report(None, None, Some(0))
+        .map_err(|error| SnpError::ReportError {
+            description: format!("unable to fetch snp report: {}", error),
+        })?;
+
+    Ok(report.chip_id.to_vec())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+    use assert_matches::assert_matches;
 
     static ARK_PEM: &[u8] = include_bytes!("data/ark.pem");
     static ASK_PEM: &[u8] = include_bytes!("data/ask_milan.pem");
@@ -376,5 +400,11 @@ mod test {
         let vcek = openssl::x509::X509::from_pem(VCEK_PEM).expect("invalid vcek PEM");
         let attestation_report = AttestationReport::default();
         assert!(!is_report_valid(&attestation_report, &vcek));
+    }
+
+    #[test]
+    fn test_get_chip_id_snp_not_enabled_fails() {
+        assert_matches!(get_chip_id(), Err(SnpError::SnpNotEnabled { description })
+        if description.contains("Snp is not enabled on this Guest"));
     }
 }

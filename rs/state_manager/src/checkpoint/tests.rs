@@ -1,6 +1,7 @@
 use super::*;
 use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
 use ic_base_types::NumSeconds;
+use ic_config::state_manager::lsmt_storage_default;
 use ic_ic00_types::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
@@ -100,6 +101,7 @@ fn can_make_a_checkpoint() {
             log,
             tip_handler,
             layout.clone(),
+            lsmt_storage_default(),
             state_manager_metrics(),
             MaliciousFlags::default(),
         );
@@ -164,6 +166,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             log,
             tip_handler,
             layout,
+            lsmt_storage_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -214,6 +217,7 @@ fn can_recover_from_a_checkpoint() {
             log,
             tip_handler,
             layout.clone(),
+            lsmt_storage_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -316,6 +320,7 @@ fn can_recover_an_empty_state() {
             log,
             tip_handler,
             layout.clone(),
+            lsmt_storage_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -400,6 +405,7 @@ fn can_recover_a_stopping_canister() {
             log,
             tip_handler,
             layout.clone(),
+            lsmt_storage_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -467,6 +473,7 @@ fn can_recover_a_stopped_canister() {
             log,
             tip_handler,
             layout.clone(),
+            lsmt_storage_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -519,6 +526,7 @@ fn can_recover_a_running_canister() {
             log,
             tip_handler,
             layout.clone(),
+            lsmt_storage_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -571,6 +579,7 @@ fn can_recover_subnet_queues() {
             log,
             tip_handler,
             layout.clone(),
+            lsmt_storage_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -621,6 +630,7 @@ fn empty_protobufs_are_loaded_correctly() {
             log,
             tip_handler,
             layout.clone(),
+            lsmt_storage_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );

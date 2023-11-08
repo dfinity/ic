@@ -1,7 +1,8 @@
 use crate::eth_rpc::{self, JsonRpcError, RpcError};
 use crate::eth_rpc::{
-    are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam, Hash,
-    HttpResponsePayload, LogEntry, ResponseSizeEstimate, SendRawTransactionResult,
+    self, are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam,
+    Hash, HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcError, JsonRpcResult, LogEntry,
+    ResponseSizeEstimate, RpcError, SendRawTransactionResult,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
@@ -13,8 +14,7 @@ use crate::state::State;
 use async_trait::async_trait;
 use candid::CandidType;
 use ic_canister_log::log;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -214,8 +214,10 @@ impl<T: RpcTransport> EthRpcClient<T> {
 
     pub async fn eth_fee_history(&self, params: FeeHistoryParams) -> Result<FeeHistory, RpcError> {
         // A typical response is slightly above 300 bytes.
-        self.sequential_call_until_ok("eth_feeHistory", params, ResponseSizeEstimate::new(512))
-            .await
+        let results: MultiCallResults<FeeHistory> = self
+            .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
+            .await;
+        results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
     }
 
     pub async fn eth_send_raw_transaction(
@@ -311,6 +313,11 @@ impl<T: PartialEq> MultiCallResults<T> {
 }
 
 #[derive(Debug, PartialEq, Eq, CandidType)]
+pub enum SingleCallError {
+    HttpOutcallError(HttpOutcallError),
+    JsonRpcError { code: i64, message: String },
+}
+#[derive(Debug, PartialEq, Eq, CandidType)]
 pub enum MultiCallError<T> {
     ConsistentError(RpcError),
     InconsistentResults(MultiCallResults<T>),
@@ -351,5 +358,80 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
             .min_by_key(extractor)
             .expect("BUG: MultiCallResults is guaranteed to be non-empty");
         Ok(min)
+    }
+
+    pub fn reduce_with_strict_majority_by_key<F: Fn(&T) -> K, K: Ord>(
+        self,
+        extractor: F,
+    ) -> Result<T, MultiCallError<T>> {
+        let mut votes_by_key: BTreeMap<K, BTreeMap<RpcNodeProvider, T>> = BTreeMap::new();
+        for (provider, result) in self.all_ok()?.into_iter() {
+            let key = extractor(&result);
+            match votes_by_key.remove(&key) {
+                Some(mut votes_for_same_key) => {
+                    let (_other_provider, other_result) = votes_for_same_key
+                        .last_key_value()
+                        .expect("BUG: results_with_same_key is non-empty");
+                    if &result != other_result {
+                        let error = MultiCallError::InconsistentResults(
+                            MultiCallResults::from_non_empty_iter(
+                                votes_for_same_key
+                                    .into_iter()
+                                    .chain(std::iter::once((provider, result)))
+                                    .map(|(provider, result)| {
+                                        (provider, Ok(JsonRpcResult::Result(result)))
+                                    }),
+                            ),
+                        );
+                        log!(
+                            INFO,
+                            "[reduce_with_strict_majority_by_key]: inconsistent results {error:?}"
+                        );
+                        return Err(error);
+                    }
+                    votes_for_same_key.insert(provider, result);
+                    votes_by_key.insert(key, votes_for_same_key);
+                }
+                None => {
+                    let _ = votes_by_key.insert(key, BTreeMap::from([(provider, result)]));
+                }
+            }
+        }
+
+        let mut tally: Vec<(K, BTreeMap<RpcNodeProvider, T>)> = Vec::from_iter(votes_by_key);
+        tally.sort_unstable_by(|(_left_key, left_ballot), (_right_key, right_ballot)| {
+            left_ballot.len().cmp(&right_ballot.len())
+        });
+        match tally.len() {
+            0 => panic!("BUG: tally should be non-empty"),
+            1 => Ok(tally
+                .pop()
+                .and_then(|(_key, mut ballot)| ballot.pop_last())
+                .expect("BUG: tally is non-empty")
+                .1),
+            _ => {
+                let mut first = tally.pop().expect("BUG: tally has at least 2 elements");
+                let second = tally.pop().expect("BUG: tally has at least 2 elements");
+                if first.1.len() > second.1.len() {
+                    Ok(first
+                        .1
+                        .pop_last()
+                        .expect("BUG: tally should be non-empty")
+                        .1)
+                } else {
+                    let error =
+                        MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
+                            first.1.into_iter().chain(second.1.into_iter()).map(
+                                |(provider, result)| (provider, Ok(JsonRpcResult::Result(result))),
+                            ),
+                        ));
+                    log!(
+                        INFO,
+                        "[reduce_with_strict_majority_by_key]: no strict majority {error:?}"
+                    );
+                    Err(error)
+                }
+            }
+        }
     }
 }

@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-internal-threshold-sig-bls12381-der"
-version = "0.8.0"
-edition = "2021"
 description = "Internal utils for serializing threshold signatures to DER with minimal dependencies"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }

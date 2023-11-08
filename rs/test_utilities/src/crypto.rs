@@ -1,7 +1,7 @@
 pub mod fake_tls_handshake;
 
 pub use ic_crypto_test_utils::files as temp_dir;
-use ic_crypto_tls_interfaces::{AllowedClients, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use tokio_rustls::rustls::{ClientConfig, PrivateKey, RootCertStore, ServerConfig};
 
 use crate::types::ids::node_test_id;
@@ -9,6 +9,7 @@ use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, Caniste
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
+use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
     IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
@@ -262,7 +263,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         config: &NiDkgConfig,
         _verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-        let mut transcript = NiDkgTranscript::dummy_transcript_for_tests_with_params(
+        let mut transcript = dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
             config.dkg_id().dkg_tag,
             config.threshold().get().get(),
@@ -491,7 +492,7 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
 impl TlsConfig for CryptoReturningOk {
     fn server_config(
         &self,
-        _allowed_clients: AllowedClients,
+        _allowed_clients: SomeOrAllNodes,
         _registry_version: RegistryVersion,
     ) -> Result<ServerConfig, TlsConfigError> {
         Ok(ServerConfig::builder()

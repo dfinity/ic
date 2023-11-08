@@ -470,7 +470,7 @@ def icos_build(
         name = "launch-remote-vm",
         srcs = [
             "//rs/ic_os/launch-single-vm",
-            ":disk-img-url",
+            ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
             "//ic-os:scripts/build-bootstrap-config-image.sh",
             ":version.txt",
@@ -479,7 +479,7 @@ def icos_build(
         cmd = """
         BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
         VERSION="$$(cat $(location :version.txt))"
-        URL="$$(cat $(location :disk-img-url))"
+        URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
         SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
         SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
         cat <<EOF > $@
@@ -511,6 +511,32 @@ cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
 qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
+
+    # Same as above but without KVM support to run inside VMs and containers
+    # VHOST for nested VMs is not configured at the moment (should be possible)
+    native.genrule(
+        name = "launch-local-vm-no-kvm",
+        srcs = [
+            ":disk-img.tar",
+        ],
+        outs = ["launch_local_vm_script_no_kvm"],
+        cmd = """
+        IMAGE="$(location :disk-img.tar)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "\\$$BUILD_WORKSPACE_DIRECTORY"
+TEMP=\\$$(mktemp -d)
+CID=\\$$((\\$$RANDOM + 3))
+cp $$IMAGE \\$$TEMP
+cd \\$$TEMP
+tar xf disk-img.tar
+qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio
 EOF
         """,
         executable = True,

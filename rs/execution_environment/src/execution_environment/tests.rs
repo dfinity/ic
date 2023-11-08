@@ -138,9 +138,7 @@ fn wat_canister_id() -> CanisterId {
 }
 
 fn call_canister_via_uc(test: &mut ExecutionTest, uc: CanisterId, canister_id: CanisterId) {
-    let call = wasm()
-        .call_simple(canister_id.get(), "test", call_args())
-        .build();
+    let call = wasm().call_simple(canister_id, "test", call_args()).build();
     test.ingress_raw(uc, "update", call);
     test.execute_message(uc);
     test.induct_messages();
@@ -379,15 +377,9 @@ fn response_callback_can_reject() {
     let c = wasm().reply().build();
     let b_callback = wasm().push_bytes("error".as_bytes()).reject().build();
     let b = wasm()
-        .call_simple(
-            c_id.get(),
-            "update",
-            call_args().other_side(c).on_reply(b_callback),
-        )
+        .inter_update(c_id, call_args().other_side(c).on_reply(b_callback))
         .build();
-    let a = wasm()
-        .call_simple(b_id.get(), "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
 
     test.ingress_raw(a_id, "update", a);
     test.execute_message(a_id);
@@ -434,15 +426,9 @@ fn canister_cannot_reply_twice() {
     let b_callback = wasm().push_bytes("error".as_bytes()).reject().build();
     let b = wasm()
         .reply()
-        .call_simple(
-            c_id.get(),
-            "update",
-            call_args().other_side(c).on_reply(b_callback),
-        )
+        .inter_update(c_id, call_args().other_side(c).on_reply(b_callback))
         .build();
-    let a = wasm()
-        .call_simple(b_id.get(), "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
 
     test.ingress_raw(a_id, "update", a);
     test.execute_message(a_id);
@@ -467,9 +453,7 @@ fn stopping_canister_rejects_requests() {
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     let b = wasm().reply().build();
-    let a = wasm()
-        .call_simple(b_id.get(), "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
     test.ingress_raw(a_id, "update", a);
     test.execute_message(a_id);
     test.induct_messages();
@@ -514,9 +498,7 @@ fn stopped_canister_rejects_requests() {
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     let b = wasm().reply().build();
-    let a = wasm()
-        .call_simple(b_id.get(), "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
     test.ingress_raw(a_id, "update", a);
     test.execute_message(a_id);
     test.induct_messages();
@@ -1709,6 +1691,29 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
 }
 
 #[test]
+fn message_to_stopping_canister_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.stop_canister(canister);
+    let err = test
+        .should_accept_ingress_message(canister, "", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterStopping, err.code());
+}
+
+#[test]
+fn message_to_stopped_canister_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.stop_canister(canister);
+    test.process_stopping_canisters();
+    let err = test
+        .should_accept_ingress_message(canister, "", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterStopped, err.code());
+}
+
+#[test]
 fn should_accept_ingress_filters_correctly_on_method_type() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
@@ -2673,7 +2678,7 @@ fn replicated_query_refunds_all_sent_cycles() {
 
     let a_payload = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "query",
             call_args().other_side(b_callback.clone()),
             transferred_cycles,
@@ -2755,7 +2760,7 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
 
     let a_payload = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "query",
             call_args().other_side(b_callback.clone()),
             transferred_cycles,
@@ -2838,7 +2843,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
     let a_payload = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b_callback.clone()),
             transferred_cycles,

@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "@crate_index//:clap_4_0_0",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "//rs/ic_os/partition_tools",
 ]
 
 MACRO_DEPENDENCIES = [

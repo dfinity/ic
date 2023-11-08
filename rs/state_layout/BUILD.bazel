@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/config",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
@@ -34,6 +35,8 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/tmpdir",
+    "@crate_index//:itertools",
+    "@crate_index//:proptest",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

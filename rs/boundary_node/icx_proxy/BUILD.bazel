@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:rustls",
     "@crate_index//:rustls-native-certs",
     "@crate_index//:rustls-pemfile",
+    "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
     "@crate_index//:tracing",

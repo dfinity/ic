@@ -59,6 +59,16 @@ mod init {
             }),
             Err(InvalidStateError::InvalidTransactionNonce(_))
         );
+
+        assert_matches!(
+            State::try_from(InitArg {
+                last_scraped_block_number: Nat(BigUint::from_bytes_be(
+                    &ethnum::u256::MAX.to_be_bytes(),
+                )),
+                ..valid_init_arg()
+            }),
+            Err(InvalidStateError::InvalidLastScrapedBlockNumber(_))
+        );
     }
 
     #[test]
@@ -88,6 +98,7 @@ mod init {
             ethereum_block_height: Default::default(),
             minimum_withdrawal_amount: Wei::TWO.into(),
             next_transaction_nonce: TransactionNonce::ZERO.into(),
+            last_scraped_block_number: Default::default(),
         }
     }
 }

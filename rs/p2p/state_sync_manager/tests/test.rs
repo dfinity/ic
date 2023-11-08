@@ -386,6 +386,7 @@ fn test_single_advert_between_two_nodes() {
             None,
             None,
             Some(Arc::new(state_sync_n1)),
+            None,
             waiter_fut(),
         );
 
@@ -399,6 +400,7 @@ fn test_single_advert_between_two_nodes() {
             None,
             None,
             Some(Arc::new(state_sync_n2)),
+            None,
             waiter_fut(),
         );
 
@@ -511,6 +513,7 @@ fn test_multiple_advert_between_two_nodes() {
             None,
             None,
             Some(Arc::new(state_sync_n1)),
+            None,
             waiter_fut(),
         );
 
@@ -524,6 +527,7 @@ fn test_multiple_advert_between_two_nodes() {
             None,
             None,
             Some(Arc::new(state_sync_n2)),
+            None,
             waiter_fut(),
         );
 
@@ -584,6 +588,7 @@ fn test_state_sync_abortion() {
             None,
             None,
             Some(Arc::new(s1.clone())),
+            None,
             conn_checker.check_fut(),
         );
 
@@ -597,6 +602,7 @@ fn test_state_sync_abortion() {
             None,
             None,
             Some(Arc::new(s2.clone())),
+            None,
             conn_checker.check_fut(),
         );
 
@@ -610,6 +616,7 @@ fn test_state_sync_abortion() {
             None,
             None,
             Some(Arc::new(s3.clone())),
+            None,
             conn_checker.check_fut(),
         );
 

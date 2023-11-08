@@ -1135,13 +1135,13 @@ pub struct XNetPayload {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryStatsPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub canister_stats: ::prost::alloc::vec::Vec<QueryStatsPayloadInner>,
+    #[prost(message, repeated, tag = "2")]
+    pub canister_stats: ::prost::alloc::vec::Vec<CanisterQueryStats>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryStatsPayloadInner {
+pub struct CanisterQueryStats {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<CanisterId>,
     #[prost(uint32, tag = "2")]
@@ -1172,142 +1172,6 @@ pub struct IngressPayload {
     pub id_and_pos: ::prost::alloc::vec::Vec<IngressIdOffset>,
     #[prost(bytes = "vec", tag = "2")]
     pub buffer: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ArtifactAttribute {
-    #[prost(oneof = "artifact_attribute::Kind", tags = "1, 2, 3, 4, 5")]
-    pub kind: ::core::option::Option<artifact_attribute::Kind>,
-}
-/// Nested message and enum types in `ArtifactAttribute`.
-pub mod artifact_attribute {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        ConsensusMessage(super::ConsensusMessageAttribute),
-        #[prost(message, tag = "2")]
-        DkgMessage(super::DkgMessageAttribute),
-        #[prost(message, tag = "3")]
-        EcdsaMessage(super::EcdsaMessageAttribute),
-        #[prost(message, tag = "4")]
-        CanisterHttp(super::CanisterHttpResponseAttribute),
-        #[prost(message, tag = "5")]
-        Empty(()),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusMessageAttribute {
-    #[prost(
-        oneof = "consensus_message_attribute::Kind",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
-    )]
-    pub kind: ::core::option::Option<consensus_message_attribute::Kind>,
-}
-/// Nested message and enum types in `ConsensusMessageAttribute`.
-pub mod consensus_message_attribute {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(uint64, tag = "1")]
-        RandomBeacon(u64),
-        #[prost(message, tag = "2")]
-        Finalization(super::FinalizationAttribute),
-        #[prost(message, tag = "3")]
-        Notarization(super::NotarizationAttribute),
-        #[prost(message, tag = "4")]
-        BlockProposal(super::BlockProposalAttribute),
-        #[prost(uint64, tag = "5")]
-        RandomBeaconShare(u64),
-        #[prost(uint64, tag = "6")]
-        NotarizationShare(u64),
-        #[prost(uint64, tag = "7")]
-        FinalizationShare(u64),
-        #[prost(uint64, tag = "8")]
-        RandomTape(u64),
-        #[prost(uint64, tag = "9")]
-        RandomTapeShare(u64),
-        #[prost(uint64, tag = "10")]
-        Cup(u64),
-        #[prost(uint64, tag = "11")]
-        CupShare(u64),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FinalizationAttribute {
-    #[prost(bytes = "vec", tag = "1")]
-    pub block_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NotarizationAttribute {
-    #[prost(bytes = "vec", tag = "1")]
-    pub block_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlockProposalAttribute {
-    #[prost(uint64, tag = "1")]
-    pub rank: u64,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DkgMessageAttribute {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaMessageAttribute {
-    #[prost(oneof = "ecdsa_message_attribute::Kind", tags = "1, 2, 3, 4, 5")]
-    pub kind: ::core::option::Option<ecdsa_message_attribute::Kind>,
-}
-/// Nested message and enum types in `EcdsaMessageAttribute`.
-pub mod ecdsa_message_attribute {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        SignedDealing(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "2")]
-        DealingSupport(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "3")]
-        SigShare(super::RequestId),
-        #[prost(message, tag = "4")]
-        Complaint(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "5")]
-        Opening(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponseAttribute {
-    #[prost(uint64, tag = "1")]
-    pub registry_version: u64,
-    #[prost(uint64, tag = "2")]
-    pub id: u64,
-    /// cryptographic hash of \[`CanisterHttpResponse`\]
-    #[prost(bytes = "vec", tag = "3")]
-    pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1446,6 +1310,213 @@ pub mod canister_http_response_message {
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ArtifactAttribute {
+    #[prost(oneof = "artifact_attribute::Kind", tags = "1, 3, 5")]
+    pub kind: ::core::option::Option<artifact_attribute::Kind>,
+}
+/// Nested message and enum types in `ArtifactAttribute`.
+pub mod artifact_attribute {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        ConsensusMessage(super::ConsensusMessageAttribute),
+        #[prost(message, tag = "3")]
+        EcdsaMessage(super::EcdsaMessageAttribute),
+        #[prost(message, tag = "5")]
+        Empty(()),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageAttribute {
+    #[prost(oneof = "consensus_message_attribute::Kind", tags = "2, 3, 12")]
+    pub kind: ::core::option::Option<consensus_message_attribute::Kind>,
+}
+/// Nested message and enum types in `ConsensusMessageAttribute`.
+pub mod consensus_message_attribute {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "2")]
+        Finalization(super::FinalizationAttribute),
+        #[prost(message, tag = "3")]
+        Notarization(super::NotarizationAttribute),
+        #[prost(message, tag = "12")]
+        Empty(()),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FinalizationAttribute {
+    #[prost(bytes = "vec", tag = "1")]
+    pub block_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NotarizationAttribute {
+    #[prost(bytes = "vec", tag = "1")]
+    pub block_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaMessageAttribute {
+    #[prost(oneof = "ecdsa_message_attribute::Kind", tags = "1, 2, 3, 4, 5")]
+    pub kind: ::core::option::Option<ecdsa_message_attribute::Kind>,
+}
+/// Nested message and enum types in `EcdsaMessageAttribute`.
+pub mod ecdsa_message_attribute {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        SignedDealing(super::super::super::registry::subnet::v1::IDkgTranscriptId),
+        #[prost(message, tag = "2")]
+        DealingSupport(super::super::super::registry::subnet::v1::IDkgTranscriptId),
+        #[prost(message, tag = "3")]
+        SigShare(super::RequestId),
+        #[prost(message, tag = "4")]
+        Complaint(super::super::super::registry::subnet::v1::IDkgTranscriptId),
+        #[prost(message, tag = "5")]
+        Opening(super::super::super::registry::subnet::v1::IDkgTranscriptId),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ArtifactId {
+    #[prost(oneof = "artifact_id::Kind", tags = "1, 2, 3, 11, 10, 6, 7, 9")]
+    pub kind: ::core::option::Option<artifact_id::Kind>,
+}
+/// Nested message and enum types in `ArtifactId`.
+pub mod artifact_id {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        Consensus(super::ConsensusMessageId),
+        #[prost(message, tag = "2")]
+        Ingress(super::IngressMessageId),
+        #[prost(message, tag = "3")]
+        Certification(super::CertificationMessageId),
+        #[prost(message, tag = "11")]
+        CanisterHttp(super::CanisterHttpShare),
+        #[prost(message, tag = "10")]
+        DkgMessage(super::DkgMessageId),
+        #[prost(message, tag = "6")]
+        Ecdsa(super::EcdsaArtifactId),
+        #[prost(string, tag = "7")]
+        FileTreeSync(::prost::alloc::string::String),
+        #[prost(message, tag = "9")]
+        StateSync(super::super::super::p2p::v1::StateSyncId),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DkgMessageId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageId {
+    #[prost(message, optional, tag = "1")]
+    pub hash: ::core::option::Option<ConsensusMessageHash>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageHash {
+    #[prost(
+        oneof = "consensus_message_hash::Kind",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
+    )]
+    pub kind: ::core::option::Option<consensus_message_hash::Kind>,
+}
+/// Nested message and enum types in `ConsensusMessageHash`.
+pub mod consensus_message_hash {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(bytes, tag = "1")]
+        RandomBeacon(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "2")]
+        Finalization(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "3")]
+        Notarization(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "4")]
+        BlockProposal(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "5")]
+        RandomBeaconShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "6")]
+        NotarizationShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "7")]
+        FinalizationShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "8")]
+        RandomTape(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "9")]
+        RandomTapeShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "10")]
+        CatchUpPackage(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "11")]
+        CatchUpPackageShare(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IngressMessageId {
+    #[prost(uint64, tag = "1")]
+    pub expiry: u64,
+    #[prost(bytes = "vec", tag = "2")]
+    pub message_id: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageId {
+    #[prost(message, optional, tag = "1")]
+    pub hash: ::core::option::Option<CertificationMessageHash>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageHash {
+    #[prost(oneof = "certification_message_hash::Kind", tags = "1, 2")]
+    pub kind: ::core::option::Option<certification_message_hash::Kind>,
+}
+/// Nested message and enum types in `CertificationMessageHash`.
+pub mod certification_message_hash {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(bytes, tag = "1")]
+        Certification(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "2")]
+        CertificationShare(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::large_enum_variant)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1478,8 +1549,8 @@ pub struct GossipAdvert {
     pub attribute: ::core::option::Option<ArtifactAttribute>,
     #[prost(uint64, tag = "2")]
     pub size: u64,
-    #[prost(bytes = "vec", tag = "3")]
-    pub artifact_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "6")]
+    pub artifact_id: ::core::option::Option<ArtifactId>,
     #[prost(bytes = "vec", tag = "4")]
     pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1487,8 +1558,8 @@ pub struct GossipAdvert {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GossipChunkRequest {
-    #[prost(bytes = "vec", tag = "1")]
-    pub artifact_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "4")]
+    pub artifact_id: ::core::option::Option<ArtifactId>,
     #[prost(uint32, tag = "2")]
     pub chunk_id: u32,
     #[prost(bytes = "vec", tag = "3")]
@@ -1521,7 +1592,32 @@ pub mod gossip_chunk {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactFilter {
-    #[prost(uint64, tag = "5")]
+    #[prost(message, optional, tag = "6")]
+    pub consensus_filter: ::core::option::Option<ConsensusMessageFilter>,
+    #[prost(message, optional, tag = "7")]
+    pub certification_message_filter: ::core::option::Option<CertificationMessageFilter>,
+    #[prost(message, optional, tag = "8")]
+    pub state_sync_filter: ::core::option::Option<StateSyncFilter>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageFilter {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageFilter {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StateSyncFilter {
+    #[prost(uint64, tag = "1")]
     pub height: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]

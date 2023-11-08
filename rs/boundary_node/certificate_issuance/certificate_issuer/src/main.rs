@@ -57,7 +57,10 @@ use crate::{
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, Remove, State, Update, UpdateType},
     verification::CertificateVerifier,
-    work::{Dispense, DispenseError, Peek, PeekError, Process, Queue, WithDetectRenewal},
+    work::{
+        Dispense, DispenseError, Peek, PeekError, Process, Queue, WithDetectImportance,
+        WithDetectRenewal,
+    },
 };
 
 mod acme;
@@ -129,6 +132,10 @@ struct Cli {
 
     #[arg(long, default_value = "60")]
     peek_sleep_sec: u64,
+
+    /// A set of important domains, to be used in metrics
+    #[arg(long, default_value = "", value_delimiter = ',')]
+    important_domains: Vec<String>,
 
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
@@ -512,6 +519,7 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "process"),
     );
     let processor = WithDetectRenewal::new(processor, certificate_getter.clone());
+    let processor = WithDetectImportance::new(processor, cli.important_domains);
     let processor = Arc::new(processor);
 
     let sem = Arc::new(Semaphore::new(10));

@@ -6,16 +6,14 @@ use crate::rocksdb_iterator::{StandaloneIterator, StandaloneSnapshot};
 use bincode::{deserialize, serialize};
 use byteorder::{BigEndian, ReadBytesExt};
 use ic_config::artifact_pool::RocksDBConfig;
-
-use ic_interfaces::artifact_pool::ValidatedArtifact;
 use ic_interfaces::consensus_pool::{
-    HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
+    HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedArtifact,
+    ValidatedConsensusArtifact,
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
-use ic_types::artifact::CertificationMessageId;
 use ic_types::{
-    artifact::ConsensusMessageId,
+    artifact::{CertificationMessageId, ConsensusMessageId},
     batch::BatchPayload,
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},

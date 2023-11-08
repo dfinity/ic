@@ -3,8 +3,8 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::ToTokens;
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed, FieldsUnnamed,
-    Ident, Index, Type,
+    parse_macro_input, parse_quote, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed,
+    FieldsUnnamed, Generics, Ident, Index, Type,
 };
 
 /// NOTE: Do not derive this implementation for types that have some special invariants
@@ -111,8 +111,8 @@ use syn::{
 pub fn exhaustive_set(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match input.data {
-        Data::Struct(inner) => parse_struct(input.ident, inner),
-        Data::Enum(inner) => parse_enum(input.ident, inner),
+        Data::Struct(inner) => parse_struct(input.ident, inner, input.generics),
+        Data::Enum(inner) => parse_enum(input.ident, inner, input.generics),
         Data::Union(_) => {
             // NOTE: We can add support for unions if we actually need unions
             unimplemented!("ExhaustiveSet cannot be derived for unions.")
@@ -120,15 +120,15 @@ pub fn exhaustive_set(input: TokenStream) -> TokenStream {
     }
 }
 
-fn parse_struct(ident: Ident, input: DataStruct) -> TokenStream {
+fn parse_struct(ident: Ident, input: DataStruct, generics: Generics) -> TokenStream {
     match input.fields {
         Fields::Unit => unimplemented!("no support for unit structs"),
-        Fields::Named(named) => parse_named_struct(ident, named),
-        Fields::Unnamed(unnamed) => parse_unnamed_struct(ident, unnamed),
+        Fields::Named(named) => parse_named_struct(ident, named, generics),
+        Fields::Unnamed(unnamed) => parse_unnamed_struct(ident, unnamed, generics),
     }
 }
 
-fn parse_named_struct(ident: Ident, input: FieldsNamed) -> TokenStream {
+fn parse_named_struct(ident: Ident, input: FieldsNamed, generics: Generics) -> TokenStream {
     let (field_names, types): (Vec<_>, Vec<_>) = input
         .named
         .into_pairs()
@@ -137,10 +137,10 @@ fn parse_named_struct(ident: Ident, input: FieldsNamed) -> TokenStream {
             (f.ident.expect("field should have a name"), f.ty)
         })
         .unzip();
-    impl_product_type(ident, field_names, types).into()
+    impl_product_type(ident, field_names, types, generics).into()
 }
 
-fn parse_unnamed_struct(ident: Ident, input: FieldsUnnamed) -> TokenStream {
+fn parse_unnamed_struct(ident: Ident, input: FieldsUnnamed, generics: Generics) -> TokenStream {
     let types: Vec<_> = input
         .unnamed
         .into_pairs()
@@ -149,7 +149,7 @@ fn parse_unnamed_struct(ident: Ident, input: FieldsUnnamed) -> TokenStream {
 
     let field_names: Vec<_> = (0..types.len()).map(Index::from).collect();
 
-    impl_product_type(ident, field_names, types).into()
+    impl_product_type(ident, field_names, types, generics).into()
 }
 
 /// Creates a token stream of a derived implementation for product types
@@ -158,13 +158,22 @@ fn impl_product_type<T: ToTokens>(
     ident: Ident,
     field_names: Vec<T>,
     types: Vec<Type>,
+    mut generics: Generics,
 ) -> TokenStream2 {
     let var_names: Vec<_> = (0..types.len())
         .map(|i| format_ident!("field_{}", i))
         .collect();
 
+    // Add ExhaustiveSet bounds to generic type parameters
+    for param in generics.type_params_mut() {
+        param
+            .bounds
+            .push(parse_quote!(crate::exhaustive::ExhaustiveSet));
+    }
+    let (gen_impl, gen_ty, gen_where) = generics.split_for_impl();
+
     quote! {
-        impl crate::exhaustive::ExhaustiveSet for #ident {
+        impl #gen_impl crate::exhaustive::ExhaustiveSet for #ident #gen_ty #gen_where {
             fn exhaustive_set<R: rand::RngCore + rand::CryptoRng>(rng: &mut R) -> Vec<Self> {
                 #(let mut #var_names = <#types as crate::exhaustive::ExhaustiveSet>::exhaustive_set(rng));*;
 
@@ -188,7 +197,7 @@ fn impl_product_type<T: ToTokens>(
     }
 }
 
-fn parse_enum(ident: Ident, input: DataEnum) -> TokenStream {
+fn parse_enum(ident: Ident, input: DataEnum, mut generics: Generics) -> TokenStream {
     let variants = input
         .variants
         .into_pairs()
@@ -208,8 +217,16 @@ fn parse_enum(ident: Ident, input: DataEnum) -> TokenStream {
         };
     }
 
+    // Add ExhaustiveSet bounds to generic type parameters
+    for param in generics.type_params_mut() {
+        param
+            .bounds
+            .push(parse_quote!(crate::exhaustive::ExhaustiveSet));
+    }
+    let (gen_impl, gen_ty, gen_where) = generics.split_for_impl();
+
     quote! {
-        impl crate::exhaustive::ExhaustiveSet for #ident {
+        impl #gen_impl crate::exhaustive::ExhaustiveSet for #ident #gen_ty #gen_where {
             fn exhaustive_set<R: rand::RngCore + rand::CryptoRng>(rng: &mut R) -> Vec<Self> {
                 let mut result = vec![#(Self::#unit_variants),*];
                 #(

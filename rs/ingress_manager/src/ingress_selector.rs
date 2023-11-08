@@ -5,6 +5,7 @@
 use crate::IngressManager;
 use ic_constants::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::IngressInductionCost;
+use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::{
     execution_environment::IngressHistoryReader,
     ingress_manager::{
@@ -328,8 +329,29 @@ impl IngressManager {
             ));
         }
 
-        // Skip the message if there aren't enough cycles to induct the message.
+        // Do not include the message if the recipient is Stopping or Stopped.
         let msg = signed_ingress.content();
+        if !msg.is_addressed_to_subnet(self.subnet_id) {
+            let canister_id = msg.canister_id();
+            let canister_state = state.canister_state(&canister_id).ok_or({
+                ValidationError::Permanent(IngressPermanentError::CanisterNotFound(canister_id))
+            })?;
+            match canister_state.status() {
+                CanisterStatusType::Running => {}
+                CanisterStatusType::Stopping => {
+                    return Err(ValidationError::Permanent(
+                        IngressPermanentError::CanisterStopping(canister_id),
+                    ));
+                }
+                CanisterStatusType::Stopped => {
+                    return Err(ValidationError::Permanent(
+                        IngressPermanentError::CanisterStopped(canister_id),
+                    ));
+                }
+            }
+        }
+
+        // Skip the message if there aren't enough cycles to induct the message.
         let effective_canister_id =
             extract_effective_canister_id(msg, self.subnet_id).map_err(|_| {
                 ValidationError::Permanent(IngressPermanentError::InvalidManagementMessage)
@@ -355,6 +377,7 @@ impl IngressManager {
                         &canister.system_state,
                         *cumulative_ingress_cost + ingress_cost,
                         canister.memory_usage(),
+                        canister.message_memory_usage(),
                         canister.scheduler_state.compute_allocation,
                         subnet_size,
                     ) {

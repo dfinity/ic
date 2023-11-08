@@ -8,7 +8,7 @@
 use crate::ArtifactClientHandle;
 use ic_interfaces::{
     artifact_manager::{ArtifactManager, OnArtifactError},
-    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
+    artifact_pool::UnvalidatedArtifactEvent,
 };
 use ic_types::{
     artifact,
@@ -233,6 +233,7 @@ where
         + TryFrom<artifact::Artifact, Error = artifact::Artifact>,
     Advert<Artifact>: Into<p2p::GossipAdvert>,
     for<'a> &'a Artifact::Id: TryFrom<&'a artifact::ArtifactId, Error = &'a artifact::ArtifactId>,
+    artifact::ArtifactFilter: AsMut<Artifact::Filter> + AsRef<Artifact::Filter>,
     for<'a> &'a Artifact::Attribute:
         TryFrom<&'a artifact::ArtifactAttribute, Error = &'a artifact::ArtifactAttribute>,
     Artifact::Attribute: 'static,
@@ -248,13 +249,8 @@ where
             Ok(message) => {
                 // this sends to an unbounded channel, which is what we want here
                 self.sender
-                    .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message,
-                        peer_id,
-                        timestamp: self.time_source.get_relative_time(),
-                    }))
+                    .send(UnvalidatedArtifactEvent::Insert((message, peer_id)))
                     .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
-
                 Ok(())
             }
             Err(_) => Err(OnArtifactError::NotProcessed),

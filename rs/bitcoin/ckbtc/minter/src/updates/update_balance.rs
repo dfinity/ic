@@ -6,10 +6,11 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_interface::{GetUtxosError, GetUtxosResponse, Utxo};
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
-use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use num_traits::ToPrimitive;
 use serde::Serialize;
 
 use super::get_btc_address::init_ecdsa_public_key;
@@ -338,5 +339,5 @@ pub(crate) async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, Up
                 msg, code
             ))
         })??;
-    Ok(block_index)
+    Ok(block_index.0.to_u64().expect("nat does not fit into u64"))
 }

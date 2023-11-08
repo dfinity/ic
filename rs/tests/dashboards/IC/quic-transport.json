@@ -93,7 +93,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.5.5",
+      "pluginVersion": "9.5.8",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -230,7 +230,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.5.5",
+      "pluginVersion": "9.5.8",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2519,7 +2519,7 @@
         "x": 0,
         "y": 100
       },
-      "id": 60,
+      "id": 79,
       "interval": "10s",
       "options": {
         "legend": {
@@ -2542,14 +2542,14 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  rate(quic_transport_request_handler_tokio_task_instrumented_count{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$period]),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)\n",
+          "expr": "label_replace(\nlabel_replace(\n  sum(rate(quic_transport_handle_requests_total{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\", handler=~\"$handler\"}[$period])) without (),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)\n",
           "interval": "",
-          "legendFormat": "{{ic_subnet}} {{instance}} {{error}}",
+          "legendFormat": "{{ic_subnet}} {{instance}} {{handler}} ",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "request rate",
+      "title": "request rate by handler",
       "transparent": true,
       "type": "timeseries"
     },
@@ -2641,9 +2641,9 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  quic_transport_request_handler_tokio_task_instrumented_count{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"} - \n  quic_transport_request_handler_tokio_task_dropped_count{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"},\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)\n",
+          "expr": "label_replace(\nlabel_replace(\n  quic_transport_handle_requests_total{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\", handler=~\"$handler\"} - quic_transport_handle_requests_duration_count{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\", handler=~\"$handler\"},\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)\n",
           "interval": "",
-          "legendFormat": "{{ic_subnet}} {{instance}} {{error}}",
+          "legendFormat": "{{ic_subnet}} {{instance}} {{handler}}",
           "range": true,
           "refId": "A"
         }
@@ -2653,12 +2653,210 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 108
+      },
+      "id": 80,
+      "interval": "10s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      },
+      "pluginVersion": "9.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "label_replace(\nlabel_replace(\n  histogram_quantile(0.5, sum(rate(quic_transport_handle_requests_duration_bucket{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\", handler=~\"$handler\"}[$period])) without ()),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)\n",
+          "interval": "",
+          "legendFormat": "{{ic_subnet}} {{instance}} {{handler}} ",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "median request handler duration by handler",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 108
+      },
+      "id": 81,
+      "interval": "10s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      },
+      "pluginVersion": "9.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "label_replace(\nlabel_replace(\n  histogram_quantile(0.95, sum(rate(quic_transport_handle_requests_duration_bucket{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\", handler=~\"$handler\"}[$period])) without ()),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)\n",
+          "interval": "",
+          "legendFormat": "{{ic_subnet}} {{instance}} {{handler}} ",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "p95 request handler duration by handler",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 108
+        "y": 116
       },
       "id": 68,
       "panels": [],
@@ -2711,7 +2909,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -2727,7 +2926,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 109
+        "y": 117
       },
       "id": 53,
       "interval": "10s",
@@ -2809,7 +3008,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -2825,7 +3025,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 109
+        "y": 117
       },
       "id": 55,
       "interval": "10s",
@@ -2907,7 +3107,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -2923,7 +3124,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 117
+        "y": 125
       },
       "id": 58,
       "interval": "10s",
@@ -3005,7 +3206,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -3021,7 +3223,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 117
+        "y": 125
       },
       "id": 56,
       "interval": "10s",
@@ -3103,7 +3305,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -3119,7 +3322,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 125
+        "y": 133
       },
       "id": 59,
       "interval": "10s",
@@ -3201,7 +3404,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -3217,7 +3421,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 125
+        "y": 133
       },
       "id": 57,
       "interval": "10s",
@@ -3262,7 +3466,9 @@
     "list": [
       {
         "current": {
-          "selected": false
+          "selected": false,
+          "text": "medium--1698396630683",
+          "value": "medium--1698396630683"
         },
         "datasource": {
           "type": "prometheus",
@@ -3422,11 +3628,37 @@
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "definition": "label_values(handler)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "handler",
+        "options": [],
+        "query": {
+          "query": "label_values(handler)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "/^\\/.*/",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
       }
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {

@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/cup_explorer",
+    "//rs/cycles_account_manager",
     "//rs/http_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
@@ -90,6 +91,7 @@ DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",
     "//rs/utils",
+    "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "@crate_index//:anyhow",
     "@crate_index//:assert-json-diff",
     "@crate_index//:assert_matches",
@@ -122,7 +124,6 @@ DEPENDENCIES = [
     "@crate_index//:nix",
     "@crate_index//:num_cpus",
     "@crate_index//:openssh-keys",
-    "@crate_index//:openssl",
     "@crate_index//:pem",
     "@crate_index//:proptest",
     "@crate_index//:prost",
@@ -134,6 +135,7 @@ DEPENDENCIES = [
     "@crate_index//:regex",
     "@crate_index//:reqwest",
     "@crate_index//:ring",
+    "@crate_index//:rsa",
     "@crate_index//:rust_decimal",
     "@crate_index//:rustls",
     "@crate_index//:serde",
@@ -163,6 +165,7 @@ GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
 GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
+    "//ic-os:scripts/build-bootstrap-config-image.sh",
 ]
 
 MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
@@ -345,14 +348,6 @@ BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
 
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
-GUESTOS_MALICIOUS_RUNTIME_DEPS = [
-    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.cas-url",
-    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.sha256",
-    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.cas-url",
-    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.sha256",
-    "//ic-os:scripts/build-bootstrap-config-image.sh",
-]
-
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests:http_uvm_config_image",
 ]
@@ -365,6 +360,23 @@ CUSTOM_DOMAINS_RUNTIME_DEPS = [
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
 
 STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync_test_canister"]
+
+IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
+                                       NNS_CANISTER_RUNTIME_DEPS + \
+                                       BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + \
+                                       MAINNET_REVISION_RUNTIME_DEPS + \
+                                       GRAFANA_RUNTIME_DEPS + [
+    "//rs/sns/cli:sns",
+    "//rs/tests:recovery/binaries",
+    "//rs/tests/nns:secret_key.pem",
+    "@dfx",
+    "@idl2json",
+    "@sns_quill//:sns-quill",
+    "@candid//:didc",
+    # TODO: remove once the mainnet ic-recovery contains the commits we need.
+    "//rs/recovery:ic-recovery",
+    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+]
 
 def _symlink_dir(ctx):
     dirname = ctx.attr.name

@@ -509,7 +509,8 @@ fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex>
             .or_else(|| {
                 account_identifier_block_ids
                     .iter_upper_bound(&last_key)
-                    .find(|((account_identifier, _), _)| account_identifier == &last_key.0)
+                    .take_while(|(k, _)| k.0 == account_identifier.hash)
+                    .next()
                     .map(|(key, _)| key.1 .0)
             })
     })

@@ -1,9 +1,10 @@
 [package]
 name = "ic-icrc1-archive"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
 description = "An archive canister for the ICRC-1 ledger"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
@@ -19,7 +20,7 @@ ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-serde = "1.0"
+serde = { workspace = true }
 
 [features]
 default = []

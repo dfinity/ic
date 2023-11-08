@@ -186,7 +186,7 @@ fn test_load_shedding_read_state() {
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let rt_clone: tokio::runtime::Handle = rt.handle().clone();
     mock_state_manager
-        .expect_get_certified_state_reader()
+        .expect_get_certified_state_snapshot()
         .returning(move || {
             // Need this check, otherwise wait_for_status_healthy() will be stuck.
             // This is due to status endpoint also relying on state_reader_executor.

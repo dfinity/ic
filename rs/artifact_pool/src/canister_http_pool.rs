@@ -7,9 +7,7 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
-    },
+    artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     time_source::TimeSource,
 };
@@ -20,23 +18,15 @@ use ic_types::{
     artifact_kind::CanisterHttpArtifact,
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
-    time::current_time,
-    Height,
 };
 use prometheus::IntCounter;
 
 const POOL_CANISTER_HTTP: &str = "canister_http";
 const POOL_CANISTER_HTTP_CONTENT: &str = "canister_http_content";
 
-type ValidatedCanisterHttpPoolSection = PoolSection<
-    CryptoHashOf<CanisterHttpResponseShare>,
-    ValidatedArtifact<CanisterHttpResponseShare>,
->;
+type ValidatedCanisterHttpPoolSection = PoolSection<CanisterHttpResponseShare, ()>;
 
-type UnvalidatedCanisterHttpPoolSection = PoolSection<
-    CryptoHashOf<CanisterHttpResponseShare>,
-    UnvalidatedArtifact<CanisterHttpResponseShare>,
->;
+type UnvalidatedCanisterHttpPoolSection = PoolSection<CanisterHttpResponseShare, ()>;
 
 type ContentCanisterHttpPoolSection =
     PoolSection<CryptoHashOf<CanisterHttpResponse>, CanisterHttpResponse>;
@@ -74,11 +64,11 @@ impl CanisterHttpPoolImpl {
 
 impl CanisterHttpPool for CanisterHttpPoolImpl {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
-        Box::new(self.validated.values().map(|artifact| &artifact.msg))
+        Box::new(self.validated.keys())
     }
 
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
-        Box::new(self.unvalidated.values().map(|artifact| &artifact.message))
+        Box::new(self.unvalidated.keys())
     }
 
     fn get_response_content_items(
@@ -99,21 +89,22 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
         &self,
         msg_id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare> {
-        self.validated.get(msg_id).map(|s| s.msg.clone())
+        self.validated.get(msg_id).map(|()| msg_id.clone())
     }
 
     fn lookup_unvalidated(
         &self,
         msg_id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare> {
-        self.unvalidated.get(msg_id).map(|s| s.message.clone())
+        self.unvalidated.get(msg_id).map(|()| msg_id.clone())
     }
 }
 
-impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPoolImpl {
+impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
+    type ChangeSet = CanisterHttpChangeSet;
+
     fn insert(&mut self, artifact: UnvalidatedArtifact<CanisterHttpResponseShare>) {
-        self.unvalidated
-            .insert(ic_types::crypto::crypto_hash(&artifact.message), artifact);
+        self.unvalidated.insert(artifact.message, ());
     }
 
     fn remove(&mut self, id: &CanisterHttpResponseId) {
@@ -132,30 +123,13 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
                     adverts.push(CanisterHttpArtifact::message_to_advert(&share));
-                    self.validated.insert(
-                        ic_types::crypto::crypto_hash(&share),
-                        ValidatedArtifact {
-                            msg: share,
-                            timestamp: current_time(),
-                        },
-                    );
+                    self.validated.insert(share, ());
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
                 }
                 CanisterHttpChangeAction::MoveToValidated(share) => {
-                    let id = ic_types::crypto::crypto_hash(&share);
-                    match self.unvalidated.remove(&id) {
-                        None => (),
-                        Some(value) => {
-                            adverts.push(CanisterHttpArtifact::message_to_advert(&share));
-                            self.validated.insert(
-                                id,
-                                ValidatedArtifact {
-                                    msg: value.message,
-                                    timestamp: current_time(),
-                                },
-                            );
-                        }
+                    if self.unvalidated.remove(&share).is_some() {
+                        self.validated.insert(share, ());
                     }
                 }
                 CanisterHttpChangeAction::RemoveValidated(id) => {
@@ -182,7 +156,7 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
         ChangeResult {
             purged,
             adverts,
-            changed,
+            poll_immediately: changed,
         }
     }
 }
@@ -196,25 +170,23 @@ impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
         &self,
         id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare> {
-        self.validated
-            .get(id)
-            .map(|artifact| (&artifact.msg))
-            .cloned()
+        self.validated.get(id).map(|()| id.clone())
     }
 
     fn get_all_validated_by_filter(
         &self,
-        _filter: &Height,
+        _filter: &(),
     ) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
-        unimplemented!()
+        Box::new(std::iter::empty())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use ic_interfaces::time_source::SysTimeSource;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{consensus::fake::FakeSigner, mock_time, types::ids::node_test_id};
+    use ic_test_utilities::{
+        consensus::fake::FakeSigner, mock_time, types::ids::node_test_id, MockTimeSource,
+    };
     use ic_types::{
         canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
         crypto::{CryptoHash, Signed},
@@ -260,7 +232,7 @@ mod tests {
     fn test_canister_http_pool_insert_and_remove() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
-        let id = ic_types::crypto::crypto_hash(&share);
+        let id = share.clone();
 
         pool.insert(to_unvalidated(share.clone()));
         assert!(pool.contains(&id));
@@ -275,12 +247,12 @@ mod tests {
     fn test_canister_http_pool_add_and_remove_validated() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
-        let id = ic_types::crypto::crypto_hash(&share);
+        let id = share.clone();
         let response = fake_response(123);
         let content_hash = ic_types::crypto::crypto_hash(&response);
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![
                 CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
                 CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
@@ -289,7 +261,7 @@ mod tests {
 
         assert!(pool.contains(&id));
         assert_eq!(result.adverts[0].id, id);
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
         assert_eq!(share, pool.get_validated_by_identifier(&id).unwrap());
@@ -299,7 +271,7 @@ mod tests {
         );
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![
                 CanisterHttpChangeAction::RemoveValidated(id.clone()),
                 CanisterHttpChangeAction::RemoveContent(content_hash.clone()),
@@ -308,7 +280,7 @@ mod tests {
 
         assert!(!pool.contains(&id));
         assert!(result.adverts.is_empty());
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert_eq!(result.purged[0], id);
         assert!(pool.lookup_validated(&id).is_none());
         assert!(pool.get_response_content_by_hash(&content_hash).is_none());
@@ -320,14 +292,14 @@ mod tests {
     fn test_canister_http_pool_move_to_validated() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share1 = fake_share(123);
-        let id1 = ic_types::crypto::crypto_hash(&share1);
+        let id1 = share1.clone();
         let share2 = fake_share(456);
-        let id2 = ic_types::crypto::crypto_hash(&share2);
+        let id2 = share2.clone();
 
         pool.insert(to_unvalidated(share1.clone()));
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![
                 CanisterHttpChangeAction::MoveToValidated(share2.clone()),
                 CanisterHttpChangeAction::MoveToValidated(share1.clone()),
@@ -336,8 +308,7 @@ mod tests {
 
         assert!(pool.contains(&id1));
         assert!(!pool.contains(&id2));
-        assert_eq!(result.adverts[0].id, id1);
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
@@ -346,18 +317,18 @@ mod tests {
     fn test_canister_http_pool_remove_unvalidated() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
-        let id = ic_types::crypto::crypto_hash(&share);
+        let id = share.clone();
 
         pool.insert(to_unvalidated(share.clone()));
         assert!(pool.contains(&id));
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![CanisterHttpChangeAction::RemoveUnvalidated(id.clone())],
         );
 
         assert!(!pool.contains(&id));
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert!(result.adverts.is_empty());
     }
@@ -366,13 +337,13 @@ mod tests {
     fn test_canister_http_pool_handle_invalid() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
-        let id = ic_types::crypto::crypto_hash(&share);
+        let id = share.clone();
 
         pool.insert(to_unvalidated(share.clone()));
         assert!(pool.contains(&id));
 
         let result = pool.apply_changes(
-            &SysTimeSource::new(),
+            &MockTimeSource::new(),
             vec![CanisterHttpChangeAction::HandleInvalid(
                 id.clone(),
                 "TEST REASON".to_string(),
@@ -380,7 +351,7 @@ mod tests {
         );
 
         assert!(!pool.contains(&id));
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert!(result.adverts.is_empty());
     }

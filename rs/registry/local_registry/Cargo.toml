@@ -1,7 +1,10 @@
 [package]
 name = "ic-registry-local-registry"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -13,7 +16,7 @@ ic-registry-local-store = { path = "../local_store" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 thiserror = "1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]

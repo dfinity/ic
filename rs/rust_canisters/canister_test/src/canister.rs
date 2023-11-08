@@ -70,28 +70,33 @@ impl Wasm {
         eprintln!("looking up {} at {}", bin_name, var_name);
         match env::var(&var_name) {
             Ok(path) => {
-                let wasm = Wasm::from_file(path);
+                let wasm = Wasm::from_file(path.clone());
                 eprintln!(
-                    "Using pre-built binary for {} (size = {})",
+                    "Using pre-built binary for {} with features: {:?} (size = {}, path = {})",
                     bin_name,
-                    wasm.0.len()
+                    features,
+                    wasm.0.len(),
+                    path,
                 );
                 Some(wasm)
             }
             Err(env::VarError::NotPresent) => {
-                if env::var("CI").is_ok() {
-                    println!("Environment variables with name containing \"CANISTER\":");
-                    for (k, v) in env::vars() {
-                        if k.contains("CANISTER") {
-                            println!("  {}: {}", k, v);
-                        }
+                println!(
+                    "Environment variable {} is not present; variables with name \
+                    containing \"CANISTER\":",
+                    var_name
+                );
+                for (k, v) in env::vars() {
+                    if k.contains("CANISTER") {
+                        println!("  {}: {}", k, v);
                     }
-
+                }
+                if env::var("CI").is_ok() {
                     panic!(
                         "Running on CI and expected canister env var {0}\n\
                         Please add {1} as a data dependency in the test's BUILD.bazel target:\n",
                         var_name, bin_name
-                    )
+                    );
                 }
                 None
             }
@@ -536,10 +541,9 @@ impl<'a> Canister<'a> {
     }
 
     pub fn from_vec8(runtime: &'a Runtime, canister_id_vec8: Vec<u8>) -> Canister<'a> {
-        let canister_id = CanisterId::new(
+        let canister_id = CanisterId::unchecked_from_principal(
             PrincipalId::try_from(&canister_id_vec8[..]).expect("failed to decode principal id"),
-        )
-        .unwrap();
+        );
         Self {
             runtime,
             effective_canister_id: canister_id.into(),

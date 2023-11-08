@@ -4,36 +4,35 @@ use std::convert::TryFrom;
 
 #[test]
 fn mega_key_generation() -> ThresholdEcdsaResult<()> {
-    let mut seed = Seed::from_bytes(&[0x42; 32]);
+    let fixed_seed = [0x42; 32];
 
-    let (pk_k256, sk_k256) = gen_keypair(EccCurveType::K256, seed);
+    let expected = [
+        (
+            EccCurveType::K256,
+            "078af152fb1edc2488a6d414ac13e76de66904648c585dc5f5032b3c022716cd",
+            "027e4c1145be85c1d62c24be6ff81f837a1c63d4051071233569b55fb410da4ebd",
+        ),
+        (
+            EccCurveType::P256,
+            "078af152fb1edc2488a6d414ac13e76de66904648c585dc5f5032b3c022716cd",
+            "03343ae689bf56d0bb443694eacdf83435380f564d1a63c9689f3f5f606c480c01",
+        ),
+    ];
 
-    assert_eq!(pk_k256.curve_type(), EccCurveType::K256);
-    assert_eq!(sk_k256.curve_type(), EccCurveType::K256);
+    for (curve_type, expected_sk, expected_pk) in expected {
+        let seed = Seed::from_bytes(&fixed_seed);
 
-    assert_eq!(
-        hex::encode(sk_k256.serialize()),
-        "078af152fb1edc2488a6d414ac13e76de66904648c585dc5f5032b3c022716cd"
-    );
-    assert_eq!(
-        hex::encode(pk_k256.serialize()),
-        "027e4c1145be85c1d62c24be6ff81f837a1c63d4051071233569b55fb410da4ebd"
-    );
+        let (pk, sk) = gen_keypair(curve_type, seed);
 
-    seed = Seed::from_bytes(&[0x42; 32]);
-    let (pk_p256, sk_p256) = gen_keypair(EccCurveType::P256, seed);
+        assert_eq!(pk.curve_type(), curve_type);
+        assert_eq!(sk.curve_type(), curve_type);
 
-    assert_eq!(pk_p256.curve_type(), EccCurveType::P256);
-    assert_eq!(sk_p256.curve_type(), EccCurveType::P256);
+        let sk_bytes = hex::encode(sk.serialize());
+        assert_eq!(sk_bytes, *expected_sk);
 
-    assert_eq!(
-        hex::encode(sk_p256.serialize()),
-        "078af152fb1edc2488a6d414ac13e76de66904648c585dc5f5032b3c022716cd"
-    );
-    assert_eq!(
-        hex::encode(pk_p256.serialize()),
-        "03343ae689bf56d0bb443694eacdf83435380f564d1a63c9689f3f5f606c480c01"
-    );
+        let pk_bytes = hex::encode(pk.serialize());
+        assert_eq!(pk_bytes, *expected_pk);
+    }
 
     Ok(())
 }
@@ -71,150 +70,150 @@ fn mega_key_validity() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
-    let curve = EccCurveType::K256;
-
     let rng = &mut reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, rng);
-    let b_sk = MEGaPrivateKey::generate(curve, rng);
+    for curve in EccCurveType::all() {
+        let a_sk = MEGaPrivateKey::generate(curve, rng);
+        let b_sk = MEGaPrivateKey::generate(curve, rng);
 
-    let a_pk = a_sk.public_key();
-    let b_pk = b_sk.public_key();
+        let a_pk = a_sk.public_key();
+        let b_pk = b_sk.public_key();
 
-    let associated_data = b"assoc_data_test";
+        let associated_data = b"assoc_data_test";
 
-    let ptext_for_a = EccScalar::random(curve, rng);
-    let ptext_for_b = EccScalar::random(curve, rng);
+        let ptext_for_a = EccScalar::random(curve, rng);
+        let ptext_for_b = EccScalar::random(curve, rng);
 
-    let dealer_index = 0;
+        let dealer_index = 0;
 
-    let seed = Seed::from_rng(rng);
+        let seed = Seed::from_rng(rng);
 
-    let ctext = MEGaCiphertextSingle::encrypt(
-        seed,
-        &[ptext_for_a.clone(), ptext_for_b.clone()],
-        &[a_pk.clone(), b_pk.clone()],
-        dealer_index,
-        associated_data,
-    )?;
+        let ctext = MEGaCiphertextSingle::encrypt(
+            seed,
+            &[ptext_for_a.clone(), ptext_for_b.clone()],
+            &[a_pk.clone(), b_pk.clone()],
+            dealer_index,
+            associated_data,
+        )?;
 
-    let ptext_a = ctext.decrypt(associated_data, dealer_index, 0, &a_sk, &a_pk)?;
+        let ptext_a = ctext.decrypt(associated_data, dealer_index, 0, &a_sk, &a_pk)?;
 
-    assert_eq!(
-        hex::encode(ptext_a.serialize()),
-        hex::encode(ptext_for_a.serialize())
-    );
+        assert_eq!(
+            hex::encode(ptext_a.serialize()),
+            hex::encode(ptext_for_a.serialize())
+        );
 
-    let ptext_b = ctext.decrypt(associated_data, dealer_index, 1, &b_sk, &b_pk)?;
+        let ptext_b = ctext.decrypt(associated_data, dealer_index, 1, &b_sk, &b_pk)?;
 
-    assert_eq!(
-        hex::encode(ptext_b.serialize()),
-        hex::encode(ptext_for_b.serialize())
-    );
+        assert_eq!(
+            hex::encode(ptext_b.serialize()),
+            hex::encode(ptext_for_b.serialize())
+        );
+    }
 
     Ok(())
 }
 
 #[test]
 fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
-    let curve = EccCurveType::K256;
-
     let rng = &mut reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, rng);
-    let b_sk = MEGaPrivateKey::generate(curve, rng);
+    for curve in EccCurveType::all() {
+        let a_sk = MEGaPrivateKey::generate(curve, rng);
+        let b_sk = MEGaPrivateKey::generate(curve, rng);
 
-    let a_pk = a_sk.public_key();
-    let b_pk = b_sk.public_key();
+        let a_pk = a_sk.public_key();
+        let b_pk = b_sk.public_key();
 
-    let associated_data = b"assoc_data_test";
+        let associated_data = b"assoc_data_test";
 
-    let ptext_for_a = (EccScalar::random(curve, rng), EccScalar::random(curve, rng));
-    let ptext_for_b = (EccScalar::random(curve, rng), EccScalar::random(curve, rng));
+        let ptext_for_a = (EccScalar::random(curve, rng), EccScalar::random(curve, rng));
+        let ptext_for_b = (EccScalar::random(curve, rng), EccScalar::random(curve, rng));
 
-    let seed = Seed::from_rng(rng);
+        let seed = Seed::from_rng(rng);
 
-    let dealer_index = 0;
+        let dealer_index = 0;
 
-    let ctext = MEGaCiphertextPair::encrypt(
-        seed,
-        &[ptext_for_a.clone(), ptext_for_b.clone()],
-        &[a_pk.clone(), b_pk.clone()],
-        dealer_index,
-        associated_data,
-    )?;
+        let ctext = MEGaCiphertextPair::encrypt(
+            seed,
+            &[ptext_for_a.clone(), ptext_for_b.clone()],
+            &[a_pk.clone(), b_pk.clone()],
+            dealer_index,
+            associated_data,
+        )?;
 
-    let ptext_a = ctext.decrypt(associated_data, dealer_index, 0, &a_sk, &a_pk)?;
-    assert_eq!(ptext_a, ptext_for_a);
+        let ptext_a = ctext.decrypt(associated_data, dealer_index, 0, &a_sk, &a_pk)?;
+        assert_eq!(ptext_a, ptext_for_a);
 
-    let ptext_b = ctext.decrypt(associated_data, dealer_index, 1, &b_sk, &b_pk)?;
-    assert_eq!(ptext_b, ptext_for_b);
+        let ptext_b = ctext.decrypt(associated_data, dealer_index, 1, &b_sk, &b_pk)?;
+        assert_eq!(ptext_b, ptext_for_b);
+    }
 
     Ok(())
 }
 
 #[test]
 fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
-    let curve = EccCurveType::K256;
-
     let rng = &mut reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, rng);
-    let b_sk = MEGaPrivateKey::generate(curve, rng);
+    for curve in EccCurveType::all() {
+        let a_sk = MEGaPrivateKey::generate(curve, rng);
+        let b_sk = MEGaPrivateKey::generate(curve, rng);
 
-    let a_pk = a_sk.public_key();
-    let b_pk = b_sk.public_key();
+        let a_pk = a_sk.public_key();
+        let b_pk = b_sk.public_key();
 
-    let ad = b"assoc_data_test";
+        let ad = b"assoc_data_test";
 
-    let ptext_for_a = EccScalar::random(curve, rng);
-    let ptext_for_b = EccScalar::random(curve, rng);
+        let ptext_for_a = EccScalar::random(curve, rng);
+        let ptext_for_b = EccScalar::random(curve, rng);
 
-    let dealer_index = 0;
+        let dealer_index = 0;
 
-    let seed = Seed::from_rng(rng);
+        let seed = Seed::from_rng(rng);
 
-    let ctext = MEGaCiphertextSingle::encrypt(
-        seed,
-        &[ptext_for_a, ptext_for_b],
-        &[a_pk, b_pk.clone()],
-        dealer_index,
-        ad,
-    )?;
+        let ctext = MEGaCiphertextSingle::encrypt(
+            seed,
+            &[ptext_for_a, ptext_for_b],
+            &[a_pk, b_pk.clone()],
+            dealer_index,
+            ad,
+        )?;
 
-    assert!(ctext.decrypt(ad, dealer_index, 1, &b_sk, &b_pk).is_ok());
-    assert_eq!(
-        ctext.decrypt(b"wrong_ad", dealer_index, 1, &b_sk, &b_pk),
-        Err(ThresholdEcdsaError::InvalidProof)
-    );
+        assert!(ctext.decrypt(ad, dealer_index, 1, &b_sk, &b_pk).is_ok());
+        assert_eq!(
+            ctext.decrypt(b"wrong_ad", dealer_index, 1, &b_sk, &b_pk),
+            Err(ThresholdEcdsaError::InvalidProof)
+        );
 
-    let mut bad_pop_pk = ctext.clone();
-    bad_pop_pk.pop_public_key = ctext.ephemeral_key.clone();
-    assert_eq!(
-        bad_pop_pk.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
-        Err(ThresholdEcdsaError::InvalidProof)
-    );
+        let mut bad_pop_pk = ctext.clone();
+        bad_pop_pk.pop_public_key = ctext.ephemeral_key.clone();
+        assert_eq!(
+            bad_pop_pk.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
+            Err(ThresholdEcdsaError::InvalidProof)
+        );
 
-    let mut bad_eph_key = ctext;
-    bad_eph_key.ephemeral_key = EccPoint::hash_to_point(curve, b"input", b"dst")?;
-    assert_eq!(
-        bad_eph_key.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
-        Err(ThresholdEcdsaError::InvalidProof)
-    );
+        let mut bad_eph_key = ctext;
+        bad_eph_key.ephemeral_key = EccPoint::hash_to_point(curve, b"input", b"dst")?;
+        assert_eq!(
+            bad_eph_key.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
+            Err(ThresholdEcdsaError::InvalidProof)
+        );
+    }
 
     Ok(())
 }
 
 #[test]
 fn mega_private_key_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
-    let curve = EccCurveType::K256;
-
     let rng = &mut reproducible_rng();
 
-    let sk = MEGaPrivateKey::generate(curve, rng);
+    for curve in EccCurveType::all() {
+        let sk = MEGaPrivateKey::generate(curve, rng);
 
-    let log = format!("{:?}", sk);
-    assert_eq!("MEGaPrivateKey(EccScalar::K256) - REDACTED", log);
+        let log = format!("{:?}", sk);
+        assert_eq!(format!("MEGaPrivateKey({}) - REDACTED", curve), log);
+    }
 
     Ok(())
 }

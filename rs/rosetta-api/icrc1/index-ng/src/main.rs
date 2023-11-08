@@ -255,11 +255,7 @@ fn get_balance(account: Account) -> Tokens {
 fn change_balance(account: Account, f: impl FnOnce(Tokens) -> Tokens) {
     let key = balance_key(account);
     let new_balance = f(get_balance(account));
-    if Tokens::is_zero(&new_balance) {
-        with_account_data(|account_data| account_data.remove(&key));
-    } else {
-        with_account_data(|account_data| account_data.insert(key, new_balance));
-    }
+    with_account_data(|account_data| account_data.insert(key, new_balance));
 }
 
 fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
@@ -546,7 +542,9 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                     credit(block_index, fee_collector, fee);
                 }
             }
-            Operation::Approve { from, fee, .. } => {
+            Operation::Approve {
+                from, fee, spender, ..
+            } => {
                 let fee = match fee.or(block.effective_fee) {
                     Some(fee) => fee,
                     // NB. There was a bug in the ledger which would create
@@ -564,6 +562,13 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                         None => ic_cdk::trap(&format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
                     }
                 };
+
+                // It is possible that the spender account has not existed prior to this approve transaction.
+                // Until a transfer_from transaction occurs such account would not show up in a `list_subaccounts` query as the spender is not involved in any credit or debit calls at this point.
+                // To ensure that the account still shows up in the `list_subaccount` query we can simply call `change_balance` without actually changing the balance.
+                // If the account is new, this will add it to the AccountDataMap with balance 0 and thus show up in a `list_subaccount` query.
+                change_balance(spender, |balance| balance);
+
                 debit(block_index, from, fee);
             }
         },
@@ -756,7 +761,8 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
         account_block_ids.get(&last_key).map(|_| 0).or_else(|| {
             account_block_ids
                 .iter_upper_bound(&last_key)
-                .find(|((account_bytes, _), _)| account_bytes == &last_key.0)
+                .take_while(|(k, _)| k.0 == account_sha256(account))
+                .next()
                 .map(|(key, _)| key.1 .0)
         })
     })

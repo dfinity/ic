@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/types/base_types",
-    "@crate_index//:lazy_static",
 ]
 
 rust_library(

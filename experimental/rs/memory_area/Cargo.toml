@@ -1,17 +1,19 @@
 [package]
 name = "memory_area"
 version = "0.1.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-bit-vec = "0.5"
+bit-vec = "0.6.3"
 lazy_static = "*"
 libc = "*"
 memory_tracker = { path = "../../../rs/memory_tracker" }
 slog = "*"
 slog-scope = "*"
-nix = "*"
+nix = { workspace = true }
 
 [dev-dependencies]
 lazy_static = "*"

@@ -23,8 +23,8 @@ use ic_ic00_types::{
     CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload, IC_00,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionRoundType, HypervisorError, HypervisorResult,
-    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
+    ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
+    RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -188,13 +188,21 @@ impl SchedulerTest {
         )
     }
 
-    /// Creates a canister with the given balance and allocations.
-    /// The `system_task` parameter can be used to optionally enable the
-    /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
-    /// In that case the heartbeat execution must be specified before each
-    /// round using `expect_heartbeat()`.
-    pub fn create_canister_with(
+    pub fn create_canister_with_id(&mut self, canister_id: CanisterId) {
+        self.create_canister_with_settings(
+            canister_id,
+            self.initial_canister_cycles,
+            ComputeAllocation::zero(),
+            MemoryAllocation::BestEffort,
+            None,
+            None,
+            None,
+        );
+    }
+
+    fn create_canister_with_settings(
         &mut self,
+        canister_id: CanisterId,
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
@@ -202,7 +210,6 @@ impl SchedulerTest {
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
     ) -> CanisterId {
-        let canister_id = self.next_canister_id();
         let wasm_source = system_task
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or_default();
@@ -235,6 +242,32 @@ impl SchedulerTest {
             .unwrap()
             .put_canister_state(canister_state);
         canister_id
+    }
+
+    /// Creates a canister with the given balance and allocations.
+    /// The `system_task` parameter can be used to optionally enable the
+    /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
+    /// In that case the heartbeat execution must be specified before each
+    /// round using `expect_heartbeat()`.
+    pub fn create_canister_with(
+        &mut self,
+        cycles: Cycles,
+        compute_allocation: ComputeAllocation,
+        memory_allocation: MemoryAllocation,
+        system_task: Option<SystemMethod>,
+        time_of_last_allocation_charge: Option<Time>,
+        status: Option<CanisterStatusType>,
+    ) -> CanisterId {
+        let canister_id = self.next_canister_id();
+        self.create_canister_with_settings(
+            canister_id,
+            cycles,
+            compute_allocation,
+            memory_allocation,
+            system_task,
+            time_of_last_allocation_charge,
+            status,
+        )
     }
 
     pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) -> MessageId {
@@ -508,9 +541,6 @@ impl SchedulerTest {
         );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
-                self.scheduler.config.max_instructions_per_round / 16,
-            ),
-            execution_complexity: ExecutionComplexity::with_cpu(
                 self.scheduler.config.max_instructions_per_round / 16,
             ),
             subnet_available_memory: self.scheduler.exec_env.subnet_available_memory(&state),
@@ -809,6 +839,7 @@ impl SchedulerTestBuilder {
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            self.scheduler_config.heap_delta_rate_limit,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
@@ -860,8 +891,6 @@ pub(crate) struct TestMessage {
     canister: Option<CanisterId>,
     // The number of instructions that execution of this message will use.
     instructions: NumInstructions,
-    // The execution complexity of the message.
-    execution_complexity: ExecutionComplexity,
     // The number of 4KiB pages that execution of this message will writes to.
     dirty_pages: usize,
     // The outgoing calls that will be produced by execution of this message.
@@ -872,13 +901,6 @@ impl TestMessage {
     pub fn dirty_pages(self, dirty_pages: usize) -> TestMessage {
         Self {
             dirty_pages,
-            ..self
-        }
-    }
-
-    pub fn execution_complexity(self, execution_complexity: ExecutionComplexity) -> TestMessage {
-        Self {
-            execution_complexity,
             ..self
         }
     }
@@ -919,7 +941,6 @@ pub(crate) fn ingress(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -930,7 +951,6 @@ pub(crate) fn other_side(callee: CanisterId, instructions: u64) -> TestMessage {
     TestMessage {
         canister: Some(callee),
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -942,7 +962,6 @@ pub(crate) fn on_response(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -954,7 +973,6 @@ pub(crate) fn instructions(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -997,6 +1015,7 @@ impl WasmExecutor for TestWasmExecutor {
             sandbox_safe_system_state: input.sandbox_safe_system_state,
             execution_parameters: input.execution_parameters,
             canister_current_memory_usage: input.canister_current_memory_usage,
+            canister_current_message_memory_usage: input.canister_current_message_memory_usage,
             call_context_id,
             instructions_executed: NumInstructions::from(0),
             executor: Arc::clone(&self),
@@ -1067,7 +1086,6 @@ impl TestWasmExecutorCore {
             paused.instructions_executed += slice_limit;
             let slice = SliceExecutionOutput {
                 executed_instructions: slice_limit,
-                execution_complexity: ExecutionComplexity::default(),
             };
             self.schedule.push((self.round, canister_id, slice_limit));
             return WasmExecutionResult::Paused(slice, paused);
@@ -1078,7 +1096,6 @@ impl TestWasmExecutorCore {
         if paused.message.instructions > message_limit {
             let slice = SliceExecutionOutput {
                 executed_instructions: instructions_to_execute,
-                execution_complexity: ExecutionComplexity::default(),
             };
             let output = WasmExecutionOutput {
                 wasm_result: Err(HypervisorError::InstructionLimitExceeded),
@@ -1101,6 +1118,7 @@ impl TestWasmExecutorCore {
             message.calls,
             paused.call_context_id,
             paused.canister_current_memory_usage,
+            paused.canister_current_message_memory_usage,
         );
 
         let canister_state_changes = CanisterStateChanges {
@@ -1122,7 +1140,6 @@ impl TestWasmExecutorCore {
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,
-            execution_complexity: message.execution_complexity,
         };
         let output = WasmExecutionOutput {
             wasm_result: Ok(None),
@@ -1176,6 +1193,7 @@ impl TestWasmExecutorCore {
         calls: Vec<TestCall>,
         call_context_id: Option<CallContextId>,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
     ) -> SystemStateChanges {
         for call in calls.into_iter() {
             if let Err(error) = self.perform_call(
@@ -1183,6 +1201,7 @@ impl TestWasmExecutorCore {
                 call,
                 call_context_id.unwrap(),
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
             ) {
                 eprintln!("Skipping a call due to an error: {}", error);
             }
@@ -1197,6 +1216,7 @@ impl TestWasmExecutorCore {
         call: TestCall,
         call_context_id: CallContextId,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
     ) -> Result<(), String> {
         let sender = system_state.canister_id();
         let receiver = call.other_side.canister.unwrap();
@@ -1236,6 +1256,7 @@ impl TestWasmExecutorCore {
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             request,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
@@ -1358,6 +1379,7 @@ struct TestPausedWasmExecution {
     sandbox_safe_system_state: SandboxSafeSystemState,
     execution_parameters: ExecutionParameters,
     canister_current_memory_usage: NumBytes,
+    canister_current_message_memory_usage: NumBytes,
     call_context_id: Option<CallContextId>,
     instructions_executed: NumInstructions,
     executor: Arc<TestWasmExecutor>,

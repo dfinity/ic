@@ -80,7 +80,6 @@ fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32),
 // Install NNS canister on system subnet
 pub fn config(
     env: TestEnv,
-    nodes_nns_subnet: usize,
     nodes_app_subnet: usize,
     use_boundary_node: bool,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
@@ -95,11 +94,8 @@ pub fn config(
         boot_image_minimal_size_gibibytes,
     };
     InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_nns_subnet),
-        )
+        .add_fast_single_node_subnet(SubnetType::System)
+        .with_default_vm_resources(vm_resources)
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)

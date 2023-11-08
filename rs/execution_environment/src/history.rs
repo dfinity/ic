@@ -235,6 +235,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         MaxNumberOfCanistersReached => "Max Number of Canisters Reached",
         IngressHistoryFull => "Ingress History Full",
         CanisterInvalidController => "Canister Invalid Controller",
+        CanisterIdAlreadyExists => "Canister ID already exists",
         CanisterNotFound => "Canister Not Found",
         CanisterMethodNotFound => "Canister Method Not Found",
         CanisterFunctionNotFound => "Canister Function Not Found",
@@ -285,5 +286,6 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         InsufficientCyclesInMemoryGrow => "Canister does not have enough cycles to grow memory",
         ReservedCyclesLimitExceededInMemoryAllocation => "Canister cannot increase memory allocation due to its reserved cycles limit",
         ReservedCyclesLimitExceededInMemoryGrow => "Canister cannot grow memory due to its reserved cycles limit",
+        InsufficientCyclesInMessageMemoryGrow => "Canister does not have enough cycles to grow message memory",
     }
 }

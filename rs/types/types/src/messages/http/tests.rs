@@ -333,7 +333,7 @@ mod try_from {
         }
     }
 
-    mod query {
+    pub(super) mod query {
         use super::super::to_blob;
         use super::*;
         use crate::messages::http::{
@@ -354,7 +354,7 @@ mod try_from {
             }
         }
 
-        fn default_user_query_content() -> UserQuery {
+        pub fn default_user_query_content() -> UserQuery {
             UserQuery {
                 source: UserId::from(fixed::principal_id()),
                 receiver: fixed::canister_id(),
@@ -549,6 +549,55 @@ mod try_from {
     }
     // In this way, the IDE will show the full name of the module as a hint.
     pub use fixed_test_values as fixed;
+}
+
+mod hashing {
+    use super::try_from::query;
+    use crate::{
+        messages::{Blob, HttpQueryResponse, HttpQueryResponseReply, QueryResponseHash},
+        Time,
+    };
+    use hex_literal::hex;
+
+    #[test]
+    fn hashing_query_response_reply() {
+        let time = 2614;
+        let query_response = HttpQueryResponse::Replied {
+            reply: HttpQueryResponseReply {
+                arg: Blob(b"some_bytes".to_vec()),
+            },
+        };
+        let user_query = query::default_user_query_content();
+        let query_response_hash = QueryResponseHash::new(
+            &query_response,
+            &user_query,
+            Time::from_nanos_since_unix_epoch(time),
+        );
+        assert_eq!(
+            query_response_hash.as_bytes(),
+            &hex!("7e94e73d1647506682a6300385bc99a63d1ef655222e5a3235f784ca3e80dca4")
+        );
+    }
+
+    #[test]
+    fn hashing_query_response_reject() {
+        let time = 2614;
+        let query_response = HttpQueryResponse::Rejected {
+            reject_code: 1,
+            reject_message: "system error".to_string(),
+            error_code: "IC500".to_string(),
+        };
+        let user_query = query::default_user_query_content();
+        let query_response_hash = QueryResponseHash::new(
+            &query_response,
+            &user_query,
+            Time::from_nanos_since_unix_epoch(time),
+        );
+        assert_eq!(
+            query_response_hash.as_bytes(),
+            &hex!("bd80f930dfd3eafdf2d5c03031da9b5ec62963701abcb217d31c84005bd8db87")
+        );
+    }
 }
 
 mod cbor_serialization {

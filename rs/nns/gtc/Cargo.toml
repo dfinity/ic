@@ -1,7 +1,10 @@
 [package]
 name = "ic-nns-gtc"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 path = "src/lib.rs"
@@ -11,8 +14,7 @@ name = "genesis-token-canister"
 path = "canister/canister.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
@@ -29,12 +31,12 @@ ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-libsecp256k1 = "0.5.0"
+libsecp256k1 = "0.7.0"
 prost = { workspace = true }
 rand = "0.8"
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 sha3 = "0.9.1"
-simple_asn1 = "0.5.4"
+simple_asn1 = { workspace = true }
 
 [dev-dependencies]
 ic-nns-gtc-protobuf-generator = { path = "./protobuf_generator" }
@@ -47,6 +49,4 @@ ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-test-utils-macros = { path = "../../nns/test_utils_macros" }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }

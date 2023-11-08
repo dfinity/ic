@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::address::Address;
@@ -7,8 +10,8 @@ use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
-use ic_cketh_minter::state::{MintedEvent, State};
-use ic_cketh_minter::transactions::EthWithdrawalRequest;
+use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Reimbursed};
+use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
@@ -37,6 +40,8 @@ pub struct DashboardTemplate {
     pub minter_address: String,
     pub contract_address: String,
     pub next_transaction_nonce: TransactionNonce,
+    pub minimum_withdrawal_amount: Wei,
+    pub first_synced_block: BlockNumber,
     pub last_synced_block: BlockNumber,
     pub last_observed_block: Option<BlockNumber>,
     pub ledger_id: Principal,
@@ -46,6 +51,8 @@ pub struct DashboardTemplate {
     pub withdrawal_requests: Vec<EthWithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
+    pub reimbursed_transactions: Vec<Reimbursed>,
+    pub eth_balance: EthBalance,
 }
 
 impl DashboardTemplate {
@@ -64,7 +71,7 @@ impl DashboardTemplate {
 
         let mut pending_transactions: Vec<_> = state
             .eth_transactions
-            .created_transactions_iter()
+            .transactions_to_sign_iter()
             .map(
                 |(_nonce, ledger_burn_index, tx)| DashboardPendingTransaction {
                     ledger_burn_index: *ledger_burn_index,
@@ -102,6 +109,10 @@ impl DashboardTemplate {
             .collect();
         finalized_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
 
+        let mut reimbursed_transactions = state.eth_transactions.get_reimbursed_transactions();
+        reimbursed_transactions
+            .sort_unstable_by_key(|reimbursed_tx| std::cmp::Reverse(reimbursed_tx.withdrawal_id));
+
         DashboardTemplate {
             ethereum_network: state.ethereum_network,
             ecdsa_key_name: state.ecdsa_key_name.clone(),
@@ -114,6 +125,8 @@ impl DashboardTemplate {
                 .map_or("N/A".to_string(), |address| address.to_string()),
             ledger_id: state.ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
+            minimum_withdrawal_amount: state.minimum_withdrawal_amount,
+            first_synced_block: state.first_scraped_block_number,
             last_synced_block: state.last_scraped_block_number,
             last_observed_block: state.last_observed_block_number,
             minted_events,
@@ -122,6 +135,8 @@ impl DashboardTemplate {
             withdrawal_requests,
             pending_transactions,
             finalized_transactions,
+            reimbursed_transactions,
+            eth_balance: state.eth_balance.clone(),
         }
     }
 }

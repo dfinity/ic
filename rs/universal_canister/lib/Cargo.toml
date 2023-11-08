@@ -1,12 +1,15 @@
 [package]
 name = "ic-universal-canister"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
 hex-literal = "0.4.1"
-serde = "1.0.115"
+serde = { workspace = true }
 universal-canister = { path = "../impl" }
 ic-types = { path = "../../types/types" }
 

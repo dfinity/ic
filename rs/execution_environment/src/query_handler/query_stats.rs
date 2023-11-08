@@ -1,29 +1,29 @@
-use crossbeam_channel::{Receiver, Sender, TryRecvError, TrySendError};
-use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload},
-    consensus::PayloadValidationError,
-};
+use crossbeam_channel::{Sender, TrySendError};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
-    batch::{EpochStats, QueryStatsPayload, ValidationContext},
-    CanisterId, Height, NumBytes, NumInstructions, QueryStatsEpoch,
+    batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
+    CanisterId, NumInstructions, QueryStatsEpoch,
 };
-use std::sync::{Mutex, RwLock};
+use std::sync::Mutex;
+use std::{collections::BTreeMap, sync::RwLock};
 
-pub fn init_query_stats(log: ReplicaLogger) -> (QueryStatsCollector, QueryStatsPayloadBuilderImpl) {
+mod payload_builder;
+pub use self::payload_builder::{QueryStatsPayloadBuilderImpl, QueryStatsPayloadBuilderParams};
+
+pub const ENABLE_QUERY_STATS: bool = false;
+
+pub fn init_query_stats(
+    log: ReplicaLogger,
+) -> (QueryStatsCollector, QueryStatsPayloadBuilderParams) {
     let (tx, rx) = crossbeam_channel::bounded(1);
     (
         QueryStatsCollector {
             log: log.clone(),
-            current_query_stats: Mutex::new(QueryStatsPayload::default()),
-            current_epoch: None,
+            current_query_stats: Mutex::new(BTreeMap::new()),
+            current_epoch: RwLock::new(None),
             sender: tx,
         },
-        QueryStatsPayloadBuilderImpl {
-            log,
-            current_epoch: RwLock::new(None),
-            receiver: rx,
-        },
+        QueryStatsPayloadBuilderParams(rx),
     )
 }
 
@@ -33,19 +33,26 @@ pub fn init_query_stats(log: ReplicaLogger) -> (QueryStatsCollector, QueryStatsP
 /// the payload builder interface.
 pub struct QueryStatsCollector {
     log: ReplicaLogger,
-    current_query_stats: Mutex<QueryStatsPayload>,
-    current_epoch: Option<QueryStatsEpoch>,
-    sender: Sender<EpochStats>,
+    pub current_query_stats: Mutex<BTreeMap<CanisterId, QueryStats>>, // Needs to be pub for testing
+    current_epoch: RwLock<Option<QueryStatsEpoch>>,
+    sender: Sender<LocalQueryStats>,
 }
 
 impl QueryStatsCollector {
-    pub fn set_epoch(&mut self, new_epoch: QueryStatsEpoch) {
-        let Some(previous_epoch) = self.current_epoch else {
-            self.current_epoch = Some(new_epoch);
+    pub fn set_epoch(&self, new_epoch: QueryStatsEpoch) {
+        let mut current_epoch = self.current_epoch.write().unwrap();
+        let Some(previous_epoch) = *current_epoch else {
+            *current_epoch = Some(new_epoch);
             return;
         };
 
-        if previous_epoch == new_epoch {
+        if previous_epoch >= new_epoch {
+            // Epoch is unchanged or smaller than a previously seen one. This can happen if
+            // concurrent query handler threads get a different certified state and there is
+            // a race for which one will execute first.
+            //
+            // For the purpose of query stats, this does not matter, as we always account queries
+            // to the highest epoch seen when serving query calls.
             return;
         }
 
@@ -54,9 +61,12 @@ impl QueryStatsCollector {
         let previous_stats = std::mem::take(&mut *state);
 
         // Epoch changed, send stats from previous epoch to block maker
-        match self.sender.try_send(EpochStats {
+        match self.sender.try_send(LocalQueryStats {
             epoch: previous_epoch,
-            stats: previous_stats.canister_stats.into_iter().collect(),
+            stats: previous_stats
+                .into_iter()
+                .map(|(canister_id, stats)| CanisterQueryStats { canister_id, stats })
+                .collect(),
         }) {
             Ok(()) => (),
             Err(TrySendError::Full(_)) => {
@@ -75,7 +85,7 @@ impl QueryStatsCollector {
                 );
             }
         }
-        self.current_epoch = Some(new_epoch);
+        *current_epoch = Some(new_epoch);
     }
 
     pub fn register_query_statistics(
@@ -85,7 +95,8 @@ impl QueryStatsCollector {
         ingress_payload_size: u64,
         egress_payload_size: u64,
     ) {
-        if self.current_epoch.is_none() {
+        let current_epoch = *self.current_epoch.read().unwrap();
+        if current_epoch.is_none() {
             info!(
                 every_n_seconds => 30,
                 self.log,
@@ -96,7 +107,7 @@ impl QueryStatsCollector {
         }
 
         let mut state = self.current_query_stats.lock().unwrap();
-        let stats_for_canister = state.canister_stats.entry(canister_id).or_default();
+        let stats_for_canister = state.entry(canister_id).or_default();
 
         stats_for_canister.num_calls = stats_for_canister.num_calls.saturating_add(1);
         stats_for_canister.num_instructions = stats_for_canister
@@ -108,52 +119,5 @@ impl QueryStatsCollector {
         stats_for_canister.egress_payload_size = stats_for_canister
             .egress_payload_size
             .saturating_add(egress_payload_size);
-    }
-}
-
-pub struct QueryStatsPayloadBuilderImpl {
-    log: ReplicaLogger,
-    current_epoch: RwLock<Option<EpochStats>>,
-    receiver: Receiver<EpochStats>,
-}
-
-impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
-    fn build_payload(
-        &self,
-        _height: Height,
-        _max_size: NumBytes,
-        _past_payloads: &[PastPayload],
-        _context: &ValidationContext,
-    ) -> Vec<u8> {
-        match self.receiver.try_recv() {
-            Ok(new_epoch) => {
-                let mut epoch = self.current_epoch.write().unwrap();
-                *epoch = Some(new_epoch);
-            }
-            Err(TryRecvError::Empty) => (),
-            Err(TryRecvError::Disconnected) => {
-                warn!(
-                    every_n_seconds => 5,
-                    self.log,
-                    "QueryStatsCollector has been dropped. This is a bug"
-                );
-                return vec![];
-            }
-        }
-
-        let _epoch = self.current_epoch.read().unwrap();
-
-        // TODO: Implement the actual streaming of the epoch stats
-        vec![]
-    }
-
-    fn validate_payload(
-        &self,
-        _height: Height,
-        _payload: &[u8],
-        _past_payloads: &[PastPayload],
-        _context: &ValidationContext,
-    ) -> Result<(), PayloadValidationError> {
-        Ok(())
     }
 }

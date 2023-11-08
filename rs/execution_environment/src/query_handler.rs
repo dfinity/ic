@@ -23,11 +23,13 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionResponse, QueryExecutionService, QueryHandler,
 };
-use ic_interfaces_state_manager::StateReader;
+use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_types::batch::QueryStats;
+use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
     messages::{
@@ -65,7 +67,7 @@ fn get_latest_certified_state_and_data_certificate(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     certificate_delegation: Option<CertificateDelegation>,
     canister_id: CanisterId,
-) -> Option<(Arc<ReplicatedState>, Vec<u8>)> {
+) -> Option<(Labeled<Arc<ReplicatedState>>, Vec<u8>)> {
     // The path to fetch the data certificate for the canister.
     let path = SubTree(flatmap! {
         label("canister") => SubTree(
@@ -82,7 +84,7 @@ fn get_latest_certified_state_and_data_certificate(
         .read_certified_state(&path)
         .map(|(state, tree, cert)| {
             (
-                state,
+                Labeled::new(cert.height, state),
                 into_cbor(&Certificate {
                     tree,
                     signature: Blob(cert.signed.signature.signature.get().0),
@@ -140,6 +142,25 @@ impl InternalHttpQueryHandler {
             query_cache: query_cache::QueryCache::new(metrics_registry, query_cache_capacity),
         }
     }
+
+    /// Get query stas for given canister from query stats collector.
+    ///
+    /// This is used in testing.
+    pub fn query_stats_for_testing(&self, canister_id: &CanisterId) -> Option<QueryStats> {
+        self.local_query_execution_stats
+            .current_query_stats
+            .lock()
+            .unwrap()
+            .get(canister_id)
+            .cloned()
+    }
+
+    /// Set current epoch in query stats collector
+    ///
+    /// This is used in testing.
+    pub fn query_stats_set_epoch_for_testing(&mut self, epoch: QueryStatsEpoch) {
+        self.local_query_execution_stats.set_epoch(epoch);
+    }
 }
 
 fn route_bitcoin_message(
@@ -175,7 +196,7 @@ impl QueryHandler for InternalHttpQueryHandler {
     fn query(
         &self,
         mut query: UserQuery,
-        state: Arc<ReplicatedState>,
+        state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
@@ -200,7 +221,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             };
 
             query.receiver =
-                route_bitcoin_message(network, &state.as_ref().metadata.network_topology)?;
+                route_bitcoin_message(network, &state.get_ref().metadata.network_topology)?;
         }
 
         // Check the query cache first (if the query caching is enabled).
@@ -209,7 +230,7 @@ impl QueryHandler for InternalHttpQueryHandler {
         let (cache_entry_key, cache_entry_env) = if self.config.query_caching == FlagStatus::Enabled
         {
             let key = query_cache::EntryKey::from(&query);
-            let env = query_cache::EntryEnv::try_from((&key, state.as_ref()))?;
+            let env = query_cache::EntryEnv::try_from((&key, state.get_ref().as_ref()))?;
 
             if let Some(result) = self.query_cache.get_valid_result(&key, &env) {
                 return result;
@@ -240,10 +261,12 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.config.composite_queries,
             query.receiver,
             &self.metrics.query_critical_error,
+            if self.config.query_stats_aggregation == FlagStatus::Enabled {
+                Some(&self.local_query_execution_stats)
+            } else {
+                None
+            },
         );
-
-        let canister_id = query.receiver;
-        let ingress_payload_size = query.method_payload.len();
 
         let result = context.run(
             query,
@@ -251,22 +274,6 @@ impl QueryHandler for InternalHttpQueryHandler {
             Arc::clone(&self.cycles_account_manager),
             &measurement_scope,
         );
-
-        let egress_payload_size = match &result {
-            Ok(WasmResult::Reply(vec)) => vec.len(),
-            Ok(WasmResult::Reject(_)) => 0,
-            Err(_) => 0,
-        };
-
-        // Add query statistics to the query aggregator.
-        if self.config.query_stats_aggregation == FlagStatus::Enabled {
-            self.local_query_execution_stats.register_query_statistics(
-                canister_id,
-                context.total_instructions_used,
-                ingress_payload_size as u64,
-                egress_payload_size as u64,
-            );
-        }
 
         // Add the query execution result to the query cache  (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
@@ -299,7 +306,7 @@ impl QueryHandler for HttpQueryHandler {
     fn query(
         &self,
         query: UserQuery,
-        state: Arc<Self::State>,
+        state: Labeled<Arc<Self::State>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         self.internal.query(query, state, data_certificate)
@@ -340,7 +347,7 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                     query.receiver,
                 ) {
                     Some((state, cert)) => {
-                        let time = state.metadata.batch_time;
+                        let time = state.get_ref().metadata.batch_time;
                         let result = internal.query(query, state, cert);
 
                         let response = match result {

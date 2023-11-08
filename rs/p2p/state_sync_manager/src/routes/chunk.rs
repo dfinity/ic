@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::metrics::{StateSyncManagerHandlerMetrics, CHUNK_HANDLER_LABEL};
+use crate::metrics::StateSyncManagerHandlerMetrics;
 use crate::ongoing::DownloadChunkError;
 use axum::{
     body::Bytes,
@@ -14,7 +14,6 @@ use ic_protobuf::p2p::v1 as pb;
 use ic_types::{
     artifact::StateSyncArtifactId,
     chunkable::{ArtifactChunk, ChunkId},
-    NodeId,
 };
 use prost::Message;
 
@@ -47,12 +46,6 @@ pub(crate) async fn state_sync_chunk_handler(
     State(state): State<Arc<StateSyncChunkHandler>>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode> {
-    let _timer = state
-        .metrics
-        .request_duration
-        .with_label_values(&[CHUNK_HANDLER_LABEL])
-        .start_timer();
-
     // Parse payload
     let pb::StateSyncChunkRequest { id, chunk_id } =
         pb::StateSyncChunkRequest::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
@@ -109,15 +102,10 @@ pub(crate) fn parse_chunk_handler_response(
 ) -> Result<ArtifactChunk, DownloadChunkError> {
     let (parts, body) = response.into_parts();
 
-    let peer_id = *parts
-        .extensions
-        .get::<NodeId>()
-        .expect("Transport attaches peer id");
     match parts.status {
         StatusCode::OK => {
             let decompressed = zstd::bulk::decompress(&body, MAX_CHUNK_SIZE).map_err(|e| {
                 DownloadChunkError::RequestError {
-                    peer_id,
                     chunk_id,
                     err: e.to_string(),
                 }
@@ -126,7 +114,6 @@ pub(crate) fn parse_chunk_handler_response(
             let pb =
                 pb::StateSyncChunkResponse::decode(Bytes::from(decompressed)).map_err(|e| {
                     DownloadChunkError::RequestError {
-                        peer_id,
                         chunk_id,
                         err: e.to_string(),
                     }
@@ -139,11 +126,10 @@ pub(crate) fn parse_chunk_handler_response(
             };
             Ok(chunk)
         }
-        StatusCode::NO_CONTENT => Err(DownloadChunkError::NoContent { peer_id }),
+        StatusCode::NO_CONTENT => Err(DownloadChunkError::NoContent),
         StatusCode::TOO_MANY_REQUESTS => Err(DownloadChunkError::Overloaded),
         StatusCode::REQUEST_TIMEOUT => Err(DownloadChunkError::Timeout),
         _ => Err(DownloadChunkError::RequestError {
-            peer_id,
             chunk_id,
             err: String::from_utf8_lossy(&body).to_string(),
         }),

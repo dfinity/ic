@@ -1,29 +1,41 @@
-use std::{pin::Pin, time::Instant};
+use std::{
+    pin::Pin,
+    sync::{atomic::AtomicBool, Arc},
+    time::Instant,
+};
 
+use anyhow::Error;
+use arc_swap::ArcSwapOption;
+use async_trait::async_trait;
 use axum::{
     body::Body,
     extract::State,
-    http::{Request, StatusCode},
+    http::Request,
     middleware::Next,
     response::{IntoResponse, Response},
     Extension,
 };
 use bytes::Buf;
 use futures::task::{Context as FutContext, Poll};
-use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH};
+use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use http_body::Body as HttpBody;
-use ic_types::messages::ReplicaHealthStatus;
+use ic_types::{messages::ReplicaHealthStatus, CanisterId};
+use jemalloc_ctl::{epoch, stats};
 use prometheus::{
-    register_histogram_vec_with_registry, register_int_counter_vec_with_registry, Encoder,
-    HistogramOpts, HistogramVec, IntCounterVec, Registry, TextEncoder,
+    proto::MetricFamily, register_histogram_vec_with_registry,
+    register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
+    IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
+use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
-    cache::CacheStatus,
+    cache::{Cache, CacheStatus},
+    core::Run,
     routes::{ErrorCause, RequestContext},
-    snapshot::Node,
+    snapshot::{Node, RegistrySnapshot},
 };
 
 const KB: f64 = 1024.0;
@@ -34,21 +46,193 @@ pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] =
 pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] =
     &[1.0 * KB, 8.0 * KB, 64.0 * KB, 256.0 * KB, 512.0 * KB];
 
+// https://prometheus.io/docs/instrumenting/exposition_formats/#basic-info
+const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
+
+const NODE_ID_LABEL: &str = "node_id";
+const SUBNET_ID_LABEL: &str = "subnet_id";
+
 const LABELS_HTTP: &[&str] = &[
     "request_type",
     "status_code",
-    "subnet_id",
-    "node_id",
+    SUBNET_ID_LABEL,
+    NODE_ID_LABEL,
     "error_cause",
     "cache_status",
     "cache_bypass",
 ];
+
+pub struct MetricsCache {
+    buffer: Vec<u8>,
+}
+
+impl MetricsCache {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            // Preallocate a large enough vector, it'll be expanded if needed
+            buffer: Vec::with_capacity(capacity),
+        }
+    }
+}
+
+// Iterates over given metric families and removes metrics that have
+// node_id/subnet_id labels and where the corresponding nodes are
+// not present in the registry snapshot
+fn remove_stale_nodes(
+    snapshot: Arc<RegistrySnapshot>,
+    mut mfs: Vec<MetricFamily>,
+) -> Vec<MetricFamily> {
+    for mf in mfs.iter_mut() {
+        // Iterate over the metrics in the metric family
+        let metrics = mf
+            .take_metric()
+            .into_iter()
+            .filter(|v| {
+                // See if this metric has node_id/subnet_id labels
+                let node_id = v
+                    .get_label()
+                    .iter()
+                    .find(|&v| v.get_name() == NODE_ID_LABEL)
+                    .map(|x| x.get_value());
+
+                let subnet_id = v
+                    .get_label()
+                    .iter()
+                    .find(|&v| v.get_name() == SUBNET_ID_LABEL)
+                    .map(|x| x.get_value());
+
+                // Check if we got both node_id and subnet_id labels
+                match (node_id, subnet_id) {
+                    (Some(node_id), Some(subnet_id)) => snapshot
+                        .nodes
+                        .get(node_id) // Check if the node_id is in the snapshot
+                        .map(|x| x.subnet_id.to_string() == subnet_id) // Check if its subnet_id matches, otherwise the metrics needs to be removed
+                        .unwrap_or(false),
+
+                    // Otherwise just pass this metric through
+                    _ => true,
+                }
+            })
+            .collect();
+
+        mf.set_metric(metrics);
+    }
+
+    mfs
+}
+
+pub struct MetricsRunner {
+    metrics_cache: Arc<RwLock<MetricsCache>>,
+    registry: Registry,
+    encoder: TextEncoder,
+
+    cache: Option<Arc<Cache>>,
+    cache_items: IntGauge,
+    cache_size: IntGauge,
+
+    mem_allocated: IntGauge,
+    mem_resident: IntGauge,
+
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+}
+
+// Snapshots & encodes the metrics for the handler to export
+impl MetricsRunner {
+    pub fn new(
+        metrics_cache: Arc<RwLock<MetricsCache>>,
+        registry: Registry,
+        cache: Option<Arc<Cache>>,
+        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    ) -> Self {
+        let cache_items = register_int_gauge_with_registry!(
+            format!("cache_items"),
+            format!("Number of items in the request cache"),
+            registry
+        )
+        .unwrap();
+
+        let cache_size = register_int_gauge_with_registry!(
+            format!("cache_size"),
+            format!("Size of items in the request cache in bytes"),
+            registry
+        )
+        .unwrap();
+
+        let mem_allocated = register_int_gauge_with_registry!(
+            format!("memory_allocated"),
+            format!("Allocated memory in bytes"),
+            registry
+        )
+        .unwrap();
+
+        let mem_resident = register_int_gauge_with_registry!(
+            format!("memory_resident"),
+            format!("Resident memory in bytes"),
+            registry
+        )
+        .unwrap();
+
+        Self {
+            metrics_cache,
+            registry,
+            encoder: TextEncoder::new(),
+            cache,
+            cache_items,
+            cache_size,
+            mem_allocated,
+            mem_resident,
+            published_registry_snapshot,
+        }
+    }
+}
+
+#[async_trait]
+impl Run for MetricsRunner {
+    async fn run(&mut self) -> Result<(), Error> {
+        // Record jemalloc memory usage
+        epoch::advance().unwrap();
+        self.mem_allocated
+            .set(stats::allocated::read().unwrap() as i64);
+        self.mem_resident
+            .set(stats::resident::read().unwrap() as i64);
+
+        // Gather cache stats if it's enabled, otherwise set to zero
+        let (cache_items, cache_size) = match self.cache.as_ref() {
+            Some(v) => {
+                v.housekeep().await;
+                (v.len(), v.size())
+            }
+
+            None => (0, 0),
+        };
+
+        self.cache_items.set(cache_items as i64);
+        self.cache_size.set(cache_size as i64);
+
+        // Get a snapshot of metrics
+        let mut metric_families = self.registry.gather();
+
+        // If we have a published snapshot - use it to remove the metrics not present anymore
+        if let Some(snapshot) = self.published_registry_snapshot.load_full() {
+            metric_families = remove_stale_nodes(snapshot, metric_families);
+        }
+
+        // Take a write lock, truncate the vector and encode the metrics into it
+        let mut metrics_cache = self.metrics_cache.write().await;
+        metrics_cache.buffer.clear();
+        self.encoder
+            .encode(&metric_families, &mut metrics_cache.buffer)?;
+
+        Ok(())
+    }
+}
 
 // A wrapper for http::Body implementations that tracks the number of bytes sent
 pub struct MetricsBody<D, E> {
     inner: Pin<Box<dyn HttpBody<Data = D, Error = E> + Send + 'static>>,
     // TODO see if we can make this FnOnce somehow
     callback: Box<dyn Fn(u64, Result<(), String>) + Send + 'static>,
+    callback_done: AtomicBool,
     expected_size: Option<u64>,
     bytes_sent: u64,
 }
@@ -69,12 +253,35 @@ impl<D, E> MetricsBody<D, E> {
             content_length.and_then(|x| x.to_str().ok().and_then(|x| x.parse::<u64>().ok()))
         });
 
-        Self {
+        let mut body = Self {
             inner: Box::pin(body),
             callback: Box::new(callback),
+            callback_done: AtomicBool::new(false),
             expected_size,
             bytes_sent: 0,
+        };
+
+        // If the size is known and zero - just execute the callback now, it won't be called anywhere else
+        if expected_size == Some(0) {
+            body.do_callback(Ok(()));
         }
+
+        body
+    }
+
+    // In certain cases the users of HttpBody trait can cause us to run callbacks more than once
+    // Use AtomicBool to prevent that and run it at most once
+    pub fn do_callback(&mut self, res: Result<(), String>) {
+        // Make locking scope shorter
+        {
+            let done = self.callback_done.get_mut();
+            if *done {
+                return;
+            }
+            *done = true;
+        }
+
+        (self.callback)(self.bytes_sent, res);
     }
 }
 
@@ -115,20 +322,20 @@ where
 
                     // Check if we already got what was expected
                     if Some(self.bytes_sent) >= self.expected_size {
-                        (self.callback)(self.bytes_sent, Ok(()));
+                        self.do_callback(Ok(()));
                     }
                 }
 
                 // Error occured, execute callback
                 Err(e) => {
                     // Error is not Copy/Clone so use string instead
-                    (self.callback)(self.bytes_sent, Err(e.to_string()));
+                    self.do_callback(Err(e.to_string()));
                 }
             },
 
             // Nothing left, execute callback
             Poll::Ready(None) => {
-                (self.callback)(self.bytes_sent, Ok(()));
+                self.do_callback(Ok(()));
             }
 
             // Do nothing
@@ -194,6 +401,79 @@ impl MetricParams {
             // Duration
             recorder: register_histogram_vec_with_registry!(recorder_opts, labels, registry)
                 .unwrap(),
+        }
+    }
+}
+
+pub struct WithMetricsPersist<T>(pub T, pub MetricParamsPersist);
+
+#[derive(Clone)]
+pub struct MetricParamsPersist {
+    pub ranges: IntGauge,
+    pub nodes: IntGauge,
+}
+
+impl MetricParamsPersist {
+    pub fn new(registry: &Registry) -> Self {
+        Self {
+            // Number of ranges
+            ranges: register_int_gauge_with_registry!(
+                format!("persist_ranges"),
+                format!("Number of canister ranges currently published"),
+                registry
+            )
+            .unwrap(),
+
+            // Number of nodes
+            nodes: register_int_gauge_with_registry!(
+                format!("persist_nodes"),
+                format!("Number of nodes currently published"),
+                registry
+            )
+            .unwrap(),
+        }
+    }
+}
+
+pub struct WithMetricsCheck<T>(pub T, pub MetricParamsCheck);
+
+#[derive(Clone)]
+pub struct MetricParamsCheck {
+    pub counter: IntCounterVec,
+    pub recorder: HistogramVec,
+    pub status: IntGaugeVec,
+}
+
+impl MetricParamsCheck {
+    pub fn new(registry: &Registry) -> Self {
+        let mut opts = HistogramOpts::new(
+            "check_duration_sec",
+            "Records the duration of check calls in seconds",
+        );
+        opts.buckets = HTTP_DURATION_BUCKETS.to_vec();
+
+        let labels = &["status", NODE_ID_LABEL, SUBNET_ID_LABEL, "addr"];
+
+        Self {
+            counter: register_int_counter_vec_with_registry!(
+                "check_total",
+                "Counts occurrences of check calls",
+                labels,
+                registry
+            )
+            .unwrap(),
+
+            // Duration
+            recorder: register_histogram_vec_with_registry!(opts, labels, registry).unwrap(),
+
+            // Status of node
+            status: register_int_gauge_vec_with_registry!(
+                "check_status",
+                "Last check result of a given node",
+                &labels[1..4],
+                registry
+            )
+            .unwrap(),
         }
     }
 }
@@ -275,10 +555,11 @@ pub async fn metrics_middleware_status(
     next: Next<Body>,
 ) -> impl IntoResponse {
     let response = next.run(request).await;
-    let health = format!(
-        "{:?}",
-        response.extensions().get::<ReplicaHealthStatus>().unwrap()
-    );
+    let health = response
+        .extensions()
+        .get::<ReplicaHealthStatus>()
+        .unwrap()
+        .to_string();
 
     let HttpMetricParamsStatus { counter } = metric_params;
     counter.with_label_values(&[health.as_str()]).inc();
@@ -312,6 +593,7 @@ pub async fn metrics_middleware(
         .unwrap_or_default();
 
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
+    let canister_id = response.extensions().get::<CanisterId>().cloned();
     let node = response.extensions().get::<Node>().cloned();
     let cache_status = response
         .extensions()
@@ -386,7 +668,8 @@ pub async fn metrics_middleware(
             status = status_code.as_u16(),
             subnet_id,
             node_id,
-            canister_id = ctx.canister_id.map(|x| x.to_string()),
+            canister_id = canister_id.map(|x| x.to_string()),
+            canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
             sender,
             method_name = ctx.method_name,
             proc_duration,
@@ -410,26 +693,19 @@ pub async fn metrics_middleware(
 
 #[derive(Clone)]
 pub struct MetricsHandlerArgs {
-    pub registry: Registry,
+    pub cache: Arc<RwLock<MetricsCache>>,
 }
 
+// Axum handler for /metrics endpoint
 pub async fn metrics_handler(
-    State(MetricsHandlerArgs { registry }): State<MetricsHandlerArgs>,
-) -> Response<Body> {
-    let metric_families = registry.gather();
-
-    let encoder = TextEncoder::new();
-
-    let mut metrics_text = Vec::new();
-    if encoder.encode(&metric_families, &mut metrics_text).is_err() {
-        return Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body("Internal Server Error".into())
-            .unwrap();
-    };
-
-    Response::builder()
-        .status(200)
-        .body(metrics_text.into())
-        .unwrap()
+    State(MetricsHandlerArgs { cache }): State<MetricsHandlerArgs>,
+) -> impl IntoResponse {
+    // Get a read lock and clone the buffer contents
+    (
+        [(CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
+        cache.read().await.buffer.clone(),
+    )
 }
+
+#[cfg(test)]
+pub mod test;

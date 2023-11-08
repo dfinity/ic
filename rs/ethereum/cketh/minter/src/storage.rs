@@ -1,11 +1,8 @@
 use crate::state::event::{Event, EventType};
-use crate::state::State;
 use ic_stable_structures::{
     log::Log as StableLog,
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    reader::Reader,
     storable::Storable,
-    writer::Writer,
     DefaultMemoryImpl,
 };
 use std::borrow::Cow;
@@ -13,7 +10,6 @@ use std::cell::RefCell;
 
 const LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
 const LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
-const UPGRADE_BUFFER_MEMORY_ID: MemoryId = MemoryId::new(2);
 
 type VMem = VirtualMemory<DefaultMemoryImpl>;
 type EventLog = StableLog<Event, VMem, VMem>;
@@ -70,27 +66,4 @@ where
     F: for<'a> FnOnce(Box<dyn Iterator<Item = Event> + 'a>) -> R,
 {
     EVENTS.with(|events| f(Box::new(events.borrow().iter())))
-}
-
-pub fn encode_state(s: &State) {
-    MEMORY_MANAGER.with(|m| {
-        ciborium::ser::into_writer(
-            s,
-            Writer::new(
-                &mut m.borrow().get(UPGRADE_BUFFER_MEMORY_ID),
-                /*offset =*/ 0,
-            ),
-        )
-        .expect("CBOR serialization should succeed")
-    })
-}
-
-pub fn decode_state() -> State {
-    MEMORY_MANAGER.with(|m| {
-        ciborium::de::from_reader(Reader::new(
-            &m.borrow().get(UPGRADE_BUFFER_MEMORY_ID),
-            /*offset =*/ 0,
-        ))
-        .expect("CBOR deserialization should succeed")
-    })
 }

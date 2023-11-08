@@ -1,7 +1,10 @@
 [package]
 name = "xnet-test"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "xnet-test-canister"
@@ -12,4 +15,4 @@ candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
 rand = "0.8"
 rand_pcg = "0.3"
-serde = "1.0"
+serde = { workspace = true }

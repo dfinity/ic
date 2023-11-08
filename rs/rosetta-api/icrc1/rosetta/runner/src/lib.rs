@@ -3,7 +3,12 @@ use std::default::Default;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::str::FromStr;
+
 use tokio::time::{sleep, Duration};
+
+pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
+pub const DEFAULT_TOKEN_SYMBOL: &str = "XTST";
+
 struct KillOnDrop(Child);
 pub struct RosettaContext {
     _proc: KillOnDrop,
@@ -35,6 +40,10 @@ pub struct RosettaOptions {
     pub exit_on_sync: bool,
 
     pub offline: bool,
+
+    pub symbol: Option<String>,
+
+    pub decimals: Option<u32>,
 }
 
 impl Default for RosettaOptions {
@@ -46,6 +55,8 @@ impl Default for RosettaOptions {
             network_url: None,
             exit_on_sync: false,
             offline: true,
+            symbol: Some(DEFAULT_TOKEN_SYMBOL.to_string()),
+            decimals: Some(DEFAULT_DECIMAL_PLACES.into()),
         }
     }
 }
@@ -81,6 +92,14 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
 
     if arguments.offline {
         command = command.arg("--offline");
+    }
+
+    if let Some(symbol) = arguments.symbol {
+        command = command.arg("--icrc1-symbol").arg(symbol);
+    }
+
+    if let Some(decimals) = arguments.decimals {
+        command = command.arg("--icrc1-decimals").arg(decimals.to_string());
     }
 
     if arguments.exit_on_sync {

@@ -90,7 +90,7 @@ where
     // Collections
     hot_keys_map: StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), PrincipalId, Memory>,
     recent_ballots_map: StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), BallotInfo, Memory>,
-    followees_map: StableBTreeMap<FolloweesKey, /* index */ u64, Memory>,
+    followees_map: StableBTreeMap<FolloweesKey, /* followee_id */ u64, Memory>,
 
     // Singletons
     known_neuron_data_map: StableBTreeMap</* Neuron ID */ u64, KnownNeuronData, Memory>,
@@ -420,15 +420,22 @@ where
 
         range
             // create groups for topics
-            .group_by(|(followees_key, _index)| followees_key.topic_id)
+            .group_by(|(followees_key, _followee_id)| followees_key.topic_id)
             .into_iter()
             // convert (Signed32, group) into (i32, followees)
             .map(|(topic, group)| {
+                // FolloweesKey::index represents the followee's index within the followees list for
+                // a specific follower and topic. We have strong guarantee that StableBTreeMap's
+                // range() returns followee entries with ascending `FolloweesKey::index` (because
+                // the Ord implementation of FolloweesKey), and the current implementation of
+                // `group_by()` preserves the order of the elements within groups. Therefore
+                // `sorted_by_key()` below is technically not needed. However, the
+                // `Itertools::group_by` documentation does not specify whether it actually preseves
+                // the order. For this reason we choose to still sort by `FolloweesKey::index`,
+                // instead of relying on an undefined behavior.
                 let followees = group
-                    .sorted_by_key(|(_, index)| *index)
-                    .map(|(followees_key, _index)| NeuronId {
-                        id: followees_key.followee_id,
-                    })
+                    .sorted_by_key(|(followees_key, _)| followees_key.index)
+                    .map(|(_, followee_id)| NeuronId { id: followee_id })
                     .collect::<Vec<_>>();
 
                 (i32::from(topic), Followees { followees })
@@ -454,14 +461,15 @@ where
                         move // Take ownership of topic_id.
                         |(index, followee_id)| {
                             let followee_id = followee_id.id;
+                            let index = index as u64;
 
                             let key = FolloweesKey {
                                 follower_id,
                                 topic_id,
-                                followee_id,
+                                index,
                             };
 
-                            (key, index as u64)
+                            (key, followee_id)
                         },
                     )
                 })
@@ -826,19 +834,19 @@ fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), Governan
 struct FolloweesKey {
     follower_id: u64,
     topic_id: Signed32,
-    followee_id: u64,
+    index: u64,
 }
 type FolloweesKeyEquivalentTuple = (u64, (Signed32, u64));
 impl FolloweesKey {
     const MIN: Self = Self {
         follower_id: u64::MIN,
         topic_id: Signed32::MIN,
-        followee_id: u64::MIN,
+        index: u64::MIN,
     };
     const MAX: Self = Self {
         follower_id: u64::MAX,
         topic_id: Signed32::MAX,
-        followee_id: u64::MAX,
+        index: u64::MAX,
     };
 }
 impl Storable for FolloweesKey {
@@ -846,20 +854,20 @@ impl Storable for FolloweesKey {
         let Self {
             follower_id,
             topic_id,
-            followee_id,
+            index,
         } = *self;
-        let tuple: FolloweesKeyEquivalentTuple = (follower_id, (topic_id, followee_id));
+        let tuple: FolloweesKeyEquivalentTuple = (follower_id, (topic_id, index));
         let bytes: Vec<u8> = tuple.to_bytes().to_vec();
         Cow::from(bytes)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        let (follower_id, (topic_id, followee_id)) = FolloweesKeyEquivalentTuple::from_bytes(bytes);
+        let (follower_id, (topic_id, index)) = FolloweesKeyEquivalentTuple::from_bytes(bytes);
 
         Self {
             follower_id,
             topic_id,
-            followee_id,
+            index,
         }
     }
 }

@@ -19,8 +19,8 @@ use crate::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, HypervisorError, HypervisorResult, InstanceStats,
-    OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
+    SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -105,8 +105,6 @@ impl WasmExecutorMetrics {
 pub struct SliceExecutionOutput {
     /// The number of instructions executed by the slice.
     pub executed_instructions: NumInstructions,
-    /// The complexity observed in the slice.
-    pub execution_complexity: ExecutionComplexity,
 }
 
 /// Represents a paused WebAssembly execution that can be resumed or aborted.
@@ -170,6 +168,7 @@ impl WasmExecutor for WasmExecutorImpl {
             api_type,
             sandbox_safe_system_state,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             execution_parameters,
             subnet_available_memory,
             func_ref,
@@ -217,6 +216,7 @@ impl WasmExecutor for WasmExecutorImpl {
             func_ref,
             api_type,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             execution_parameters,
             subnet_available_memory,
             sandbox_safe_system_state,
@@ -377,12 +377,12 @@ impl WasmExecutorImpl {
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
                 Some(Ok(serialized_module)) => {
-                    let module = self
+                    let instance_pre = self
                         .wasm_embedder
-                        .deserialize_module(&serialized_module.bytes);
-                    let cache = EmbedderCache::new(module.clone());
+                        .deserialize_module_and_pre_instantiate(&serialized_module.bytes);
+                    let cache = EmbedderCache::new(instance_pre.clone());
                     *guard = Some(cache.clone());
-                    match module {
+                    match instance_pre {
                         Ok(_) => Ok(CacheLookup {
                             cache,
                             serialized_module: Some(serialized_module),
@@ -446,7 +446,6 @@ pub fn wasm_execution_error(
     WasmExecutionResult::Finished(
         SliceExecutionOutput {
             executed_instructions: NumInstructions::from(0),
-            execution_complexity: ExecutionComplexity::default(),
         },
         WasmExecutionOutput {
             wasm_result: Err(err),
@@ -559,6 +558,7 @@ pub fn process(
     func_ref: FuncRef,
     api_type: ApiType,
     canister_current_memory_usage: NumBytes,
+    canister_current_message_memory_usage: NumBytes,
     execution_parameters: ExecutionParameters,
     subnet_available_memory: SubnetAvailableMemory,
     sandbox_safe_system_state: SandboxSafeSystemState,
@@ -582,6 +582,7 @@ pub fn process(
         api_type,
         sandbox_safe_system_state,
         canister_current_memory_usage,
+        canister_current_message_memory_usage,
         execution_parameters,
         subnet_available_memory,
         embedder.config().feature_flags.wasm_native_stable_memory,
@@ -608,7 +609,6 @@ pub fn process(
             return (
                 SliceExecutionOutput {
                     executed_instructions: NumInstructions::from(0),
-                    execution_complexity: ExecutionComplexity::default(),
                 },
                 WasmExecutionOutput {
                     wasm_result: Err(err),
@@ -664,7 +664,6 @@ pub fn process(
 
     let mut allocated_bytes = NumBytes::from(0);
     let mut allocated_message_bytes = NumBytes::from(0);
-    let mut execution_complexity = ExecutionComplexity::default();
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -702,7 +701,6 @@ pub fn process(
                     let sys_api = instance.store_data().system_api().unwrap();
                     allocated_bytes = sys_api.get_allocated_bytes();
                     allocated_message_bytes = sys_api.get_allocated_message_bytes();
-                    execution_complexity = sys_api.execution_complexity().clone();
 
                     Some(WasmStateChanges::new(
                         wasm_memory_delta,
@@ -719,7 +717,6 @@ pub fn process(
     (
         SliceExecutionOutput {
             executed_instructions: slice_instructions_executed,
-            execution_complexity,
         },
         WasmExecutionOutput {
             wasm_result,
@@ -776,7 +773,7 @@ pub fn get_initial_globals_and_memory(
     };
 
     Ok((
-        instance.get_exported_globals(),
+        instance.get_exported_globals()?,
         wasm_memory_delta,
         instance.heap_size(CanisterMemoryType::Heap),
     ))

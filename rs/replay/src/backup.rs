@@ -82,7 +82,7 @@ pub(crate) enum ExitPoint {
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
-    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet>,
+    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet = ChangeSet>,
     backup_dir: &Path,
     height: Height,
 ) -> Result<(), ReplayError> {
@@ -98,15 +98,26 @@ pub(crate) fn insert_cup_at_height(
     }
 }
 
-/// Deserializes the CUP file and returns it.
-pub(crate) fn read_cup_file(file: &Path) -> Option<CatchUpPackage> {
+pub(crate) fn read_cup_proto_file(file: &Path) -> Option<pb::CatchUpPackage> {
     let buffer = read_file(file);
 
-    let Ok(protobuf) = pb::CatchUpPackage::decode(buffer.as_slice()) else {
-        rename_file(file);
-        println!("Protobuf decoding of CUP failed");
-        return None;
-    };
+    match pb::CatchUpPackage::decode(buffer.as_slice()) {
+        Ok(proto) => Some(proto),
+        Err(err) => {
+            rename_file(file);
+            println!(
+                "Protobuf decoding of CUP at {} failed: {:?}",
+                file.display(),
+                err
+            );
+            None
+        }
+    }
+}
+
+/// Deserializes the CUP file and returns it.
+pub(crate) fn read_cup_file(file: &Path) -> Option<CatchUpPackage> {
+    let protobuf = read_cup_proto_file(file)?;
 
     match CatchUpPackage::try_from(&protobuf) {
         Ok(cup) => Some(cup),

@@ -146,16 +146,7 @@ impl Service<Request<Bytes>> for QueryService {
             }
         };
 
-        let effective_canister_id = match CanisterId::new(effective_principal_id) {
-            Ok(canister_id) => canister_id,
-            Err(_) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Invalid canister id: {}", effective_principal_id),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
+        let effective_canister_id = CanisterId::unchecked_from_principal(effective_principal_id);
 
         // Reject requests where `canister_id` != `effective_canister_id`. In comparison to update
         // requests we don't need to check for the mgmt canister since all mgmt canister calls are updated calls.

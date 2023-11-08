@@ -21,11 +21,11 @@ prometheus = { workspace = true }
 hyper = { version = "0.14.18", features = ["full"] }
 anyhow = "1.0.31"
 slog = { version = "2.5.2", features = ["nested-values"] }
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_json = { workspace = true }
 ic-utils = { path = "../../utils/" }
 ic-registry-keys = { path = "../../registry/keys" }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 crossbeam = "0.8.0"
 crossbeam-channel = "0.5.5"
 tempfile = "3.1.0"
@@ -37,4 +37,4 @@ futures = { workspace = true }
 regex = "1.7.0"
 
 [dev-dependencies]
-itertools = "0.10.0"
+itertools = { workspace = true }

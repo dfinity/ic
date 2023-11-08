@@ -567,12 +567,12 @@ pub fn serve_http(request: HttpRequest) -> HttpResponse {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "sale_stable_memory_pages",
-        dfn_core::api::stable_memory_size_in_pages() as f64,
+        ic_nervous_system_common::stable_memory_num_pages() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "sale_stable_memory_bytes",
-        (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
+        ic_nervous_system_common::stable_memory_size_bytes() as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
     w.encode_gauge(
@@ -647,12 +647,10 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_nervous_system_clients::canister_status::{
-        DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
-    };
     use ic_nervous_system_clients::{
         canister_status::{
             CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
+            DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
         },
         management_canister_client::{
             MockManagementCanisterClient, MockManagementCanisterClientReply,

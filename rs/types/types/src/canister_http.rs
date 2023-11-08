@@ -55,7 +55,6 @@ use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformCo
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
-    types::v1 as pb,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -620,50 +619,6 @@ pub type CanisterHttpResponseProof =
 impl CountBytes for CanisterHttpResponseProof {
     fn count_bytes(&self) -> usize {
         size_of::<CanisterHttpResponseProof>()
-    }
-}
-
-/// Used by the artifact pool as to differentiate [`CanisterHttpResponse`] artifacts
-///
-/// The current implementation of the canister http feature only has a single type of
-/// artifact, which is shares and therefore needs an attribute.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum CanisterHttpResponseAttribute {
-    /// Attributes of a [`CanisterHttpResponseShare`].
-    ///
-    /// It is not sufficient to differentiate the [`CanisterHttpResponseShare`]s by their
-    /// [`CanisterHttpRequestId`]. The reason is, that if the membership of the subnet changes
-    /// while a [`CanisterHttpRequest`] is in progress, the new nodes can not get consensus on
-    /// the old nodes [`CanisterHttpResponseShare`]s.
-    ///
-    /// Instead, they need to make new shares, which is why the [`RegistryVersion`]
-    /// under which they where generated and signed is part of the attribute.
-    Share(
-        RegistryVersion,
-        CanisterHttpRequestId,
-        CryptoHashOf<CanisterHttpResponse>,
-    ),
-}
-
-impl From<&CanisterHttpResponseAttribute> for pb::CanisterHttpResponseAttribute {
-    fn from(value: &CanisterHttpResponseAttribute) -> Self {
-        match value {
-            CanisterHttpResponseAttribute::Share(v, id, hash) => Self {
-                registry_version: v.get(),
-                id: id.get(),
-                hash: hash.clone().get().0,
-            },
-        }
-    }
-}
-
-impl From<&pb::CanisterHttpResponseAttribute> for CanisterHttpResponseAttribute {
-    fn from(value: &pb::CanisterHttpResponseAttribute) -> Self {
-        CanisterHttpResponseAttribute::Share(
-            RegistryVersion::new(value.registry_version),
-            CanisterHttpRequestId::new(value.id),
-            CryptoHashOf::new(crate::crypto::CryptoHash(value.hash.clone())),
-        )
     }
 }
 

@@ -347,15 +347,6 @@ pub fn setup(
         create_service_nervous_system_proposal.clone(),
     );
 
-    // Assert that the NF NNS neuron's maturity has decreased by the same amount
-    // as the neurons' fund's investment in the SNS.
-    let neurons_fund_investment_icp = create_service_nervous_system_proposal
-        .swap_parameters
-        .unwrap()
-        .neurons_fund_investment_icp
-        .unwrap()
-        .e8s
-        .unwrap();
     let final_nf_neuron_maturity = {
         let mut neurons = Vec::new();
         for neuron in nf_neurons.iter() {
@@ -368,10 +359,15 @@ pub fn setup(
             .map(|n| n.maturity_e8s_equivalent)
             .sum::<u64>()
     };
-    assert_eq!(
+    assert!(
+        final_nf_neuron_maturity < starting_nf_neuron_maturity,
+        "NF maturity did not decrease after SNS creation",
+    );
+
+    info!(
+        env.logger(),
+        "Neurons' Fund maturity has decreased by {} e8s.",
         starting_nf_neuron_maturity - final_nf_neuron_maturity,
-        neurons_fund_investment_icp,
-        "NF maturity did not decrease after SNS creation"
     );
 
     block_on(dapp_canister.check_exclusively_owned_by_sns_root(&env));

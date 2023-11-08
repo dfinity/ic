@@ -216,6 +216,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         replica_version: Some(master_version.clone()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
+        skip_prompts: true,
     };
 
     let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
@@ -268,7 +269,6 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         recovery_args,
         /*neuron_args=*/ None,
         subnet_args,
-        /*interactive=*/ false,
     );
     if upgrade {
         break_subnet(

@@ -31,7 +31,7 @@ use ic_registry_local_registry::{LocalRegistry, LocalRegistryError};
 use ic_types::{registry::RegistryClientError, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use job_types::{JobType, NodeOS};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use slog::{warn, Logger};
 use thiserror::Error;
 
@@ -60,7 +60,7 @@ pub trait IcServiceDiscovery: Send + Sync {
 
 /// A [TargetGroup] associates a set of scrape targets with
 /// a set of labels.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TargetGroup {
     pub node_id: NodeId,
     pub ic_name: String,
@@ -390,7 +390,7 @@ fn some_after(
 ///
 /// (The MAC starts with 0x6a00. The 7'th bit of the first byte is flipped. See
 /// https://en.wikipedia.org/wiki/MAC_address)
-fn guest_to_host_address(sockaddr: SocketAddr) -> Option<SocketAddr> {
+pub fn guest_to_host_address(sockaddr: SocketAddr) -> Option<SocketAddr> {
     match sockaddr.ip() {
         IpAddr::V6(a) if a.segments()[4] == 0x6801 => {
             let s = a.segments();

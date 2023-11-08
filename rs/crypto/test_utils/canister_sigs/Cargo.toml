@@ -1,7 +1,10 @@
 [package]
 name = "ic-crypto-test-utils-canister-sigs"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-certification-test-utils = { path = "../../../certification/test-utils" }
@@ -19,5 +22,5 @@ ic-types = { path = "../../../types/types" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 rand = "0.8.3"
 rand_chacha = "0.3"
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }

@@ -2,18 +2,23 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+alias(
+    name = "icrc-ledger-types",
+    actual = ":icrc_ledger_types",
+)
+
 rust_library(
     name = "icrc_ledger_types",
     srcs = glob(
         ["src/**"],
     ),
-    crate_features = ["experimental-api"],
     deps = [
         "@crate_index//:base32",
         "@crate_index//:candid",
         "@crate_index//:crc32fast",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
+        "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -27,5 +32,7 @@ rust_test(
     deps = [
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
+        "@crate_index//:num-bigint",
+        "@crate_index//:proptest",
     ],
 )

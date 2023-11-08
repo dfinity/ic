@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 service-discovery = { path = "../service_discovery" }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
@@ -21,7 +21,7 @@ ic-config = { path = "../../config" }
 ic-async-utils = { path = "../../async_utils" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-http-endpoints-metrics = { path = "../../http_endpoints/metrics" }
-serde = { version = "1.0.115", features = ["derive"] }
+serde = { workspace = true }
 regex = "1.7.0"
 url = "2.2.2"
 config_writer_common = { path = "../config_writer_common" }

@@ -1,6 +1,6 @@
 use k256::elliptic_curve::{
     group::{ff::PrimeField, GroupEncoding},
-    ops::{LinearCombination, Reduce},
+    ops::{LinearCombination, MulByGenerator, Reduce},
     scalar::IsHigh,
     sec1::{FromEncodedPoint, ToEncodedPoint},
     Field, Group,
@@ -218,6 +218,11 @@ impl Point {
     /// Scalar multiplication
     pub fn mul(&self, scalar: &Scalar) -> Self {
         Self::new(self.p * scalar.s)
+    }
+
+    /// Scalar multiplication with the customary generator
+    pub fn mul_by_g(scalar: &Scalar) -> Self {
+        Self::new(k256::ProjectivePoint::mul_by_generator(&scalar.s))
     }
 
     /// Serialize the point to bytes in compressed format

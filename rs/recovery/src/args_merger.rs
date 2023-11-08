@@ -65,6 +65,7 @@ mod tests {
             replica_version: None,
             key_file: Some(PathBuf::from("/dir1/key_file")),
             test_mode: true,
+            skip_prompts: true,
         };
         let args2 = RecoveryArgs {
             dir: PathBuf::from("/dir2/"),
@@ -72,6 +73,7 @@ mod tests {
             replica_version: None,
             key_file: None,
             test_mode: false,
+            skip_prompts: true,
         };
 
         let expected = RecoveryArgs {
@@ -80,6 +82,7 @@ mod tests {
             replica_version: args2.replica_version.clone(),
             key_file: args1.key_file.clone(),
             test_mode: args2.test_mode,
+            skip_prompts: true,
         };
 
         assert_eq!(expected, merge(&logger, "test", &args1, &args2).unwrap());

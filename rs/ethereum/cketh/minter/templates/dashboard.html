@@ -1,29 +1,29 @@
-{% macro etherscan_address_link(address) %}
+{% macro etherscan_address_link(address) -%}
 {% match ethereum_network %}
-  {% when Sepolia %}
+  {%- when EthereumNetwork::Sepolia -%}
   <a href="https://sepolia.etherscan.io/address/{{address}}"><code>{{address}}</code></a>
-  {% when Mainnet %}
+  {%- when EthereumNetwork::Mainnet -%}
   <a href="https://etherscan.io/address/{{address}}"><code>{{address}}</code></a>
 {% endmatch %}
-{% endmacro %}
+{%- endmacro %}
 
-{% macro etherscan_block_link(block_number) %}
+{% macro etherscan_block_link(block_number) -%}
 {% match ethereum_network %}
-  {% when Sepolia %}
+  {%- when EthereumNetwork::Sepolia -%}
   <a href="https://sepolia.etherscan.io/block/{{block_number.to_string_inner()}}"><code>{{block_number.to_string_inner()}}</code></a>
-  {% when Mainnet %}
+  {%- when EthereumNetwork::Mainnet -%}
   <a href="https://etherscan.io/block/{{block_number.to_string_inner()}}"><code>{{block_number.to_string_inner()}}</code></a>
 {% endmatch %}
-{% endmacro %}
+{%- endmacro %}
 
-{% macro etherscan_tx_link(txhash) %}
+{% macro etherscan_tx_link(txhash) -%}
 {% match ethereum_network %}
-  {% when Sepolia %}
+  {%- when EthereumNetwork::Sepolia -%}
   <a href="https://sepolia.etherscan.io/tx/{{txhash}}"><code>{{txhash}}</code></a>
-  {% when Mainnet %}
+  {%- when EthereumNetwork::Mainnet -%}
   <a href="https://etherscan.io/tx/{{txhash}}"><code>{{txhash}}</code></a>
 {% endmatch %}
-{% endmacro %}
+{%- endmacro %}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -113,32 +113,48 @@
                 Please refer to the <a href="https://forum.dfinity.org/t/22819">forum post</a> for more information
                 or if you have any feedback.
             </div>
-            <h3>Metadata</h3>
+            <h3 id="metadata">Metadata</h3>
             <table>
                 <tbody>
-                    <tr>
+                    <tr id="ethereum-network">
                         <th>Ethereum Chain</th>
                         <td><a href="https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-{{ethereum_network.chain_id()}}.json">{{ ethereum_network }}</a></td>
                     </tr>
-                    <tr>
+                    <tr id="minter-address">
                         <th>Minter address</th>
                         <td>{% call etherscan_address_link(minter_address) %}</td>
                     </tr>
-                    <tr>
+                    <tr id="contract-address">
                         <th>Helper contract address</th>
                         <td>{% call etherscan_address_link(contract_address) %}</td>
                     </tr>
-                    <tr>
+                    <tr id="ledger-canister-id">
                         <th>Ledger canister ID</th>
                         <td><code>{{ ledger_id }}</code></td>
                     </tr>
-                    <tr>
+                    <tr id="tecdsa-key-name">
                         <th>tECDSA key name</th>
                         <td><code>{{ ecdsa_key_name }}</code></td>
                     </tr>
-                    <tr>
+                    <tr id="next-transaction-nonce">
                         <th>Next nonce</th>
                         <td>{{ next_transaction_nonce }}</td>
+                    </tr>
+                    <tr id="minimum-withdrawal-amount">
+                        <th>Minimum withdrawal amount (Wei)</th>
+                        <td>{{ minimum_withdrawal_amount }}</td>
+                    </tr>
+                    <tr id="eth-balance">
+                        <th>Total ETH managed (Wei)</th>
+                        <td>{{ eth_balance.eth_balance() }}</td>
+                    </tr>
+                    <tr id="total-effective-tx-fees">
+                        <th>Total effective transaction fees (Wei)</th>
+                        <td>{{ eth_balance.total_effective_tx_fees() }}</td>
+                    </tr>
+                    <tr id="total-unspent-tx-fees">
+                        <th>Total unspent transaction fees (Wei)</th>
+                        <td>{{ eth_balance.total_unspent_tx_fees() }}</td>
                     </tr>
                 </tbody>
             </table>
@@ -153,22 +169,26 @@
             <h3>Block sync</h3>
             <table>
                 <tbody>
-                    {% if last_observed_block.is_some() %}
-                    <tr>
+                    {% if last_observed_block.is_some() -%}
+                    <tr id="last-observed-block-number">
                         <th>Last observed block number</th>
                         <td>{% call etherscan_block_link(last_observed_block.unwrap()) %}</td>
                     </tr>
-                    {% endif %}
-                    <tr>
+                    {%- endif %}
+                    <tr id="last-synced-block-number">
                         <th>Last synced block number</th>
                         <td>{% call etherscan_block_link(last_synced_block) %}</td>
+                    </tr>
+                    <tr id="first-synced-block-number">
+                        <th>First synced block number</th>
+                        <td>{% call etherscan_block_link(first_synced_block) %}</td>
                     </tr>
                 </tbody>
             </table>
 
 
             {% if !events_to_mint.is_empty() %}
-            <h3>Events to mint</h3>
+            <h3 id="events-to-mint">Events to mint</h3>
             <table>
                 <thead>
                 <tr>
@@ -181,7 +201,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                {% for event in events_to_mint %}
+                {% for event in events_to_mint -%}
                 <tr>
                     <td>{% call etherscan_tx_link(event.transaction_hash.to_string()) %}</td>
                     <td class="numeric">{{ event.log_index }}</td>
@@ -190,13 +210,13 @@
                     <td><code>{{ event.principal }}</code></td>
                     <td class="numeric">{% call etherscan_block_link(event.block_number) %}</td>
                 </tr>
-                {% endfor %}
+                {%- endfor %}
                 </tbody>
             </table>
             {% endif %}
 
             {% if !minted_events.is_empty() %}
-            <h3>Minted events</h3>
+            <h3 id="minted-events">Minted events</h3>
             <table>
                 <thead>
                     <tr>
@@ -224,7 +244,7 @@
             {% endif %}
 
             {% if !rejected_deposits.is_empty() %}
-            <h3>Rejected deposits</h3>
+            <h3 id="rejected-deposits">Rejected deposits</h3>
             <table>
                 <thead>
                     <tr>
@@ -246,7 +266,7 @@
             {% endif %}
 
             {% if !withdrawal_requests.is_empty() %}
-            <h3>Withdrawal Requests ckETH → ETH</h3>
+            <h3 id="withdrawal-requests">Withdrawal Requests ckETH → ETH</h3>
             <table>
                 <thead>
                 <tr>
@@ -268,7 +288,7 @@
             {% endif %}
 
             {% if !pending_transactions.is_empty() %}
-            <h3>Pending Transactions ckETH → ETH</h3>
+            <h3 id="pending-transactions">Pending Transactions ckETH → ETH</h3>
             <table>
                 <thead>
                 <tr>
@@ -292,7 +312,7 @@
             {% endif %}
 
             {% if !finalized_transactions.is_empty() %}
-            <h3>Finalized Transactions ckETH → ETH</h3>
+            <h3 id="finalized-transactions">Finalized Transactions ckETH → ETH</h3>
             <table>
                 <thead>
                 <tr>
@@ -317,6 +337,28 @@
                     <td>{{ tx.status }}</td>
                 </tr>
                 {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if !reimbursed_transactions.is_empty() %}
+            <h3 id="reimbursed-transactions">Reimbursed Transactions</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ledger Burn Index</th>
+                        <th>Ledger Mint Index</th>
+                        <th>Value (Wei)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reimbursed_transactions %}
+                    <tr>
+                        <td class="numeric">{{ r.withdrawal_id }}</td>
+                        <td class="numeric">{{ r.reimbursed_in_block }}</td>
+                        <td class="numeric">{{ r.reimbursed_amount }}</td>
+                    </tr>
+                    {% endfor %}
                 </tbody>
             </table>
             {% endif %}
@@ -354,5 +396,6 @@
             inputPrincipal.addEventListener("input", recomputePrincipal);
         });
     </script>
-    <body>
+    </body>
 </html>
+

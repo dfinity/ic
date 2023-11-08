@@ -1,7 +1,10 @@
 [package]
 name = "ic-sns-governance"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "sns-governance-canister"
@@ -18,14 +21,17 @@ path = "tests/governance.rs"
 name = "governance-interleaving-test"
 path = "tests/interleaving_tests.rs"
 
+[[test]]
+name = "proposal-test"
+path = "tests/proposal.rs"
+
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 async-trait = "0.1.42"
 base64 = { workspace = true }
 candid = { workspace = true }
-clap = { version = "3.1.6", features = ["derive", "cargo"] }
+clap = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
@@ -36,13 +42,14 @@ ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canister-profiler = { path = "../../rust_canisters/canister_profiler" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ic00-types = { path = "../../types/ic00_types" }
-ic-icrc1-client = { path = "../../rosetta-api/icrc1/client" }
+icrc-ledger-client = { path = "../../../packages/icrc-ledger-client" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
+ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-constants = { path = "../../nns/constants" }
@@ -51,22 +58,21 @@ lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
+num-traits = "0.2.14"
 prost = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3"
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
-serde = { version = "1.0", features = ["derive"] }
-strum = "0.18.0"
-strum_macros = "0.18.0"
+serde = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-types = { path = "../../types/types" }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }
 
 ic-base-types = { path = "../../types/base_types" }
 prost-build = { workspace = true }
@@ -84,10 +90,10 @@ ic-sns-test-utils = { path = "../test_utils" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 lazy_static = "1.4.0"
-pretty_assertions = "1.0"
+pretty_assertions = { workspace = true }
 proptest = "1.0"
 tempfile = "3.1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-test = "0.4.2"
 
 [features]

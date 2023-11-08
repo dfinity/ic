@@ -1,10 +1,10 @@
 use clap::Parser;
-use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
 use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
 use url::Url;
@@ -93,18 +93,21 @@ async fn main() -> std::io::Result<()> {
                 // The mainnet root key
                 let root_key_text = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
                 let decoded = base64::decode(root_key_text).unwrap();
-                let pubkey_bytes = bls12_381::api::public_key_from_der(&decoded).unwrap();
-                ThresholdSigPublicKey::from(pubkey_bytes)
+                parse_threshold_sig_key_from_der(&decoded).unwrap()
             }
         };
 
         let canister_id = match opt.ic_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
         let governance_canister_id = match opt.governance_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
         };
 
@@ -130,12 +133,16 @@ async fn main() -> std::io::Result<()> {
         };
 
         let canister_id = match opt.ic_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
         let governance_canister_id = match opt.governance_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
         };
 

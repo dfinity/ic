@@ -2,7 +2,7 @@
 Description=Manage SEV GuestOS virtual machine
 Requires=generate-guestos-config.service
 After=generate-guestos-config.service
-ConditionPathExists=/var/run/SEV
+ConditionPathExists=/opt/ic/share/SEV
 
 [Service]
 Type=simple

@@ -1,8 +1,10 @@
 [package]
 name = "ic-icrc1-test-utils"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
@@ -12,5 +14,5 @@ icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.15"
 proptest = "1.0"
 rand = "0.8"
-serde_bytes = "0.11"
+serde_bytes = { workspace = true }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }

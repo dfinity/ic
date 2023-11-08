@@ -25,12 +25,15 @@ use crate::{
             RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    util::assert_create_agent,
+    util::{assert_create_agent, block_on},
 };
 
 use crate::boundary_nodes::{
     constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
-    helpers::{create_canister, get_install_url},
+    helpers::{
+        create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
+        set_counters_on_counter_canisters,
+    },
 };
 use std::{net::SocketAddrV6, time::Duration};
 
@@ -217,6 +220,317 @@ pub fn http_canister_test(env: TestEnv) {
                 (client_builder, host, invalid_host)
             };
         let client = client_builder.build().unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .header("x-ic-test", "no-certificate")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "'/foo' not found" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        // "x-ic-test", "no-certificate"
+        // "x-ic-test", "streaming-callback"
+        // "x-icx-require-certification", "1"
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .put(format!("https://{host}/foo"))
+                .body("bar")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "'/foo' set to 'bar'" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "bar" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .header("x-ic-test", "streaming-callback")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "bar" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        // Check that `canisterId` parameters go unused
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{invalid_host}/?canisterId={canister_id}"))
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "Could not find a canister id to forward to." {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+    });
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes prefix HTTP canister test
+
+Goal:: Install an HTTP canister and query using (ignored prefix)--(canister id)
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+
+Success:: The canister installs successfully and HTTP calls against it
+return the expected responses
+
+Coverage:: Canisters can be queried using some ignored prefix
+
+end::catalog[] */
+
+pub fn prefix_canister_id_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut install_node = None;
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            install_node = Some((node.get_public_url(), node.effective_canister_id()));
+        }
+    }
+    let install_node = install_node.expect("No install node");
+
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    rt.block_on(async move {
+        info!(&logger, "Creating replica agent...");
+        let agent = assert_create_agent(install_node.0.as_str()).await;
+        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+
+        info!(&logger, "installing canister");
+        let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
+            .await
+            .expect("Could not create kv_store canister");
+
+        info!(&logger, "created kv_store canister={canister_id}");
+
+        // Wait for the canisters to finish installing
+        // TODO: maybe this should be status calls?
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        let client_builder = reqwest::ClientBuilder::new();
+        let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
+            (
+                client_builder,
+                format!("ignored-prefix--{canister_id}.raw.{playnet}"),
+            )
+        } else {
+            let host = format!("ignored-prefix--{canister_id}.raw.ic0.app");
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+            let client_builder = client_builder
+                .danger_accept_invalid_certs(true)
+                .resolve(&host, bn_addr);
+            (client_builder, host)
+        };
+        let client = client_builder.build().unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .header("x-ic-test", "no-certificate")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "'/foo' not found" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        // "x-ic-test", "no-certificate"
+        // "x-ic-test", "streaming-callback"
+        // "x-icx-require-certification", "1"
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .put(format!("https://{host}/foo"))
+                .body("bar")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "'/foo' set to 'bar'" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "bar" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .header("x-ic-test", "streaming-callback")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "bar" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+    });
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes HTTP canister test
+
+Goal:: Install and query an HTTP canister using the proxy
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+
+Success:: The canister installs successfully and HTTP calls against it
+return the expected responses
+
+Coverage:: HTTP Canisters behave as expected using the proxy
+
+end::catalog[] */
+
+pub fn proxy_http_canister_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut install_node = None;
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            install_node = Some((node.get_public_url(), node.effective_canister_id()));
+        }
+    }
+    let install_node = install_node.expect("No install node");
+
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    rt.block_on(async move {
+        info!(&logger, "Creating replica agent...");
+        let agent = assert_create_agent(install_node.0.as_str()).await;
+        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+
+        info!(&logger, "installing canister");
+        let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
+            .await
+            .expect("Could not create kv_store canister");
+
+        info!(&logger, "created kv_store canister={canister_id}");
+
+        // Wait for the canisters to finish installing
+        // TODO: maybe this should be status calls?
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        let client_builder = reqwest::ClientBuilder::new();
+        let (client_builder, host, invalid_host) =
+            if let Some(playnet) = boundary_node.get_playnet() {
+                (
+                    client_builder,
+                    format!("{canister_id}.raw.{playnet}"),
+                    format!("invalid-canister-id.raw.{playnet}"),
+                )
+            } else {
+                let host = format!("{canister_id}.raw.ic0.app");
+                let invalid_host = "invalid-canister-id.raw.ic0.app".to_string();
+                let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+                let client_builder = client_builder
+                    .danger_accept_invalid_certs(true)
+                    .resolve(&host, bn_addr)
+                    .resolve(&invalid_host, bn_addr);
+                (client_builder, host, invalid_host)
+            };
+        let proxy = format!("http://{host}:8888");
+        info!(&logger, "using proxy={proxy}");
+        let proxy = reqwest::Proxy::http(proxy).expect("Could not create proxy");
+        let client = client_builder.proxy(proxy).build().unwrap();
 
         retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
@@ -1944,4 +2258,72 @@ pub fn reboot_test(env: TestEnv) {
     boundary_node
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
+}
+
+/* tag::catalog[]
+Title:: Handle incoming canister calls by the boundary node.
+
+Goal:: Verify that ic-boundary service of the boundary node routes canister requests (query/call/read_state) on different subnets correctly.
+
+Runbook:
+. Setup:
+    . Subnets(>=2) with node/s(>=1) on each subnet.
+    . A single boundary node.
+. Install three counter canisters on each subnet.
+. Set unique counter values on each canister via update (`write`) calls. All calls are executed via boundary node agent.
+. Verify an OK execution status of each update call via read_state call.
+. Retrieve counter values from each canister via query (`read`) call.
+. Assert that retrieved values match the expected ones.
+
+end::catalog[] */
+
+pub fn canister_routing_test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let canisters_per_subnet = 3;
+    let subnets = topology.subnets().count() as u32;
+    assert!(subnets >= 2);
+    // These values will be set via update `write` call. Each counter value is chosen to be unique.
+    let canister_values: Vec<u32> = (0..canisters_per_subnet * subnets).collect();
+    info!(
+        log,
+        "Installing {canisters_per_subnet} canisters on each of the {subnets} subnets ...",
+    );
+    let canister_ids: Vec<Principal> = block_on(async {
+        install_canisters(
+            topology,
+            wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+            canisters_per_subnet,
+        )
+        .await
+    });
+    info!(
+        log,
+        "All {} canisters ({canisters_per_subnet} per subnet) were successfully installed",
+        canister_ids.len()
+    );
+    // As creating an agent requires a status call, the status endpoint is implicitly tested.
+    let bn_agent = {
+        let boundary_node = env
+            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+        boundary_node.build_default_agent()
+    };
+    info!(
+        log,
+        "Incrementing counters on canisters via BN agent update calls ..."
+    );
+    block_on(set_counters_on_counter_canisters(
+        bn_agent.clone(),
+        canister_ids.clone(),
+        canister_values.clone(),
+    ));
+    info!(
+        log,
+        "Asserting expected counters on canisters via BN agent query calls ... "
+    );
+    let counters = block_on(read_counters_on_counter_canisters(bn_agent, canister_ids));
+    assert_eq!(counters, canister_values);
 }

@@ -26,7 +26,7 @@ use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternalBytes,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -41,7 +41,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use ic_types::crypto::canister_threshold_sig::{
+    idkg::{BatchSignedIDkgDealing, IDkgDealingBytes},
+    ExtendedDerivationPath,
+};
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::mock;
@@ -135,7 +138,7 @@ mock! {
         fn idkg_verify_dealing_private(
             &self,
             algorithm_id: AlgorithmId,
-            dealing: &IDkgDealingInternal,
+            dealing: IDkgDealingBytes,
             dealer_index: NodeIndex,
             receiver_index: NodeIndex,
             receiver_key_id: KeyId,
@@ -144,21 +147,21 @@ mock! {
 
         fn idkg_load_transcript(
             &self,
-            dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+            dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
             context_data: &[u8],
             receiver_index: NodeIndex,
             key_id: &KeyId,
-            transcript: &IDkgTranscriptInternal,
+            transcript: IDkgTranscriptInternalBytes,
         ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
         fn idkg_load_transcript_with_openings(
             &self,
-            dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+            dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
             openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
             context_data: &[u8],
             receiver_index: NodeIndex,
             key_id: &KeyId,
-            transcript: &IDkgTranscriptInternal,
+            transcript: IDkgTranscriptInternalBytes,
         ) -> Result<(), IDkgLoadTranscriptError>;
 
         fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
@@ -185,11 +188,11 @@ mock! {
             derivation_path: &ExtendedDerivationPath,
             hashed_message: &[u8],
             nonce: &Randomness,
-            key: &IDkgTranscriptInternal,
-            kappa_unmasked: &IDkgTranscriptInternal,
-            lambda_masked: &IDkgTranscriptInternal,
-            kappa_times_lambda: &IDkgTranscriptInternal,
-            key_times_lambda: &IDkgTranscriptInternal,
+            key_raw: IDkgTranscriptInternalBytes,
+            kappa_unmasked_raw: IDkgTranscriptInternalBytes,
+            lambda_masked_raw: IDkgTranscriptInternalBytes,
+            kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
+            key_times_lambda_raw: IDkgTranscriptInternalBytes,
             algorithm_id: AlgorithmId,
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
     }

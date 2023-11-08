@@ -90,19 +90,21 @@ pub fn test(test_env: TestEnv) {
     ));
     info!(logger, "Upgrade started");
 
-    let sess = nns_node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
+    for nns_node in test_env.topology_snapshot().root_subnet().nodes() {
+        let session = nns_node
+            .block_on_ssh_session()
+            .expect("Failed to establish SSH session");
 
-    info!(logger, "Wait for 'hash mismatch' in the replica's log.");
-    retry(test_env.logger(), secs(600), secs(20), || {
-        if have_sha_errors(&sess) {
-            Ok(())
-        } else {
-            bail!("Waiting for hash mismatch!")
-        }
-    })
-    .expect("No hash mismatch in the logs");
+        info!(logger, "Wait for 'hash mismatch' in the replica's log.");
+        retry(test_env.logger(), secs(600), secs(20), || {
+            if have_sha_errors(&session) {
+                Ok(())
+            } else {
+                bail!("Waiting for hash mismatch!")
+            }
+        })
+        .expect("No hash mismatch in the logs");
+    }
 
     info!(logger, "Check that system does not make progress");
     cert_state_makes_no_progress_with_retries(
@@ -126,11 +128,9 @@ pub fn test(test_env: TestEnv) {
         r#"set -e
         sudo chmod 777 /var/lib/ic/data/images
         cd /var/lib/ic/data/images/
-        sudo mv image.bin old-image.bin
         sudo curl {} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500 --fail
-        sudo chmod --reference=old-image.bin image.bin
-        sudo chown --reference=old-image.bin image.bin
-        sudo rm old-image.bin
+        sudo chmod --reference=. image.bin
+        sudo chown --reference=. image.bin
         "#,
         test_env.get_ic_os_update_img_test_url().unwrap(),
     );
@@ -195,7 +195,7 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "Could store and read message!");
 }
 
-fn have_sha_errors(sess: &Session) -> bool {
+fn have_sha_errors(session: &Session) -> bool {
     let cmd = "journalctl | grep -c 'FileHashMismatchError'".to_string();
-    execute_bash_command(sess, cmd).map_or(false, |res| res.trim().parse::<i32>().unwrap() > 0)
+    execute_bash_command(session, cmd).map_or(false, |res| res.trim().parse::<i32>().unwrap() > 0)
 }

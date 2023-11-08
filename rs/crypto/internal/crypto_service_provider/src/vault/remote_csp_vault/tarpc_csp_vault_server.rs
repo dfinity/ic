@@ -18,7 +18,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternalBytes,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -36,19 +36,24 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use ic_types::crypto::canister_threshold_sig::{
+    idkg::{BatchSignedIDkgDealing, IDkgDealingBytes},
+    ExtendedDerivationPath,
+};
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
+use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
 use tarpc::server::BaseChannel;
 #[allow(unused_imports)]
 use tarpc::server::Serve;
-use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{context, serde_transport, server::Channel};
 use threadpool::ThreadPool;
 use tokio::net::UnixListener;
+
+use super::codec::{Bincode, CspVaultObserver, ObservableCodec};
 
 /// Crypto service provider (CSP) vault server based on the tarpc RPC framework.
 pub struct TarpcCspVaultServerImpl<C: CspVault> {
@@ -56,6 +61,7 @@ pub struct TarpcCspVaultServerImpl<C: CspVault> {
     listener: UnixListener,
     thread_pool: ThreadPool,
     max_frame_length: usize,
+    metrics: Arc<CryptoMetrics>,
     #[allow(unused)]
     logger: ReplicaLogger,
 }
@@ -111,7 +117,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        msg: Vec<u8>,
+        msg: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let vault = self.local_csp_vault;
@@ -133,7 +139,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let vault = self.local_csp_vault;
@@ -155,7 +161,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let vault = self.local_csp_vault;
@@ -313,7 +319,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn tls_sign(
         self,
         _: context::Context,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspTlsSignError> {
         let vault = self.local_csp_vault;
@@ -326,7 +332,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<MEGaPublicKey>,
@@ -350,17 +356,17 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        dealing: IDkgDealingInternal,
+        dealing: IDkgDealingBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         let vault = self.local_csp_vault;
         let job = move || {
             vault.idkg_verify_dealing_private(
                 algorithm_id,
-                &dealing,
+                dealing,
                 dealer_index,
                 receiver_index,
                 receiver_key_id,
@@ -373,11 +379,11 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn idkg_load_transcript(
         self,
         _: context::Context,
-        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
-        context_data: Vec<u8>,
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,
-        transcript: IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let vault = self.local_csp_vault;
         let job = move || {
@@ -386,7 +392,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &context_data,
                 receiver_index,
                 &key_id,
-                &transcript,
+                transcript,
             )
         };
         execute_on_thread_pool(self.thread_pool_handle, job).await
@@ -395,12 +401,12 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn idkg_load_transcript_with_openings(
         self,
         _: context::Context,
-        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,
-        transcript: IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         let vault = self.local_csp_vault;
         let job = move || {
@@ -410,7 +416,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &context_data,
                 receiver_index,
                 &key_id,
-                &transcript,
+                transcript,
             )
         };
         execute_on_thread_pool(self.thread_pool_handle, job).await
@@ -441,7 +447,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         dealing: IDkgDealingInternal,
         dealer_index: NodeIndex,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         opener_index: NodeIndex,
         opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
@@ -463,13 +469,13 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         derivation_path: ExtendedDerivationPath,
-        hashed_message: Vec<u8>,
+        hashed_message: ByteBuf,
         nonce: Randomness,
-        key: IDkgTranscriptInternal,
-        kappa_unmasked: IDkgTranscriptInternal,
-        lambda_masked: IDkgTranscriptInternal,
-        kappa_times_lambda: IDkgTranscriptInternal,
-        key_times_lambda: IDkgTranscriptInternal,
+        key_raw: IDkgTranscriptInternalBytes,
+        kappa_unmasked_raw: IDkgTranscriptInternalBytes,
+        lambda_masked_raw: IDkgTranscriptInternalBytes,
+        kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
+        key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
         let vault = self.local_csp_vault;
@@ -478,11 +484,11 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &derivation_path,
                 &hashed_message,
                 &nonce,
-                &key,
-                &kappa_unmasked,
-                &lambda_masked,
-                &kappa_times_lambda,
-                &key_times_lambda,
+                key_raw,
+                kappa_unmasked_raw,
+                lambda_masked_raw,
+                kappa_times_lambda_raw,
+                key_times_lambda_raw,
                 algorithm_id,
             )
         };
@@ -569,6 +575,7 @@ impl<C: CspVault> TarpcCspVaultServerImplBuilder<C> {
             listener,
             thread_pool: self.threadpool_builder.clone().build(),
             max_frame_length: self.max_frame_length,
+            metrics: Arc::clone(&self.metrics),
             logger: new_logger!(&self.logger),
         }
     }
@@ -607,9 +614,13 @@ impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
             });
             let local_csp_vault = Arc::clone(&self.local_csp_vault);
             let thread_pool_handle = self.thread_pool.clone(); // creates a pool handle similar to Arc
+            let codec = ObservableCodec::new(
+                Bincode::default(),
+                CspVaultObserver::new(new_logger!(&self.logger), Arc::clone(&self.metrics)),
+            );
             tokio::spawn(async move {
                 let framed = codec_builder.new_framed(conn);
-                let transport = serde_transport::new(framed, Bincode::default());
+                let transport = serde_transport::new(framed, codec);
                 let worker = TarpcCspVaultServerWorker {
                     local_csp_vault,
                     thread_pool_handle,

@@ -16,8 +16,8 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     execute_canister, init_query_stats, CompilationCostHandling, ExecuteMessageResult,
-    ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
+    ExecutionEnvironment, Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl,
+    InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
@@ -26,9 +26,10 @@ use ic_ic00_types::{
     UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
-    RegistryExecutionSettings, SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
+    SubnetAvailableMemory,
 };
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -47,13 +48,14 @@ use ic_replicated_state::{
 use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
 use ic_types::{
+    batch::QueryStats,
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
         RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
-    CanisterId, Cycles, Height, NumInstructions, NumPages, Time, UserId,
+    CanisterId, Cycles, Height, NumInstructions, NumPages, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -311,9 +313,11 @@ impl ExecutionTest {
             .canister_state(canister_id)
             .scheduler_state
             .compute_allocation;
+        let message_memory_usage = self.canister_state(canister_id).message_memory_usage();
         self.cycles_account_manager.idle_cycles_burned_rate(
             memory_allocation,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             self.subnet_size(),
         )
@@ -322,6 +326,7 @@ impl ExecutionTest {
     pub fn freezing_threshold(&self, canister_id: CanisterId) -> Cycles {
         let canister = self.canister_state(canister_id);
         let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
         let memory_allocation = canister.system_state.memory_allocation;
         let compute_allocation = canister.scheduler_state.compute_allocation;
         let freeze_threshold = canister.system_state.freeze_threshold;
@@ -329,6 +334,7 @@ impl ExecutionTest {
             freeze_threshold,
             memory_allocation,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             self.subnet_size(),
             canister.system_state.reserved_balance(),
@@ -931,7 +937,6 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1033,7 +1038,6 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1130,7 +1134,6 @@ impl ExecutionTest {
         let maybe_canister_id = get_canister_id_if_install_code(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1181,7 +1184,6 @@ impl ExecutionTest {
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1256,7 +1258,6 @@ impl ExecutionTest {
                 state.put_canister_states(canisters);
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
-                    execution_complexity: ExecutionComplexity::MAX,
                     subnet_available_memory: self.subnet_available_memory,
                     compute_allocation_used,
                 };
@@ -1280,7 +1281,6 @@ impl ExecutionTest {
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
-                    execution_complexity: ExecutionComplexity::MAX,
                     subnet_available_memory: self.subnet_available_memory,
                     compute_allocation_used,
                 };
@@ -1429,6 +1429,7 @@ impl ExecutionTest {
             &ProvisionalWhitelist::new_empty(),
             ingress.content(),
             ExecutionMode::NonReplicated,
+            &IngressFilterMetrics::new(&MetricsRegistry::new()),
         )
     }
 
@@ -1446,7 +1447,17 @@ impl ExecutionTest {
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        self.query_handler.query(query, state, data_certificate)
+        // We always pass 0 as the height to the query handler, because we don't run consensus
+        // in these tests and therefore there isn't any height.
+        //
+        // Currently, this height is only used for query stats collection and it doesn't matter which one we pass in here.
+        // Even if consensus was running, it could be that all queries are actually runnning at height 0. The state passed in to
+        // the query handler shouldn't have the height encoded, so there shouldn't be a missmatch between the two.
+        self.query_handler.query(
+            query,
+            Labeled::new(Height::from(0), state),
+            data_certificate,
+        )
     }
 
     /// Returns a reference to the query handler of this test.
@@ -1488,7 +1499,7 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.wasm_memory.page_map = PageMap::open(&path, Height::new(0), factory).unwrap();
+            es.wasm_memory.page_map = PageMap::open(&path, &[], Height::new(0), factory).unwrap();
             *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
 
@@ -1507,11 +1518,19 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.stable_memory.page_map = PageMap::open(&path, Height::new(0), factory).unwrap();
+            es.stable_memory.page_map = PageMap::open(&path, &[], Height::new(0), factory).unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
         }
         self.checkpoint_files.extend(new_checkpoint_files);
+    }
+
+    pub fn query_stats_for_testing(&self, canister_id: &CanisterId) -> Option<QueryStats> {
+        self.query_handler.query_stats_for_testing(canister_id)
+    }
+
+    pub fn query_stats_set_epoch_for_testing(&mut self, epoch: QueryStatsEpoch) {
+        self.query_handler.query_stats_set_epoch_for_testing(epoch);
     }
 }
 
@@ -1538,6 +1557,7 @@ pub struct ExecutionTestBuilder {
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     time: Time,
     resource_saturation_scaling: usize,
+    heap_delta_rate_limit: NumBytes,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1577,6 +1597,7 @@ impl Default for ExecutionTestBuilder {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: mock_time(),
             resource_saturation_scaling: 1,
+            heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
         }
     }
 }
@@ -1773,6 +1794,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_query_stats(mut self) -> Self {
+        self.execution_config.query_stats_aggregation = FlagStatus::Enabled;
+        self
+    }
+
     pub fn with_allocatable_compute_capacity_in_percent(
         mut self,
         allocatable_compute_capacity_in_percent: usize,
@@ -1848,6 +1874,14 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_non_native_stable(mut self) -> Self {
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .wasm_native_stable_memory = FlagStatus::Disabled;
+        self
+    }
+
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self
@@ -1855,6 +1889,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_resource_saturation_scaling(mut self, scaling: usize) -> Self {
         self.resource_saturation_scaling = scaling;
+        self
+    }
+
+    pub fn with_heap_delta_rate_limit(mut self, heap_delta_rate_limit: NumBytes) -> Self {
+        self.heap_delta_rate_limit = heap_delta_rate_limit;
         self
     }
 
@@ -1992,6 +2031,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             self.resource_saturation_scaling,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            self.heap_delta_rate_limit,
         );
         let (query_stats_collector, _) = init_query_stats(self.log.clone());
 

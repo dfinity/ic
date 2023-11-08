@@ -118,10 +118,22 @@ function assemble_config_media() {
 function generate_guestos_config() {
     RESOURCES_MEMORY=$(/opt/ic/bin/fetch-property.sh --key=.resources.memory --metric=hostos_resources_memory --config=${DEPLOYMENT})
     MAC_ADDRESS=$(/opt/ic/bin/generate-deterministic-mac.sh --index=1)
+    # NOTE: `fetch-property` will error if the target is not found. Here we
+    # only want to act when the field is set.
+    CPU_MODE=$(jq -r ".resources.cpu" ${DEPLOYMENT})
+
+    CPU_DOMAIN="kvm"
+    CPU_SPEC="/opt/ic/share/kvm-cpu.xml"
+    if [ "${CPU_MODE}" == "qemu" ]; then
+        CPU_DOMAIN="qemu"
+        CPU_SPEC="/opt/ic/share/qemu-cpu.xml"
+    fi
 
     if [ ! -f "${OUTPUT}" ]; then
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
+            -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
+            -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
             "${INPUT}" >"${OUTPUT}"
         write_log "Generating GuestOS configuration file: ${OUTPUT}"
         write_metric "hostos_generate_guestos_config" \
@@ -141,7 +153,7 @@ TMP_MOUNT_DIR="/tmp/sev-guest-mount"
 BOOT_COMPONENTS_DIR="/tmp/sev-guest-boot-components"
 LOOP_DEVICE="/dev/loop0"
 GUESTOS_LOCATION="/dev/mapper/hostlvm-guestos"
-SEV_SNP_FILE="/var/run/SEV"
+SEV_SNP_FILE="/opt/ic/share/SEV"
 
 # Set up loop device and mount. Get the boot components
 mount_guestos_image_and_copy_files() {

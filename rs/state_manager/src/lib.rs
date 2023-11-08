@@ -30,7 +30,7 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateReader, Labeled,
+    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled,
     PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
     StateManagerResult, StateReader, TransientStateHashError::*, CERT_CERTIFIED, CERT_UNCERTIFIED,
 };
@@ -746,6 +746,17 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
+    lsmt_storage: FlagStatus,
+}
+
+#[cfg(debug_assertions)]
+impl Drop for StateManagerImpl {
+    fn drop(&mut self) {
+        // Make sure the tip thread didn't panic. Otherwise we may be blind to it in tests.
+        // If the tip thread panics after the latest communication with tip_channel the test returns
+        // success.
+        self.flush_tip_channel();
+    }
 }
 
 fn load_checkpoint(
@@ -1015,6 +1026,39 @@ impl PageMapType {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
+        }
+    }
+
+    /// The path of an overlay file written during round `height`
+    fn overlay<Access>(
+        &self,
+        layout: &CheckpointLayout<Access>,
+        height: Height,
+    ) -> Result<PathBuf, LayoutError>
+    where
+        Access: AccessPolicy,
+    {
+        match &self {
+            PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0_overlay(height)),
+            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_overlay(height)),
+            PageMapType::WasmChunkStore(id) => {
+                Ok(layout.canister(id)?.wasm_chunk_store_overlay(height))
+            }
+        }
+    }
+
+    /// List all existing overlay files of a this PageMapType inside `layout`
+    fn overlays<Access>(
+        &self,
+        layout: &CheckpointLayout<Access>,
+    ) -> Result<Vec<PathBuf>, LayoutError>
+    where
+        Access: AccessPolicy,
+    {
+        match &self {
+            PageMapType::WasmMemory(id) => layout.canister(id)?.vmemory_0_overlays(),
+            PageMapType::StableMemory(id) => layout.canister(id)?.stable_memory_overlays(),
+            PageMapType::WasmChunkStore(id) => layout.canister(id)?.wasm_chunk_store_overlays(),
         }
     }
 
@@ -1355,6 +1399,7 @@ impl StateManagerImpl {
             log.clone(),
             state_layout.capture_tip_handler(),
             state_layout.clone(),
+            config.lsmt_storage,
             metrics.clone(),
             malicious_flags.clone(),
         );
@@ -1578,6 +1623,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
+            lsmt_storage: config.lsmt_storage,
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -2432,14 +2478,14 @@ impl StateManagerImpl {
         self.tip_channel.send(TipRequest::Wait { sender }).unwrap();
     }
 
-    fn certified_state_reader(&self) -> Option<CertifiedStateReaderImpl> {
+    fn certified_state_reader(&self) -> Option<CertifiedStateSnapshotImpl> {
         let read_certified_state_duration_histogram = self
             .metrics
             .api_call_duration
             .with_label_values(&["read_certified_state"]);
 
         let (state, certification, hash_tree) = self.latest_certified_state()?;
-        Some(CertifiedStateReaderImpl {
+        Some(CertifiedStateSnapshotImpl {
             read_certified_state_duration_histogram,
             state,
             certification,
@@ -2998,12 +3044,22 @@ impl StateManager for StateManagerImpl {
                 checkpointed_state
             }
             CertificationScope::Metadata => {
-                if self.tip_channel.is_empty() {
+                if self.lsmt_storage == FlagStatus::Enabled {
+                    // TODO (IC-1306): Implement LSMT strategy for when to flush page maps
+                    unimplemented!();
+                } else if self.tip_channel.is_empty() {
                     self.flush_page_maps(&mut state, height);
                 } else {
                     self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
                 }
-                state.clone()
+                {
+                    let _timer = self
+                        .metrics
+                        .checkpoint_op_duration
+                        .with_label_values(&["copy_state"])
+                        .start_timer();
+                    state.clone()
+                }
             }
         };
 
@@ -3114,6 +3170,13 @@ impl StateManager for StateManagerImpl {
                 "Failed to mark checkpoint @{} diverged: {}", height, err
             );
         }
+        // At this point we broke quite few assumptions by removing files outside the
+        // Tip thread, so Tip thread may panic if it tries to do some work with the checkpoint
+        // files.
+        // But the rename is atomic, and all the work past this comment is optional. If we don't
+        // remove further diverged checkpoint, we crash again at the next startup but each restart
+        // we do progress by removing the diverged checkpoints.
+        // The metadata part is for performance.
         for h in heights {
             if h > height {
                 info!(self.log, "Removing diverged checkpoint @{}", h);
@@ -3134,14 +3197,14 @@ impl StateManager for StateManagerImpl {
     }
 }
 
-struct CertifiedStateReaderImpl {
+struct CertifiedStateSnapshotImpl {
     certification: Certification,
     state: Arc<ReplicatedState>,
     hash_tree: Arc<HashTree>,
     read_certified_state_duration_histogram: Histogram,
 }
 
-impl CertifiedStateReader for CertifiedStateReaderImpl {
+impl CertifiedStateSnapshot for CertifiedStateSnapshotImpl {
     type State = ReplicatedState;
 
     fn get_state(&self) -> &Self::State {
@@ -3251,9 +3314,9 @@ impl StateReader for StateManagerImpl {
         Some((reader.state, mixed_hash_tree, certification))
     }
 
-    fn get_certified_state_reader(
+    fn get_certified_state_snapshot(
         &self,
-    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>> {
+    ) -> Option<Box<dyn CertifiedStateSnapshot<State = Self::State> + 'static>> {
         self.certified_state_reader()
             .map(|reader| Box::new(reader) as Box<_>)
     }

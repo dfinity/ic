@@ -1,7 +1,10 @@
 [package]
 name = "ic-sns-cli"
-version = "1.0.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "sns"
@@ -14,7 +17,7 @@ path = "src/lib.rs"
 anyhow = "1.0"
 base64 = { workspace = true }
 candid = { workspace = true }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
@@ -31,11 +34,11 @@ ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-pretty_assertions = "0.6.1"
+pretty_assertions = { workspace = true }
 regex = "1.5.6"
-serde_json = { version = "1.0.79", features = ["std"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.8.24"
+serde_json = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
 json-patch = "0.2.6"
 tempfile = "3.1.0"
 url = "2.2.0"

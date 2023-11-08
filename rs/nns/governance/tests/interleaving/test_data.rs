@@ -79,6 +79,8 @@ lazy_static! {
                 min_participants: 5,
                 min_icp_e8s: 100 * E8,
                 max_icp_e8s: 1_000 * E8,
+                min_direct_participation_icp_e8s: Some(100 * E8),
+                max_direct_participation_icp_e8s: Some(1_000 * E8),
                 min_participant_icp_e8s: E8,
                 max_participant_icp_e8s: 10 * E8,
                 swap_due_timestamp_seconds: ONE_DAY_SECONDS,

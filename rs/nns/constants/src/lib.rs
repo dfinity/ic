@@ -1,6 +1,4 @@
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use lazy_static::lazy_static;
-use std::str::FromStr;
+use ic_base_types::CanisterId;
 
 // WARNING: The NNS canisters MUST be installed in the NNS subnet,
 // in the following order, otherwise they won't be able to find
@@ -45,13 +43,6 @@ pub const NNS_CANISTER_WASMS: [&str; 13] = [
     "ic-ckbtc-minter",
 ];
 
-lazy_static! {
-    pub static ref NNS_SUBNET_ID: SubnetId = SubnetId::new(
-        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-            .unwrap()
-    );
-}
-
 pub const NUM_NNS_CANISTERS: usize = ALL_NNS_CANISTER_IDS.len();
 
 pub const REGISTRY_CANISTER_ID: CanisterId =
@@ -93,18 +84,18 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 10] = [
 // (4GiB)
 const NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
+// We preallocate 4GB stable memory for NNS governance so that pre_upgrade never fails trying to
+// grow stable memory, and we might also have some other data occupying stable memory.
+const NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 10 * 1024 * 1024 * 1024;
+
 // The default memory allocation to set for the remaining NNS canister (1GiB)
 const NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// Returns the memory allocation of the given nns canister.
 pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
-    if [
-        LEDGER_CANISTER_ID,
-        GOVERNANCE_CANISTER_ID,
-        REGISTRY_CANISTER_ID,
-    ]
-    .contains(&canister_id)
-    {
+    if canister_id == GOVERNANCE_CANISTER_ID {
+        NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES
+    } else if [LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID].contains(&canister_id) {
         NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES
     } else {
         NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES
@@ -117,4 +108,4 @@ pub const IS_MATCHED_FUNDING_ENABLED: bool = cfg! { any(test, feature = "test") 
 
 /// Returns whether the UpdateAllowedPrincipals NnsFunction is enabled. Currently, the
 /// proposals should be disabled in non-test builds.
-pub const IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED: bool = cfg! { not(any(test, feature = "test")) };
+pub const IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED: bool = cfg! { any(test, feature = "test") };

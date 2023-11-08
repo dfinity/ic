@@ -63,6 +63,8 @@ impl Ord for IDkgTranscriptInternal {
     }
 }
 
+pub type IDkgTranscriptInternalBytes = serde_bytes::ByteBuf;
+
 /// Some type of commitment, specifying its combination strategy
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum CombinedCommitment {
@@ -75,6 +77,13 @@ impl CombinedCommitment {
         match self {
             Self::BySummation(c) => c,
             Self::ByInterpolation(c) => c,
+        }
+    }
+
+    pub(crate) fn curve_type(&self) -> EccCurveType {
+        match self {
+            Self::BySummation(c) => c.curve_type(),
+            Self::ByInterpolation(c) => c.curve_type(),
         }
     }
 
@@ -160,7 +169,7 @@ fn combine_commitments_via_interpolation(
             values.push(commitment.points()[i].clone());
         }
         for pt in values.iter_mut() {
-            if !pt.is_precopmuted() {
+            if !pt.is_precomputed() {
                 pt.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
             }
         }
@@ -406,7 +415,6 @@ impl CommitmentOpening {
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
     ) -> Result<Self, IDkgComputeSecretSharesInternalError> {
-        let curve = secret_key.curve_type();
         let mut openings = Vec::with_capacity(verified_dealings.len());
 
         for (dealer_index, dealing) in verified_dealings {
@@ -451,7 +459,7 @@ impl CommitmentOpening {
             openings.push((*dealer_index, opening));
         }
 
-        Self::combine_openings(&openings, transcript_commitment, receiver_index, curve).map_err(
+        Self::combine_openings(&openings, transcript_commitment, receiver_index).map_err(
             |e| match e {
                 ThresholdEcdsaError::InsufficientOpenings(have, req) => {
                     IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
@@ -484,7 +492,6 @@ impl CommitmentOpening {
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
     ) -> Result<Self, IDkgComputeSecretSharesInternalError> {
-        let curve = secret_key.curve_type();
         let mut openings = Vec::with_capacity(verified_dealings.len());
 
         for (dealer_index, dealing) in verified_dealings {
@@ -514,17 +521,18 @@ impl CommitmentOpening {
             openings.push((*dealer_index, opening));
         }
 
-        Self::combine_openings(&openings, transcript_commitment, receiver_index, curve).map_err(
-            |e| IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!("{:?}", e)),
-        )
+        Self::combine_openings(&openings, transcript_commitment, receiver_index).map_err(|e| {
+            IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!("{:?}", e))
+        })
     }
 
     fn combine_openings(
         openings: &[(NodeIndex, CommitmentOpening)],
         transcript_commitment: &CombinedCommitment,
         receiver_index: NodeIndex,
-        curve: EccCurveType,
     ) -> ThresholdEcdsaResult<Self> {
+        let curve = transcript_commitment.curve_type();
+
         // Recombine the openings according to the type of combined polynomial
         match transcript_commitment {
             CombinedCommitment::BySummation(commitment) => {

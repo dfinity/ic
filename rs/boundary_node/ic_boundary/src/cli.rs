@@ -52,6 +52,14 @@ pub struct RegistryConfig {
     /// The registry local store path to be populated
     #[clap(long)]
     pub local_store_path: PathBuf,
+
+    /// Whether to disable internal registry replicator
+    #[clap(long, default_value = "false")]
+    pub disable_registry_replicator: bool,
+
+    /// Minimum snapshot version age to be useful for initial publishing, in seconds
+    #[clap(long, default_value = "15")]
+    pub min_version_age: u64,
 }
 
 #[derive(Args)]
@@ -105,11 +113,11 @@ pub struct HealthChecksConfig {
 #[derive(Args)]
 pub struct FirewallConfig {
     /// The path to the nftables replica ruleset file to update
-    #[clap(long, default_value = "system_replicas.ruleset")]
-    pub nftables_system_replicas_path: PathBuf,
+    #[clap(long)]
+    pub nftables_system_replicas_path: Option<PathBuf>,
 
     /// The name of the nftables variable to export
-    #[clap(long, default_value = "system_replica_ips")]
+    #[clap(long, default_value = "ipv6_system_replica_ips")]
     pub nftables_system_replicas_var: String,
 }
 
@@ -154,7 +162,7 @@ pub struct CacheConfig {
     pub cache_size_bytes: Option<u64>,
     /// Maximum size of a single cached response item in bytes
     #[clap(long, default_value = "65536")]
-    pub cache_max_item_size_bytes: usize,
+    pub cache_max_item_size_bytes: u64,
     /// Time-to-live for cache entries in seconds
     #[clap(long, default_value = "1")]
     pub cache_ttl_seconds: u64,

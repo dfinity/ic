@@ -6,10 +6,7 @@ use ic_crypto_tree_hash::{
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
 use ic_interfaces::artifact_pool::ChangeResult;
-use ic_interfaces::{
-    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
-    certification::Verifier,
-};
+use ic_interfaces::{artifact_pool::UnvalidatedArtifactEvent, certification::Verifier};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
@@ -38,8 +35,7 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::batch::{
-    CanisterQueryStats, EpochStatsMessages, QueryStatsMessage, ReceivedEpochStats,
-    TotalCanisterQueryStats,
+    CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
@@ -311,11 +307,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    })],
+                    vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
                 );
 
                 assert_eq!(
@@ -529,7 +521,7 @@ fn query_stats_are_persisted() {
         let (curr_height, mut state) = state_manager.take_tip();
 
         let epoch = epoch_from_height(curr_height);
-        let test_query_stats: CanisterQueryStats = CanisterQueryStats {
+        let test_query_stats: QueryStats = QueryStats {
             num_calls: 1337,
             num_instructions: 100000,
             ingress_payload_size: 100001,
@@ -542,7 +534,7 @@ fn query_stats_are_persisted() {
         let mut stats = BTreeMap::new();
         stats.insert(canister_id, inner);
 
-        state.epoch_query_stats = ReceivedEpochStats {
+        state.epoch_query_stats = RawQueryStats {
             epoch: Some(epoch),
             stats,
         };
@@ -681,6 +673,8 @@ fn missing_wasm_chunk_store_is_handled() {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        // Make sure Tip Thread isn't doing anything while we hack into the Checkpoint files.
+        state_manager.flush_tip_channel();
 
         // Since the canister has no execution state, there should be no stable memory
         // file.
@@ -1986,11 +1980,7 @@ fn can_do_simple_state_sync_transfer() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let recovered_state = dst_state_manager
@@ -2191,11 +2181,7 @@ fn can_state_sync_from_cache() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    })],
+                    vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2228,11 +2214,7 @@ fn can_state_sync_from_cache() {
 
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    })],
+                    vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2335,11 +2317,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    })],
+                    vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2453,11 +2431,7 @@ fn state_sync_can_reject_invalid_chunks() {
             let dst_msg = pipe_state_sync(msg.clone(), chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let recovered_state = dst_state_manager
@@ -2512,11 +2486,7 @@ fn can_state_sync_into_existing_checkpoint() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             assert_no_remaining_chunks(dst_metrics);
@@ -2592,11 +2562,7 @@ fn can_group_small_files_in_state_sync() {
 
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let recovered_state = dst_state_manager
@@ -2650,11 +2616,7 @@ fn can_commit_after_prev_state_is_gone() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             dst_state_manager.remove_states_below(height(2));
@@ -2713,11 +2675,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
@@ -2766,11 +2724,7 @@ fn can_state_sync_based_on_old_checkpoint() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let expected_state = src_state_manager.get_latest_state();
@@ -2960,11 +2914,7 @@ fn can_recover_from_corruption_on_state_sync() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let expected_state = src_state_manager.get_latest_state();
@@ -3013,11 +2963,7 @@ fn can_commit_below_state_sync() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -3072,11 +3018,7 @@ fn can_state_sync_below_commit() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
             assert_eq!(
                 dst_state_manager.checkpoint_heights(),
@@ -3847,6 +3789,10 @@ fn report_diverged_checkpoint() {
             state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
             wait_for_checkpoint(&state_manager, height(3));
 
+            // If the Tip thread is active while we report diverged checkpoint, it may crash
+            // which is OK in production but confuses debug assertions.
+            state_manager.flush_tip_channel();
+
             // This could only happen if calculating the manifest and certification of height 2
             // completed after reaching height 3
             state_manager.report_diverged_checkpoint(height(2))
@@ -3919,6 +3865,9 @@ fn diverged_checkpoint_is_complete() {
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
+            // If the Tip thread is active while we report diverged checkpoint, it may crash
+            // which is OK in production but confuses debug assertions.
+            state_manager.flush_tip_channel();
 
             state_manager.report_diverged_checkpoint(height(2));
         })
@@ -4007,6 +3956,9 @@ fn remove_too_many_diverged_checkpoints() {
 
         let (_, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(divergence), CertificationScope::Full);
+        // If the Tip thread is active while we report diverged checkpoint, it may crash
+        // which is OK in production but confuses debug assertions.
+        state_manager.flush_tip_channel();
         state_manager.report_diverged_checkpoint(height(divergence));
     }
     state_manager_crash_test(
@@ -4035,6 +3987,9 @@ fn remove_old_diverged_checkpoint() {
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
                 wait_for_checkpoint(&state_manager, height(1));
+                // If the Tip thread is active while we report diverged checkpoint, it may crash
+                // which is OK in production but confuses debug assertions.
+                state_manager.flush_tip_channel();
 
                 state_manager.report_diverged_checkpoint(height(1))
             }),
@@ -4119,6 +4074,10 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
                 wait_for_checkpoint(&state_manager, height(2));
+
+                // If the Tip thread is active while we report diverged checkpoint, it may crash
+                // which is OK in production but confuses debug assertions.
+                state_manager.flush_tip_channel();
 
                 state_manager.report_diverged_checkpoint(height(2))
             }),
@@ -4777,8 +4736,8 @@ proptest! {
                     };
 
                     let req = RequestBuilder::default()
-                        .sender(CanisterId::new(PrincipalId::try_from(&[2][..]).unwrap()).unwrap())
-                        .receiver(CanisterId::new(PrincipalId::try_from(&[3][..]).unwrap()).unwrap())
+                        .sender(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[2][..]).unwrap()))
+                        .receiver(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[3][..]).unwrap()))
                         .method_name("test".to_string())
                         .sender_reply_callback(CallbackId::from(999))
                         .build();
@@ -5016,7 +4975,7 @@ fn query_stats_are_collected() {
     ] {
         env.set_query_stats(
             canister,
-            TotalCanisterQueryStats {
+            TotalQueryStats {
                 num_calls: INITIAL_VALUES,
                 num_instructions: INITIAL_VALUES,
                 ingress_payload_size: INITIAL_VALUES,
@@ -5045,9 +5004,9 @@ fn query_stats_are_collected() {
 
         // Append query stats the first time each node is a block maker.
         if i < NUM_NODES {
-            stats.push(QueryStatsMessage {
+            stats.push(CanisterQueryStats {
                 canister_id: test_canister_id,
-                stats: CanisterQueryStats {
+                stats: QueryStats {
                     num_calls: if i < NUM_MALICIOUS {
                         1337 // "Malicious" nodes send too large values, but that should not affect what is being charged
                     } else {
@@ -5062,9 +5021,9 @@ fn query_stats_are_collected() {
             // This canister does not exist in the replicated state.
             // We simply want to make sure nothing crashes in the case where we have stats for a canister
             // that does not exist (e.g. it got uninstalled).
-            stats.push(QueryStatsMessage {
+            stats.push(CanisterQueryStats {
                 canister_id: uninstalled_canister,
-                stats: CanisterQueryStats {
+                stats: QueryStats {
                     num_calls: 1,
                     num_instructions: 2,
                     ingress_payload_size: 3,
@@ -5074,9 +5033,9 @@ fn query_stats_are_collected() {
 
             if i < NUM_MALICIOUS {
                 // Simulate malicious nodes sending stats for a canister that does not execute any queries
-                stats.push(QueryStatsMessage {
+                stats.push(CanisterQueryStats {
                     canister_id: malicious_overreporting,
-                    stats: CanisterQueryStats {
+                    stats: QueryStats {
                         num_calls: 1,
                         num_instructions: 2,
                         ingress_payload_size: 3,
@@ -5085,9 +5044,9 @@ fn query_stats_are_collected() {
                 });
             } else {
                 // Simulate malicious nodes not sending (under-reporting) stats for a canister that does execute queries
-                stats.push(QueryStatsMessage {
+                stats.push(CanisterQueryStats {
                     canister_id: malicious_underreporting,
-                    stats: CanisterQueryStats {
+                    stats: QueryStats {
                         num_calls: 1,
                         num_instructions: 2,
                         ingress_payload_size: 3,
@@ -5097,7 +5056,7 @@ fn query_stats_are_collected() {
             }
         }
 
-        let height = env.deliver_query_stats(EpochStatsMessages {
+        let height = env.deliver_query_stats(QueryStatsPayload {
             proposer: proposers[i % NUM_NODES],
             stats,
             epoch: epoch_from_height(Height::from(i as u64)),

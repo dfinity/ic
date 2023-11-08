@@ -59,6 +59,10 @@ const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
 
+/// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
+/// This is the minimum amount needed for creating a canister as of October 2023.
+const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
+
 thread_local! {
     static STATE: RefCell<Option<State>> = RefCell::new(None);
 }
@@ -325,7 +329,7 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
     with_state_mut(|state| {
         let governance_canister_id = state.governance_canister_id;
 
-        if CanisterId::new(caller()) != Ok(governance_canister_id) {
+        if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
             panic!("Only the governance canister can set authorized subnetwork lists.");
         }
 
@@ -380,7 +384,7 @@ fn update_subnet_type_() {
 fn update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
 
-    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+    if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
         panic!("Only the governance canister can update the available subnet types.");
     }
 
@@ -452,7 +456,7 @@ fn change_subnet_type_assignment(
 ) -> ChangeSubnetTypeAssignmentResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
 
-    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+    if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
         panic!(
             "Only the governance canister can change the assignment of subnets to subnet types."
         );
@@ -1008,6 +1012,11 @@ fn notify_create_canister_() {
     over_async(candid_one, notify_create_canister)
 }
 
+#[export_name = "canister_update create_canister"]
+fn create_canister_() {
+    over_async(candid_one, create_canister)
+}
+
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
     if let Err(e) = result {
         return e.is_retriable();
@@ -1089,17 +1098,26 @@ async fn notify_top_up(
 ///   notification about.
 /// * `controller` - PrincipalId of the canister controller.
 #[candid_method(update, rename = "notify_create_canister")]
+#[allow(deprecated)]
 async fn notify_create_canister(
     NotifyCreateCanister {
         block_index,
         controller,
         subnet_type,
+        subnet_selection,
         settings,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&controller);
     let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    let subnet_selection =
+        get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
+            NotifyError::Other {
+                error_code: NotifyErrorCode::BadSubnetSelection as u64,
+                error_message,
+            }
+        })?;
 
     let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_CREATE_CANISTER).await?;
 
@@ -1131,7 +1149,7 @@ async fn notify_create_canister(
         Some(result) => result,
         None => {
             let result =
-                process_create_canister(controller, from, amount, subnet_type, settings).await;
+                process_create_canister(controller, from, amount, subnet_selection, settings).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.as_mut().unwrap().insert(
@@ -1144,6 +1162,52 @@ async fn notify_create_canister(
             });
 
             result
+        }
+    }
+}
+
+#[candid_method(update, rename = "create_canister")]
+#[allow(deprecated)]
+async fn create_canister(
+    CreateCanister {
+        settings,
+        subnet_selection,
+        subnet_type,
+    }: CreateCanister,
+) -> Result<CanisterId, CreateCanisterError> {
+    let cycles = dfn_core::api::msg_cycles_available();
+    if cycles < CREATE_CANISTER_MIN_CYCLES {
+        return Err(CreateCanisterError::Refunded {
+            refund_amount: cycles.into(),
+            create_error: "Insufficient cycles attached.".to_string(),
+        });
+    }
+    let subnet_selection =
+        get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
+            CreateCanisterError::Refunded {
+                refund_amount: cycles.into(),
+                create_error: error_message,
+            }
+        })?;
+
+    // will always succeed because only calls from canisters can have cycles attached
+    let calling_canister = caller().try_into().unwrap();
+
+    dfn_core::api::msg_cycles_accept(cycles);
+    match do_create_canister(caller(), cycles.into(), subnet_selection, settings, false).await {
+        Ok(canister_id) => Ok(canister_id),
+        Err(create_error) => {
+            let refund_amount = cycles.saturating_sub(BAD_REQUEST_CYCLES_PENALTY as u64);
+            match deposit_cycles(calling_canister, refund_amount.into(), false).await {
+                Ok(()) => Err(CreateCanisterError::Refunded {
+                    refund_amount: refund_amount.into(),
+                    create_error,
+                }),
+                Err(refund_error) => Err(CreateCanisterError::RefundFailed {
+                    create_error,
+                    refund_error,
+                }),
+            }
         }
     }
 }
@@ -1252,7 +1316,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     let ledger_canister_id = with_state(|state| state.ledger_canister_id);
 
-    if CanisterId::new(caller) != Ok(ledger_canister_id) {
+    if CanisterId::unchecked_from_principal(caller) != ledger_canister_id {
         return Err(format!(
             "This canister can only be notified by the ledger canister ({}), not by {}.",
             ledger_canister_id, caller
@@ -1396,7 +1460,7 @@ async fn process_create_canister(
     controller: PrincipalId,
     from: AccountIdentifier,
     amount: Tokens,
-    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
     settings: Option<CanisterSettingsArgs>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
@@ -1411,13 +1475,13 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match create_canister(controller, cycles, subnet_type, settings).await {
+    match do_create_canister(controller, cycles, subnet_selection, settings, true).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
         }
         Err(err) => {
-            let refund_block = refund(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
+            let refund_block = refund_icp(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err,
                 block_index: refund_block,
@@ -1440,13 +1504,13 @@ async fn process_top_up(
         canister_id, cycles
     ));
 
-    match deposit_cycles(canister_id, cycles).await {
+    match deposit_cycles(canister_id, cycles, true).await {
         Ok(()) => {
             burn_and_log(sub, amount).await;
             Ok(cycles)
         }
         Err(err) => {
-            let refund_block = refund(sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
+            let refund_block = refund_icp(sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err.to_string(),
                 block_index: refund_block,
@@ -1500,7 +1564,7 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
 /// minus the transaction fee (which is gone) and the fee for the
 /// action (which is burned). Returns the index of the block in which
 /// the refund was done.
-async fn refund(
+async fn refund_icp(
     from_subaccount: Subaccount,
     to: AccountIdentifier,
     amount: Tokens,
@@ -1556,8 +1620,14 @@ async fn refund(
     Ok(refund_block_index)
 }
 
-async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), String> {
-    ensure_balance(cycles)?;
+async fn deposit_cycles(
+    canister_id: CanisterId,
+    cycles: Cycles,
+    mint_cycles: bool,
+) -> Result<(), String> {
+    if mint_cycles {
+        ensure_balance(cycles)?;
+    }
 
     let res: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds_and_cleanup(
         IC_00,
@@ -1579,11 +1649,12 @@ async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), S
     Ok(())
 }
 
-async fn create_canister(
+async fn do_create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
-    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
     settings: Option<CanisterSettingsArgs>,
+    mint_cycles: bool,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
@@ -1591,23 +1662,53 @@ async fn create_canister(
     // subnets change in the meantime.
     let mut rng = get_rng().await?;
 
-    // If subnet_type is `Some`, then use it to determine the eligible list
+    // If subnet_selection is set, then use it to determine the eligible list
     // of subnets. Otherwise, fall back to the list of subnets for the
     // provided controller id.
-    let mut subnets: Vec<SubnetId> = match subnet_type {
-        Some(subnet_type) => with_state(|state| {
-            let subnet_types_to_subnets = state
-                .subnet_types_to_subnets
-                .as_ref()
-                .expect("subnet types to subnets mapping is not `None`");
-            match subnet_types_to_subnets.get(&subnet_type) {
-                Some(s) => Ok(s.iter().copied().collect()),
-                None => Err(format!(
-                    "Provided subnet type {} does not exist",
-                    subnet_type
-                )),
+
+    let mut subnets: Vec<SubnetId> = match subnet_selection {
+        Some(option) => match option {
+            SubnetSelection::Filter(subnet_filter) => {
+                with_state(|state| match subnet_filter.subnet_type {
+                    Some(subnet_type) => {
+                        let subnet_types_to_subnets = state
+                            .subnet_types_to_subnets
+                            .as_ref()
+                            .expect("subnet types to subnets mapping is `None`");
+                        subnet_types_to_subnets
+                            .get(&subnet_type)
+                            .map(|set| set.iter().cloned().collect())
+                            .ok_or(format!(
+                                "Provided subnet type {} does not exist",
+                                subnet_type
+                            ))
+                    }
+                    None => Ok(get_subnets_for(&controller_id)),
+                })
             }
-        }),
+            SubnetSelection::Subnet { subnet } => with_state(|state| {
+                if state.default_subnets.contains(&subnet)
+                    || state
+                        .authorized_subnets
+                        .get(&controller_id)
+                        .map(|subnets| subnets.contains(&subnet))
+                        .unwrap_or(false)
+                    || state
+                        .subnet_types_to_subnets
+                        .as_ref()
+                        .map(|types_to_subnets| {
+                            types_to_subnets
+                                .values()
+                                .any(|subnets| subnets.contains(&subnet))
+                        })
+                        .unwrap_or(false)
+                {
+                    Ok(vec![subnet])
+                } else {
+                    Err(format!("Subnet {} does not exist or {} is not authorized to deploy to that subnet.", subnet, controller_id))
+                }
+            }),
+        },
         None => Ok(get_subnets_for(&controller_id)),
     }?;
 
@@ -1617,7 +1718,7 @@ async fn create_canister(
 
     let mut last_err = None;
 
-    if !subnets.is_empty() {
+    if mint_cycles && !subnets.is_empty() {
         // TODO(NNS1-503): If CreateCanister fails, then we still have minted
         // these cycles.
         ensure_balance(cycles)?;
@@ -1889,6 +1990,21 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
+fn get_subnet_selection(
+    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
+) -> Result<Option<SubnetSelection>, String> {
+    if subnet_type.is_some() && subnet_selection.is_some() {
+        Err("Cannot specify subnet_type and subnet_selection at the same time.".to_string())
+    } else if let Some(subnet_type) = subnet_type {
+        Ok(Some(SubnetSelection::Filter(SubnetFilter {
+            subnet_type: Some(subnet_type),
+        })))
+    } else {
+        Ok(subnet_selection)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1931,10 +2047,9 @@ mod tests {
         }
         blocks_notified.insert(
             60,
-            NotificationStatus::NotifiedCreateCanister(Ok(CanisterId::new(
+            NotificationStatus::NotifiedCreateCanister(Ok(CanisterId::unchecked_from_principal(
                 PrincipalId::new_user_test_id(4),
-            )
-            .unwrap())),
+            ))),
         );
         state.blocks_notified = Some(blocks_notified);
 

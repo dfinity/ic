@@ -3,6 +3,7 @@ use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
@@ -142,7 +143,16 @@ pub fn blocks_strategy<Tokens: TokensType>(
     let fee_collector_strategy = prop::option::of(account_strategy());
     let fee_collector_block_index_strategy = prop::option::of(prop::num::u64::ANY);
     let effective_fee_strategy = prop::option::of(arb_small_amount());
-    let timestamp_strategy = prop::num::u64::ANY;
+    let timestamp_strategy = Just({
+        let end = SystemTime::now();
+        // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
+        let day_in_sec = 24 * 60 * 60 - 60 * 5;
+        let start = end - Duration::from_secs(day_in_sec);
+        let mut rng = rand::thread_rng(); // initialize random number generator
+        let random_duration = Duration::from_secs(rng.gen_range(0..=day_in_sec));
+        let random_time = start + random_duration; // calculate the random time
+        random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
+    });
     (
         transaction_strategy,
         effective_fee_strategy,
@@ -721,6 +731,26 @@ pub fn valid_transactions_strategy(
         now,
     )
     .prop_map(|res| res.transactions)
+}
+
+pub fn decimals_strategy() -> impl Strategy<Value = u8> {
+    0..u8::MAX
+}
+
+pub fn symbol_strategy() -> impl Strategy<Value = String> {
+    prop::string::string_regex("[A-Za-z0-9]{1,5}").expect("failed to make generator")
+}
+
+pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>> {
+    (symbol_strategy(), decimals_strategy()).prop_map(|(symbol, decimals)| {
+        vec![
+            ("icrc1:symbol".to_string(), MetadataValue::Text(symbol)),
+            (
+                "icrc1:decimals".to_string(),
+                MetadataValue::Nat(candid::Nat::from(decimals)),
+            ),
+        ]
+    })
 }
 
 #[cfg(test)]

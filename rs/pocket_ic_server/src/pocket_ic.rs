@@ -17,10 +17,10 @@ use ic_state_machine_tests::StateMachineBuilder;
 use ic_state_machine_tests::StateMachineConfig;
 use ic_state_machine_tests::Time;
 use ic_types::{CanisterId, PrincipalId};
-use pocket_ic::common::blob::{BinaryBlob, BlobCompression};
 use pocket_ic::common::rest::RawAddCycles;
 use pocket_ic::common::rest::RawCanisterCall;
 use pocket_ic::common::rest::RawSetStableMemory;
+use pocket_ic::common::rest::{BinaryBlob, BlobCompression};
 use serde::Deserialize;
 use serde::Serialize;
 use std::{sync::Arc, time::SystemTime};
@@ -31,7 +31,6 @@ pub struct PocketIc {
     subnet: StateMachine,
 }
 
-#[allow(clippy::new_without_default)]
 impl PocketIc {
     pub fn new(sm: StateMachine) -> Self {
         Self { subnet: sm }

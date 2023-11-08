@@ -1,6 +1,8 @@
 use crate::LOG_PREFIX;
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_crypto_sha2::Sha256;
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
 use ic_nervous_system_clients::{
@@ -222,7 +224,20 @@ where
     let stop_before_installing = proposal.stop_before_installing;
 
     if stop_before_installing {
-        stop_canister::<Rt>(canister_id).await;
+        let stop_result = stop_canister::<Rt>(canister_id).await;
+        if stop_result.is_err() {
+            println!(
+                "{}change_canister: Failed to stop canister, trying to restart...",
+                LOG_PREFIX
+            );
+            match start_canister::<Rt>(canister_id).await {
+                Ok(_) => {}
+                Err(_) => {
+                    println!("{}change_canister: Failed to restart canister.", LOG_PREFIX);
+                }
+            };
+            return;
+        }
     }
 
     // Ship code to the canister.
@@ -240,7 +255,7 @@ where
 
     // Restart the canister, if needed
     if stop_before_installing {
-        start_canister::<Rt>(canister_id).await;
+        start_canister::<Rt>(canister_id).await.unwrap();
     }
 
     // Check the result of the install_code
@@ -248,7 +263,7 @@ where
 }
 
 /// Calls the "install_code" method of the management canister.
-pub async fn install_code(proposal: ChangeCanisterProposal) -> ic_cdk::api::call::CallResult<()> {
+async fn install_code(proposal: ChangeCanisterProposal) -> ic_cdk::api::call::CallResult<()> {
     let install_code_args = InstallCodeArgs {
         mode: proposal.mode,
         canister_id: proposal.canister_id.get(),
@@ -270,7 +285,7 @@ pub async fn install_code(proposal: ChangeCanisterProposal) -> ic_cdk::api::call
     .await
 }
 
-pub async fn start_canister<Rt>(canister_id: CanisterId)
+pub async fn start_canister<Rt>(canister_id: CanisterId) -> Result<(), (i32, String)>
 where
     Rt: Runtime,
 {
@@ -283,30 +298,28 @@ where
     )
     .await;
 
-    // Let's make sure this worked. We can abort if not.
-    res.unwrap();
-    println!("{}Restart call successful.", LOG_PREFIX);
+    if res.is_ok() {
+        println!("{}start_canister call successful. {res:?}", LOG_PREFIX);
+    }
+    res
 }
 
 /// Stops the given canister, and polls until the `Stopped` state is reached.
 ///
 /// Warning: there's no guarantee that this ever finishes!
 /// TODO(IC-1099)
-pub async fn stop_canister<Rt>(canister_id: CanisterId)
+pub async fn stop_canister<Rt>(canister_id: CanisterId) -> Result<(), (i32, String)>
 where
     Rt: Runtime,
 {
     // stop_canister returns the candid empty type, which cannot be parsed using
     // dfn_candid::candid
-    let res: Result<(), (i32, String)> = Rt::call_with_cleanup(
+    Rt::call_with_cleanup(
         CanisterId::ic_00(),
         "stop_canister",
         (CanisterIdRecord::from(canister_id),),
     )
-    .await;
-
-    // Let's make sure this worked. We can abort if not.
-    res.unwrap();
+    .await?;
 
     loop {
         let status: CanisterStatusResultFromManagementCanister =
@@ -315,7 +328,7 @@ where
                 .unwrap();
 
         if status.status == CanisterStatusType::Stopped {
-            return;
+            return Ok(());
         }
 
         println!(

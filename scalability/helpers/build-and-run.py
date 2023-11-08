@@ -29,9 +29,9 @@ def build_icos():
     ic_root = get_ic_root()
     if FLAGS.clean:
         print(colored("Doing clean build", "green"))
-        subprocess.check_output(shlex.split("gitlab-ci/container/container-run.sh bazel clean"), cwd=ic_root)
+        subprocess.check_output(shlex.split("bazel clean"), cwd=ic_root)
         subprocess.check_output(
-            shlex.split("gitlab-ci/container/container-run.sh rm -rf $(bazel info repository_cache)"), cwd=ic_root
+            shlex.split("rm -rf ./$(bazel info repository_cache)"), cwd=ic_root
         )
     else:
         print(
@@ -48,7 +48,7 @@ def build_icos():
 
     subprocess.check_output(
         shlex.split(
-            "./gitlab-ci/container/container-run.sh bazel run --config=systest //ic-os/guestos/envs/dev:upload_disk-img"
+            "bazel run --config=systest //ic-os/guestos/envs/dev:upload_disk-img"
         ),
         cwd=ic_root,
     )

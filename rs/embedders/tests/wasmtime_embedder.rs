@@ -5,23 +5,21 @@ use ic_replicated_state::Global;
 use ic_test_utilities::{
     mock_time, types::ids::user_test_id, wasmtime_instance::WasmtimeInstanceBuilder,
 };
-use ic_types::{
-    methods::{FuncRef, WasmMethod},
-    Cycles,
-};
+use ic_types::methods::{FuncRef, WasmMethod};
+
+#[cfg(target_os = "linux")]
+use ic_types::Cycles;
 
 #[cfg(test)]
 mod test {
     use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
     use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
-    use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-    use ic_test_utilities::{
-        universal_canister::{call_args, wasm},
-        wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS,
-    };
-    use ic_test_utilities_execution_environment::ExecutionTestBuilder;
-    use ic_types::{methods::WasmClosure, NumBytes, PrincipalId};
+    use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
+    use ic_types::{methods::WasmClosure, NumBytes};
+
+    #[cfg(target_os = "linux")]
+    use ic_types::PrincipalId;
 
     use super::*;
 
@@ -103,7 +101,8 @@ mod test {
         let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
         let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
 
-        let expected_instructions = 3 * const_cost
+        let expected_instructions = 1 // Function is 1 instruction.
+            + 3 * const_cost
             + call_cost
             + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
             + data_size;
@@ -172,7 +171,8 @@ mod test {
         // So, the first perf counter will catch the whole test func static part
         // + first data copy and performance counter dynamic part.
         // The second perf counter will catch on top the second data copy dynamic part.
-        let expected_instructions_counter1 = 3 * const_cost
+        let expected_instructions_counter1 = 1 // Function is 1 instruction.
+            + 3 * const_cost
             + call_cost
             + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
             + data_size
@@ -262,192 +262,6 @@ mod test {
     }
 
     #[test]
-    // TODO: RUN-759: The test fails, as the performance counter is not implemented yet.
-    #[ignore]
-    fn test_correctly_report_call_context_performance_counter() {
-        let mut test = ExecutionTestBuilder::new().build();
-        let a_id = test.universal_canister().unwrap();
-        let b_id = test.universal_canister().unwrap();
-
-        let b = wasm().performance_counter(1).reply_int64().build();
-        let a = wasm()
-            // Counter a.0
-            .performance_counter(1)
-            .int64_to_blob()
-            .append_to_global_data()
-            .call_simple(
-                b_id.get(),
-                "update",
-                call_args()
-                    // Counter b.2
-                    .other_side(b.clone())
-                    .on_reply(
-                        wasm()
-                            .message_payload()
-                            .append_to_global_data()
-                            // Counter a.3
-                            .performance_counter(1)
-                            .int64_to_blob()
-                            .append_to_global_data()
-                            .call_simple(
-                                b_id.get(),
-                                "update",
-                                call_args()
-                                    // Counter b.4
-                                    .other_side(b)
-                                    .on_reply(
-                                        wasm()
-                                            .get_global_data()
-                                            .reply_data_append()
-                                            .message_payload()
-                                            .reply_data_append()
-                                            // Counter a.5
-                                            .performance_counter(1)
-                                            .reply_int64(),
-                                    ),
-                            ),
-                    ),
-            )
-            // Counter a.1
-            .performance_counter(1)
-            .int64_to_blob()
-            .append_to_global_data()
-            .build();
-        let result = test.ingress(a_id, "update", a).unwrap();
-
-        let counters = result
-            .bytes()
-            .chunks_exact(std::mem::size_of::<u64>())
-            .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
-            .collect::<Vec<_>>();
-
-        assert!(
-            counters[0] < counters[1] && counters[1] < counters[3] && counters[3] < counters[5]
-        );
-    }
-
-    const CALL_NEW_CALL_PERFORM_WAT: &str = r#"
-    (module
-        (import "ic0" "call_new"
-            (func $ic0_call_new
-            (param $callee_src i32)         (param $callee_size i32)
-            (param $name_src i32)           (param $name_size i32)
-            (param $reply_fun i32)          (param $reply_env i32)
-            (param $reject_fun i32)         (param $reject_env i32)
-        ))
-        (import "ic0" "call_perform"
-            (func $ic0_call_perform (result i32)))
-        (memory 1)
-        (func (export "canister_update test_call_perform")
-            (call $ic0_call_new
-                (i32.const 0)   (i32.const 0)
-                (i32.const 100) (i32.const 0)
-                (i32.const 11)  (i32.const 0) ;; non-existent function
-                (i32.const 22)  (i32.const 0) ;; non-existent function
-            )
-            (drop (call $ic0_call_perform))
-        )
-    )
-    "#;
-
-    #[test]
-    fn correctly_observe_system_api_complexity() {
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
-            .with_api_type(ic_system_api::ApiType::update(
-                mock_time(),
-                vec![],
-                Cycles::zero(),
-                PrincipalId::new_user_test_id(0),
-                0.into(),
-            ))
-            .build();
-
-        instance
-            .run(ic_types::methods::FuncRef::Method(
-                ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
-            ))
-            .unwrap();
-
-        let instruction_counter = instance.instruction_counter();
-        let system_api = &instance.store_data().system_api().unwrap();
-        let instructions_used = system_api.slice_instructions_executed(instruction_counter);
-
-        let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-        let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
-        let drop_cost = instruction_to_cost_new(&wasmparser::Operator::Drop);
-
-        let call_8_const_cost = call_cost + 8 * const_cost;
-        let drop_call_cost = drop_cost + call_cost;
-        let expected_instructions = call_8_const_cost
-            + system_api_complexity::overhead::new::CALL_NEW.get()
-            + drop_call_cost
-            + system_api_complexity::overhead::new::CALL_PERFORM.get();
-        assert_eq!(instructions_used.get(), expected_instructions);
-
-        let total_cpu_complexity = system_api.execution_complexity().cpu;
-        let expected_cpu_complexity =
-            system_api_complexity::cpu::CALL_NEW + system_api_complexity::cpu::CALL_PERFORM;
-        assert_eq!(total_cpu_complexity, expected_cpu_complexity);
-    }
-
-    #[test]
-    fn complex_system_api_call_traps() {
-        let subnet_type = SubnetType::Application;
-        let expected_cpu_complexity = system_api_complexity::cpu::CALL_NEW.get()
-            + system_api_complexity::cpu::CALL_PERFORM.get();
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
-            .with_api_type(ic_system_api::ApiType::update(
-                mock_time(),
-                vec![],
-                Cycles::zero(),
-                PrincipalId::new_user_test_id(0),
-                0.into(),
-            ))
-            .with_num_instructions((expected_cpu_complexity as u64 - 1).into())
-            .with_subnet_type(subnet_type)
-            .build();
-
-        let result = instance.run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
-        ));
-
-        assert_eq!(
-            result.err(),
-            Some(HypervisorError::ExecutionComplexityLimitExceeded)
-        );
-    }
-
-    #[test]
-    fn complex_system_api_call_does_not_trap_on_system_subnet() {
-        // The same setup as previously, but with the System subnet type
-        let subnet_type = SubnetType::System;
-        let expected_cpu_complexity = (system_api_complexity::cpu::CALL_NEW.get()
-            + system_api_complexity::cpu::CALL_PERFORM.get())
-            * 5; // times 5B instructions per message / nanos_in_sec
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
-            .with_api_type(ic_system_api::ApiType::update(
-                mock_time(),
-                vec![],
-                Cycles::zero(),
-                PrincipalId::new_user_test_id(0),
-                0.into(),
-            ))
-            .with_num_instructions((expected_cpu_complexity as u64 - 1).into())
-            .with_subnet_type(subnet_type)
-            .build();
-
-        let result = instance.run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
-        ));
-
-        // Should not fail on System subnet
-        assert!(result.is_ok());
-    }
-
-    #[test]
     fn stack_overflow_traps() {
         use std::thread;
         let builder = thread::Builder::new();
@@ -520,7 +334,8 @@ mod test {
                 Global::I64(0),
                 Global::I32(42),
                 Global::I64(1357),
-                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64)
+                // Minus 1 instruction for function.
+                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64 - 1)
             ]
         );
 
@@ -546,7 +361,8 @@ mod test {
                 Global::I64(5),
                 Global::I32(12),
                 Global::I64(2468),
-                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64),
+                // Minus 1 instruction for function.
+                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64 - 1),
             ]
         );
     }
@@ -576,7 +392,8 @@ mod test {
             [
                 Global::F64(0.0),
                 Global::F32(42.42),
-                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64),
+                // Minus 1 instruction for function.
+                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64 - 1),
             ]
         );
 
@@ -599,7 +416,8 @@ mod test {
             [
                 Global::F64(5.3),
                 Global::F32(12.37),
-                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64),
+                // Minus 1 instruction for function.
+                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64 - 1),
             ]
         );
     }

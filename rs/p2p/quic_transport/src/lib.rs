@@ -42,7 +42,7 @@ use either::Either;
 use http::{Request, Response};
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
-use ic_icos_sev_interfaces::ValidateAttestedStream;
+use ic_icos_sev::ValidateAttestedStream;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -91,7 +91,7 @@ impl QuicTransport {
             peer_map.clone(),
             topology_watcher,
             udp_socket,
-            router.unwrap_or_default(),
+            router,
         );
 
         QuicTransport(peer_map)

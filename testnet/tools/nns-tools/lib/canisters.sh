@@ -16,7 +16,7 @@ get_info() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    dfx -q canister --network "$NETWORK" info "$CANISTER_ID"
+    __dfx -q canister --network "$NETWORK" info "$CANISTER_ID"
 }
 
 nns_canister_hash() {
@@ -57,7 +57,7 @@ canister_git_version() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    dfx -q canister --network "$NETWORK" metadata \
+    __dfx -q canister --network "$NETWORK" metadata \
         "$CANISTER_ID" git_commit_id
 }
 
@@ -173,6 +173,34 @@ wait_for_nns_canister_has_file_contents() {
     done
 
     print_red "Canister $CANISTER_NAME upgrade failed"
+    return 1
+}
+
+wait_for_nns_canister_has_new_code() {
+    local NETWORK=$1
+    local CANISTER_NAME=$2
+
+    ORIGINAL_WASM_HASH="$(nns_canister_hash ic "${CANISTER_NAME}")"
+
+    echo "The original WASM hash is ${ORIGINAL_WASM_HASH}."
+    echo "We will now poll until it changes. Please, stand by..."
+    echo
+
+    for i in {1..100}; do
+        sleep 6
+        LATEST_WASM_HASH="$(nns_canister_hash ic "${CANISTER_NAME}")"
+
+        if [[ "${LATEST_WASM_HASH}" != "${ORIGINAL_WASM_HASH}" ]]; then
+            echo
+            echo "The WASM hash for ${CANISTER_NAME} has changed to ${LATEST_WASM_HASH}."
+            return
+        fi
+
+        echo "No change yet..."
+    done
+
+    echo
+    echo "Giving up. The canister's WASM hash has not changed after 10 minutes."
     return 1
 }
 

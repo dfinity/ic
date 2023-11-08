@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
@@ -21,7 +20,7 @@ use std::collections::BTreeMap;
 /// (since this would require searching first for a value in the map to retrieve the corresponding primary key).
 /// If this becomes necessary, additional duplication of the primary key might be needed (e.g., one map
 /// would be `BTreeMap<Key, (AltKey, V)>` while the second one would be `BTreeMap<AltKey, Key>`).
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct MultiKeyMap<Key, AltKey, V>
 where
     Key: Ord,
@@ -145,6 +144,10 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         self.by_key
             .iter()
             .map(|(key, alt_key)| (key, alt_key, &self.by_alt_key[alt_key]))
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &Key> {
+        self.by_key.keys()
     }
 
     pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(Key, AltKey, V)>

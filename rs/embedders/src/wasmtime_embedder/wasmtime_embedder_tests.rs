@@ -36,7 +36,7 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 #[test]
 fn test_wasmtime_system_api() {
-    let engine = Engine::new(&WasmtimeEmbedder::initial_wasmtime_config(
+    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(
         &EmbeddersConfig::default(),
     ))
     .expect("Failed to initialize Wasmtime engine");
@@ -52,10 +52,12 @@ fn test_wasmtime_system_api() {
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
         ApiType::start(mock_time()),
         sandbox_safe_system_state,
         canister_current_memory_usage,
+        canister_current_message_memory_usage,
         ExecutionParameters {
             instruction_limits: InstructionLimits::new(
                 FlagStatus::Disabled,
@@ -84,6 +86,7 @@ fn test_wasmtime_system_api() {
             system_api: Some(system_api),
             num_instructions_global: None,
             log: no_op_logger(),
+            num_stable_dirty_pages_from_non_native_writes: ic_types::NumPages::from(0),
         },
     );
 

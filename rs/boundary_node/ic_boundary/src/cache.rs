@@ -13,7 +13,7 @@ use http::header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH};
 use http::{response, Version};
 use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
 use hyper::body;
-use stretto::CacheBuilder;
+use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
 use crate::routes::{ApiError, ErrorCause, RequestContext};
 
@@ -22,9 +22,6 @@ type AxumResponse = Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>;
 
 // A list of possible Cache-Control directives that ask us not to cache the response
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];
-
-// This is calculated from the historical data and needed for estimating Cache counters
-const AVG_CACHE_VALUE_SIZE: usize = 800;
 
 // Read the body from the available stream enforcing a size limit
 async fn read_streaming_body<H: HttpBody>(
@@ -59,6 +56,7 @@ pub enum CacheBypassReason {
     CacheControl,
     SizeUnknown,
     TooBig,
+    HTTPError,
 }
 
 impl fmt::Display for CacheBypassReason {
@@ -69,6 +67,7 @@ impl fmt::Display for CacheBypassReason {
             Self::CacheControl => write!(f, "cache_control"),
             Self::SizeUnknown => write!(f, "size_unknown"),
             Self::TooBig => write!(f, "too_big"),
+            Self::HTTPError => write!(f, "http_error"),
         }
     }
 }
@@ -80,7 +79,6 @@ pub enum CacheStatus {
     Bypass(CacheBypassReason),
     Hit,
     Miss,
-    Error(String), // TODO remove if no errors manifest in prod
 }
 
 // Injects itself into a given response to be accessible by middleware
@@ -98,11 +96,11 @@ impl fmt::Display for CacheStatus {
             Self::Bypass(_) => write!(f, "BYPASS"),
             Self::Hit => write!(f, "HIT"),
             Self::Miss => write!(f, "MISS"),
-            Self::Error(_) => write!(f, "ERROR"),
         }
     }
 }
 
+#[derive(Clone)]
 struct CacheItem {
     status: StatusCode,
     version: Version,
@@ -112,10 +110,27 @@ struct CacheItem {
 
 #[derive(Clone)]
 pub struct Cache {
-    cache: stretto::Cache<RequestContext, CacheItem>,
-    max_item_size: usize,
-    ttl: Duration,
+    cache: MokaCache<RequestContext, CacheItem>,
+    max_item_size: u64,
     cache_non_anonymous: bool,
+}
+
+// Estimate rough amount of bytes that cache entry takes in memory
+fn weigh_entry(k: &RequestContext, v: &CacheItem) -> u32 {
+    let mut cost = v.body.capacity()
+        + std::mem::size_of::<CacheItem>()
+        + std::mem::size_of::<RequestContext>()
+        + k.method_name.as_ref().map(|x| x.len()).unwrap_or(0)
+        + k.arg.as_ref().map(|x| x.len()).unwrap_or(0)
+        + k.nonce.as_ref().map(|x| x.len()).unwrap_or(0)
+        + 58; // 2 x Principal
+
+    for (k, v) in v.headers.iter() {
+        cost += k.as_str().as_bytes().len();
+        cost += v.as_bytes().len();
+    }
+
+    cost as u32
 }
 
 // Max cost represents the max sum of items' costs that the cache can hold.
@@ -124,39 +139,31 @@ pub struct Cache {
 impl Cache {
     pub fn new(
         cache_size: u64,
-        max_item_size: usize,
+        max_item_size: u64,
         ttl: Duration,
         cache_non_anonymous: bool,
     ) -> Result<Self, Error> {
-        if max_item_size >= cache_size as usize {
+        if max_item_size >= cache_size {
             return Err(anyhow!(
                 "Cache item size should be less than whole cache size"
             ));
         }
 
-        Ok(Self {
-            cache: CacheBuilder::new(
-                // That's the recommended way of estimating it
-                (cache_size as usize) / AVG_CACHE_VALUE_SIZE * 10,
-                cache_size as i64,
-            )
-            .finalize()
-            .unwrap(),
+        let cache = MokaCacheBuilder::new(cache_size)
+            .time_to_live(ttl)
+            .weigher(weigh_entry)
+            .build();
 
+        Ok(Self {
+            cache,
             max_item_size,
-            ttl,
             cache_non_anonymous,
         })
     }
 
     // Stores the response components in the cache
     // Response itself cannot be stored since it's not cloneable, so we have to rebuild it
-    fn store(
-        &self,
-        ctx: RequestContext,
-        parts: &response::Parts,
-        body: &[u8],
-    ) -> Result<(), Error> {
+    async fn store(&self, ctx: RequestContext, parts: &response::Parts, body: &[u8]) {
         // Make sure that the vector has the smallest possible memory footprint
         let mut body = body.to_vec();
         body.shrink_to_fit();
@@ -168,66 +175,55 @@ impl Cache {
             body,
         };
 
-        // Estimate the storage cost in bytes
-        // This is probably not the exact size that CacheItem would take in memory, but close enough I guess
-        let mut cost = item.body.capacity() + std::mem::size_of::<CacheItem>();
-        for (k, v) in item.headers.iter() {
-            cost += k.as_str().as_bytes().len();
-            cost += v.as_bytes().len();
-        }
-
         // Insert the response into the cache & wait for it to persist there
-        self.cache
-            .try_insert_with_ttl(ctx, item, cost as i64, self.ttl)?;
-        self.cache.wait()?;
-
-        Ok(())
+        self.cache.insert(ctx, item).await;
     }
 
     // Looks up the request in the cache
-    fn lookup(&self, ctx: &RequestContext) -> Option<AxumResponse> {
-        let item = match self.cache.get(ctx) {
+    async fn lookup(&self, ctx: &RequestContext) -> Option<AxumResponse> {
+        let item = match self.cache.get(ctx).await {
             Some(v) => v,
             None => return None,
         };
 
-        let item = item.value();
-
-        // If an item was found -> construct a response from cached data
+        // If an item was found -> construct a response from the cached data
         let mut builder = Response::builder()
             .status(item.status)
             .version(item.version);
 
-        for (k, v) in item.headers.iter() {
-            builder = builder.header(k.clone(), v.clone());
-        }
+        *builder.headers_mut().unwrap() = item.headers;
 
         Some(
             builder
-                .body(axum::body::boxed(Body::from(item.body.clone())))
+                .body(axum::body::boxed(Body::from(item.body)))
                 .unwrap(),
         )
     }
 
-    // For now used only in tests, but belongs here
-
-    #[allow(dead_code)]
-    fn len(&self) -> usize {
-        self.cache.len()
+    pub fn size(&self) -> u64 {
+        self.cache.weighted_size()
     }
 
+    pub fn len(&self) -> u64 {
+        self.cache.entry_count()
+    }
+
+    pub async fn housekeep(&self) {
+        self.cache.run_pending_tasks().await;
+    }
+
+    // For now stuff below is used only in tests, but belongs here
     #[allow(dead_code)]
-    fn clear(&self) -> Result<(), Error> {
-        self.cache.clear()?;
-        self.cache.wait()?;
-        Ok(())
+    async fn clear(&self) {
+        self.cache.invalidate_all();
+        self.housekeep().await;
     }
 }
 
 // Try to get & parse content-length header
-fn extract_content_length(resp: &Response) -> Result<Option<usize>, Error> {
+fn extract_content_length(resp: &Response) -> Result<Option<u64>, Error> {
     let size = match resp.headers().get(CONTENT_LENGTH) {
-        Some(v) => v.to_str()?.parse::<usize>()?,
+        Some(v) => v.to_str()?.parse::<u64>()?,
         None => return Ok(None),
     };
 
@@ -252,7 +248,7 @@ pub async fn cache_middleware(
             return Some(CacheBypassReason::NonAnonymous);
         }
 
-        // Check if we have a Cache-Control header and if it asks us not to use cache
+        // Check if we have a Cache-Control header and if it asks us not to use the cache
         if let Some(v) = request.headers().get(CACHE_CONTROL) {
             if let Ok(hdr) = v.to_str() {
                 if SKIP_CACHE_DIRECTIVES.iter().any(|&x| hdr.contains(x)) {
@@ -269,12 +265,17 @@ pub async fn cache_middleware(
     }
 
     // Try to look up the request in the cache
-    if let Some(v) = cache.lookup(&ctx) {
+    if let Some(v) = cache.lookup(&ctx).await {
         return Ok(CacheStatus::Hit.with_response(v));
     }
 
     // If not found - pass the request down the stack
     let response = next.run(request).await;
+
+    // Do not cache non-2xx responses
+    if !response.status().is_success() {
+        return Ok(CacheStatus::Bypass(CacheBypassReason::HTTPError).with_response(response));
+    }
 
     let content_length = extract_content_length(&response).map_err(|_| {
         ErrorCause::MalformedResponse("Malformed Content-Length header in response".into())
@@ -295,18 +296,15 @@ pub async fn cache_middleware(
 
     // Buffer entire response body to be able to cache it
     let (parts, body) = response.into_parts();
-    let body = read_streaming_body(body, body_size).await?;
+    let body = read_streaming_body(body, body_size as usize).await?;
 
     // Insert the response into the cache
-    let cache_status = match cache.store(ctx, &parts, &body) {
-        Err(e) => CacheStatus::Error(e.to_string()),
-        Ok(_) => CacheStatus::Miss,
-    };
+    cache.store(ctx, &parts, &body).await;
 
     // Reconstruct the response from components
     let response = Response::from_parts(parts, axum::body::boxed(Body::from(body)));
 
-    Ok(cache_status.with_response(response))
+    Ok(CacheStatus::Miss.with_response(response))
 }
 
 #[cfg(test)]

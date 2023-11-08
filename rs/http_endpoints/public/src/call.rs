@@ -14,11 +14,7 @@ use crossbeam::channel::Sender;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
-use ic_interfaces::{
-    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
-    ingress_pool::IngressPoolThrottler,
-    time_source::TimeSource,
-};
+use ic_interfaces::{artifact_pool::UnvalidatedArtifactEvent, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
@@ -46,7 +42,6 @@ pub(crate) struct CallService {
     metrics: HttpHandlerMetrics,
     node_id: NodeId,
     subnet_id: SubnetId,
-    time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
     validator_executor: ValidatorExecutor<SignedIngressContent>,
     ingress_filter: IngressFilterService,
@@ -62,7 +57,6 @@ impl CallService {
         metrics: HttpHandlerMetrics,
         node_id: NodeId,
         subnet_id: SubnetId,
-        time_source: Arc<dyn TimeSource>,
         registry_client: Arc<dyn RegistryClient>,
         validator_executor: ValidatorExecutor<SignedIngressContent>,
         ingress_filter: IngressFilterService,
@@ -82,7 +76,6 @@ impl CallService {
                     validator_executor,
                     ingress_throttler,
                     ingress_tx,
-                    time_source,
                     ingress_filter,
                     node_id,
                 }),
@@ -179,16 +172,7 @@ impl Service<Request<Bytes>> for CallService {
             }
         };
 
-        let effective_canister_id = match CanisterId::new(effective_principal_id) {
-            Ok(canister_id) => canister_id,
-            Err(_) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Invalid canister id: {}", effective_principal_id),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
+        let effective_canister_id = CanisterId::unchecked_from_principal(effective_principal_id);
 
         // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
         // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
@@ -237,7 +221,6 @@ impl Service<Request<Bytes>> for CallService {
         let ingress_filter = self.ingress_filter.clone();
         let log = self.log.clone();
         let validator_executor = self.validator_executor.clone();
-        let time_source = self.time_source.clone();
         let node_id = self.node_id;
         let ingress_throttler = self.ingress_throttler.clone();
         Box::pin(async move {
@@ -263,11 +246,7 @@ impl Service<Request<Bytes>> for CallService {
 
             let is_overloaded = ingress_throttler.read().unwrap().exceeds_threshold()
                 || ingress_tx
-                    .try_send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: msg,
-                        peer_id: node_id,
-                        timestamp: time_source.get_relative_time(),
-                    }))
+                    .try_send(UnvalidatedArtifactEvent::Insert((msg, node_id)))
                     .is_err();
 
             let response = if is_overloaded {

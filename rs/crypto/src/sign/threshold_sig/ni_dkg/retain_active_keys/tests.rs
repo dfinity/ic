@@ -17,6 +17,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
 use ic_types::crypto::error as cryptoerror;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::transcripts_to_retain::TranscriptsToRetain;
@@ -111,7 +112,7 @@ fn high_transcript_with_pub_coeffs(
     registry_version: RegistryVersion,
     pub_coeffs: PublicCoefficientsBytes,
 ) -> NiDkgTranscript {
-    let mut transcript = NiDkgTranscript::dummy_transcript_for_tests();
+    let mut transcript = dummy_transcript_for_tests();
     transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
     transcript.registry_version = registry_version;
     transcript.internal_csp_transcript = csp_transcript_with_pub_coeffs(pub_coeffs);
@@ -126,7 +127,7 @@ fn low_transcript_with_pub_coeffs(
     registry_version: RegistryVersion,
     pub_coeffs: PublicCoefficientsBytes,
 ) -> NiDkgTranscript {
-    let mut transcript = NiDkgTranscript::dummy_transcript_for_tests();
+    let mut transcript = dummy_transcript_for_tests();
     transcript.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
     transcript.registry_version = registry_version;
     transcript.internal_csp_transcript = csp_transcript_with_pub_coeffs(pub_coeffs);

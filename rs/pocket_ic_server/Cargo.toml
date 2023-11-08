@@ -1,16 +1,16 @@
 [package]
 name = "pocket-ic-server"
-version = "0.0.1"
+version = "1.0.0"
 edition = "2021"
 
 [dependencies]
 axum = { version = "^0.6.1", features = ["headers"] }
 candid = { workspace = true }
 rand = "^0.8.5"
-itertools = "0.11"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "^1.0"
+itertools = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -25,7 +25,7 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-utils = { path = "../utils" }
 hex = "0.4.2"
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 sha2 = "0.9.3"
 time = "^0.3.20"
 tracing = "0.1"

@@ -1,7 +1,10 @@
 [package]
 name = "ic-registry-transport"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
@@ -9,7 +12,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-base-types = { path = "../../types/base_types" }
 prost = { workspace = true }
 bytes = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 
 [dev-dependencies]
 ic-registry-transport-protobuf-generator = { path = "./protobuf_generator" }

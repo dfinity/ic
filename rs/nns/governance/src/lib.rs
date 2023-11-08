@@ -120,7 +120,10 @@
 //! without need for a quorum of voting power to participate, and it
 //! can also always decide upon proposals in a timely manner.
 
+use mockall::automock;
+
 mod audit_event;
+mod garbage_collection;
 /// The 'governance' module contains the canister (smart contract)
 /// that manages neurons, proposals, voting, voter following, voting
 /// rewards, and the code necessary to execute accepted proposals.
@@ -136,7 +139,7 @@ pub mod init;
 mod known_neuron_index;
 mod migrations;
 mod neuron;
-mod neuron_data_validation;
+pub mod neuron_data_validation;
 mod neuron_store;
 pub mod neurons_fund;
 pub mod pb;
@@ -147,7 +150,54 @@ mod subaccount_index;
 
 use std::{collections::HashMap, io};
 
-use crate::governance::Governance;
+use crate::governance::{Governance, TimeWarp};
+
+#[automock]
+trait Clock {
+    fn now(&self) -> u64;
+    fn set_time_warp(&mut self, new_time_warp: TimeWarp);
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct IcClock {
+    time_warp: TimeWarp,
+}
+
+impl IcClock {
+    fn new() -> Self {
+        let time_warp = TimeWarp { delta_s: 0 };
+
+        Self { time_warp }
+    }
+}
+
+impl Clock for IcClock {
+    fn now(&self) -> u64 {
+        // Step 1: Read the real time.
+        let real_timestamp_seconds = dfn_core::api::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .expect("IcClock malfunctioned.")
+            .as_secs();
+
+        // Step 2: Apply time warp.
+        let TimeWarp { delta_s } = self.time_warp;
+        let modified_timestamp_seconds = i64::try_from(real_timestamp_seconds)
+            .expect("Timestamp does not fit in i64.")
+            .saturating_add(delta_s);
+
+        // Step 3: Convert back to u64.
+        u64::try_from(modified_timestamp_seconds).unwrap_or_else(|err| {
+            panic!(
+                "Timestamp no longer fits in u64 {} + {}. err: {}",
+                real_timestamp_seconds, delta_s, err,
+            );
+        })
+    }
+
+    fn set_time_warp(&mut self, new_time_warp: TimeWarp) {
+        self.time_warp = new_time_warp;
+    }
+}
 
 trait Metric {
     fn into(self) -> f64;
@@ -307,7 +357,7 @@ pub fn encode_metrics(
         "The total voting power, according to the most recent proposal.",
     )?;
 
-    if migrations::neuron_stable_indexes_building_is_enabled() {
+    if neuron_stable_indexes_building_is_enabled() {
         let neuron_store::NeuronIndexesLens {
             subaccount: subaccount_index_len,
             principal: principal_index_len,
@@ -473,9 +523,26 @@ pub fn encode_metrics(
         );
     }
 
+    w.encode_gauge(
+        "governance_stable_memory_neuron_count",
+        governance.neuron_store.stable_neuron_store_len() as f64,
+        "The number of neurons in stable memory.",
+    )?;
+
     Ok(())
 }
 
+/// Whether we should start to copy inactive neurons into stable memory.
 fn is_copy_inactive_neurons_to_stable_memory_enabled() -> bool {
     cfg! { any(test, feature = "test") }
+}
+
+/// Whether we should start to build neuron indexes in stable storage.
+fn neuron_stable_indexes_building_is_enabled() -> bool {
+    true
+}
+
+/// Whether we should use neuron indexes in stable storage (instead of the ones on heap memory).
+fn use_neuron_stable_indexes() -> bool {
+    true
 }

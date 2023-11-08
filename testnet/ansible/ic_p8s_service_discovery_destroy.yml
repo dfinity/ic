@@ -5,11 +5,12 @@
   become: false
 
   tasks:
-    - name: Remove all Prometheus scraping targets
+    
+    - name: Remove all service discovery scraping targets
       vars:
         ic: "{{ ic_deployment_name }}"
       uri:
-        url: "https://{{ service_discovery_server }}/service-discovery/{{ ic }}"
+        url: "{{ multiservice_discovery_server }}/{{ ic }}"
         method: DELETE
         return_content: true
         validate_certs: no

@@ -20,6 +20,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
+    get_node_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
@@ -28,6 +29,7 @@ use ic_recovery::{
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::Height;
 use serde::{Deserialize, Serialize};
 use slog::{error, warn, Logger};
 use strum::{EnumMessage, IntoEnumIterator};
@@ -126,7 +128,6 @@ pub struct SubnetSplitting {
     state_tool_helper: StateToolHelper,
     layout: Layout,
     logger: Logger,
-    interactive: bool,
     subnet_type: SubnetType,
 }
 
@@ -136,7 +137,6 @@ impl SubnetSplitting {
         recovery_args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
         subnet_splitting_args: SubnetSplittingArgs,
-        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
@@ -170,7 +170,6 @@ impl SubnetSplitting {
             recovery,
             state_tool_helper,
             logger,
-            interactive,
             subnet_type,
         }
     }
@@ -184,9 +183,9 @@ impl SubnetSplitting {
     /// Destination Subnet:
     /// 1) Is an `Application` subnet
     /// 2) Is not an ECDSA subnet
-    /// TODO(kpop): enforce the following
     /// 3) Is halted
     /// 4) Hasn't produced any block yet
+    /// 5) Has the same size as the Source Subnet
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
@@ -195,7 +194,9 @@ impl SubnetSplitting {
         let source_subnet_record = Self::get_and_pre_validate_subnet_record(
             recovery,
             source_subnet_id,
-            /*expected_subnet_type=*/ None,
+            /*other_subnet_record=*/ None,
+            /*check_whether_halted=*/ false,
+            /*check_height=*/ false,
         )?;
 
         let subnet_type = source_subnet_record
@@ -206,7 +207,9 @@ impl SubnetSplitting {
         let _ = Self::get_and_pre_validate_subnet_record(
             recovery,
             destination_subnet_id,
-            Some(subnet_type),
+            Some(source_subnet_record),
+            /*check_whether_halted=*/ true,
+            /*check_height=*/ true,
         )?;
 
         Ok(subnet_type)
@@ -215,7 +218,9 @@ impl SubnetSplitting {
     fn get_and_pre_validate_subnet_record(
         recovery: &Recovery,
         subnet_id: SubnetId,
-        expected_subnet_type: Option<SubnetType>,
+        other_subnet_record: Option<SubnetRecord>,
+        check_whether_halted: bool,
+        check_height: bool,
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
@@ -249,14 +254,40 @@ impl SubnetSplitting {
             ));
         }
 
-        if let Some(expected_subnet_type) = expected_subnet_type {
-            if subnet_type != expected_subnet_type {
+        if let Some(other_subnet_record) = other_subnet_record {
+            if subnet_record.subnet_type() != other_subnet_record.subnet_type() {
                 return validation_error(format!(
                     "Both subnets should have the same subnet type. \
                      Expected subnet type = {:?}, actual subnet type = {:?}",
-                    expected_subnet_type, subnet_type,
+                    other_subnet_record.subnet_type(),
+                    subnet_record.subnet_type(),
                 ));
             }
+
+            if subnet_record.membership.len() != other_subnet_record.membership.len() {
+                return validation_error(format!(
+                    "Both subnets should have the same size. \
+                    Expected subnet size = {}, actual subnet size = {}",
+                    other_subnet_record.membership.len(),
+                    subnet_record.membership.len()
+                ));
+            }
+        }
+
+        if check_whether_halted && !subnet_record.is_halted {
+            return validation_error(String::from("Subnet should be halted"));
+        }
+
+        if check_height
+            && get_node_heights_from_metrics(
+                &recovery.logger,
+                &recovery.registry_helper,
+                subnet_id,
+            )?
+            .iter()
+            .any(|metrics| metrics.finalization_height > Height::new(0))
+        {
+            return validation_error(String::from("Subnet has a non-zero height"));
         }
 
         Ok(subnet_record)
@@ -319,7 +350,7 @@ impl SubnetSplitting {
                 node_ip,
                 work_dir: self.layout.work_dir(target_subnet),
                 data_src: self.layout.ic_state_dir(target_subnet),
-                require_confirmation: self.interactive,
+                require_confirmation: !self.recovery_args.skip_prompts,
                 key_file: self.recovery.key_file.clone(),
                 check_ic_replay_height: false,
             }),
@@ -368,7 +399,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
     }
 
     fn interactive(&self) -> bool {
-        self.interactive
+        !self.recovery_args.skip_prompts
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
@@ -490,7 +521,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     logger: self.recovery.logger.clone(),
                     label: "Canister Migrations".to_string(),
                     querier: move || registry_helper.get_canister_migrations(),
-                    interactive: self.interactive,
+                    interactive: !self.recovery_args.skip_prompts,
                 }
                 .into()
             }
@@ -538,7 +569,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                             },
                         )
                     },
-                    interactive: self.interactive,
+                    interactive: !self.recovery_args.skip_prompts,
                 }
                 .into()
             }

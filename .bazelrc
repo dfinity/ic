@@ -68,6 +68,7 @@ build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 build --flag_alias=ic_version=//bazel:ic_version
 build --flag_alias=ic_version_rc_only=//bazel:ic_version_rc_only
 build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
+build --flag_alias=rc=//gitlab-ci/src/artifacts:rc
 
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
@@ -75,7 +76,7 @@ build --build_tag_filters="-system_test,-upload,-fuzz_test"
 test --test_tag_filters="-system_test,-post_master,-allow_to_fail,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test,-allow_to_fail"
-test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_staging,-system_test_hotfix,-allow_to_fail,-fuzz_test"
+test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-allow_to_fail,-fuzz_test"
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
@@ -84,6 +85,9 @@ test:precommit --build_tests_only --test_tag_filters="smoke"
 
 build:systest --build_tag_filters= --s3_endpoint=https://s3-upload.idx.dfinity.network
 test:systest --test_output=streamed --test_tag_filters=
+
+build:testnet --build_tag_filters= --s3_endpoint=https://s3-upload.idx.dfinity.network --ic_version_rc_only=
+test:testnet --test_output=streamed --test_tag_filters=
 
 # For sandboxed actions, mount an empty, writable directory at this absolute path
 # (if supported by the sandboxing implementation, ignored otherwise).
@@ -123,7 +127,7 @@ build:check --@rules_rust//rust/settings:pipelined_compilation=True
 build:check --output_groups=build_metadata
 
 # Fuzzing configuration
-build:fuzzing --action_env="DFINITY_OPENSSL_STATIC=1"
+build:fuzzing --action_env="SANITIZERS_ENABLED=1"
 # sanitizers are only supported in nightly
 build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
 build:fuzzing --build_tag_filters=fuzz_test

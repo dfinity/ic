@@ -36,7 +36,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:hex",
-    "@crate_index//:openssl",
     "@crate_index//:tempfile",
 ]
 

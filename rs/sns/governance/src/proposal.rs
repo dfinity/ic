@@ -41,17 +41,6 @@ pub const PROPOSAL_URL_CHAR_MAX: usize = 2048;
 /// The maximum number of bytes in an SNS motion proposal's motion_text.
 pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
 
-/// The minimum number of votes a proposal must have at the end of the voting period to be
-/// adopted with a plurality of the voting power submitted rather than a majority of the
-/// total available voting power.
-///
-/// A proposal is adopted if either a majority of the total voting power available voted
-/// in favor of the proposal or if the proposal reaches the end of the voting period,
-/// there is a minimum amount of votes, and a plurality of the used voting power is in
-/// favor of the proposal. This minimum of votes is expressed as a ratio of the used
-/// voting power in favor of the proposal divided by the total available voting power.
-pub const MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO: f64 = 0.03;
-
 /// The maximum number of proposals returned by one call to the method `list_proposals`,
 /// which can be used to list all proposals in a paginated fashion.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
@@ -383,13 +372,7 @@ fn validate_and_render_upgrade_sns_controlled_canister(
             defects.push(err);
         }
         Ok(id) => {
-            // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
-            // check does nothing.
-            if let Err(err) = CanisterId::new(*id) {
-                defects.push(format!("Specified canister ID was invalid: {}", err));
-            } else {
-                canister_id = *id;
-            }
+            canister_id = *id;
         }
     }
 
@@ -520,15 +503,7 @@ fn validate_canister_id(
             defects.push(format!("{} field was not populated.", field_name));
             None
         }
-        // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
-        // check does nothing.
-        Some(canister_id) => match CanisterId::new(*canister_id) {
-            Err(err) => {
-                defects.push(format!("{} was invalid: {}", field_name, err));
-                None
-            }
-            Ok(target_canister_id) => Some(target_canister_id),
-        },
+        Some(canister_id) => Some(CanisterId::unchecked_from_principal(*canister_id)),
     }
 }
 
@@ -741,9 +716,8 @@ fn validate_and_render_register_dapp_canisters(
     let canisters_to_register = register_dapp_canisters
         .canister_ids
         .iter()
-        .map(|id| CanisterId::new(*id))
-        .collect::<Result<HashSet<CanisterId>, _>>()
-        .map_err(|err| err.to_string())?;
+        .map(|id| CanisterId::unchecked_from_principal(*id))
+        .collect::<HashSet<CanisterId>>();
 
     let error_canister_ids: HashSet<&CanisterId> = disallowed_canister_ids
         .intersection(&canisters_to_register)
@@ -790,9 +764,8 @@ fn validate_and_render_deregister_dapp_canisters(
     let canisters_to_deregister = deregister_dapp_canisters
         .canister_ids
         .iter()
-        .map(|id| CanisterId::new(*id))
-        .collect::<Result<HashSet<CanisterId>, _>>()
-        .map_err(|err| err.to_string())?;
+        .map(|id| CanisterId::unchecked_from_principal(*id))
+        .collect::<HashSet<CanisterId>>();
 
     let error_canister_ids: HashSet<&CanisterId> = disallowed_canister_ids
         .intersection(&canisters_to_deregister)
@@ -1097,9 +1070,52 @@ impl ProposalData {
     /// The result is only meaningful if a decision on the proposal's result can be made, i.e.,
     /// either there is a majority of yes-votes or the proposal's deadline has passed.
     pub fn is_accepted(&self) -> bool {
-        if let Some(tally) = self.latest_tally.as_ref() {
-            (tally.yes as f64 >= tally.total as f64 * MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO)
-                && tally.yes > tally.no
+        let majority_required_to_adopt_basis_points = 5_000;
+
+        let minimum_yes_proportion_of_total_basis_points = self
+            .minimum_yes_proportion_of_total
+            .and_then(|percentage| percentage.basis_points)
+            .unwrap_or(
+                NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+                    .basis_points
+                    .unwrap(),
+            ) as u128;
+
+        debug_assert!(
+            majority_required_to_adopt_basis_points < 10_000,
+            "majority_required_to_adopt_basis_points ({majority_required_to_adopt_basis_points}) should be < 100%"
+        );
+        debug_assert!(
+            majority_required_to_adopt_basis_points >= 5_000,
+            "majority_required_to_adopt_basis_points ({majority_required_to_adopt_basis_points}) should be >= 50%"
+        );
+
+        debug_assert!(
+            minimum_yes_proportion_of_total_basis_points <= majority_required_to_adopt_basis_points,
+            "minimum_yes_proportion_of_total_basis_points ({minimum_yes_proportion_of_total_basis_points}) should be <= majority_required_to_adopt_basis_points ({majority_required_to_adopt_basis_points})"
+        );
+
+        if let Some(tally) = &self.latest_tally {
+            debug_assert!(
+                tally.total >= tally.yes.saturating_add(tally.no),
+                "The total number of votes ({}) should be greater than or equal to the number of yes votes ({}) plus the number of no votes ({})",
+                tally.total,
+                tally.yes,
+                tally.no
+            );
+
+            // We'll convert the values to u128 to prevent overflow.
+            let yes = tally.yes as u128;
+            let no = tally.no as u128;
+            let total = tally.total as u128;
+
+            let quorum_met = yes * 10_000 >= total * minimum_yes_proportion_of_total_basis_points;
+
+            // e.g. if majority_required_to_adopt_basis_points is 5000 (50%),
+            // this would require 50%+1 of the cast votes to be yes
+            let majority_met = yes * 10_000 > (yes + no) * 5_000;
+
+            quorum_met && majority_met
         } else {
             false
         }
@@ -1107,7 +1123,7 @@ impl ProposalData {
 
     /// Returns true if a decision can be made right now to adopt or reject the proposal.
     /// The proposal must be tallied prior to calling this method.
-    pub(crate) fn can_make_decision(&self, now_seconds: u64) -> bool {
+    pub fn can_make_decision(&self, now_seconds: u64) -> bool {
         if let Some(tally) = &self.latest_tally {
             // Even when a proposal's deadline has not passed, a proposal is
             // adopted if strictly more than half of the votes are 'yes' and
@@ -2484,9 +2500,8 @@ Version {
             .take(1)
             // convert to CanisterId
             .cloned()
-            .map(CanisterId::new)
-            .collect::<Result<HashSet<_>, _>>()
-            .unwrap();
+            .map(CanisterId::unchecked_from_principal)
+            .collect::<HashSet<_>>();
 
         let register_dapp_canisters = RegisterDappCanisters { canister_ids };
         let rendered_err = validate_and_render_register_dapp_canisters(
@@ -2570,9 +2585,8 @@ Version {
             .take(1)
             // convert to CanisterId
             .cloned()
-            .map(CanisterId::new)
-            .collect::<Result<HashSet<_>, _>>()
-            .unwrap();
+            .map(CanisterId::unchecked_from_principal)
+            .collect::<HashSet<_>>();
 
         let deregister_dapp_canisters = DeregisterDappCanisters {
             canister_ids,

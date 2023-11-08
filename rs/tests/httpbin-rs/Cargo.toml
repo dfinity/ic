@@ -1,15 +1,18 @@
 [package]
 name = "httpbin-rs"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 axum = "0.6.18"
-axum-server = { version = "0.5.1", features = ["tls-openssl", "tls-rustls"] }
+axum-server = { version = "0.5.1", features = ["tls-rustls"] }
 clap = { version = "4.0", features = ["derive"] }
 rustls = "0.21.1"
 rustls-pemfile = "1.0.2"
-serde_json = { version = "1.0" }
-tokio = "1.32.0"
+serde_json = { workspace = true }
+tokio = { workspace = true }

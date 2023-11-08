@@ -1,7 +1,10 @@
 [package]
 name = "ic-crypto-ecdsa-secp256k1"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,7 +14,7 @@ lazy_static = "1.4"
 num-bigint = "0.4"
 pem = "1.1.0"
 rand = "0.8"
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 
 [dev-dependencies]

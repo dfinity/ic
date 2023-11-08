@@ -150,7 +150,6 @@ fn dkg_payload_builder_fn(
             validation_context,
             no_op_logger(),
             10, // at most dealings per block
-            0,  // dealings age in secs
         )
         .unwrap_or_else(|err| panic!("Couldn't create the payload: {:?}", err))
     })
@@ -160,6 +159,7 @@ impl TestConsensusPool {
     /// Creates a new test pool. `registry_version_for_genesis` is used to
     /// create the genesis block with data from the provided registry.
     pub fn new(
+        node_id: NodeId,
         subnet_id: SubnetId,
         pool_config: ArtifactPoolConfig,
         time_source: Arc<dyn TimeSource>,
@@ -183,9 +183,10 @@ impl TestConsensusPool {
             }),
         ));
         let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
-        let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let pool = ConsensusPoolImpl::new(
+            node_id,
             subnet_id,
-            ic_test_utilities::consensus::make_genesis(summary),
+            (&ic_test_utilities::consensus::make_genesis(summary)).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
@@ -711,7 +712,9 @@ impl ConsensusPool for TestConsensusPool {
     }
 }
 
-impl MutablePool<ConsensusArtifact, ChangeSet> for TestConsensusPool {
+impl MutablePool<ConsensusArtifact> for TestConsensusPool {
+    type ChangeSet = ChangeSet;
+
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
     }

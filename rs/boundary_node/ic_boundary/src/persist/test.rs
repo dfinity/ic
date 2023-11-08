@@ -1,7 +1,6 @@
-use super::{principal_to_u256, Persist, PersistStatus, Persister, RouteSubnet, Routes};
+use super::{principal_bytes_to_u256, Persist, PersistStatus, Persister, RouteSubnet, Routes};
 
 use std::{
-    collections::HashMap,
     net::{IpAddr, Ipv4Addr},
     sync::Arc,
 };
@@ -11,10 +10,19 @@ use arc_swap::ArcSwapOption;
 use candid::Principal;
 use ethnum::u256;
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
-use ic_protobuf::registry::subnet::v1::SubnetType;
+use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::types::ids::node_test_id;
 
-use crate::snapshot::{CanisterRange, Node, RoutingTable, Subnet};
+use crate::snapshot::{CanisterRange, Node, Subnet};
+
+// Converts string principal to a u256
+fn principal_to_u256(p: &str) -> Result<u256, Error> {
+    // Parse textual representation into a byte slice
+    let p = Principal::from_text(p)?;
+    let p = p.as_slice();
+
+    Ok(principal_bytes_to_u256(p))
+}
 
 #[test]
 fn test_principal_to_u256() -> Result<(), Error> {
@@ -54,6 +62,7 @@ pub fn node(i: u64, subnet_id: Principal) -> Node {
     Node {
         id: node_test_id(1001 + i).get().0,
         subnet_id,
+        subnet_type: SubnetType::Application,
         addr: IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
         port: 8080,
         tls_certificate: valid_tls_certificate_and_validation_time()
@@ -63,7 +72,7 @@ pub fn node(i: u64, subnet_id: Principal) -> Node {
     }
 }
 
-pub fn generate_test_routing_table(offset: u64) -> RoutingTable {
+pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {
     let subnet_id_1 =
         Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap();
@@ -123,16 +132,7 @@ pub fn generate_test_routing_table(offset: u64) -> RoutingTable {
         replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
     };
 
-    RoutingTable {
-        registry_version: 1,
-        nns_subnet_id: Principal::from_text("fscpm-uiaaa-aaaaa-aaaap-yai").unwrap(),
-        subnets: vec![subnet1, subnet2, subnet3],
-        nodes: HashMap::from([
-            (node1.id.to_string(), node1),
-            (node2.id.to_string(), node2),
-            (node3.id.to_string(), node3),
-        ]),
-    }
+    vec![subnet1, subnet2, subnet3]
 }
 
 fn generate_test_routes(offset: u64) -> Routes {
@@ -196,34 +196,27 @@ fn generate_test_routes(offset: u64) -> Routes {
 #[tokio::test]
 async fn test_persist() -> Result<(), Error> {
     let routes = generate_test_routes(0);
-    let routing_table = generate_test_routing_table(0);
+    let subnets = generate_test_subnets(0);
 
     let rt_init = Arc::new(ArcSwapOption::empty());
     let persister = Persister::new(Arc::clone(&rt_init));
 
     // Persist the routing table
-    let result = persister.persist(routing_table.clone()).await.unwrap();
+    let result = persister.persist(subnets.clone()).await;
     // Check the result
     assert!(matches!(result, PersistStatus::Completed(_)));
     // Compare the persisted table state with expected
     assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
 
     // Check empty table
-    let empty_table = RoutingTable {
-        registry_version: 1,
-        nns_subnet_id: Principal::from_text("fscpm-uiaaa-aaaaa-aaaap-yai").unwrap(),
-        subnets: vec![],
-        nodes: HashMap::new(),
-    };
-
-    let result = persister.persist(empty_table).await.unwrap();
+    let result = persister.persist(vec![]).await;
     assert!(matches!(result, PersistStatus::SkippedEmpty));
     // Check if the table hasn't changed
     assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
 
     // Generate different table
-    let routing_table = generate_test_routing_table(1);
-    let result = persister.persist(routing_table).await.unwrap();
+    let subnets = generate_test_subnets(1);
+    let result = persister.persist(subnets).await;
     // Check if it was updated
     assert!(matches!(result, PersistStatus::Completed(_)));
     // Check if the routing table matches expected one

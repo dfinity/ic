@@ -1,22 +1,33 @@
 [package]
 name = "pocket-ic"
-version = "0.0.1"
-edition = "2021"
+version = "1.0.0"
+license = "Apache-2.0"
+description = "PocketIC: A Canister Smart Contract Testing Platform"
+repository = "https://github.com/dfinity/ic"
+readme = "README.md"
+categories = ["emulators", "development-tools::testing", "wasm"]
+keywords = ["icp", "canister", "testing", "smart-contract", "internet-computer"]
+include = ["src", "Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE"]
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
-candid = "^0.9"
+candid = { workspace = true }
 reqwest = { version = "0.11", features = [
     "blocking",
     "json",
 ], default-features = false }
-serde = { version = "1", features = ["derive"] }
-serde_json = "^1.0"
-serde_bytes = "^0.11"
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_bytes = { workspace = true }
 ic-cdk = "0.10"
 base64 = { workspace = true }
 hex = "^0.4.2"
 async-trait = "^0.1.73"
-
+tracing = "0.1"
+tracing-appender = "^0.2.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 flate2 = "1.0.27"

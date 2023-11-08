@@ -14,11 +14,16 @@ function install_guestos() {
     vgchange -ay hostlvm
     log_and_reboot_on_error "${?}" "Unable to activate HostOS volume group."
 
-    size=$(tar --list -v -f /data/guest-os.img.tar.gz disk.img | cut -d ' ' -f 3)
+    TMPDIR=$(mktemp -d)
+    tar xafS /data/guest-os.img.tar.zst -C "${TMPDIR}" disk.img
+
+    size=$(wc -c <"${TMPDIR}/disk.img")
     size="${size:=0}"
 
-    tar xzOf /data/guest-os.img.tar.gz disk.img | pv -f -s "$size" | dd of=${LV} bs=10M
+    pv -f -s "$size" "${TMPDIR}/disk.img" | dd of=${LV} bs=10M conv=sparse
     log_and_reboot_on_error "${?}" "Unable to install GuestOS disk-image."
+
+    rm -rf "${TMPDIR}"
 
     sync
     log_and_reboot_on_error "${?}" "Unable to synchronize cached writes to persistent storage."

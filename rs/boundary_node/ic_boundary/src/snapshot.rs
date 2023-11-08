@@ -1,8 +1,16 @@
+use std::{
+    collections::HashMap,
+    fmt,
+    net::IpAddr,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
-use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
@@ -10,15 +18,21 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
-use std::{collections::HashMap, fmt, net::IpAddr, str::FromStr, sync::Arc};
+use ic_registry_subnet_type::SubnetType;
+use ic_types::RegistryVersion;
+use tracing::info;
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
-use crate::core::Run;
+use crate::{
+    core::Run,
+    firewall::{FirewallGenerator, SystemdReloader},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
+    pub subnet_type: SubnetType,
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
@@ -52,43 +66,67 @@ impl fmt::Display for Subnet {
     }
 }
 
+// TODO remove after decentralization and clean up all loose ends
+pub struct SnapshotPersister {
+    generator: FirewallGenerator,
+    reloader: SystemdReloader,
+}
+
+impl SnapshotPersister {
+    pub fn new(generator: FirewallGenerator, reloader: SystemdReloader) -> Self {
+        Self {
+            generator,
+            reloader,
+        }
+    }
+
+    pub async fn persist(&self, s: RegistrySnapshot) -> Result<(), Error> {
+        self.generator.generate(s)?;
+        self.reloader.reload().await
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct RoutingTable {
+pub struct RegistrySnapshot {
     pub registry_version: u64,
-    pub nns_subnet_id: Principal,
     pub subnets: Vec<Subnet>,
     // Hash map for a faster lookup by DNS resolver
     pub nodes: HashMap<String, Node>,
 }
 
 pub struct Runner {
-    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     registry_client: Arc<dyn RegistryClient>,
+    registry_version_available: Option<RegistryVersion>,
+    registry_version_published: Option<RegistryVersion>,
+    last_version_change: Instant,
+    min_version_age: Duration,
+    persister: Option<SnapshotPersister>,
 }
 
 impl Runner {
     pub fn new(
-        published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
+        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
         registry_client: Arc<dyn RegistryClient>,
+        min_version_age: Duration,
     ) -> Self {
         Self {
-            published_routing_table,
+            published_registry_snapshot,
             registry_client,
+            registry_version_published: None,
+            registry_version_available: None,
+            last_version_change: Instant::now(),
+            min_version_age,
+            persister: None,
         }
     }
 
-    // Constructs a routing table based on registry
-    fn get_routing_table(&mut self) -> Result<RoutingTable, Error> {
-        let version = self.registry_client.get_latest_version();
+    pub fn set_persister(&mut self, persister: SnapshotPersister) {
+        self.persister = Some(persister);
+    }
 
-        // Get NNS subnet ID
-        // TODO What do we need it for?
-        let root_subnet_id = self
-            .registry_client
-            .get_root_subnet_id(version)
-            .context("failed to get root subnet id")? // Result
-            .context("root subnet id not available")?; // Option
-
+    // Creates a snapshot of the registry for given version
+    fn get_snapshot(&mut self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
         let routing_table = self
             .registry_client
@@ -141,6 +179,9 @@ impl Runner {
                     .context("failed to get replica version")? // Result
                     .context("replica version not available")?; // Option
 
+                // If this fails then the libraries are in despair, better to die here
+                let subnet_type = SubnetType::try_from(subnet.subnet_type()).unwrap();
+
                 let nodes = node_ids
                     .into_iter()
                     .map(|node_id| {
@@ -166,6 +207,7 @@ impl Runner {
                         let node_route = Node {
                             id: node_id.as_ref().0,
                             subnet_id: subnet_id.as_ref().0,
+                            subnet_type,
                             addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
                                 .context("unable to parse IP address")?,
                             port: http_endpoint.port as u16, // Port is u16 anyway
@@ -186,7 +228,7 @@ impl Runner {
 
                 let subnet_route = Subnet {
                     id: subnet_id.as_ref().0,
-                    subnet_type: subnet.subnet_type(),
+                    subnet_type,
                     ranges,
                     nodes,
                     replica_version: replica_version.to_string(),
@@ -198,9 +240,8 @@ impl Runner {
             .collect::<Result<Vec<Subnet>, Error>>()
             .context("unable to get subnets")?;
 
-        Ok(RoutingTable {
+        Ok(RegistrySnapshot {
             registry_version: version.get(),
-            nns_subnet_id: root_subnet_id.as_ref().0,
             subnets,
             nodes: nodes_map,
         })
@@ -210,9 +251,56 @@ impl Runner {
 #[async_trait]
 impl Run for Runner {
     async fn run(&mut self) -> Result<(), Error> {
-        // Obtain routing table & publish it
-        let rt = self.get_routing_table()?;
-        self.published_routing_table.store(Some(Arc::new(rt)));
+        // Fetch latest available registry version
+        let version = self.registry_client.get_latest_version();
+
+        if self.registry_version_available != Some(version) {
+            self.registry_version_available = Some(version);
+            self.last_version_change = Instant::now();
+        }
+
+        // If we have just started and have no snapshot published then we
+        // need to make sure that the registry client has caught up with
+        // the latest version before going online.
+        if self.published_registry_snapshot.load().is_none() {
+            // We check that the versions stop progressing for some period of time
+            // and only then allow the initial publishing.
+            if self.last_version_change.elapsed() < self.min_version_age {
+                info!(
+                    action = "snapshot",
+                    "Snapshot {version} is not old enough, not publishing"
+                );
+                return Ok(());
+            }
+        }
+
+        // Check if we already have this version published
+        if self.registry_version_published == Some(version) {
+            return Ok(());
+        }
+
+        // Otherwise create a snapshot & publish it
+        let snapshot = self.get_snapshot(version)?;
+
+        self.published_registry_snapshot
+            .store(Some(Arc::new(snapshot.clone())));
+
+        info!(
+            action = "snapshot",
+            version_old = self.registry_version_published.map(|x| x.get()),
+            version_new = version.get(),
+            nodes = snapshot.nodes.len(),
+            subnets = snapshot.subnets.len(),
+            "New registry snapshot published"
+        );
+
+        self.registry_version_published = Some(version);
+
+        // Persist the firewall rules if configured
+        if let Some(v) = &self.persister {
+            v.persist(snapshot).await?;
+        }
+
         Ok(())
     }
 }

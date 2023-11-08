@@ -235,29 +235,3 @@ sh_binary(
     ],
     visibility = ["//visibility:public"],
 )
-
-sh_test(
-    name = "candid-backwards",
-    size = "small",
-    srcs = ["candid-backwards.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "//gitlab-ci/src/checks:candid_changes_are_backwards_compatible.py",
-        "@candid//:didc",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "script_path": "$(rootpath //gitlab-ci/src/checks:candid_changes_are_backwards_compatible.py)",
-        "candid_path": "$(rootpath @candid//:didc)",
-    },
-    env_inherit = [
-        "CI_MERGE_REQUEST_TITLE",
-        "CI_MERGE_REQUEST_TARGET_BRANCH_NAME",
-    ],
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-)

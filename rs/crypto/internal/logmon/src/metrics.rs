@@ -217,24 +217,40 @@ impl CryptoMetrics {
         }
     }
 
-    pub fn observe_vault_message_size(
+    pub fn observe_vault_message_serialization(
         &self,
         service_type: ServiceType,
         message_type: MessageType,
         domain: MetricsDomain,
         method_name: &str,
-        size: usize,
+        message_size: usize,
+        start_time: Option<Instant>,
     ) {
         if let Some(metrics) = &self.metrics {
+            let service_type_string = &format!("{}", service_type);
+            let message_type_string = &format!("{}", message_type);
+            let domain_string = &format!("{}", domain);
             metrics
                 .crypto_vault_message_sizes
                 .with_label_values(&[
-                    &format!("{}", service_type),
-                    &format!("{}", message_type),
-                    &format!("{}", domain),
+                    service_type_string,
+                    message_type_string,
+                    domain_string,
                     method_name,
                 ])
-                .observe(size as f64);
+                .observe(message_size as f64);
+
+            if let Some(start_time) = start_time {
+                metrics
+                    .crypto_vault_message_serialization_duration_seconds
+                    .with_label_values(&[
+                        service_type_string,
+                        message_type_string,
+                        domain_string,
+                        method_name,
+                    ])
+                    .observe(start_time.elapsed().as_secs_f64());
+            }
         }
     }
 
@@ -529,6 +545,14 @@ struct Metrics {
     /// The 'message_type' label indicates whether the message is a request or a response.
     pub crypto_vault_message_sizes: HistogramVec,
 
+    /// Histograms of messages' sizes sent between the CSP vault client and server via the RPC socket.
+    /// The observed value is the size of the duration of (de)serialization in seconds.
+    /// The 'method_name' label indicates the functionality, such as `sign` or `idkg_retain_active_keys`.
+    /// The 'service_type' label indicates whether the observation is made by the `client` or `server`
+    /// The 'message_type' label indicates whether the message is a request or a response.
+    /// The 'result' label indicates if the result of the operation was an `Ok(_)`
+    pub crypto_vault_message_serialization_duration_seconds: HistogramVec,
+
     /// Metrics for the cache of successfully verified BLS12-381 threshold signatures.
     pub crypto_bls12_381_sig_cache_metrics: bls12_381_sig_cache::Metrics,
 
@@ -645,6 +669,12 @@ impl Metrics {
                     1000.0, 10000.0, 100000.0, 1000000.0, 2000000.0, 4000000.0, 8000000.0,
                     16000000.0, 20000000.0, 24000000.0, 28000000.0, 30000000.0,
                 ],
+                &["service_type", "message_type", "domain", "method_name"],
+            ),
+            crypto_vault_message_serialization_duration_seconds: r.histogram_vec(
+                "crypto_vault_message_serialization_duration_seconds",
+                "Duration in seconds of (de)serialization",
+                vec![0.000_001, 0.000_01, 0.000_1, 0.001, 0.01, 0.1, 1.0, 10.0],
                 &["service_type", "message_type", "domain", "method_name"],
             ),
             crypto_bls12_381_sig_cache_metrics: bls12_381_sig_cache::Metrics {

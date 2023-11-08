@@ -19,9 +19,9 @@ use ic_nervous_system_clients::{
     update_settings::{CanisterSettings, UpdateSettings},
 };
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
-use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
 
+pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
 pub mod pb;
 pub mod types;
@@ -401,8 +401,7 @@ impl SnsRootCanister {
                 );
             return Ok(());
         }
-        let canister_to_register =
-            CanisterId::new(canister_to_register).map_err(|_| "Canister ID invalid")?;
+        let canister_to_register = CanisterId::unchecked_from_principal(canister_to_register);
 
         // Make sure we are a controller by querying the management canister.
         let canister_status = management_canister_client
@@ -720,15 +719,7 @@ impl SnsRootCanister {
 }
 
 async fn get_swap_status(env: &impl Environment, swap_id: PrincipalId) -> CanisterSummary {
-    let Ok(canister_id) = CanisterId::new(swap_id) else {
-        log!(
-            ERROR,
-            "The recorded Swap principal id, '{}', is not a valid CanisterId.",
-            swap_id
-        );
-        return CanisterSummary::new_with_no_status(swap_id);
-    };
-
+    let canister_id = CanisterId::unchecked_from_principal(swap_id);
     let status = match env
         .call_canister(
             canister_id,
@@ -806,10 +797,12 @@ async fn get_owned_canister_summary(
 mod tests {
     use super::*;
     use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
-    use ic_nervous_system_clients::canister_status::CanisterStatusResultFromManagementCanister;
-    use ic_nervous_system_clients::management_canister_client::{
-        MockManagementCanisterClient, MockManagementCanisterClientCall,
-        MockManagementCanisterClientReply,
+    use ic_nervous_system_clients::{
+        canister_status::CanisterStatusResultFromManagementCanister,
+        management_canister_client::{
+            MockManagementCanisterClient, MockManagementCanisterClientCall,
+            MockManagementCanisterClientReply,
+        },
     };
     use std::{
         collections::VecDeque,

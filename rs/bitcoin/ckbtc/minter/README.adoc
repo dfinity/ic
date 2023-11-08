@@ -104,25 +104,27 @@ dfx canister --network ic call minter retrieve_btc_status "(record { block_index
 
 === ckBTC to Bitcoin (old flow)
 ```
- ┌────┐                ┌──────┐┌────────────┐
- │User│                │Minter││ckBTC ledger│
- └─┬──┘                └──┬───┘└─────┬──────┘
-   │                      │          │       
-   │get_withdrawal_account│          │       
-   │─────────────────────>│          │       
-   │                      │          │       
-   │       account        │          │       
-   │<─────────────────────│          │       
-   │                      │          │       
-   │    icrc1_transfer to account    │       
-   │────────────────────────────────>│       
-   │                      │          │       
-   │     retrieve_btc     │          │       
-   │─────────────────────>│          │       
- ┌─┴──┐                ┌──┴───┐┌─────┴──────┐
- │User│                │Minter││ckBTC ledger│
- └────┘                └──────┘└────────────┘
-
+ ┌────┐                ┌──────┐┌────────────┐    ┌───────────────┐
+ │User│                │Minter││ckBTC ledger│    │Bitcoin Network│
+ └─┬──┘                └──┬───┘└─────┬──────┘    └───────┬───────┘
+   │                      │          │                   │        
+   │get_withdrawal_account│          │                   │        
+   │─────────────────────>│          │                   │        
+   │                      │          │                   │        
+   │       account        │          │                   │        
+   │<─────────────────────│          │                   │        
+   │                      │          │                   │        
+   │     icrc1_transfer(account)     │                   │        
+   │────────────────────────────────>│                   │        
+   │                      │          │                   │        
+   │     retrieve_btc     │          │                   │        
+   │─────────────────────>│          │                   │        
+   │                      │          │                   │        
+   │                      │Send BTC to withdrawal address│        
+   │                      │─────────────────────────────>│        
+ ┌─┴──┐                ┌──┴───┐┌─────┴──────┐    ┌───────┴───────┐
+ │User│                │Minter││ckBTC ledger│    │Bitcoin Network│
+ └────┘                └──────┘└────────────┘    └───────────────┘
 ```
 
 1. Obtain the withdrawal address and store it in a variable.

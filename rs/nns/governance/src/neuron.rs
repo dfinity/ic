@@ -1,24 +1,22 @@
 use crate::{
     governance,
     governance::{
-        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        DEPRECATED_TOPICS, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     pb::v1::{
-        governance::NeuronInFlightCommand,
-        governance_error::ErrorType,
-        manage_neuron::{self, NeuronIdOrSubaccount},
-        neuron::DissolveState,
-        Ballot, BallotInfo, GovernanceError, Neuron, NeuronInfo, NeuronState, ProposalData,
-        ProposalStatus, Topic, Vote,
+        governance_error::ErrorType, manage_neuron, neuron::DissolveState, Ballot, BallotInfo,
+        GovernanceError, Neuron, NeuronInfo, NeuronState, Topic, Vote,
     },
 };
+#[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap},
     ops::RangeBounds,
 };
 
@@ -127,9 +125,11 @@ impl Neuron {
             .collect()
     }
 
-    /// Returns true if this is a community fund neuron.
-    pub(crate) fn is_community_fund_neuron(&self) -> bool {
-        self.joined_community_fund_timestamp_seconds.is_some()
+    /// Returns whether self is a member of Neurons Fund.
+    pub(crate) fn is_a_neurons_fund_member(&self) -> bool {
+        self.joined_community_fund_timestamp_seconds
+            .unwrap_or_default()
+            > 0
     }
 
     /// Return the voting power of this neuron.
@@ -253,10 +253,13 @@ impl Neuron {
         }
     }
 
-    pub(crate) fn unstake_maturity_if_dissolved(&mut self, now_seconds: u64) {
-        if self.state(now_seconds) == NeuronState::Dissolved
+    pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
+        self.state(now_seconds) == NeuronState::Dissolved
             && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
-        {
+    }
+
+    pub(crate) fn unstake_maturity(&mut self, now_seconds: u64) {
+        if self.ready_to_unstake_maturity(now_seconds) {
             self.maturity_e8s_equivalent = self
                 .maturity_e8s_equivalent
                 .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0));
@@ -675,7 +678,7 @@ impl Neuron {
     ///
     /// Only a non-dissolving neuron has a non-zero age. The age of all other
     /// neurons (i.e., dissolving and dissolved) is represented as
-    /// `againg_since_timestamp_seconds == u64::MAX`. This method maintains
+    /// `aging_since_timestamp_seconds == u64::MAX`. This method maintains
     /// that invariant.
     pub fn update_stake_adjust_age(&mut self, updated_stake_e8s: u64, now: u64) {
         // If the updated stake is less than the original stake, preserve the
@@ -736,109 +739,110 @@ impl Neuron {
     ///
     /// The exact criteria is subject to change. Currently, all of the following must hold:
     ///
-    ///     1. Not funded (i.e. no stake, and no maturity).
-    ///     2. Not currently involved in an open proposal
-    ///     3. Not in the middle of a neuron operation.
+    ///     1. Not funded: No stake, and no (unstaked) maturity.
+    ///     2. Dissolved sufficiently "long ago": Precisely, dissolved as of now - 2 weeks.
+    ///     3. Member of the Neuron's Fund.
     ///
-    /// Notice that under these criteria, a Neuron cannot become inactive merely by the passage of
-    /// time. This is nice, because we can always immediately detect when a neuron transitions from
-    /// active to inactive simply by watching all mutations, as opposed to scheduling an update at
-    /// the future moment when a neuron transitions from active to inactive. (Therefore, we could
-    /// say that this property is "static", or, perhaps, even better "temporaly stable".)
+    /// Remarks about condition 2:
     ///
-    /// The last two criteria are why auxiliary data needs to be passed. (By contrast, 1 can be
-    /// determined using only data in self.)
+    /// A. Notice that under these criteria, a Neuron CAN INDEED become inactive merely by the passage
+    /// of time. This is unfortunate, but not catastrophic. As long as "most" inactive Neurons are
+    /// in stable memory, and nothing is relying on "if a Neuron is inactive, then it is in stable
+    /// memory", then we have achieved our goal: save heap space.
     ///
-    /// Usage Tip
-    /// ---------
-    ///
-    /// To avoid violating Rust's reference rules, it is useful to create some references, like so:
-    ///
-    /// ```Rust
-    /// // Good.
-    /// let proposals = &governance.heap_data.proposals;
-    /// let in_flight_commands = &governance.heap_data.in_flight_commands;
-    /// let is_neuron_inactive = |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
-    /// ```
-    ///
-    /// instead of
-    ///
-    /// ```Rust
-    /// // Bad.
-    /// let is_neuron_inactive = |neuron: &Neuron| {
-    ///     neuron.is_inactive(
-    ///        &governance.heap_data.proposals,
-    ///        &governance.heap_data.in_flight_commands,
-    ///     )
-    /// };
-    /// ```
-    ///
-    /// The reason that the latter is more likely to cause reference rules violations is that it
-    /// captures _everything_ in governance, not just the two sub-data that we need. need-to-know
-    /// basis for the win!
-    ///
-    /// Also, to avoid using these references (indirectly via is_neuron_inactive) after an await, it
-    /// is a good idea to enclose the call where you pass is_neuron_inactive to some other function
-    /// in an "extra" set of braces. I.e.
-    ///
-    /// ```Rust
-    /// let f_result = {
-    ///     let proposals = &governance.heap_data.proposals;
-    ///     let in_flight_commands = &governance.heap_data.in_flight_commands;
-    ///     let is_neuron_inactive = |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
-    ///     f(&mut neuron_store, is_neuron_inactive)
-    /// };
-    /// ```
-    ///
-    /// Notice that after the block, is_neuron_inactive can't be accidentally used after an await.
-    ///
-    /// Also, notice that f should not be async. Otherwise, the bad thing can can easily be done
-    /// within f: is_neuron_inactive is used after an await.
-    pub fn is_inactive(
-        &self,
-        // Supporting auxiliary data, from GovernanceProto.
-        proposals: &BTreeMap</* Proposal ID */ u64, ProposalData>,
-        in_flight_commands: &HashMap</* Neuron ID */ u64, NeuronInFlightCommand>,
-    ) -> bool {
-        fn involved_with_open_proposal(
-            proposals: &BTreeMap<u64, ProposalData>,
-            neuron: &Neuron,
-        ) -> bool {
-            let id = neuron.id.as_ref().unwrap();
-            let subaccount = &neuron.account;
-
-            proposals.values().any(|p| {
-                if p.status() != ProposalStatus::Open {
-                    return false;
-                }
-
-                if p.proposer.as_ref() == Some(id) {
-                    return true;
-                }
-
-                let manage_neuron_proposal_involves_neuron = p.is_manage_neuron()
-                    && p.proposal.as_ref().map_or(false, |pr| {
-                        pr.managed_neuron() == Some(NeuronIdOrSubaccount::NeuronId(*id))
-                            || pr.managed_neuron()
-                                == Some(NeuronIdOrSubaccount::Subaccount(subaccount.clone()))
-                    });
-
-                manage_neuron_proposal_involves_neuron
-            })
+    /// B. This is why this method has the `now` parameter.
+    pub fn is_inactive(&self, now: u64) -> bool {
+        // Require condition 1.
+        if self.is_funded() {
+            return false;
         }
 
-        let is_locked = self
-            .id
-            .as_ref()
-            .map(|id| in_flight_commands.contains_key(&id.id))
-            .unwrap_or_default();
+        // Require condition 2.
 
-        let has_stake = self.stake_e8s() != 0;
+        // 2.1: Interpret dissolve_state field.
+        let dissolved_at_timestamp_seconds = match self.dissolved_at_timestamp_seconds() {
+            // None -> not dissolving -> will be dissolved in the future -> not dissolved now ->
+            // certainly was not dissolved sufficiently "long" ago!
+            None => {
+                return false;
+            }
+            Some(ok) => ok,
+        };
 
-        let has_maturity = self.maturity_e8s_equivalent != 0;
+        // 2.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
+        // Thus, we can evaluate whether that happened sufficiently long ago.
+        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * SECONDS_PER_DAY;
+        if dissolved_at_timestamp_seconds > max_dissolved_at_timestamp_seconds_to_be_inactive {
+            return false;
+        }
 
-        !has_maturity && !has_stake && !is_locked && !involved_with_open_proposal(proposals, self)
+        // Finally, require condition 3: Member of the Neuron's Fund.
+        if self.is_a_neurons_fund_member() {
+            return false;
+        }
+
+        // All requirements have been met.
+        true
     }
+
+    pub fn is_funded(&self) -> bool {
+        let amount_e8s = self.stake_e8s() + self.maturity_e8s_equivalent;
+        amount_e8s > 0
+    }
+
+    /// If not dissolving, returns None. Otherwise, returns Some Unix timestamp (seconds) when the
+    /// Neuron is dissolved (could be in the past, present, or future).
+    ///
+    /// Note that when self.dissolve_state == DissolveDelaySeconds(0), even though the Neuron is
+    /// dissolved, we do not know when that happened. This tends to happen when Neurons are first
+    /// created. In those cases, we could have set dissolve_state to
+    /// WhenDissolvedTimestampSeconds(now()), but we didn't. This could be changed for new Neurons,
+    /// but there is no intention to do that (yet).
+    pub fn dissolved_at_timestamp_seconds(&self) -> Option<u64> {
+        use DissolveState::{DissolveDelaySeconds, WhenDissolvedTimestampSeconds};
+        match self.dissolve_state {
+            None => None,
+            Some(WhenDissolvedTimestampSeconds(result)) => Some(result),
+            Some(DissolveDelaySeconds(seconds)) => {
+                if seconds == 0 {
+                    println!(
+                        "{}WARNING: Neuron {:#?} is dissolved, but it is not \
+                         known when that happened. Thus, by default, \
+                         dissolved_at_timestamp_seconds is set to None.",
+                        LOG_PREFIX, self.id,
+                    );
+                }
+
+                None
+            }
+        }
+    }
+
+    /// Omit deprecated topics from a Neuron's followees. Used to scrub deprecated
+    /// topics from Governance's APIs.
+    pub(crate) fn without_deprecated_topics_from_followees(mut self) -> Self {
+        for topic in DEPRECATED_TOPICS {
+            let converted_topic = topic as i32;
+            self.followees.remove(&converted_topic);
+        }
+        self
+    }
+}
+
+/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
+/// that operate on NeuronId ranges with internal u64 representations in data.
+pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
+    let first = match range.start_bound() {
+        std::ops::Bound::Included(start) => start.id,
+        std::ops::Bound::Excluded(start) => start.id + 1,
+        std::ops::Bound::Unbounded => 0,
+    };
+    let last = match range.end_bound() {
+        std::ops::Bound::Included(end) => end.id,
+        std::ops::Bound::Excluded(end) => end.id - 1,
+        std::ops::Bound::Unbounded => u64::MAX,
+    };
+    first..=last
 }
 
 #[cfg(test)]
@@ -1144,20 +1148,4 @@ mod tests {
             }
         }
     }
-}
-
-/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
-/// that operate on NeuronId ranges with internal u64 representations in data.
-pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
-    let first = match range.start_bound() {
-        std::ops::Bound::Included(start) => start.id,
-        std::ops::Bound::Excluded(start) => start.id + 1,
-        std::ops::Bound::Unbounded => 0,
-    };
-    let last = match range.end_bound() {
-        std::ops::Bound::Included(end) => end.id,
-        std::ops::Bound::Excluded(end) => end.id - 1,
-        std::ops::Bound::Unbounded => u64::MAX,
-    };
-    first..=last
 }

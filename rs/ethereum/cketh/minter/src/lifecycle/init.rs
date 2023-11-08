@@ -3,16 +3,14 @@ use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc::BlockTag;
 use crate::lifecycle::EvmNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
+use crate::state::transactions::EthTransactions;
 use crate::state::{InvalidStateError, State};
-use crate::transactions::EthTransactions;
 use candid::types::number::Nat;
 use candid::types::principal::Principal;
 use candid::{CandidType, Deserialize};
 use minicbor::{Decode, Encode};
 
-#[derive(
-    CandidType, serde::Serialize, Deserialize, Clone, Debug, Encode, Decode, PartialEq, Eq,
-)]
+#[derive(CandidType, Deserialize, Clone, Debug, Encode, Decode, PartialEq, Eq)]
 pub struct InitArg {
     #[n(0)]
     pub ethereum_network: EvmNetwork,
@@ -28,6 +26,8 @@ pub struct InitArg {
     pub minimum_withdrawal_amount: Nat,
     #[cbor(n(7), with = "crate::cbor::nat")]
     pub next_transaction_nonce: Nat,
+    #[cbor(n(8), with = "crate::cbor::nat")]
+    pub last_scraped_block_number: Nat,
 }
 
 impl TryFrom<InitArg> for State {
@@ -41,6 +41,7 @@ impl TryFrom<InitArg> for State {
             ethereum_block_height,
             minimum_withdrawal_amount,
             next_transaction_nonce,
+            last_scraped_block_number,
         }: InitArg,
     ) -> Result<Self, Self::Error> {
         use std::str::FromStr;
@@ -56,6 +57,18 @@ impl TryFrom<InitArg> for State {
             .map_err(|e| {
                 InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
             })?;
+        let last_scraped_block_number =
+            BlockNumber::try_from(last_scraped_block_number).map_err(|e| {
+                InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {}", e))
+            })?;
+        let first_scraped_block_number =
+            last_scraped_block_number
+                .checked_increment()
+                .ok_or_else(|| {
+                    InvalidStateError::InvalidLastScrapedBlockNumber(
+                        "ERROR: last_scraped_block_number is at maximum value".to_string(),
+                    )
+                })?;
         let state = Self {
             ethereum_network,
             ecdsa_key_name,
@@ -65,16 +78,14 @@ impl TryFrom<InitArg> for State {
             ledger_id,
             minimum_withdrawal_amount,
             ethereum_block_height: BlockTag::from(ethereum_block_height),
-            // Note that the default block to start from for logs scrapping
-            // depends on the chain we are using:
-            // Ethereum and Sepolia have for example different block heights at a given time.
-            // https://sepolia.etherscan.io/block/3938798
-            last_scraped_block_number: BlockNumber::new(3_956_206),
+            first_scraped_block_number,
+            last_scraped_block_number,
             last_observed_block_number: None,
             events_to_mint: Default::default(),
             minted_events: Default::default(),
             ecdsa_public_key: None,
             invalid_events: Default::default(),
+            eth_balance: Default::default(),
             active_tasks: Default::default(),
             http_request_counter: 0,
         };

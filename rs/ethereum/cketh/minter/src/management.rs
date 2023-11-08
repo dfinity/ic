@@ -1,5 +1,4 @@
-use candid::CandidType;
-use candid::Principal;
+use candid::{CandidType, Principal};
 use ic_cdk::api::call::RejectionCode;
 use ic_ic00_types::{
     DerivationPath, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply,

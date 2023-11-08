@@ -313,6 +313,7 @@ impl ValidatedCanisterSettings {
 pub(crate) fn validate_canister_settings(
     settings: CanisterSettings,
     canister_memory_usage: NumBytes,
+    canister_message_memory_usage: NumBytes,
     canister_memory_allocation: MemoryAllocation,
     subnet_available_memory: &SubnetAvailableMemory,
     subnet_memory_saturation: &ResourceSaturation,
@@ -414,6 +415,7 @@ pub(crate) fn validate_canister_settings(
         freezing_threshold,
         new_memory_allocation,
         canister_memory_usage,
+        canister_message_memory_usage,
         new_compute_allocation,
         subnet_size,
         canister_reserved_balance,

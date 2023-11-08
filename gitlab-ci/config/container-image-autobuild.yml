@@ -1,6 +1,6 @@
 container-autobuild-protected:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     # Run immediately on Dockerfile changes pushed to a protected branch - such as master.
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "push"'
@@ -37,11 +37,10 @@ container-autobuild-protected:
 
 container-autobuild:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
-        - requirements.txt
         - .bazelversion
         - gitlab-ci/container/**/*
         - gitlab-ci/config/container-image-autobuild.yml

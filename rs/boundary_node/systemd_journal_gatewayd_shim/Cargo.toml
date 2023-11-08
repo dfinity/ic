@@ -1,7 +1,10 @@
 [package]
 name = "systemd-journal-gatewayd-shim"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.75"
@@ -9,8 +12,8 @@ async-trait = "0.1.73"
 axum = "0.6.20"
 clap = { version = "4.4.0", features = ["derive"] }
 http = "0.2.9"
-itertools = "0.11.0"
+itertools = { workspace = true }
 reqwest = { version = "0.11.20", features = ["stream"] }
 thiserror = "1.0.47"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 url = "2.4.0"

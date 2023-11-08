@@ -24,7 +24,16 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
     curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
     echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /" | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends docker-ce-cli podman buildah
+    apt -yqq install --no-install-recommends docker-ce-cli podman buildah zip fuse-overlayfs
+
+# install afl & gsutils deps for bazel-fuzzers
+RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
+    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
+    apt -yq update && \
+    apt -yqq install --no-install-recommends lld-15 llvm-15 llvm-15-dev clang-15 libclang-rt-15-dev google-cloud-cli \
+        gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
 
 ARG sdk_version=0.12.0
 ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
@@ -74,6 +83,18 @@ RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOG
     rm "/usr/local/bin/LICENSE" && \
     echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
 
+# Install AFLplusplus
+ARG AFL_RELEASE_VERSION=v4.08c
+RUN mkdir -p /afl && \
+    chown -R ubuntu:ubuntu /afl && \
+    cd /afl && \
+    git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
+    cd AFLplusplus && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make install && \
+    mv afl-fuzz afl-showmap  /afl && \
+    cd .. && rm -rf AFLplusplus
+
 USER ubuntu
 
 # Set PATH for ubuntu user
@@ -89,11 +110,6 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
     rustup target add wasm32-unknown-unknown
-
-# Install all python requirements
-COPY ./requirements.txt /tmp/requirements.txt
-RUN sudo pip3 install --ignore-installed -r /tmp/requirements.txt
-RUN sudo pip3 install pre-commit
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
@@ -128,6 +144,14 @@ ARG MOLD_VERSION=2.0.0
 RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
     echo "4d17d89e0c6a7c4c08ba5e0d3bbe9fd9c01ba227212307e157722c910e9a88be  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
+
+
+# Add kubectl
+ARG KUBECTL_BIN="/usr/local/bin/kubectl"
+ARG KUBECTL_VERSION="1.22.17"
+RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
+    echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
+    chmod +x "${KUBECTL_BIN}"
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]

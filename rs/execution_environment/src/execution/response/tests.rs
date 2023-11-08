@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::ErrorCode;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
@@ -17,6 +17,7 @@ use ic_types::{
     CanisterId, Cycles, Time,
 };
 use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
+use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_universal_canister::{call_args, wasm};
 
 #[test]
@@ -30,9 +31,7 @@ fn execute_response_when_stopping_status() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .build();
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -92,7 +91,7 @@ fn execute_response_refunds_cycles() {
     // Canister A calls canister B.
     let cycles_sent = Cycles::new(1_000_000);
     let wasm_payload = wasm()
-        .call_with_cycles(b_id.get(), "update", call_args(), cycles_sent)
+        .call_with_cycles(b_id, "update", call_args(), cycles_sent)
         .build();
 
     // Enqueue ingress message to canister A and execute it.
@@ -144,9 +143,7 @@ fn execute_response_when_call_context_deleted() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .build();
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -191,9 +188,7 @@ fn execute_response_successfully() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .build();
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -249,7 +244,7 @@ fn execute_response_traps() {
 
     // Canister A calls canister B, traps when executing reply closure.
     let wasm_payload = wasm()
-        .inter_update(b_id.get(), call_args().on_reply(wasm().trap()))
+        .inter_update(b_id, call_args().on_reply(wasm().trap()))
         .build();
 
     // Enqueue ingress message to canister A and execute it.
@@ -300,7 +295,7 @@ fn execute_response_with_trapping_cleanup() {
     // Canister A calls canister B, traps when executing cleanup.
     let wasm_payload = wasm()
         .inter_update(
-            b_id.get(),
+            b_id,
             call_args()
                 .on_reply(wasm().trap())
                 .on_cleanup(wasm().trap()),
@@ -366,7 +361,7 @@ fn cycles_correct_if_response_fails() {
     // 2. Traps in the response callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -415,7 +410,7 @@ fn cycles_correct_if_cleanup_fails() {
     // 3. Traps in the cleanup callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -465,7 +460,7 @@ fn dts_works_in_response_callback() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -546,7 +541,7 @@ fn dts_works_in_cleanup_callback() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -625,7 +620,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -730,7 +725,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -831,7 +826,7 @@ fn dts_abort_works_in_response_callback() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -927,7 +922,7 @@ fn dts_abort_works_in_cleanup_callback() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1010,7 +1005,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -1054,7 +1049,7 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     // 2. Traps in the response callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1112,7 +1107,7 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     // 3. Traps in the cleanup callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1278,14 +1273,13 @@ fn dts_response_concurrent_cycles_change_succeeds() {
         .build();
 
     let a = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
+        .inter_update(
+            b_id,
             call_args().other_side(b.clone()).on_reply(
                 wasm()
                     .instruction_counter_is_at_least(1_000_000)
                     .call_with_cycles(
-                        b_id.get(),
+                        b_id,
                         "update",
                         call_args().other_side(b.clone()),
                         transferred_cycles,
@@ -1397,14 +1391,13 @@ fn dts_response_concurrent_cycles_change_fails() {
         .build();
 
     let a = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
+        .inter_update(
+            b_id,
             call_args().other_side(b.clone()).on_reply(
                 wasm()
                     .instruction_counter_is_at_least(1_000_000)
                     .call_with_cycles(
-                        b_id.get(),
+                        b_id,
                         "update",
                         call_args().other_side(b.clone()),
                         transferred_cycles,
@@ -1535,16 +1528,15 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
         .build();
 
     let a = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
+        .inter_update(
+            b_id,
             call_args()
                 .other_side(b.clone())
                 .on_reply(
                     wasm()
                         .instruction_counter_is_at_least(1_000_000)
                         .call_with_cycles(
-                            b_id.get(),
+                            b_id,
                             "update",
                             call_args().other_side(b.clone()),
                             transferred_cycles,
@@ -1654,9 +1646,8 @@ fn cleanup_callback_cannot_accept_cycles() {
     let b = wasm().message_payload().append_and_reply().build();
 
     let a = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
+        .inter_update(
+            b_id,
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
@@ -1682,13 +1673,12 @@ fn cleanup_callback_cannot_make_calls() {
     let b = wasm().message_payload().append_and_reply().build();
 
     let a = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
+        .inter_update(
+            b_id,
             call_args()
                 .other_side(b.clone())
                 .on_reply(wasm().trap())
-                .on_cleanup(wasm().call_simple(b_id.get(), "update", call_args().other_side(b))),
+                .on_cleanup(wasm().inter_update(b_id, call_args().other_side(b))),
         )
         .build();
     let err = test.ingress(a_id, "update", a).unwrap_err();
@@ -1714,9 +1704,8 @@ fn dts_uninstall_with_aborted_response() {
     let b_id = test.universal_canister().unwrap();
 
     let wasm_payload = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
+        .inter_update(
+            b_id,
             call_args()
                 .other_side(wasm().push_bytes(&[42]).append_and_reply())
                 .on_reply(
@@ -1781,7 +1770,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
     let transferred_cycles = initial_cycles.get() / 2;
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1892,7 +1881,7 @@ fn response_callback_succeeds_with_memory_reservation() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2016,7 +2005,7 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
     // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2142,7 +2131,7 @@ fn subnet_available_memory_does_not_change_on_response_abort() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2219,7 +2208,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_abort() {
     // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2295,7 +2284,7 @@ fn subnet_available_memory_does_not_change_on_response_validation_failure() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2368,7 +2357,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2454,7 +2443,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2531,7 +2520,7 @@ fn cycles_balance_changes_applied_correctly() {
         "update",
         wasm()
             .call_with_cycles(
-                a_id.get(),
+                a_id,
                 "update",
                 call_args().other_side(wasm().accept_cycles(Cycles::new(u128::MAX))),
                 Cycles::new(60_000_000_000),
@@ -2543,14 +2532,14 @@ fn cycles_balance_changes_applied_correctly() {
     let mut b = wasm().accept_cycles(Cycles::new(u128::MAX));
 
     for _ in 0..400 {
-        b = b.call_simple(a_id, "update", call_args());
+        b = b.inter_update(a_id, call_args());
     }
 
     let b = b.push_int(42).reply_int().build();
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             Cycles::new(5_000_000_000_000),
@@ -2570,6 +2559,69 @@ fn cycles_balance_changes_applied_correctly() {
 }
 
 #[test]
+fn test_cycles_burn() {
+    let test = ExecutionTestBuilder::new().build();
+
+    let canister_memory_usage = NumBytes::try_from(1_000_000).unwrap();
+    let canister_message_memory_usage = NumBytes::from(0);
+
+    let amount = 1_000_000_000;
+    let mut balance = Cycles::new(amount);
+    let amount_to_burn = Cycles::new(amount / 10);
+
+    let burned = test.cycles_account_manager().cycles_burn(
+        &mut balance,
+        amount_to_burn,
+        ic_config::execution_environment::Config::default().default_freeze_threshold,
+        MemoryAllocation::BestEffort,
+        canister_memory_usage,
+        canister_message_memory_usage,
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+        Cycles::zero(),
+    );
+
+    assert_eq!(burned, amount_to_burn);
+    assert_eq!(balance.get() + burned.get(), amount);
+}
+
+#[test]
+fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
+    let test = ExecutionTestBuilder::new().build();
+
+    let canister_memory_usage = NumBytes::try_from(1_000_000).unwrap();
+    let canister_message_memory_usage = NumBytes::from(0);
+
+    let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
+        ic_config::execution_environment::Config::default().default_freeze_threshold,
+        MemoryAllocation::BestEffort,
+        canister_memory_usage,
+        canister_message_memory_usage,
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+        Cycles::zero(),
+    );
+
+    let amount = 1_000_000_000;
+    let mut balance = Cycles::new(amount);
+
+    let burned = test.cycles_account_manager().cycles_burn(
+        &mut balance,
+        Cycles::new(10 * amount),
+        ic_config::execution_environment::Config::default().default_freeze_threshold,
+        MemoryAllocation::BestEffort,
+        canister_memory_usage,
+        canister_message_memory_usage,
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+        Cycles::zero(),
+    );
+
+    assert_eq!(burned.get(), amount - freezing_threshold_cycles.get());
+    assert_eq!(balance.get() + burned.get(), amount);
+}
+
+#[test]
 fn test_call_context_instructions_executed_is_updated_on_ok_response() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
 
@@ -2581,8 +2633,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
 
     // Canister A calls canister B and C.
     let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .call_simple(c_id.get(), "update", call_args())
+        .inter_update(b_id, call_args())
+        .inter_update(c_id, call_args())
         .build();
 
     // Enqueue ingress message to canister A.
@@ -2630,8 +2682,8 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
 
     // Canister A calls canister B and C, the canister B on reply traps.
     let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args().on_reply(wasm().trap()))
-        .call_simple(c_id.get(), "update", call_args())
+        .inter_update(b_id, call_args().on_reply(wasm().trap()))
+        .inter_update(c_id, call_args())
         .build();
 
     // Enqueue ingress message to canister A.
@@ -2679,12 +2731,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
 
     // Canister A calls canister B and C, the canister B on reply traps.
     let wasm_payload = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
-            call_args().on_reply(wasm().trap()).on_cleanup(wasm()),
-        )
-        .call_simple(c_id.get(), "update", call_args())
+        .inter_update(b_id, call_args().on_reply(wasm().trap()).on_cleanup(wasm()))
+        .inter_update(c_id, call_args())
         .build();
 
     // Enqueue ingress message to canister A.
@@ -2733,14 +2781,13 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
 
     // Canister A calls canister B and C, the canister B on reply and on cleanup trap.
     let wasm_payload = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
+        .inter_update(
+            b_id,
             call_args()
                 .on_reply(wasm().trap())
                 .on_cleanup(wasm().trap()),
         )
-        .call_simple(c_id.get(), "update", call_args())
+        .inter_update(c_id, call_args())
         .build();
 
     // Enqueue ingress message to canister A.
@@ -2775,4 +2822,151 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
     // Make sure the `instructions_executed` has increased.
     let instructions_executed_a_2 = call_context.instructions_executed();
     assert!(instructions_executed_a_2 > instructions_executed_a_1);
+}
+
+#[test]
+fn test_call_context_performance_counter_correctly_reported_on_reply() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        // Counter a.0
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .inter_update(
+            b_id,
+            call_args().on_reply(
+                wasm()
+                    // Counter a.2
+                    .performance_counter(1)
+                    .int64_to_blob()
+                    .append_to_global_data()
+                    .inter_update(
+                        b_id,
+                        call_args().on_reply(
+                            wasm()
+                                .get_global_data()
+                                .reply_data_append()
+                                // Counter a.3
+                                .performance_counter(1)
+                                .reply_int64(),
+                        ),
+                    ),
+            ),
+        )
+        // Counter a.1
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .build();
+    let result = test.ingress(a_id, "update", a).unwrap();
+
+    let counters = result
+        .bytes()
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert!(counters[0] < counters[1]);
+    assert!(counters[1] < counters[2]);
+    assert!(counters[2] < counters[3]);
+}
+
+#[test]
+fn test_call_context_performance_counter_correctly_reported_on_reject() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        // Counter a.0
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .inter_update(
+            b_id,
+            call_args().other_side(wasm().trap()).on_reject(
+                wasm()
+                    // Counter a.2
+                    .performance_counter(1)
+                    .int64_to_blob()
+                    .append_to_global_data()
+                    .inter_update(
+                        b_id,
+                        call_args().other_side(wasm().trap()).on_reject(
+                            wasm()
+                                .get_global_data()
+                                .reply_data_append()
+                                // Counter a.3
+                                .performance_counter(1)
+                                .reply_int64(),
+                        ),
+                    ),
+            ),
+        )
+        // Counter a.1
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .build();
+    let result = test.ingress(a_id, "update", a).unwrap();
+
+    let counters = result
+        .bytes()
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert!(counters[0] < counters[1]);
+    assert!(counters[1] < counters[2]);
+    assert!(counters[2] < counters[3]);
+}
+
+#[test]
+fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .stable_grow(1)
+        .stable64_write(2, &[3, 4])
+        // Counter a.0
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .call_simple(
+            a_id.get(),
+            "non-existent",
+            call_args().on_reject(wasm().trap()).on_cleanup(
+                wasm()
+                    // Counter a.2
+                    .performance_counter(1)
+                    .int64_to_blob()
+                    .append_to_global_data()
+                    // Write the global data to the stable memory.
+                    .push_int(0)
+                    .get_global_data()
+                    .stable_write_offset_blob(),
+            ),
+        )
+        // Counter a.1
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .build();
+    // The canister explicitly traps.
+    let _err = test.ingress(a_id, "update", a).unwrap_err();
+
+    let state = test.canister_state(a_id);
+    let stable_memory = &state.execution_state.as_ref().unwrap().stable_memory;
+    let page = stable_memory.page_map.get_page(0.into());
+    let counters = page[0..(std::mem::size_of::<u64>() * 3)]
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert!(counters[0] < counters[1]);
+    assert!(counters[1] < counters[2]);
 }

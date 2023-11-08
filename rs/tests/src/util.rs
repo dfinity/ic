@@ -1574,6 +1574,8 @@ pub(crate) fn create_service_nervous_system_into_params(
         minimum_participants,
         minimum_icp,
         maximum_icp,
+        minimum_direct_participation_icp,
+        maximum_direct_participation_icp,
         minimum_participant_icp,
         maximum_participant_icp,
         neuron_basket_construction_parameters,
@@ -1582,6 +1584,7 @@ pub(crate) fn create_service_nervous_system_into_params(
         start_time,
         duration,
         neurons_fund_investment_icp: _,
+        neurons_fund_participation: _,
     } = create_service_nervous_system
         .swap_parameters
         .clone()
@@ -1612,6 +1615,10 @@ pub(crate) fn create_service_nervous_system_into_params(
             .ok_or("`maximum_icp` should not be None")?
             .e8s
             .ok_or("`e8`s should not be None")?,
+        min_direct_participation_icp_e8s: minimum_direct_participation_icp
+            .and_then(|minimum_direct_participation_icp| minimum_direct_participation_icp.e8s),
+        max_direct_participation_icp_e8s: maximum_direct_participation_icp
+            .and_then(|maximum_direct_participation_icp| maximum_direct_participation_icp.e8s),
         min_participant_icp_e8s: minimum_participant_icp
             .ok_or("`minimum_participant_icp` should not be None")?
             .e8s

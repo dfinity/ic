@@ -1,15 +1,17 @@
 [package]
 name = "registry-canister"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "registry-canister"
 path = "canister/canister.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
@@ -36,12 +38,13 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
-ipnet = "2.5.0"
+lazy_static = "1.4.0"
 leb128 = "0.2.4"
+ipnet = "2.5.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 url = "2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
@@ -60,20 +63,19 @@ lazy_static = "1.4.0"
 maplit = "1.0"
 rand = { version = "0.8.4", features = ["small_rng"] }
 rand_distr = "0.4.0"
-serde_json = "1.0"
+serde_json = { workspace = true }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }
 
 [dev-dependencies]
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-test-utils-macros = { path = "../../nns/test_utils_macros" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 registry-canister-protobuf-generator = { path = "./protobuf_generator" }
-tokio = { version = "1.32.0", features = ["time"] }
+tokio = { workspace = true }
 tempfile = "3.1.0"
-itertools = "0.10.3"
+itertools = { workspace = true }

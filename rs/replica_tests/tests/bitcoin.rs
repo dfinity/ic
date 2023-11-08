@@ -7,6 +7,7 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use ic_btc_types_internal::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
+use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_config::{
     execution_environment::{BitcoinConfig, Config as HypervisorConfig},
     subnet_config::SubnetConfig,
@@ -24,11 +25,68 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::ingress::WasmResult;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use tonic::transport::Server;
 
-struct MockBitcoinAdapter(BtcServiceGetSuccessorsResponse);
+struct MockBitcoinAdapterBuilder {
+    get_successors_response: Result<BtcServiceGetSuccessorsResponse, tonic::Status>,
+    send_transaction_response: Result<BtcServiceSendTransactionResponse, tonic::Status>,
+}
+
+impl MockBitcoinAdapterBuilder {
+    fn new() -> Self {
+        Self {
+            get_successors_response: Ok(BtcServiceGetSuccessorsResponse {
+                blocks: vec![],
+                next: vec![],
+            }),
+
+            send_transaction_response: Ok(BtcServiceSendTransactionResponse {}),
+        }
+    }
+
+    fn with_get_successors_reply(self, reply: BtcServiceGetSuccessorsResponse) -> Self {
+        Self {
+            get_successors_response: Ok(reply),
+            ..self
+        }
+    }
+
+    fn with_get_successors_reject(self, reject: tonic::Status) -> Self {
+        Self {
+            get_successors_response: Err(reject),
+            ..self
+        }
+    }
+
+    fn with_send_transaction_reply(self, reply: BtcServiceSendTransactionResponse) -> Self {
+        Self {
+            send_transaction_response: Ok(reply),
+            ..self
+        }
+    }
+
+    fn with_send_transaction_reject(self, reject: tonic::Status) -> Self {
+        Self {
+            send_transaction_response: Err(reject),
+            ..self
+        }
+    }
+
+    fn build(self) -> MockBitcoinAdapter {
+        MockBitcoinAdapter {
+            get_successors_response: self.get_successors_response,
+            send_transaction_response: self.send_transaction_response,
+        }
+    }
+}
+
+struct MockBitcoinAdapter {
+    get_successors_response: Result<BtcServiceGetSuccessorsResponse, tonic::Status>,
+    send_transaction_response: Result<BtcServiceSendTransactionResponse, tonic::Status>,
+}
 
 #[tonic::async_trait]
 impl BtcService for MockBitcoinAdapter {
@@ -36,22 +94,25 @@ impl BtcService for MockBitcoinAdapter {
         &self,
         _request: tonic::Request<BtcServiceGetSuccessorsRequest>,
     ) -> Result<tonic::Response<BtcServiceGetSuccessorsResponse>, tonic::Status> {
-        Ok(tonic::Response::new(self.0.clone()))
+        self.get_successors_response
+            .clone()
+            .map(tonic::Response::new)
     }
 
     async fn send_transaction(
         &self,
         _request: tonic::Request<BtcServiceSendTransactionRequest>,
     ) -> Result<tonic::Response<BtcServiceSendTransactionResponse>, tonic::Status> {
-        Ok(tonic::Response::new(BtcServiceSendTransactionResponse {}))
+        self.send_transaction_response
+            .clone()
+            .map(tonic::Response::new)
     }
 }
 
 fn spawn_mock_bitcoin_adapter(
     uds_path: Arc<TempDir>,
-    mock_response: BtcServiceGetSuccessorsResponse,
+    adapter: MockBitcoinAdapter,
 ) -> JoinHandle<()> {
-    let adapter = MockBitcoinAdapter(mock_response);
     tokio::spawn(async move {
         Server::builder()
             .add_service(BtcServiceServer::new(adapter))
@@ -95,15 +156,15 @@ fn call_send_transaction_internal(
         .unwrap()
 }
 
-fn bitcoin_test<F: 'static>(adapter_response: BtcServiceGetSuccessorsResponse, test: F)
+fn bitcoin_test<F: 'static>(adapter: MockBitcoinAdapter, test: F)
 where
     F: FnOnce(utils::LocalTestRuntime),
 {
-    bitcoin_test_with_config(adapter_response, true, test)
+    bitcoin_test_with_config(adapter, true, test)
 }
 
 fn bitcoin_test_with_config<F: 'static>(
-    adapter_response: BtcServiceGetSuccessorsResponse,
+    adapter: MockBitcoinAdapter,
     privileged_access: bool,
     test: F,
 ) where
@@ -121,9 +182,12 @@ fn bitcoin_test_with_config<F: 'static>(
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _rt_guard = rt.enter();
     let tmp_uds_dir = Arc::new(tempfile::tempdir().unwrap());
-    let _ma = spawn_mock_bitcoin_adapter(tmp_uds_dir.clone(), adapter_response);
+    let _ma = spawn_mock_bitcoin_adapter(tmp_uds_dir.clone(), adapter);
     config.adapters_config.bitcoin_mainnet_uds_path = Some(tmp_uds_dir.path().join("uds.socket"));
     config.adapters_config.bitcoin_testnet_uds_path = Some(tmp_uds_dir.path().join("uds.socket"));
+    config.bitcoin_payload_builder_config = BitcoinPayloadBuilderConfig {
+        adapter_timeout: Duration::from_secs(1),
+    };
 
     utils::canister_test_with_config(config, test);
 }
@@ -131,10 +195,12 @@ fn bitcoin_test_with_config<F: 'static>(
 #[test]
 fn bitcoin_get_successors() {
     bitcoin_test(
-        BtcServiceGetSuccessorsResponse {
-            blocks: vec![],
-            next: vec![],
-        },
+        MockBitcoinAdapterBuilder::new()
+            .with_get_successors_reply(BtcServiceGetSuccessorsResponse {
+                blocks: vec![],
+                next: vec![],
+            })
+            .build(),
         |runtime| {
             let canister_id = runtime.create_universal_canister();
             let canister = ic_replica_tests::UniversalCanister {
@@ -167,10 +233,12 @@ fn bitcoin_get_successors() {
 fn bitcoin_get_successors_pagination() {
     bitcoin_test(
         // A mock adapter response returning a large payload that doesn't fit.
-        BtcServiceGetSuccessorsResponse {
-            blocks: vec![vec![0; 4_000_000]],
-            next: vec![],
-        },
+        MockBitcoinAdapterBuilder::new()
+            .with_get_successors_reply(BtcServiceGetSuccessorsResponse {
+                blocks: vec![vec![0; 4_000_000]],
+                next: vec![],
+            })
+            .build(),
         |runtime| {
             let canister_id = runtime.create_universal_canister();
             let canister = ic_replica_tests::UniversalCanister {
@@ -211,10 +279,12 @@ fn bitcoin_get_successors_pagination() {
 fn bitcoin_get_successors_pagination_invalid_adapter_request() {
     bitcoin_test(
         // A mock adapter response returning a large payload that doesn't fit.
-        BtcServiceGetSuccessorsResponse {
-            blocks: vec![vec![0; 4_000_000], vec![0]],
-            next: vec![],
-        },
+        MockBitcoinAdapterBuilder::new()
+            .with_get_successors_reply(BtcServiceGetSuccessorsResponse {
+                blocks: vec![vec![0; 4_000_000], vec![0]],
+                next: vec![],
+            })
+            .build(),
         |runtime| {
             let canister_id = runtime.create_universal_canister();
             let canister = ic_replica_tests::UniversalCanister {
@@ -242,12 +312,44 @@ fn bitcoin_get_successors_pagination_invalid_adapter_request() {
 }
 
 #[test]
+fn bitcoin_get_successors_reject() {
+    let err_message = "get_successors error has occurred";
+    bitcoin_test(
+        MockBitcoinAdapterBuilder::new()
+            .with_get_successors_reject(tonic::Status::unavailable(err_message))
+            .build(),
+        move |runtime| {
+            let canister_id = runtime.create_universal_canister();
+            let canister = ic_replica_tests::UniversalCanister {
+                runtime,
+                canister_id,
+            };
+
+            // Send a request.
+            let response = call_get_successors(
+                &canister,
+                ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
+                    network: ic_btc_interface::Network::Regtest,
+                    anchor: vec![],
+                    processed_block_hashes: vec![],
+                }),
+            );
+
+            // Expect the reject message to be received.
+            assert_eq!(
+                response,
+                WasmResult::Reject(format!("Unavailable({})", err_message))
+            );
+        },
+    );
+}
+
+#[test]
 fn bitcoin_send_transaction_internal_valid_request() {
     bitcoin_test(
-        BtcServiceGetSuccessorsResponse {
-            blocks: vec![],
-            next: vec![],
-        },
+        MockBitcoinAdapterBuilder::new()
+            .with_send_transaction_reply(BtcServiceSendTransactionResponse {})
+            .build(),
         |runtime| {
             let canister_id = runtime.create_universal_canister();
             let canister = ic_replica_tests::UniversalCanister {
@@ -271,13 +373,13 @@ fn bitcoin_send_transaction_internal_valid_request() {
 }
 
 #[test]
-fn bitcoin_send_transaction_internal_invalid_request() {
+fn bitcoin_send_transaction_internal_reject() {
+    let err_message = "send_transaction error has occurred";
     bitcoin_test(
-        BtcServiceGetSuccessorsResponse {
-            blocks: vec![],
-            next: vec![],
-        },
-        |runtime| {
+        MockBitcoinAdapterBuilder::new()
+            .with_send_transaction_reject(tonic::Status::unavailable(err_message))
+            .build(),
+        move |runtime| {
             let canister_id = runtime.create_universal_canister();
             let canister = ic_replica_tests::UniversalCanister {
                 runtime,
@@ -285,27 +387,50 @@ fn bitcoin_send_transaction_internal_invalid_request() {
             };
 
             // Send a request.
-            let response = canister
-                .update(wasm().call_simple(
-                    ic00::IC_00,
-                    Method::BitcoinSendTransactionInternal,
-                    call_args().other_side(vec![1, 2, 3]), // garbage payload
-                ))
-                .unwrap();
+            let response = call_send_transaction_internal(
+                &canister,
+                ic00::BitcoinSendTransactionInternalArgs {
+                    network: ic_btc_interface::Network::Regtest,
+                    transaction: vec![1, 2, 3],
+                },
+            );
 
-            // Expect request to be rejected.
-            utils::assert_reject(Ok(response), RejectCode::CanisterReject);
+            // Expect the reject message to be received.
+            assert_eq!(
+                response,
+                WasmResult::Reject(format!("Unavailable({})", err_message))
+            );
         },
     );
 }
 
 #[test]
+fn bitcoin_send_transaction_internal_invalid_request() {
+    bitcoin_test(MockBitcoinAdapterBuilder::new().build(), |runtime| {
+        let canister_id = runtime.create_universal_canister();
+        let canister = ic_replica_tests::UniversalCanister {
+            runtime,
+            canister_id,
+        };
+
+        // Send a request.
+        let response = canister
+            .update(wasm().call_simple(
+                ic00::IC_00,
+                Method::BitcoinSendTransactionInternal,
+                call_args().other_side(vec![1, 2, 3]), // garbage payload
+            ))
+            .unwrap();
+
+        // Expect request to be rejected.
+        utils::assert_reject(Ok(response), RejectCode::CanisterReject);
+    });
+}
+
+#[test]
 fn bitcoin_send_transaction_internal_no_permissions() {
     bitcoin_test_with_config(
-        BtcServiceGetSuccessorsResponse {
-            blocks: vec![],
-            next: vec![],
-        },
+        MockBitcoinAdapterBuilder::new().build(),
         false, // Do not give permission to call internal bitcoin APIs.
         |runtime| {
             let canister_id = runtime.create_universal_canister();

@@ -229,16 +229,20 @@ fn upgrade_fails_on_not_enough_cycles() {
         .cycles_account_manager()
         .execution_cost((MAX_INSTRUCTIONS_PER_SLICE * 3).into(), test.subnet_size());
 
-    let canister_memory_usage = {
+    let (canister_memory_usage, canister_message_memory_usage) = {
         // Create a dummy canister just to get its memory usage.
         let id = test.canister_from_binary(old_empty_binary()).unwrap();
-        test.canister_state(id).memory_usage()
+        (
+            test.canister_state(id).memory_usage(),
+            test.canister_state(id).message_memory_usage(),
+        )
     };
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
         canister_memory_usage,
+        canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),

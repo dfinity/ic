@@ -60,8 +60,7 @@ impl ProvisionalTopUpCanisterArgs {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 }
 

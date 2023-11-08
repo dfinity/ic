@@ -201,7 +201,7 @@ const TEST_CANISTER: &str = r#"
     (export "canister_update grow_mem" (func $grow_mem))
 )"#;
 
-const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS: u64 = 0;
+const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS: u64 = 1;
 
 /// This is an empty canister that only exposes canister_heartbeat method.
 const TEST_HEARTBEAT_CANISTER: &str = r#"
@@ -817,7 +817,7 @@ fn convert_instructions_to_cycles(
     config: &CyclesAccountManagerConfig,
     num_instructions: NumInstructions,
 ) -> Cycles {
-    config.ten_update_instructions_execution_fee * (num_instructions.get() / 10)
+    config.ten_update_instructions_execution_fee * num_instructions.get() / 10_u64
 }
 
 fn prepay_execution_cycles(
@@ -1225,18 +1225,19 @@ fn test_subnet_size_execute_heartbeat_default_cost() {
 
     // Assert small subnet size costs per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_lo);
-    assert_eq!(cost, Cycles::new(590_000));
-    assert_eq!(cost * per_year, trillion_cycles(20.290_337_770));
+    assert_eq!(cost, Cycles::new(590001));
+    assert_eq!(cost * per_year, Cycles::new(20290372160403));
 
     // Assert big subnet size cost per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_hi);
-    assert_eq!(cost, Cycles::new(1_543_077));
-    assert_eq!(cost * per_year, trillion_cycles(53.067_039_890_031));
+    // Scaled instrumentation + update message cost.
+    assert_eq!(cost, Cycles::new(1543080));
+    assert_eq!(cost * per_year, Cycles::new(53067143061240));
 
     // Assert big subnet size cost scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost, Cycles::new(590_000));
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(20.290_337_770));
+    assert_eq!(adjusted_cost, Cycles::new(590001));
+    assert_eq!(adjusted_cost * per_year, Cycles::new(20290372160403));
 }
 
 #[test]

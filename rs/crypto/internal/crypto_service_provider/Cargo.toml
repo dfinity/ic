@@ -1,13 +1,17 @@
 [package]
 name = "ic-crypto-internal-csp"
 description = "Secret key store and services"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 async-trait = "0.1.41"
 base64 = { workspace = true }
+bincode = "1.2"
+bytes = "1.5"
+educe = "0.4"
 hex = "0.4.2"
 ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
 ic-config = { path = "../../../config" }
@@ -40,21 +44,22 @@ prost = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3"
 rcgen = "0.10.0"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_cbor = "0.11.1"
-simple_asn1 = "0.6.1"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+simple_asn1 = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
 stubborn-io = "0.3.2"
-strum = "0.23.0"
-strum_macros = "0.23.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tarpc = { version = "0.32", features = ["full"] }
 tempfile = "3.1.0"
 time = "0.3.20"
 threadpool = "1.8.1"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { version = "0.7.4", features = ["codec"] }
 x509-parser = { version = "0.15.1", features = ["verify"] }
@@ -62,7 +67,6 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-chrono = "0.4.19"
 ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-csp-proptest-utils = { path = "./csp_proptest_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }
@@ -79,7 +83,6 @@ ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = "1.4.0"
 mockall = "0.7.2"
-openssl = "0.10.55"
 proptest = "1.0"
 proptest-derive = "0.3.0"
 rsa = "0.9"

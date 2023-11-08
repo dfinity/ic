@@ -11,7 +11,10 @@ use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_interface::Network;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
+    BitcoinReject,
 };
+use ic_config::bitcoin_payload_builder_config::Config;
+use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload},
     consensus::{PayloadPermanentError, PayloadValidationError},
@@ -80,6 +83,7 @@ pub struct BitcoinPayloadBuilder {
     >,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
+    config: Config,
     log: ReplicaLogger,
 }
 
@@ -101,6 +105,7 @@ impl BitcoinPayloadBuilder {
         >,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient + Send + Sync>,
+        config: Config,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -110,6 +115,7 @@ impl BitcoinPayloadBuilder {
             bitcoin_testnet_adapter_client,
             subnet_id,
             registry,
+            config,
             log,
         }
     }
@@ -144,10 +150,16 @@ impl BitcoinPayloadBuilder {
 
             // Send request to the adapter.
             let timer = Timer::start();
-            let result = adapter_client.send_blocking(request.clone(), Options::default());
+            let result = adapter_client.send_blocking(
+                request.clone(),
+                Options {
+                    timeout: self.config.adapter_timeout,
+                },
+            );
 
-            match result {
-                Ok(response_wrapper) => {
+            // Update logs and metrics.
+            match &result {
+                Ok(wrapped_response) => {
                     self.metrics.observe_adapter_request_duration(
                         ADAPTER_REQUEST_STATUS_SUCCESS,
                         request.to_request_type_label(),
@@ -155,34 +167,11 @@ impl BitcoinPayloadBuilder {
                     );
 
                     if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) =
-                        &response_wrapper
+                        wrapped_response
                     {
                         self.metrics
                             .observe_blocks_per_get_successors_response(r.blocks.len());
                     }
-
-                    let response = BitcoinAdapterResponse {
-                        response: response_wrapper,
-                        callback_id: callback_id.get(),
-                    };
-
-                    let response_size = response.count_bytes() as u64;
-                    self.metrics.observe_adapter_response_size(response_size);
-
-                    if response_size + current_payload_size > byte_limit.get()
-                    // NOTE: Currently, the theoretical maximum block size of Bitcoin is 4MiB, while the
-                    // maximum block size of the IC is also 4MiB. This makes it impossible to transport a
-                    // BTC block via an IC block, since including the metadata would make the block too
-                    // large. We therefore allow a response to be oversized, if it is the first response in
-                    // the block. Since we tolerate up to 2x the size margin currently, this will pass validation
-                    // but trigger a warning.
-                        && current_payload_size != 0
-                    {
-                        // Stop if we're about to exceed the byte limit.
-                        break;
-                    }
-                    current_payload_size += response_size;
-                    responses.push(response);
                 }
                 Err(err) => {
                     self.metrics.observe_adapter_request_duration(
@@ -190,15 +179,59 @@ impl BitcoinPayloadBuilder {
                         request.to_request_type_label(),
                         timer,
                     );
-                    log!(
+
+                    warn!(
                         self.log,
-                        slog::Level::Error,
                         "Sending the request with callback id {} to the adapter failed with {:?}",
                         callback_id,
                         err
                     );
                 }
+            };
+
+            // Build response.
+            let response = BitcoinAdapterResponse {
+                response: match result {
+                    Ok(response_wrapper) => response_wrapper,
+                    Err(err) => {
+                        let error_message = err.to_string();
+                        match request {
+                            BitcoinAdapterRequestWrapper::SendTransactionRequest(context) => {
+                                BitcoinAdapterResponseWrapper::SendTransactionReject(
+                                    BitcoinReject {
+                                        reject_code: RejectCode::SysTransient,
+                                        message: error_message,
+                                    },
+                                )
+                            }
+                            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(context) => {
+                                BitcoinAdapterResponseWrapper::GetSuccessorsReject(BitcoinReject {
+                                    reject_code: RejectCode::SysTransient,
+                                    message: error_message,
+                                })
+                            }
+                        }
+                    }
+                },
+                callback_id: callback_id.get(),
+            };
+
+            let response_size = response.count_bytes() as u64;
+            self.metrics.observe_adapter_response_size(response_size);
+
+            // NOTE: Currently, the theoretical maximum block size of Bitcoin is 4MiB, while the
+            // maximum block size of the IC is also 4MiB. This makes it impossible to transport a
+            // BTC block via an IC block, since including the metadata would make the block too
+            // large. We therefore allow a response to be oversized, if it is the first response in
+            // the block. Since we tolerate up to 2x the size margin currently, this will pass validation
+            // but trigger a warning.
+            if response_size + current_payload_size > byte_limit.get() && current_payload_size != 0
+            {
+                // Stop if we're about to exceed the byte limit.
+                break;
             }
+            current_payload_size += response_size;
+            responses.push(response);
         }
 
         Ok(SelfValidatingPayload::new(responses))

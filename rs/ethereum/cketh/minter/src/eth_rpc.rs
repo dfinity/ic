@@ -9,7 +9,7 @@ use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::RpcTransport;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
-use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei};
+use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
@@ -211,6 +211,16 @@ impl From<CandidBlockTag> for BlockTag {
     }
 }
 
+impl Display for BlockTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Latest => write!(f, "latest"),
+            Self::Safe => write!(f, "safe"),
+            Self::Finalized => write!(f, "finalized"),
+        }
+    }
+}
+
 /// The block specification indicating which block to query.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
 #[serde(untagged)]
@@ -369,10 +379,10 @@ pub struct FeeHistory {
     /// This includes the next block after the newest of the returned range,
     /// because this value can be derived from the newest block.
     /// Zeroes are returned for pre-EIP-1559 blocks.
-    pub base_fee_per_gas: Vec<Wei>,
+    pub base_fee_per_gas: Vec<WeiPerGas>,
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
     #[serde(default)]
-    pub reward: Vec<Vec<Wei>>,
+    pub reward: Vec<Vec<WeiPerGas>>,
 }
 
 impl HttpResponsePayload for FeeHistory {
@@ -405,12 +415,12 @@ impl HttpResponsePayload for Block {
 }
 
 /// An envelope for all JSON-RPC requests.
-#[derive(Serialize)]
-struct JsonRpcRequest<T> {
-    jsonrpc: &'static str,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct JsonRpcRequest<T> {
+    jsonrpc: String,
     method: String,
     id: u64,
-    params: T,
+    pub params: T,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -453,12 +463,17 @@ impl<T> From<JsonRpcResult<T>> for Result<T, RpcError> {
 /// Describes a payload transformation to execute before passing the HTTP response to consensus.
 /// The purpose of these transformations is to ensure that the response encoding is deterministic
 /// (the field order is the same).
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Debug)]
 pub enum ResponseTransform {
+    #[n(0)]
     Block,
+    #[n(1)]
     LogEntries,
+    #[n(2)]
     TransactionReceipt,
+    #[n(3)]
     FeeHistory,
+    #[n(4)]
     SendRawTransaction,
 }
 
@@ -477,9 +492,27 @@ impl ResponseTransform {
                 .into_bytes();
         }
 
+        fn redact_collection_response<T>(body: &mut Vec<u8>)
+        where
+            T: Serialize + DeserializeOwned,
+        {
+            let mut response: JsonRpcReply<Vec<T>> = match serde_json::from_slice(body) {
+                Ok(response) => response,
+                Err(_) => return,
+            };
+
+            if let JsonRpcResult::Result(ref mut result) = response.result {
+                sort_by_hash(result);
+            }
+
+            *body = serde_json::to_string(&response)
+                .expect("BUG: failed to serialize response")
+                .into_bytes();
+        }
+
         match self {
             Self::Block => redact_response::<Block>(body_bytes),
-            Self::LogEntries => redact_response::<Vec<LogEntry>>(body_bytes),
+            Self::LogEntries => redact_collection_response::<LogEntry>(body_bytes),
             Self::TransactionReceipt => redact_response::<TransactionReceipt>(body_bytes),
             Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
             Self::SendRawTransaction => {
@@ -500,8 +533,7 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     );
     let status_ok = args.response.status >= 200u16 && args.response.status < 300u16;
     if status_ok && !args.context.is_empty() {
-        let maybe_transform: Result<ResponseTransform, _> =
-            ciborium::de::from_reader(&args.context[..]);
+        let maybe_transform: Result<ResponseTransform, _> = minicbor::decode(&args.context[..]);
         if let Ok(transform) = maybe_transform {
             transform.apply(&mut args.response.body);
         }
@@ -662,7 +694,7 @@ where
 {
     let eth_method = method.into();
     let mut rpc_request = JsonRpcRequest {
-        jsonrpc: "2.0",
+        jsonrpc: "2.0".to_string(),
         params,
         method: eth_method.clone(),
         id: 1,
@@ -688,7 +720,7 @@ where
             .as_ref()
             .map(|t| {
                 let mut buf = vec![];
-                ciborium::ser::into_writer(t, &mut buf).unwrap();
+                minicbor::encode(t, &mut buf).unwrap();
                 buf
             })
             .unwrap_or_default();
@@ -734,7 +766,7 @@ where
         {
             Ok((response,)) => response,
             Err((code, message))
-                if code == RejectionCode::SysFatal && message.contains("body size limit") =>
+                if code == RejectionCode::SysFatal && message.contains("size limit") =>
             {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
@@ -791,4 +823,13 @@ fn is_successful_http_code(status: &u16) -> bool {
     const OK: u16 = 200;
     const REDIRECTION: u16 = 300;
     (OK..REDIRECTION).contains(status)
+}
+
+fn sort_by_hash<T: Serialize + DeserializeOwned>(to_sort: &mut [T]) {
+    use ic_crypto_sha3::Keccak256;
+    to_sort.sort_by(|a, b| {
+        let a_hash = Keccak256::hash(serde_json::to_vec(a).expect("BUG: failed to serialize"));
+        let b_hash = Keccak256::hash(serde_json::to_vec(b).expect("BUG: failed to serialize"));
+        a_hash.cmp(&b_hash)
+    });
 }

@@ -53,6 +53,9 @@ SNS_CANISTERS=(
     archive
 )
 
+echo SNS
+echo =====
+
 for canister_name in "${SNS_CANISTERS[@]}"; do
     echo
     echo Canister: "$canister_name"

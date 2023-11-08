@@ -1,0 +1,45 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:lazy_static",
+    "@crate_index//:rust_decimal",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "//rs/nervous_system/common",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:rust_decimal_macros",
+]
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:proptest",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:assert_matches",
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "neurons_fund",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_neurons_fund",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "neurons_fund_test",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate = ":neurons_fund",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

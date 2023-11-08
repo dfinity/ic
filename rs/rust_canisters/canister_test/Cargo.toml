@@ -1,8 +1,10 @@
 [package]
 name = "canister-test"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 backoff = "0.3.0"
@@ -19,7 +21,7 @@ escargot = "0.5.2"
 on_wire = { path = "../on_wire" }
 rand = "0.8"
 reqwest = { version = "0.11.1", features = [ "native-tls" ] }
-tokio = { version = "1.32.0", features = [ "full" ] }
+tokio = { workspace = true }
 wasmprinter = "0.2.45"
 wat = "1.0.52"
 

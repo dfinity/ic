@@ -21,6 +21,7 @@ pub struct SandboxExecInput {
     pub api_type: ApiType,
     pub globals: Vec<Global>,
     pub canister_current_memory_usage: NumBytes,
+    pub canister_current_message_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: SubnetAvailableMemory,
     pub next_wasm_memory_id: MemoryId,

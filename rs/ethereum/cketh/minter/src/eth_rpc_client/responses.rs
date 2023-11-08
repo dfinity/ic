@@ -1,6 +1,5 @@
-use crate::eth_rpc::{Hash, HttpResponsePayload, Quantity, ResponseTransform};
-use crate::numeric::{BlockNumber, Wei};
-use candid::CandidType;
+use crate::eth_rpc::{Hash, HttpResponsePayload, ResponseTransform};
+use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -18,11 +17,11 @@ pub struct TransactionReceipt {
 
     /// The total base charge plus tip paid for each unit of gas
     #[n(2)]
-    pub effective_gas_price: Wei,
+    pub effective_gas_price: WeiPerGas,
 
     /// The amount of gas used by this specific transaction alone
-    #[cbor(n(3), with = "crate::cbor::u256")]
-    pub gas_used: Quantity,
+    #[n(3)]
+    pub gas_used: GasAmount,
 
     /// Status of the transaction.
     #[n(4)]
@@ -31,6 +30,14 @@ pub struct TransactionReceipt {
     /// The hash of the transaction
     #[n(5)]
     pub transaction_hash: Hash,
+}
+
+impl TransactionReceipt {
+    pub fn effective_transaction_fee(&self) -> Wei {
+        self.effective_gas_price
+            .transaction_cost(self.gas_used)
+            .expect("ERROR: overflow during transaction fee calculation")
+    }
 }
 
 impl HttpResponsePayload for TransactionReceipt {

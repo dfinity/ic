@@ -58,7 +58,11 @@ type InitArg = record {
     minimum_withdrawal_amount : nat;
 
     // Nonce of the next transaction to be sent to the Ethereum network.
-    next_transaction_nonce : nat
+    next_transaction_nonce : nat;
+    
+    // Block number to start scrapping from on the Ethereum network.
+    // Scrapping the logs will resume at `last_scraped_block_number + 1` (inclusive).
+    last_scraped_block_number : nat;
 };
 
 type UpgradeArg = record {
@@ -96,6 +100,22 @@ type Eip1559TransactionPrice = record {
     max_transaction_fee : nat;
 };
 
+type EthTransaction = record { transaction_hash : text };
+
+// Status of a finalized transaction.
+type TxFinalizedStatus = variant {
+    // Transaction was successful.
+    Success : EthTransaction;
+    // Transaction failed, user got reimbursed.
+    Reimbursed : record {
+        transaction_hash : text;
+        reimbursed_amount : nat;
+        reimbursed_in_block : nat;
+    };
+    // Transaction failed and will be reimbursed,
+    PendingReimbursement : EthTransaction;
+};
+
 // Retrieve the status of a withdrawal request.
 type RetrieveEthStatus = variant {
     // Withdrawal request is not found.
@@ -108,17 +128,17 @@ type RetrieveEthStatus = variant {
     // Transaction is not signed yet.
     TxCreated;
 
-    // Ethereum transaction is signed and ready to be sent.
-    TxSigned : record {transaction_hash : text};
+    // Ethereum transaction was signed and is sent to the network.
+    TxSent : EthTransaction;
 
-    // Ethereum transaction is sent to the network.
-    TxSent : record {transaction_hash : text};
-
-    // Ethereum transaction is confirmed.
-    TxConfirmed : record {transaction_hash : text};
+    // Ethereum transaction is finalized.
+    TxFinalized : TxFinalizedStatus;
 };
+
 type WithdrawalArg = record { recipient : text; amount : nat };
+
 type RetrieveEthRequest = record { block_index : nat };
+
 type WithdrawalError = variant {
     // The withdrawal amount is too low.
     // The payload contains the minimal withdrawal amount.
@@ -127,6 +147,9 @@ type WithdrawalError = variant {
     InsufficientFunds : record { balance : nat };
     // The allowance given to the minter is too low.
     InsufficientAllowance : record { allowance : nat };
+   // Recipient's address is blocked.
+   // No withdrawal can be made to that address.
+    RecipientAddressBlocked : record { address : text };
     // The minter is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;
@@ -135,6 +158,27 @@ type WithdrawalError = variant {
 type EventSource = record {
     transaction_hash : text;
     log_index : nat;
+};
+
+type TransactionReceipt = record {
+    block_hash : text;
+    block_number : nat;
+    effective_gas_price : nat;
+    gas_used : nat;
+    status : variant { Success; Failure };
+    transaction_hash : text;
+};
+
+type UnsignedTransaction = record {
+    chain_id : nat;
+    nonce : nat;
+    max_priority_fee_per_gas : nat;
+    max_fee_per_gas : nat;
+    gas_limit : nat;
+    destination : text;
+    value : nat;
+    data : blob;
+    access_list : vec record { address : text; storage_keys : vec blob };
 };
 
 type Event = record {
@@ -165,18 +209,29 @@ type Event = record {
             withdrawal_amount : nat;
             destination : text;
             ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
         };
-        SignedTx : record {
+        CreatedTransaction : record {
             withdrawal_id : nat;
-            raw_tx : text;
+            transaction : UnsignedTransaction;
         };
-        SentTransaction : record {
+        SignedTransaction : record {
             withdrawal_id : nat;
-            transaction_hash : text;
+            raw_transaction : text;
+        };
+        ReplacedTransaction : record {
+            withdrawal_id : nat;
+            transaction : UnsignedTransaction;
         };
         FinalizedTransaction : record {
             withdrawal_id : nat;
-            transaction_hash : text;
+            transaction_receipt : TransactionReceipt;
+        };
+          ReimbursedEthWithdrawal : record {
+            reimbursed_in_block : nat;
+            reimbursed_amount : nat;
+            withdrawal_id : nat;
         };
     };
 };

@@ -3,9 +3,10 @@ load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 
 LINUX_ONLY = [
-    "sevctl",
+    "snptool",
     "vsock_guest",
     "vsock_host",
+    "guestos_tool",
 ]
 
 NO_STRIP = [
@@ -16,6 +17,7 @@ NO_STRIP = [
 ]
 
 BINARIES = {
+    "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "replica": "//rs/replica",
@@ -25,6 +27,7 @@ BINARIES = {
     "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
+    "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
@@ -50,8 +53,9 @@ BINARIES = {
     "orchestrator": "//rs/orchestrator",
     "prometheus-config-updater": "//rs/observability/prometheus_config_updater:prometheus_config_updater",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
-    "sevctl": "//rs/ic_os/sevctl:sevctl",
+    "snptool": "//rs/ic_os/snptool:snptool",
     "sns": "//rs/sns/cli:sns",
+    "sns-test-feature": "//rs/sns/cli:sns--test_feature",
     "state-tool": "//rs/state_tool:state-tool",
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
     "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",

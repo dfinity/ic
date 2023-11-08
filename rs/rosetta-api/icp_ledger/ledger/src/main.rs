@@ -1493,7 +1493,7 @@ fn get_canidid_interface() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid::utils::{service_compatible, CandidSource};
+    use candid::utils::{service_compatible, service_equal, CandidSource};
     use std::path::PathBuf;
 
     #[test]
@@ -1502,7 +1502,7 @@ mod tests {
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let old_interface = manifest_dir.join("../ledger.did");
 
-        service_compatible(
+        service_equal(
             CandidSource::Text(&new_interface),
             CandidSource::File(old_interface.as_path()),
         )
@@ -1532,5 +1532,33 @@ mod tests {
                 e
             )
         });
+    }
+
+    #[test]
+    fn check_archive_and_ledger_interface_compatibility() {
+        // check that ledger.did and ledger_archive.did agree on the block format
+        let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let ledger_did_file = manifest_dir.join("../ledger.did");
+        let archive_did_file = manifest_dir.join("../ledger_archive.did");
+        let mut ledger_env = CandidSource::File(ledger_did_file.as_path())
+            .load()
+            .unwrap()
+            .0;
+        let archive_env = CandidSource::File(archive_did_file.as_path())
+            .load()
+            .unwrap()
+            .0;
+        let ledger_block_type = ledger_env.find_type("Block").unwrap().to_owned();
+        let archive_block_type = archive_env.find_type("Block").unwrap().to_owned();
+
+        let mut gamma = std::collections::HashSet::new();
+        let archive_block_type = ledger_env.merge_type(archive_env, archive_block_type.clone());
+        candid::types::subtype::equal(
+            &mut gamma,
+            &ledger_env,
+            &ledger_block_type,
+            &archive_block_type,
+        )
+        .expect("Ledger and Archive Block type are different");
     }
 }

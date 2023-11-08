@@ -29,21 +29,23 @@ mod eth_rpc_client {
             providers,
             &[
                 RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
-                RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare)
+                RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
+                RpcNodeProvider::Ethereum(EthereumProvider::PublicNode)
             ]
         );
     }
 }
 
 mod multi_call_results {
-    use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
+    use crate::eth_rpc_client::providers::{RpcNodeProvider, SepoliaProvider};
 
-    const ANKR: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Ankr);
-    const CLOUDFLARE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare);
+    const ANKR: RpcNodeProvider = RpcNodeProvider::Sepolia(SepoliaProvider::Ankr);
+    const BLOCK_PI: RpcNodeProvider = RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi);
+    const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode);
 
     mod reduce_with_equality {
         use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, CLOUDFLARE};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, BLOCK_PI};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
         use ic_cdk::api::call::RejectionCode;
 
@@ -64,7 +66,7 @@ mod multi_call_results {
                     }),
                 ),
                 (
-                    CLOUDFLARE,
+                    BLOCK_PI,
                     Err(HttpOutcallError::IcError {
                         code: RejectionCode::SysTransient,
                         message: "transient".to_string(),
@@ -88,7 +90,7 @@ mod multi_call_results {
                     }),
                 ),
                 (
-                    CLOUDFLARE,
+                    BLOCK_PI,
                     Ok(JsonRpcResult::Error {
                         code: -32000,
                         message: "nonce too low".to_string(),
@@ -105,7 +107,7 @@ mod multi_call_results {
         fn should_be_inconsistent_when_different_ok_results() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (ANKR, Ok(JsonRpcResult::Result("hello".to_string()))),
-                (CLOUDFLARE, Ok(JsonRpcResult::Result("world".to_string()))),
+                (BLOCK_PI, Ok(JsonRpcResult::Result("world".to_string()))),
             ]);
 
             let reduced = results.clone().reduce_with_equality();
@@ -124,7 +126,7 @@ mod multi_call_results {
                     }),
                 ),
                 (
-                    CLOUDFLARE,
+                    BLOCK_PI,
                     Err(HttpOutcallError::IcError {
                         code: RejectionCode::CanisterReject,
                         message: "reject".to_string(),
@@ -156,7 +158,7 @@ mod multi_call_results {
                     }),
                 ),
                 (
-                    CLOUDFLARE,
+                    BLOCK_PI,
                     Ok(JsonRpcResult::Error {
                         code: -32700,
                         message: "insufficient funds for gas * price + value".to_string(),
@@ -179,7 +181,7 @@ mod multi_call_results {
         fn should_be_consistent_ok_result() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (ANKR, Ok(JsonRpcResult::Result("0x01".to_string()))),
-                (CLOUDFLARE, Ok(JsonRpcResult::Result("0x01".to_string()))),
+                (BLOCK_PI, Ok(JsonRpcResult::Result("0x01".to_string()))),
             ]);
 
             let reduced = results.clone().reduce_with_equality();
@@ -190,7 +192,7 @@ mod multi_call_results {
 
     mod reduce_with_min_by_key {
         use crate::eth_rpc::{Block, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, CLOUDFLARE};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, BLOCK_PI};
         use crate::eth_rpc_client::MultiCallResults;
         use crate::numeric::{BlockNumber, Wei};
 
@@ -205,7 +207,7 @@ mod multi_call_results {
                     })),
                 ),
                 (
-                    CLOUDFLARE,
+                    BLOCK_PI,
                     Ok(JsonRpcResult::Result(Block {
                         number: BlockNumber::new(0x411cd9),
                         base_fee_per_gas: Wei::new(0x10),
@@ -224,12 +226,216 @@ mod multi_call_results {
             );
         }
     }
+
+    mod reduce_with_stable_majority_by_key {
+        use crate::eth_rpc::{FeeHistory, JsonRpcResult};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, BLOCK_PI, PUBLIC_NODE};
+        use crate::eth_rpc_client::MultiCallError::ConsistentJsonRpcError;
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
+        use crate::numeric::{BlockNumber, WeiPerGas};
+
+        #[test]
+        fn should_get_unanimous_fee_history() {
+            let results: MultiCallResults<FeeHistory> =
+                MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
+                    (BLOCK_PI, Ok(JsonRpcResult::Result(fee_history()))),
+                    (PUBLIC_NODE, Ok(JsonRpcResult::Result(fee_history()))),
+                ]);
+
+            let reduced =
+                results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+
+            assert_eq!(reduced, Ok(fee_history()));
+        }
+
+        #[test]
+        fn should_get_fee_history_with_2_out_of_3() {
+            for index_non_majority in 0..3_usize {
+                let index_majority = (index_non_majority + 1) % 3;
+                let mut fees = [fee_history(), fee_history(), fee_history()];
+                fees[index_non_majority].oldest_block = BlockNumber::new(0x10f73fd);
+                assert_ne!(
+                    fees[index_non_majority].oldest_block,
+                    fees[index_majority].oldest_block
+                );
+                let majority_fee = fees[index_majority].clone();
+                let [ankr_fee_history, block_pi_fee_history, public_node_fee_history] = fees;
+                let results: MultiCallResults<FeeHistory> =
+                    MultiCallResults::from_non_empty_iter(vec![
+                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
+                        (BLOCK_PI, Ok(JsonRpcResult::Result(block_pi_fee_history))),
+                        (
+                            PUBLIC_NODE,
+                            Ok(JsonRpcResult::Result(public_node_fee_history)),
+                        ),
+                    ]);
+
+                let reduced = results
+                    .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+
+                assert_eq!(reduced, Ok(majority_fee));
+            }
+        }
+
+        #[test]
+        fn should_fail_when_no_strict_majority() {
+            let ankr_fee_history = FeeHistory {
+                oldest_block: BlockNumber::new(0x10f73fd),
+                ..fee_history()
+            };
+            let block_pi_fee_history = FeeHistory {
+                oldest_block: BlockNumber::new(0x10f73fc),
+                ..fee_history()
+            };
+            let public_node_fee_history = FeeHistory {
+                oldest_block: BlockNumber::new(0x10f73fe),
+                ..fee_history()
+            };
+            let three_distinct_results: MultiCallResults<FeeHistory> =
+                MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
+                    (
+                        BLOCK_PI,
+                        Ok(JsonRpcResult::Result(block_pi_fee_history.clone())),
+                    ),
+                    (
+                        PUBLIC_NODE,
+                        Ok(JsonRpcResult::Result(public_node_fee_history.clone())),
+                    ),
+                ]);
+
+            let reduced = three_distinct_results
+                .clone()
+                .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+
+            assert_eq!(
+                reduced,
+                Err(MultiCallError::InconsistentResults(
+                    MultiCallResults::from_non_empty_iter(vec![
+                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
+                        (
+                            PUBLIC_NODE,
+                            Ok(JsonRpcResult::Result(public_node_fee_history))
+                        ),
+                    ])
+                ))
+            );
+
+            let two_distinct_results: MultiCallResults<FeeHistory> =
+                MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
+                    (
+                        BLOCK_PI,
+                        Ok(JsonRpcResult::Result(block_pi_fee_history.clone())),
+                    ),
+                ]);
+
+            let reduced = two_distinct_results
+                .clone()
+                .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+
+            assert_eq!(
+                reduced,
+                Err(MultiCallError::InconsistentResults(
+                    MultiCallResults::from_non_empty_iter(vec![
+                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
+                        (BLOCK_PI, Ok(JsonRpcResult::Result(block_pi_fee_history))),
+                    ])
+                ))
+            );
+        }
+
+        #[test]
+        fn should_fail_when_fee_history_inconsistent_for_same_oldest_block() {
+            let (fee, inconsistent_fee) = {
+                let fee = fee_history();
+                let mut inconsistent_fee = fee.clone();
+                inconsistent_fee.base_fee_per_gas[0] = WeiPerGas::new(0x729d3f3b4);
+                assert_ne!(fee, inconsistent_fee);
+                (fee, inconsistent_fee)
+            };
+
+            let results: MultiCallResults<FeeHistory> =
+                MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(fee.clone()))),
+                    (BLOCK_PI, Ok(JsonRpcResult::Result(fee.clone()))),
+                    (
+                        PUBLIC_NODE,
+                        Ok(JsonRpcResult::Result(inconsistent_fee.clone())),
+                    ),
+                ]);
+
+            let reduced =
+                results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+
+            assert_eq!(
+                reduced,
+                Err(MultiCallError::InconsistentResults(
+                    MultiCallResults::from_non_empty_iter(vec![
+                        (ANKR, Ok(JsonRpcResult::Result(fee.clone()))),
+                        (BLOCK_PI, Ok(JsonRpcResult::Result(fee))),
+                        (PUBLIC_NODE, Ok(JsonRpcResult::Result(inconsistent_fee))),
+                    ])
+                ))
+            );
+        }
+
+        #[test]
+        fn should_fail_upon_any_error() {
+            let results: MultiCallResults<FeeHistory> =
+                MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
+                    (BLOCK_PI, Ok(JsonRpcResult::Result(fee_history()))),
+                    (
+                        PUBLIC_NODE,
+                        Ok(JsonRpcResult::Error {
+                            code: -32700,
+                            message: "error".to_string(),
+                        }),
+                    ),
+                ]);
+
+            let reduced = results
+                .clone()
+                .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+
+            assert_eq!(
+                reduced,
+                Err(ConsistentJsonRpcError {
+                    code: -32700,
+                    message: "error".to_string()
+                })
+            );
+        }
+
+        fn fee_history() -> FeeHistory {
+            FeeHistory {
+                oldest_block: BlockNumber::new(0x10f73fc),
+                base_fee_per_gas: vec![
+                    WeiPerGas::new(0x729d3f3b3),
+                    WeiPerGas::new(0x766e503ea),
+                    WeiPerGas::new(0x75b51b620),
+                    WeiPerGas::new(0x74094f2b4),
+                    WeiPerGas::new(0x716724f03),
+                    WeiPerGas::new(0x73b467f76),
+                ],
+                reward: vec![
+                    vec![WeiPerGas::new(0x5f5e100)],
+                    vec![WeiPerGas::new(0x55d4a80)],
+                    vec![WeiPerGas::new(0x5f5e100)],
+                    vec![WeiPerGas::new(0x5f5e100)],
+                    vec![WeiPerGas::new(0x5f5e100)],
+                ],
+            }
+        }
+    }
 }
 
 mod eth_get_transaction_receipt {
-    use crate::eth_rpc::{Hash, Quantity};
+    use crate::eth_rpc::Hash;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use crate::numeric::{BlockNumber, Wei};
+    use crate::numeric::{BlockNumber, GasAmount, WeiPerGas};
     use assert_matches::assert_matches;
     use proptest::proptest;
     use std::str::FromStr;
@@ -263,8 +469,8 @@ mod eth_get_transaction_receipt {
                 )
                 .unwrap(),
                 block_number: BlockNumber::new(0x4132ec),
-                effective_gas_price: Wei::new(0xfefbee3e),
-                gas_used: Quantity::new(0x5208),
+                effective_gas_price: WeiPerGas::new(0xfefbee3e),
+                gas_used: GasAmount::new(0x5208),
                 status: TransactionStatus::Success,
                 transaction_hash: Hash::from_str(
                     "0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d"

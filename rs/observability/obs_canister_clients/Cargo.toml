@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 ic-agent =  { workspace = true, features = ["reqwest"] }
 candid = { workspace = true }
-serde = "1"
+serde = { workspace = true }
 rand = "0.8"
 url = "2.2.2"
 slog = { version = "2.5.2", features = ["nested-values"] }
