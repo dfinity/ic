@@ -2864,6 +2864,7 @@ dependencies = [
  "warp",
  "wasm-bindgen",
  "wasm-encoder 0.31.1",
+ "wasm-encoder 0.36.2",
  "wasm-smith",
  "wasmparser 0.109.0",
  "wasmprinter",
@@ -10942,17 +10943,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm-smith"
-version = "0.12.21"
+name = "wasm-encoder"
+version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fef779c243bbf04d9f03333c2cb50b98047c6dcc2a1db0cc7d0691e4135064b4"
+checksum = "822b645bf4f2446b949776ffca47e2af60b167209ffb70814ef8779d299cd421"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
+name = "wasm-encoder"
+version = "0.36.2"
+source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
+name = "wasm-smith"
+version = "0.12.23"
+source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
 dependencies = [
  "arbitrary",
  "flagset",
  "indexmap 2.1.0",
  "leb128",
- "wasm-encoder 0.35.0",
- "wasmparser 0.115.0",
+ "wasm-encoder 0.36.2",
+ "wasmparser 0.116.1",
 ]
 
 [[package]]
@@ -11005,6 +11022,15 @@ name = "wasmparser"
 version = "0.115.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e06c0641a4add879ba71ccb3a1e4278fd546f76f1eafb21d8f7b07733b547cd5"
+dependencies = [
+ "indexmap 2.1.0",
+ "semver",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.116.1"
+source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
 dependencies = [
  "indexmap 2.1.0",
  "semver",
