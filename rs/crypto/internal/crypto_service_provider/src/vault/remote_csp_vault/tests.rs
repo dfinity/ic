@@ -437,3 +437,20 @@ mod single_call_bincode {
         assert_eq!(bytes_tokio_bincode, bytes_our_bincode);
     }
 }
+
+mod worker_thread_pool {
+    // This test is to ensure that the number of threads returned by
+    // `std::thread::available_parallelism()` is the same as was set by the
+    // `threadpool`s `Builder` that uses the `num_cpus` crate.
+    // The goal is to ensure that we have the same number of threads after
+    // replacing `threadpool` with `rayon`.
+    #[test]
+    fn std_available_parallelism_consistent_with_num_cpus_get() {
+        assert_eq!(
+            std::thread::available_parallelism()
+                .expect("failed to obtain number of threads from std")
+                .get(),
+            num_cpus::get()
+        );
+    }
+}
