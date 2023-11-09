@@ -78,6 +78,8 @@ const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 const METRIC_TIMED_OUT_REQUESTS_TOTAL: &str = "mr_timed_out_requests_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
+const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
+const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
 
 const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
     "mr_wasm_custom_sections_memory_usage_bytes";
@@ -260,6 +262,10 @@ pub(crate) struct MessageRoutingMetrics {
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     pub subnet_split_height: IntGaugeVec,
+    /// Number of blocks proposed.
+    pub blocks_proposed_total: IntCounter,
+    /// Number of blocks not proposed.
+    pub blocks_not_proposed_total: IntCounter,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -336,7 +342,14 @@ impl MessageRoutingMetrics {
                 "Height at which the subnet last split (if during the lifetime of this replica process).",
                 &["split_from"],
             ),
-
+            blocks_proposed_total: metrics_registry.int_counter(
+                BLOCKS_PROPOSED_TOTAL,
+                "Successfully proposed blocks (blocks that became part of the blockchain)."
+            ),
+            blocks_not_proposed_total: metrics_registry.int_counter(
+                BLOCKS_NOT_PROPOSED_TOTAL,
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R)."
+            ),
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
                 "canister_memory_usage_bytes",
                 "Total memory footprint of all canisters on this subnet.",
@@ -913,6 +926,15 @@ impl BatchProcessor for BatchProcessorImpl {
         let registry_version = batch.registry_version;
         let (network_topology, subnet_features, registry_execution_settings, node_public_keys) =
             self.read_registry(registry_version, state.metadata.own_subnet_id);
+
+        self.metrics.blocks_proposed_total.inc();
+        self.metrics
+            .blocks_not_proposed_total
+            .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
+        state
+            .metadata
+            .blockmaker_metrics_time_series
+            .observe(batch.time, &batch.blockmaker_metrics);
 
         let mut state_after_round = self.state_machine.execute_round(
             state,
