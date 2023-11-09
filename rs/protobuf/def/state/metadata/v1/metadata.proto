@@ -243,6 +243,22 @@ message NodePublicKeyEntry {
   bytes public_key = 2;
 }
 
+message NodeBlockmakerStats {
+  types.v1.NodeId node_id = 1;
+  uint64 blocks_proposed_total = 2;
+  uint64 blocks_not_proposed_total = 3;
+}
+
+message BlockmakerStatsMap {
+  repeated NodeBlockmakerStats node_stats = 1;
+  uint64 blocks_proposed_total = 2;
+  uint64 blocks_not_proposed_total = 3;
+}
+
+message BlockmakerMetricsTimeSeries {
+  map<uint64, BlockmakerStatsMap> time_stamp_map = 1;
+}
+
 message SystemMetadata {
   reserved 1, 4, 12, 14;
   reserved "generated_id_counter", "ingress_history", "stable_memory_delta_estimate", "time_of_last_allocation_charge_nanos";
@@ -281,6 +297,8 @@ message SystemMetadata {
   repeated BitcoinGetSuccessorsFollowUpResponses bitcoin_get_successors_follow_up_responses = 18;
 
   repeated NodePublicKeyEntry node_public_keys = 19;
+
+  BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 }
 
 message StableMemory {
