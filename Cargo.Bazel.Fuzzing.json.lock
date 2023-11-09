@@ -1,5 +1,5 @@
 {
-  "checksum": "58c6963ffa07554e9669dddeafb6666416087b260d5de58eeb68815d07a15003",
+  "checksum": "e786e2c5e643efd81a5c04d82a66d4d382e9fde17c4074cf48600f79d6320ee5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20296,25 +20296,6 @@
           "selects": {}
         },
         "edition": "2018",
-        "rustc_flags": [
-          "-Cpasses=sancov-module",
-          "-Cllvm-args=-sanitizer-coverage-level=4",
-          "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-          "-Cllvm-args=-sanitizer-coverage-pc-table",
-          "-Cllvm-args=-sanitizer-coverage-trace-compares",
-          "-Cllvm-args=-sanitizer-coverage-stack-depth",
-          "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-          "-Ctarget-cpu=native",
-          "-Coverflow_checks",
-          "-Copt-level=3",
-          "-Clink-dead-code",
-          "-Cinstrument-coverage",
-          "-Cdebug-assertions",
-          "-Ccodegen-units=1",
-          "-Zextra-const-ub-checks",
-          "-Zstrict-init-checks",
-          "-Zsanitizer=address"
-        ],
         "version": "0.4.3"
       },
       "license": "MIT OR Apache-2.0"
@@ -49003,25 +48984,6 @@
           "selects": {}
         },
         "edition": "2018",
-        "rustc_flags": [
-          "-Cpasses=sancov-module",
-          "-Cllvm-args=-sanitizer-coverage-level=4",
-          "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-          "-Cllvm-args=-sanitizer-coverage-pc-table",
-          "-Cllvm-args=-sanitizer-coverage-trace-compares",
-          "-Cllvm-args=-sanitizer-coverage-stack-depth",
-          "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-          "-Ctarget-cpu=native",
-          "-Coverflow_checks",
-          "-Copt-level=3",
-          "-Clink-dead-code",
-          "-Cinstrument-coverage",
-          "-Cdebug-assertions",
-          "-Ccodegen-units=1",
-          "-Zextra-const-ub-checks",
-          "-Zstrict-init-checks",
-          "-Zsanitizer=address"
-        ],
         "version": "2.5.0"
       },
       "license": "BSD-3-Clause"
