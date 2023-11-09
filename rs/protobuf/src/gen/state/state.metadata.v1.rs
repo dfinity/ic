@@ -293,6 +293,16 @@ pub struct StopCanisterCallTree {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RawRandContext {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<super::super::queues::v1::Request>,
+    #[prost(message, optional, tag = "2")]
+    pub time: ::core::option::Option<Time>,
+    #[prost(uint64, tag = "3")]
+    pub execution_round_id: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetCallContextManager {
     #[prost(uint64, tag = "1")]
     pub next_callback_id: u64,
@@ -320,6 +330,8 @@ pub struct SubnetCallContextManager {
     pub next_stop_canister_call_id: u64,
     #[prost(message, repeated, tag = "15")]
     pub stop_canister_calls: ::prost::alloc::vec::Vec<StopCanisterCallTree>,
+    #[prost(message, repeated, tag = "16")]
+    pub raw_rand_contexts: ::prost::alloc::vec::Vec<RawRandContext>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -189,6 +189,12 @@ message StopCanisterCallTree {
   StopCanisterCall call = 2;
 }
 
+message RawRandContext {
+  state.queues.v1.Request request = 1;
+  Time time = 2;
+  uint64 execution_round_id = 3;
+}
+
 message SubnetCallContextManager {
   uint64 next_callback_id = 1;
   reserved 2;
@@ -209,6 +215,7 @@ message SubnetCallContextManager {
   repeated InstallCodeCallTree install_code_calls = 13;
   uint64 next_stop_canister_call_id = 14;
   repeated StopCanisterCallTree stop_canister_calls = 15;
+  repeated RawRandContext raw_rand_contexts = 16;
 }
 
 message SubnetMetrics {
