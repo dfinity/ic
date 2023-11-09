@@ -599,12 +599,24 @@ impl Swap {
                     &participation,
                     direct_participation_icp_e8s,
                 ) {
-                    Ok(neurons_fund_participation_icp_e8s) => neurons_fund_participation_icp_e8s,
+                    Ok(neurons_fund_participation_icp_e8s) => {
+                        // Capping mitigates a potentially confusing situation in which the Swap's
+                        // best `neurons_fund_participation_icp_e8s` estimate for whatever reason
+                        // exceeds the amount allocated by the Neurons' Fund before the swap started.
+                        neurons_fund_participation_icp_e8s.min(
+                            // Defaulting to `u64::MAX` since we are computing minimum. Practically,
+                            // this shouldn't happen, as `max_neurons_fund_participation_icp_e8s`
+                            // is expected to be set here.
+                            constraints
+                                .max_neurons_fund_participation_icp_e8s
+                                .unwrap_or(u64::MAX),
+                        )
+                    }
                     Err(err) => {
                         log!(
                             ERROR,
                             "Cannot compute neurons_fund_participation_icp_e8s for \
-                            direct_participation_icp_e8s={}: {}",
+                        direct_participation_icp_e8s={}: {}",
                             direct_participation_icp_e8s,
                             err.to_string(),
                         );
