@@ -42,6 +42,7 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -50,7 +51,6 @@ use tarpc::server::BaseChannel;
 #[allow(unused_imports)]
 use tarpc::server::Serve;
 use tarpc::{context, serde_transport, server::Channel};
-use threadpool::ThreadPool;
 use tokio::net::UnixListener;
 
 use super::codec::{Bincode, CspVaultObserver, ObservableCodec};
@@ -59,7 +59,7 @@ use super::codec::{Bincode, CspVaultObserver, ObservableCodec};
 pub struct TarpcCspVaultServerImpl<C: CspVault> {
     local_csp_vault: Arc<C>,
     listener: UnixListener,
-    thread_pool: ThreadPool,
+    thread_pool: Arc<ThreadPool>,
     max_frame_length: usize,
     metrics: Arc<CryptoMetrics>,
     #[allow(unused)]
@@ -69,23 +69,20 @@ pub struct TarpcCspVaultServerImpl<C: CspVault> {
 /// A worker of the tarpc CSP vault server responsible for a single service request.
 ///
 /// For each service request (i.e., remote procedure call), a new worker is
-/// created through cloning (with `Clone`). Note that [cloning of a `ThreadPool`
-/// creates a pool handle whose behavior is similar to `Arc`][1].
-///
-/// [1]: https://docs.rs/threadpool/1.8.1/threadpool/struct.ThreadPool.html#impl-Clone
+/// created through cloning (with `Clone`).
 struct TarpcCspVaultServerWorker<C: CspVault> {
     local_csp_vault: Arc<C>,
-    thread_pool_handle: ThreadPool,
+    thread_pool: Arc<ThreadPool>,
 }
 
-async fn execute_on_thread_pool<F, T>(thread_pool_handle: ThreadPool, job: F) -> T
+async fn execute_on_thread_pool<F, T>(thread_pool: &ThreadPool, job: F) -> T
 where
     F: FnOnce() -> T,
     F: Send + 'static,
     T: Send + 'static,
 {
     let (tx, rx) = tokio::sync::oneshot::channel();
-    thread_pool_handle.execute(move || {
+    thread_pool.spawn(move || {
         if tx.is_closed() {
             // Do not start the job if the associated receiver handle was
             // dropped in the meanwhile (e.g., because the client closed
@@ -105,7 +102,7 @@ impl<C: CspVault> Clone for TarpcCspVaultServerWorker<C> {
     fn clone(&self) -> Self {
         Self {
             local_csp_vault: Arc::clone(&self.local_csp_vault),
-            thread_pool_handle: self.thread_pool_handle.clone(),
+            thread_pool: Arc::clone(&self.thread_pool),
         }
     }
 }
@@ -122,7 +119,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let vault = self.local_csp_vault;
         let job = move || vault.sign(algorithm_id, &msg, key_id);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn gen_node_signing_key_pair(
@@ -131,7 +128,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         let vault = self.local_csp_vault;
         let job = move || vault.gen_node_signing_key_pair();
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // `MultiSignatureCspVault`-methods.
@@ -144,7 +141,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let vault = self.local_csp_vault;
         let job = move || vault.multi_sign(algorithm_id, &message, key_id);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn gen_committee_signing_key_pair(
@@ -153,7 +150,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
         let vault = self.local_csp_vault;
         let job = move || vault.gen_committee_signing_key_pair();
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // `ThresholdSignatureCspVault`-methods.
@@ -166,7 +163,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<CspSignature, CspThresholdSignError> {
         let vault = self.local_csp_vault;
         let job = move || vault.threshold_sign(algorithm_id, &message, key_id);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // `NiDkgCspVault`-methods.
@@ -177,7 +174,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
         let vault = self.local_csp_vault;
         let job = move || vault.gen_dealing_encryption_key_pair(node_id);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn update_forward_secure_epoch(
@@ -189,7 +186,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<(), CspDkgUpdateFsEpochError> {
         let vault = self.local_csp_vault;
         let job = move || vault.update_forward_secure_epoch(algorithm_id, key_id, epoch);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn create_dealing(
@@ -213,7 +210,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 maybe_resharing_secret,
             )
         };
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn load_threshold_signing_key(
@@ -235,7 +232,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 receiver_index,
             )
         };
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn retain_threshold_keys_if_present(
@@ -245,7 +242,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<(), CspDkgRetainThresholdKeysError> {
         let vault = self.local_csp_vault;
         let job = move || vault.retain_threshold_keys_if_present(active_key_ids);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // SecretKeyStoreCspVault-methods.
@@ -256,7 +253,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<bool, CspSecretKeyStoreContainsError> {
         let vault = self.local_csp_vault;
         let job = move || vault.sks_contains(&key_id);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // PublicKeyStoreCspVault-methods.
@@ -266,7 +263,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
         let vault = self.local_csp_vault;
         let job = move || vault.current_node_public_keys();
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn current_node_public_keys_with_timestamps(
@@ -275,13 +272,13 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
         let vault = self.local_csp_vault;
         let job = move || vault.current_node_public_keys_with_timestamps();
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn idkg_key_count(self, _: context::Context) -> Result<usize, CspPublicKeyStoreError> {
         let vault = self.local_csp_vault;
         let job = move || vault.idkg_dealing_encryption_pubkeys_count();
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // PublicAndSecretKeyStoreCspVault-methods.
@@ -292,7 +289,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<(), PksAndSksContainsErrors> {
         let vault = self.local_csp_vault;
         let job = move || vault.pks_and_sks_contains(external_public_keys);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn validate_pks_and_sks(
@@ -301,7 +298,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
         let vault = self.local_csp_vault;
         let job = move || vault.validate_pks_and_sks();
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // 'TlsHandshakeCspVault'-methods.
@@ -313,7 +310,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         let vault = self.local_csp_vault;
         let job = move || vault.gen_tls_key_pair(node, &not_after);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn tls_sign(
@@ -324,7 +321,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<CspSignature, CspTlsSignError> {
         let vault = self.local_csp_vault;
         let job = move || vault.tls_sign(&message, &key_id);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // `IDkgProtocolCspVault`-methods.
@@ -349,7 +346,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &transcript_operation,
             )
         };
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn idkg_verify_dealing_private(
@@ -373,7 +370,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &context_data,
             )
         };
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn idkg_load_transcript(
@@ -395,7 +392,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 transcript,
             )
         };
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn idkg_load_transcript_with_openings(
@@ -419,7 +416,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 transcript,
             )
         };
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn idkg_retain_active_keys(
@@ -430,7 +427,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<(), IDkgRetainKeysError> {
         let vault = self.local_csp_vault;
         let job = move || vault.idkg_retain_active_keys(active_key_ids, oldest_public_key);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn idkg_gen_dealing_encryption_key_pair(
@@ -439,7 +436,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         let vault = self.local_csp_vault;
         let job = move || vault.idkg_gen_dealing_encryption_key_pair();
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn idkg_open_dealing(
@@ -461,7 +458,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &opener_key_id,
             )
         };
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     // `ThresholdEcdsaSignerCspVault`-methods
@@ -492,7 +489,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 algorithm_id,
             )
         };
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 
     async fn new_public_seed(
@@ -501,7 +498,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<Seed, PublicRandomSeedGeneratorError> {
         let vault = self.local_csp_vault;
         let job = move || vault.new_public_seed();
-        execute_on_thread_pool(self.thread_pool_handle, job).await
+        execute_on_thread_pool(&self.thread_pool, job).await
     }
 }
 
@@ -509,7 +506,6 @@ type VaultFactory<C> = dyn Fn(&ReplicaLogger, Arc<CryptoMetrics>) -> Arc<C> + Se
 
 pub struct TarpcCspVaultServerImplBuilder<C> {
     local_csp_vault_factory: Box<VaultFactory<C>>,
-    threadpool_builder: threadpool::Builder,
     max_frame_length: usize,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
@@ -541,8 +537,6 @@ impl<C> TarpcCspVaultServerImplBuilder<C> {
     fn new_internal(local_csp_vault_factory: Box<VaultFactory<C>>) -> Self {
         TarpcCspVaultServerImplBuilder {
             local_csp_vault_factory,
-            // defaults the number of threads to the number of CPUs
-            threadpool_builder: threadpool::Builder::new().thread_name("ic-crypto-csp".to_string()),
             max_frame_length: FOUR_GIGA_BYTES,
             logger: no_op_logger(),
             metrics: Arc::new(CryptoMetrics::none()),
@@ -573,7 +567,18 @@ impl<C: CspVault> TarpcCspVaultServerImplBuilder<C> {
         TarpcCspVaultServerImpl {
             local_csp_vault,
             listener,
-            thread_pool: self.threadpool_builder.clone().build(),
+            // defaults the number of threads to the number of CPUs
+            thread_pool: Arc::new(
+                ThreadPoolBuilder::new()
+                    .thread_name(|i| format!("ic-crypto-csp-{i}"))
+                    .num_threads(
+                        std::thread::available_parallelism()
+                            .expect("obtaining the number of available cores should never fail")
+                            .get(),
+                    )
+                    .build()
+                    .expect("failed to instantiate a thread pool"),
+            ),
             max_frame_length: self.max_frame_length,
             metrics: Arc::clone(&self.metrics),
             logger: new_logger!(&self.logger),
@@ -613,7 +618,7 @@ impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
                 )
             });
             let local_csp_vault = Arc::clone(&self.local_csp_vault);
-            let thread_pool_handle = self.thread_pool.clone(); // creates a pool handle similar to Arc
+            let thread_pool = Arc::clone(&self.thread_pool);
             let codec = ObservableCodec::new(
                 Bincode::default(),
                 CspVaultObserver::new(new_logger!(&self.logger), Arc::clone(&self.metrics)),
@@ -623,7 +628,7 @@ impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
                 let transport = serde_transport::new(framed, codec);
                 let worker = TarpcCspVaultServerWorker {
                     local_csp_vault,
-                    thread_pool_handle,
+                    thread_pool,
                 };
                 let channel_executor =
                     BaseChannel::with_defaults(transport).execute(worker.serve());
