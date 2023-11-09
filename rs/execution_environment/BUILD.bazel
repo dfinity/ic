@@ -117,6 +117,9 @@ rust_test(
     data = DATA,
     env = ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "test_macos",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -128,12 +131,18 @@ rust_test_suite(
     data = DATA,
     env = ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "test_macos",
+    ],
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_doc_test(
     name = "execution_environment_doc_test",
     crate = ":execution_environment",
+    tags = [
+        "test_macos",
+    ],
 )
 
 BENCH_DEPENDENCIES = [
