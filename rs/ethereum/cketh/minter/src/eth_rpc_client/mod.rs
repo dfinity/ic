@@ -18,6 +18,8 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
+use self::providers::RpcApi;
+
 pub mod providers;
 pub mod requests;
 pub mod responses;
@@ -51,8 +53,8 @@ impl RpcTransport for DefaultTransport {
         unimplemented!()
     }
 
-    fn resolve_api(_provider: RpcNodeProvider) -> RpcApi {
-        unimplemented!()
+    fn resolve_api(provider: RpcNodeProvider) -> RpcApi {
+        provider.api::<Self>()
     }
 
     async fn call_json_rpc<T: DeserializeOwned>(
@@ -117,7 +119,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
                 provider
             );
             let result = eth_rpc::call::<T, _, _>(
-                provider.api::<T>(),
+                T::resolve_api(*provider),
                 method.clone(),
                 params.clone(),
                 response_size_estimate,
@@ -162,7 +164,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
             for provider in providers {
                 log!(DEBUG, "[parallel_call]: will call provider: {:?}", provider);
                 fut.push(eth_rpc::call::<T, _, _>(
-                    provider.api::<T>(),
+                    T::resolve_api(*provider),
                     method.clone(),
                     params.clone(),
                     response_size_estimate,
