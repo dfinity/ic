@@ -221,3 +221,64 @@ fn test_sleb128() {
         assert_eq!(&buf[0..=i], b, "invalid encoding of integer {}", n);
     }
 }
+
+#[test]
+fn test_test_vectors() {
+    let test_vectors = vec![
+        (
+            Value::Nat(42.into()),
+            "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
+        ),
+        (
+            Value::Int((-42).into()),
+            "de5a6f78116eca62d7fc5ce159d23ae6b889b365a1739ad2cf36f925a140d0cc",
+        ),
+        (
+            Value::text("Hello, World!"),
+            "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f",
+        ),
+        (
+            Value::blob(hex::decode("01020304").unwrap()),
+            "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
+        ),
+        (
+            Value::Array(vec![
+                Value::Nat(3.into()),
+                Value::text("foo"),
+                Value::blob(hex::decode("0506").unwrap()),
+            ]),
+            "514a04011caa503990d446b7dec5d79e19c221ae607fb08b2848c67734d468d6",
+        ),
+        (
+            Value::map(vec![
+                (
+                    "from",
+                    Value::blob(
+                        hex::decode("00abcdef0012340056789a00bcdef000012345678900abcdef01")
+                            .unwrap(),
+                    ),
+                ),
+                (
+                    "to",
+                    Value::blob(
+                        hex::decode("00ab0def0012340056789a00bcdef000012345678900abcdef01")
+                            .unwrap(),
+                    ),
+                ),
+                ("amount", Value::Nat(42.into())),
+                ("created_at", Value::Nat(1699218263.into())),
+                ("memo", Value::Nat(0.into())),
+            ]),
+            "c56ece650e1de4269c5bdeff7875949e3e2033f85b2d193c2ff4f7f78bdcfc75",
+        ),
+    ];
+
+    for (input, expected) in test_vectors {
+        assert_eq!(
+            input.hash().to_vec(),
+            hex::decode(expected).unwrap(),
+            "input: {}",
+            input
+        );
+    }
+}
