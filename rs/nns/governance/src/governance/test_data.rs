@@ -6,6 +6,8 @@
 use super::*;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
+use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
+use ic_sns_swap::pb::v1::{IdealMatchedParticipationFunction, LinearScalingCoefficient};
 use lazy_static::lazy_static;
 
 // Alias types from crate::pb::v1::...
@@ -190,5 +192,26 @@ lazy_static! {
             }),
             ..CREATE_SERVICE_NERVOUS_SYSTEM.clone()
         }
+    };
+
+    pub static ref NEURONS_FUND_PARTICIPATION_CONSTRAINTS: NeuronsFundParticipationConstraints = NeuronsFundParticipationConstraints {
+        min_direct_participation_threshold_icp_e8s: Some(
+            36_000 * E8,
+        ),
+        max_neurons_fund_participation_icp_e8s: Some(
+            45_000 * E8,
+        ),
+        coefficient_intervals: vec![LinearScalingCoefficient {
+            from_direct_participation_icp_e8s: Some(0),
+            to_direct_participation_icp_e8s: Some(u64::MAX),
+            slope_numerator: Some(1),
+            slope_denominator: Some(1),
+            intercept_icp_e8s: Some(0),
+        }],
+        ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+            serialized_representation: Some(
+                PolynomialMatchingFunction::new(u64::MAX).unwrap().serialize(),
+            ),
+        }),
     };
 }

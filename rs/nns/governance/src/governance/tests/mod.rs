@@ -13,12 +13,12 @@ use candid::{Decode, Encode};
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
-#[cfg(not(feature = "test"))]
+#[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::SnsInitPayload;
-#[cfg(not(feature = "test"))]
+#[cfg(feature = "test")]
 use ic_sns_init::pb::v1::{self as sns_init_pb};
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,
@@ -1088,13 +1088,12 @@ mod settle_neurons_fund_participation_request_tests {
     }
 } // end mod settle_neurons_fund_participation_request_tests
 
-#[cfg(not(feature = "test"))]
+#[cfg(feature = "test")]
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
+    use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
-    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1, IMAGE_2};
-
-    use super::*;
+    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
     //
@@ -1119,20 +1118,23 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         Some(original.as_ref().unwrap().basis_points.unwrap())
     }
 
+    #[cfg(feature = "test")]
     #[test]
     fn test_convert_from_valid() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
         // Step 2: Call the code under test.
-        let converted = SnsInitPayload::try_from(CREATE_SERVICE_NERVOUS_SYSTEM.clone()).unwrap();
+        let converted =
+            SnsInitPayload::try_from(CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone())
+                .unwrap();
 
         // Step 3: Inspect the result.
 
-        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .ledger_parameters
             .as_ref()
             .unwrap();
-        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .governance_parameters
             .as_ref()
             .unwrap();
@@ -1142,7 +1144,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             .as_ref()
             .unwrap();
 
-        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .swap_parameters
             .as_ref()
             .unwrap();
@@ -1172,11 +1174,12 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                     &original_governance_parameters.neuron_minimum_stake
                 ),
 
-                fallback_controller_principal_ids: CREATE_SERVICE_NERVOUS_SYSTEM
-                    .fallback_controller_principal_ids
-                    .iter()
-                    .map(|id| id.to_string())
-                    .collect(),
+                fallback_controller_principal_ids:
+                    CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                        .fallback_controller_principal_ids
+                        .iter()
+                        .map(|id| id.to_string())
+                        .collect(),
 
                 logo: Some(IMAGE_1.to_string(),),
                 url: Some("https://best.app".to_string(),),
@@ -1227,16 +1230,8 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
-                min_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
-                    None
-                } else {
-                    unwrap_tokens_e8s(&original_swap_parameters.minimum_icp)
-                },
-                max_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
-                    None
-                } else {
-                    unwrap_tokens_e8s(&original_swap_parameters.maximum_icp)
-                },
+                min_icp_e8s: None,
+                max_icp_e8s: None,
                 min_direct_participation_icp_e8s: unwrap_tokens_e8s(
                     &original_swap_parameters.minimum_direct_participation_icp
                 ),
@@ -1265,10 +1260,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             },
         );
 
-        let original_initial_token_distribution: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
-            .initial_token_distribution
-            .as_ref()
-            .unwrap();
+        let original_initial_token_distribution: &_ =
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .initial_token_distribution
+                .as_ref()
+                .unwrap();
         let original_developer_distribution: &_ = original_initial_token_distribution
             .developer_distribution
             .as_ref()
@@ -1336,13 +1332,14 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             ),
         );
 
-        let original_neuron_basket_construction_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
-            .swap_parameters
-            .as_ref()
-            .unwrap()
-            .neuron_basket_construction_parameters
-            .as_ref()
-            .unwrap();
+        let original_neuron_basket_construction_parameters =
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .swap_parameters
+                .as_ref()
+                .unwrap()
+                .neuron_basket_construction_parameters
+                .as_ref()
+                .unwrap();
 
         assert_eq!(
             converted.neuron_basket_construction_parameters.unwrap(),
@@ -1363,10 +1360,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         assert_eq!(converted.swap_due_timestamp_seconds, None);
     }
 
+    #[cfg(feature = "test")]
     #[test]
     fn test_convert_from_invalid() {
         // Step 1: Prepare the world: construct input.
-        let mut original = CREATE_SERVICE_NERVOUS_SYSTEM.clone();
+        let mut original = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
         let governance_parameters = original.governance_parameters.as_mut().unwrap();
 
         // Corrupt the data. The problem with this is that wait for quiet extension
@@ -1390,17 +1388,15 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     }
 }
 
-mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests {
+#[cfg(feature = "test")]
+mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
     use super::*;
     use crate::pb::v1::create_service_nervous_system::SwapParameters;
-    #[cfg(not(feature = "test"))]
     use ic_nervous_system_proto::pb::v1 as pb;
-    #[cfg(not(feature = "test"))]
-    use ic_sns_init::pb::v1::{sns_init_payload, NeuronsFundParticipants};
-    #[cfg(not(feature = "test"))]
-    use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
-    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM;
-    #[cfg(not(feature = "test"))]
+    use ic_sns_init::pb::v1::sns_init_payload;
+    use test_data::{
+        CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+    };
     use test_data::{IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
@@ -1411,54 +1407,44 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
     }
 
-    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_duration_seconds(original: &Option<pb::Duration>) -> Option<u64> {
         Some(original.as_ref().unwrap().seconds.unwrap())
     }
 
-    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_tokens_e8s(original: &Option<pb::Tokens>) -> Option<u64> {
         Some(original.as_ref().unwrap().e8s.unwrap())
     }
 
-    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_percentage_basis_points(original: &Option<pb::Percentage>) -> Option<u64> {
         Some(original.as_ref().unwrap().basis_points.unwrap())
     }
 
-    #[cfg(not(feature = "test"))]
     #[test]
     fn test_convert_from_valid() {
         // Step 1: Prepare the world. (In this case, trivial.)
+
+        use ic_sns_init::pb::v1::NeuronsFundParticipants;
+
+        use crate::governance::test_data::NEURONS_FUND_PARTICIPATION_CONSTRAINTS;
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
-        let neurons_fund_participants = vec![
-            CfParticipant {
-                hotkey_principal: PrincipalId::new_user_test_id(1).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(1, 10 * E8).unwrap()],
-            },
-            CfParticipant {
-                hotkey_principal: PrincipalId::new_user_test_id(2).to_string(),
-                cf_neurons: vec![
-                    CfNeuron::try_new(2, 11 * E8).unwrap(),
-                    CfNeuron::try_new(3, 12 * E8).unwrap(),
-                ],
-            },
-        ];
 
         let executed_create_service_nervous_system_proposal =
             ExecutedCreateServiceNervousSystemProposal {
                 current_timestamp_seconds,
-                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                    .clone(),
                 proposal_id,
-                neurons_fund_participants: neurons_fund_participants.clone(),
+                neurons_fund_participants: vec![],
                 random_swap_start_time: GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
                 },
-                neurons_fund_participation_constraints: None, // TODO[NNS1-2558]
+                neurons_fund_participation_constraints: Some(
+                    NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
+                ),
             };
 
         // Step 2: Call the code under test.
@@ -1467,11 +1453,11 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
 
         // Step 3: Inspect the result.
 
-        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .ledger_parameters
             .as_ref()
             .unwrap();
-        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .governance_parameters
             .as_ref()
             .unwrap();
@@ -1481,7 +1467,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             .as_ref()
             .unwrap();
 
-        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .swap_parameters
             .as_ref()
             .unwrap();
@@ -1509,11 +1495,12 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                     &original_governance_parameters.neuron_minimum_stake
                 ),
 
-                fallback_controller_principal_ids: CREATE_SERVICE_NERVOUS_SYSTEM
-                    .fallback_controller_principal_ids
-                    .iter()
-                    .map(|id| id.to_string())
-                    .collect(),
+                fallback_controller_principal_ids:
+                    CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                        .fallback_controller_principal_ids
+                        .iter()
+                        .map(|id| id.to_string())
+                        .collect(),
 
                 logo: Some(IMAGE_1.to_string(),),
                 url: Some("https://best.app".to_string(),),
@@ -1564,16 +1551,8 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
-                min_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
-                    None
-                } else {
-                    unwrap_tokens_e8s(&original_swap_parameters.minimum_icp)
-                },
-                max_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
-                    None
-                } else {
-                    unwrap_tokens_e8s(&original_swap_parameters.maximum_icp)
-                },
+                min_icp_e8s: None,
+                max_icp_e8s: None,
                 min_direct_participation_icp_e8s: unwrap_tokens_e8s(
                     &original_swap_parameters.minimum_direct_participation_icp
                 ),
@@ -1591,16 +1570,13 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
                 nns_proposal_id: Some(proposal_id),
                 neurons_fund_participants: Some(NeuronsFundParticipants {
-                    participants: neurons_fund_participants,
+                    participants: vec![],
                 }),
-                neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED {
-                    Some(true)
-                } else {
-                    None
-                },
+                neurons_fund_participation: Some(true),
 
-                // TODO[NNS1-2558]: Test these fields.
-                neurons_fund_participation_constraints: None,
+                neurons_fund_participation_constraints: Some(
+                    NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone()
+                ),
 
                 // We'll examine these later
                 initial_token_distribution: None,
@@ -1610,10 +1586,11 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             },
         );
 
-        let original_initial_token_distribution: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
-            .initial_token_distribution
-            .as_ref()
-            .unwrap();
+        let original_initial_token_distribution: &_ =
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .initial_token_distribution
+                .as_ref()
+                .unwrap();
         let original_developer_distribution: &_ = original_initial_token_distribution
             .developer_distribution
             .as_ref()
@@ -1681,13 +1658,14 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             ),
         );
 
-        let original_neuron_basket_construction_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
-            .swap_parameters
-            .as_ref()
-            .unwrap()
-            .neuron_basket_construction_parameters
-            .as_ref()
-            .unwrap();
+        let original_neuron_basket_construction_parameters =
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .swap_parameters
+                .as_ref()
+                .unwrap()
+                .neuron_basket_construction_parameters
+                .as_ref()
+                .unwrap();
 
         assert_eq!(
             converted.neuron_basket_construction_parameters.unwrap(),
@@ -1720,29 +1698,15 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         );
     }
 
-    // Test that if min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
-    // max_direct_participation_icp_e8s are Some, or vice versa, then the
-    // TryFrom<CreateServiceNervousSystem> for SnsInitPayload will "reconstruct"
-    // the missing fields.
+    // TODO NNS1-2687: remove this test once the check is moved to sns/init
     #[test]
-    #[cfg(not(feature = "test"))]
-    fn test_convert_from_valid_swap_parameters_with_missing_max_direct_icp() {
+    fn test_neurons_fund_participation_required() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
         // Step 2: Call the code under test.
         let payload = CreateServiceNervousSystem {
             swap_parameters: Some(SwapParameters {
-                minimum_icp: Some(pb::Tokens {
-                    e8s: Some(12_300_000_000),
-                }),
-                maximum_icp: Some(pb::Tokens {
-                    e8s: Some(25_000_000_000),
-                }),
-                minimum_direct_participation_icp: None,
-                maximum_direct_participation_icp: None,
-                neurons_fund_investment_icp: Some(pb::Tokens {
-                    e8s: Some(6_100_000_000),
-                }),
+                neurons_fund_participation: None,
                 ..CREATE_SERVICE_NERVOUS_SYSTEM
                     .swap_parameters
                     .clone()
@@ -1750,67 +1714,28 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             }),
             ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
         };
-        let converted = SnsInitPayload::try_from(payload).unwrap();
+        let error = SnsInitPayload::try_from(payload).unwrap_err();
 
-        // Step 3: Inspect the result.
-
-        assert_eq!(
-            converted.min_direct_participation_icp_e8s(),
-            12_300_000_000 - 6_100_000_000 // Subtract neurons_fund_investment_icp
-        );
-        assert_eq!(
-            converted.max_direct_participation_icp_e8s(),
-            25_000_000_000 - 6_100_000_000 // Subtract neurons_fund_investment_icp
-        );
+        assert!(error.contains("neurons_fund_participation"));
     }
+}
 
-    // Test that if min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
-    // max_direct_participation_icp_e8s are Some, or vice versa, then the
-    // TryFrom<CreateServiceNervousSystem> for SnsInitPayload will "reconstruct"
-    // the missing fields.
-    #[test]
-    #[cfg(not(feature = "test"))]
-    fn test_convert_from_valid_swap_parameters_with_missing_max_icp() {
-        // Step 1: Prepare the world. (In this case, trivial.)
+#[cfg(not(feature = "test"))]
+mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_without_test_feature {
+    use super::*;
+    use crate::pb::v1::create_service_nervous_system::SwapParameters;
+    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM;
 
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                minimum_icp: None,
-                maximum_icp: None,
-                minimum_direct_participation_icp: Some(pb::Tokens {
-                    e8s: Some(12_300_000_000 - 6_100_000_000),
-                }),
-                maximum_direct_participation_icp: Some(pb::Tokens {
-                    e8s: Some(25_000_000_000 - 6_100_000_000),
-                }),
-                neurons_fund_investment_icp: Some(pb::Tokens {
-                    e8s: Some(6_100_000_000),
-                }),
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let converted = SnsInitPayload::try_from(payload).unwrap();
-
-        // Step 3: Inspect the result.
-
-        assert_eq!(
-            converted.min_icp_e8s(),
-            12_300_000_000 // Subtract neurons_fund_investment_icp
-        );
-        assert_eq!(
-            converted.max_icp_e8s(),
-            25_000_000_000 // Subtract neurons_fund_investment_icp
-        );
+    // Alias types from crate::pb::v1::...
+    //
+    // This is done within another mod to differentiate against types that have
+    // similar names as types found in ic_sns_init.
+    mod src {
+        pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
     }
 
     // TODO NNS1-2687: remove this test entirely
     #[test]
-    #[cfg(not(feature = "test"))]
     fn test_neurons_fund_participation_false_not_allowed() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
@@ -1832,7 +1757,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
 
     // TODO NNS1-2687: remove this test entirely
     #[test]
-    #[cfg(not(feature = "test"))]
     fn test_neurons_fund_participation_true_not_allowed() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
@@ -1840,28 +1764,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         let payload = CreateServiceNervousSystem {
             swap_parameters: Some(SwapParameters {
                 neurons_fund_participation: Some(true),
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let error = SnsInitPayload::try_from(payload).unwrap_err();
-
-        assert!(error.contains("neurons_fund_participation"));
-    }
-
-    // TODO NNS1-2687: remove this test once the check is moved to sns/init
-    #[test]
-    #[cfg(feature = "test")]
-    fn test_neurons_fund_participation_required() {
-        // Step 1: Prepare the world. (In this case, trivial.)
-
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                neurons_fund_participation: None,
                 ..CREATE_SERVICE_NERVOUS_SYSTEM
                     .swap_parameters
                     .clone()
