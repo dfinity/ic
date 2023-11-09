@@ -180,6 +180,36 @@ pub struct NeuronsFundNeuron {
 /// in either heap memory or stable memory.
 #[cfg_attr(test, derive(Clone, Debug))]
 pub struct NeuronStore {
+    /// Neurons stored in heap (as supposed to StableNeuronStore). The invariant regarding neurons
+    /// in heap v.s. stable storage: "all neurons in the stable storage should be inactive", which
+    /// is equivalent to: "all active neurons should remain on the heap". The invariant holds
+    /// because: (1) all neuron mutations go through `add_neuron`, `remove_neuron` and
+    /// `with_neuron_mut` which is responsible for upholding the invariant. (2) neuron being
+    /// inactive is monotonic through passage of time without mutation - when time increases, an
+    /// inactive neuron will stay inactive without mutation.
+    ///
+    /// Note that 'inactive' definition comes from `Neuron::is_inactive` which takes current time as
+    /// an argument.
+    ///
+    /// All accesses to heap_neurons need to be aware that it is only guaranteed that active neurons
+    /// are always returned, and the current use cases are (which also means new use cases should be
+    /// evaluated this way):
+    /// - building indexes on post_upgrade: soon to be deprecated since we switched to indexes
+    ///   persisted through upgrades.
+    /// - computing cached entries: when it involves neurons, it mostly cares about stake, maturity
+    ///   and NF fund.
+    /// - `Governance::validate`: soon to be deprecated since we have subaccount index.
+    /// - Copying inactive neurons from heap to stable storage: it is intended to only loop through
+    ///   neurons in heap.
+    /// - `voting_eligible_neurons()`: inactive neurons have been dissolved for 14 days, so it
+    ///   cannot be voting eligible.
+    /// - `list_community_fund_neuron_ids` and `list_active_neurons_fund_neurons`: inactive neurons
+    ///   must not be NF.
+    /// - `list_neurons_ready_to_unstake_maturity`: inactive neurons have 0 stake (which also means
+    ///   0 staked maturity), so no inactive neurons need to unstake maturity.
+    /// - `list_known_neuron_ids`: soon to be deprecated because of known neuron index.
+    /// - `list_ready_to_spawn_neuron_ids`: inactive neurons must have 0 maturity, and spawning
+    ///   neurons must have maturity.
     heap_neurons: BTreeMap<u64, Neuron>,
 
     /// Cached data structure that (for each topic) maps a followee to
