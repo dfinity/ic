@@ -130,11 +130,13 @@ function generate_guestos_config() {
     fi
 
     if [ ! -f "${OUTPUT}" ]; then
+        mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
             "${INPUT}" >"${OUTPUT}"
+        restorecon -R "$(dirname "$OUTPUT")"
         write_log "Generating GuestOS configuration file: ${OUTPUT}"
         write_metric "hostos_generate_guestos_config" \
             "1" \
@@ -188,6 +190,7 @@ function generate_sev_guestos_config() {
     INITRD="$BOOT_COMPONENTS_DIR/initrd.img"
     source "$BOOT_COMPONENTS_DIR"/extra_boot_args
     if [ ! -f "${OUTPUT}" ]; then
+        mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ kernel }}@${KERNEL}@" \
@@ -195,6 +198,7 @@ function generate_sev_guestos_config() {
             -e "s@{{ extra_boot_args }}@${EXTRA_BOOT_ARGS}@" \
             "${INPUT}" >"${OUTPUT}"
         chmod ug+x "${OUTPUT}"
+        restorecon -R "$(dirname "$OUTPUT")"
         write_log "Generating SEV GuestOS configuration file: ${OUTPUT}"
         write_metric "hostos_generate_sev_guestos_config" \
             "1" \

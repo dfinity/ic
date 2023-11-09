@@ -103,6 +103,7 @@ def icos_build(
         strip_paths = [
             "/run",
             "/boot",
+            "/var",
         ],
         target_compatible_with = [
             "@platforms//os:linux",

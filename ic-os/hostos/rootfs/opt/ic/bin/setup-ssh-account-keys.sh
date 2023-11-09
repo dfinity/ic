@@ -7,16 +7,26 @@ set -e
 
 # TBD: should only allow root ssh key for test builds
 
+# Bind mount to enable root access to .ssh in RO environment
 mount --bind /run/ic-node/root/.ssh /root/.ssh
 
 for ACCOUNT in root backup readonly admin; do
-    ORIGIN="/boot/config/ssh_authorized_keys/${ACCOUNT}"
-    if [ -e "${ORIGIN}" ]; then
-        HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
-        GROUP=$(id -ng "${ACCOUNT}")
-        mkdir -p "${HOMEDIR}/.ssh"
-        cp -L "${ORIGIN}" "${HOMEDIR}/.ssh/authorized_keys"
-        chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}/.ssh"
-        restorecon -vr "${HOMEDIR}/.ssh"
+    HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
+    GROUP=$(id -ng "${ACCOUNT}")
+
+    mkdir -p "${HOMEDIR}/.ssh"
+
+    if [ "${ACCOUNT}" != "root" ]; then
+        chmod 700 "${HOMEDIR}" "${HOMEDIR}/.ssh"
+        chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
+        restorecon -r "${HOMEDIR}"
+    fi
+
+    AUTHORIZED_SSH_KEYS="/boot/config/ssh_authorized_keys/${ACCOUNT}"
+    if [ -e "${AUTHORIZED_SSH_KEYS}" ]; then
+        cp -L "${AUTHORIZED_SSH_KEYS}" "${HOMEDIR}/.ssh/authorized_keys"
+        chown "${ACCOUNT}:${GROUP}" "${HOMEDIR}/.ssh/authorized_keys"
+        chmod 600 "${HOMEDIR}/.ssh/authorized_keys"
+        restorecon "${HOMEDIR}/.ssh/authorized_keys"
     fi
 done
