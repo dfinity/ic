@@ -6132,13 +6132,14 @@ fn test_refresh_buyer_tokens_with_neurons_fund_matched_funding() {
 
     let max_direct_amount = 500_000 * E8;
 
-    let total_nf_maturity_equivalent_icp_e8s = 2_000_000 * E8;
+    let total_nf_maturity_equivalent_icp_e8s = 4_000_000 * E8;
+    let max_neurons_fund_participation_icp_e8s = total_nf_maturity_equivalent_icp_e8s / 10;
 
     let mut swap = {
         let mut init = init_with_neurons_fund_funding();
         let neurons_fund_participation_constraints = Some(NeuronsFundParticipationConstraints {
             min_direct_participation_threshold_icp_e8s: Some(250_000 * E8),
-            max_neurons_fund_participation_icp_e8s: Some(total_nf_maturity_equivalent_icp_e8s / 10),
+            max_neurons_fund_participation_icp_e8s: Some(max_neurons_fund_participation_icp_e8s),
             // Set `slope_numerator` to zero, so the outcome does not depend on the kind of matching
             // function that is used. Only `intercept_icp_e8s` will have an impact on the amount
             // that the Neurons' Fund participates on each of the three intervals.
@@ -6235,14 +6236,17 @@ fn test_refresh_buyer_tokens_with_neurons_fund_matched_funding() {
     buy_token_ok(&mut swap, &user3, amount_user_3, amount_user_3);
 
     assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
-    assert_eq!(swap.current_neurons_fund_participation_e8s(), amount_nf_3);
+    assert_eq!(
+        swap.current_neurons_fund_participation_e8s(),
+        max_neurons_fund_participation_icp_e8s
+    );
     assert_eq!(
         swap.current_direct_participation_e8s(),
         amount_user_1 + amount_user_2 + amount_user_3
     );
     assert_eq!(
         swap.current_total_participation_e8s(),
-        amount_user_1 + amount_user_2 + amount_user_3 + amount_nf_3
+        amount_user_1 + amount_user_2 + amount_user_3 + max_neurons_fund_participation_icp_e8s
     );
     assert_eq!(swap.available_direct_participation_e8s(), 0);
 }
