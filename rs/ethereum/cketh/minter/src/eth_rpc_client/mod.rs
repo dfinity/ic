@@ -31,8 +31,10 @@ pub trait RpcTransport: Debug {
     // TODO: remove after refactoring to `call_json_rpc()`
     fn get_subnet_size() -> u32;
 
+    fn resolve_api(provider: RpcNodeProvider) -> RpcApi;
+
     async fn call_json_rpc<T: DeserializeOwned>(
-        service: RpcNodeProvider,
+        provider: RpcNodeProvider,
         json: &str,
         max_response_bytes: u64,
     ) -> Result<T, RpcError>;
@@ -49,8 +51,12 @@ impl RpcTransport for DefaultTransport {
         unimplemented!()
     }
 
+    fn resolve_api(_provider: RpcNodeProvider) -> RpcApi {
+        unimplemented!()
+    }
+
     async fn call_json_rpc<T: DeserializeOwned>(
-        _service: RpcNodeProvider,
+        _provider: RpcNodeProvider,
         _json: &str,
         _max_response_bytes: u64,
     ) -> Result<T, RpcError> {
@@ -211,7 +217,10 @@ impl<T: RpcTransport> EthRpcClient<T> {
         results.reduce_with_equality()
     }
 
-    pub async fn eth_fee_history(&self, params: FeeHistoryParams) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
+    pub async fn eth_fee_history(
+        &self,
+        params: FeeHistoryParams,
+    ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         // A typical response is slightly above 300 bytes.
         let results: MultiCallResults<FeeHistory> = self
             .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
