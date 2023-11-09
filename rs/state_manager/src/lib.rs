@@ -1104,75 +1104,27 @@ impl PageMapType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DirtyPageMap {
     pub height: Height,
-    pub file_type: FileType,
+    pub page_type: PageMapType,
     pub page_delta_indices: Vec<PageIndex>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum FileType {
-    PageMap(PageMapType),
-    WasmBinary(CanisterId),
 }
 
 pub type DirtyPages = Vec<DirtyPageMap>;
 
 /// Get dirty pages of all PageMaps backed by a checkpoint
 /// file.
-pub fn get_dirty_pages(
-    state: &ReplicatedState,
-    previous_snapshot: Option<&Snapshot>,
-) -> DirtyPages {
-    let mut result: DirtyPages = PageMapType::list_all(state)
+pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
+    PageMapType::list_all(state)
         .into_iter()
         .filter_map(|entry| {
             let page_map = entry.get(state)?;
             let height = page_map.base_height?;
             Some(DirtyPageMap {
                 height,
-                file_type: FileType::PageMap(entry),
+                page_type: entry,
                 page_delta_indices: page_map.get_page_delta_indices(),
             })
         })
-        .collect();
-
-    // Collect all canisters whose wasm binaries have not changed since last checkpoint
-    // For all others we simply do not list them, so that they are
-    // treated as requiring hashing
-    if let Some(previous_snapshot) = previous_snapshot {
-        let unchanged_ids = state.canisters_iter().filter_map(|state| {
-            let canister_id = state.canister_id();
-            if let Some(hash) = state
-                .execution_state
-                .as_ref()
-                .map(|e| e.wasm_binary.binary.module_hash())
-            {
-                if let Some(previous_hash) = previous_snapshot
-                    .state
-                    .canister_state(&canister_id)
-                    .and_then(|s| {
-                        s.execution_state
-                            .as_ref()
-                            .map(|e| e.wasm_binary.binary.module_hash())
-                    })
-                {
-                    if hash == previous_hash {
-                        return Some(canister_id);
-                    }
-                }
-            }
-            None
-        });
-
-        let dirty_pages = unchanged_ids.map(|canister_id| DirtyPageMap {
-            height: previous_snapshot.height,
-            file_type: FileType::WasmBinary(canister_id),
-            page_delta_indices: vec![], // empty page_delta_indices as the whole file is unchanged
-        });
-
-        result.extend(dirty_pages);
-    }
-
-    result
+        .collect()
 }
 
 /// Strips away the deltas from all page maps of the replicated state.
@@ -1385,6 +1337,13 @@ impl StateManagerImpl {
         let state_layout =
             StateLayout::try_new(log.clone(), config.state_root.clone(), metrics_registry)
                 .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
+        // Init scripts after upgrade change all files to be read write. This introduces a danger
+        // of accidental modification of checkpoint data and also confuses hard-linking logic.
+        state_layout
+            .mark_checkpoint_files_readonly(&mut Some(scoped_threadpool::Pool::new(
+                NUMBER_OF_CHECKPOINT_THREADS,
+            )))
+            .unwrap_or_else(|err| fatal!(&log, "Failed to mark checkpoints readonly: {:?}", err));
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
         // Create the file descriptor factory that is used to create files for PageMaps.
@@ -2287,6 +2246,7 @@ impl StateManagerImpl {
             dirty_pages: DirtyPages,
             base_manifest: Manifest,
             base_height: Height,
+            checkpoint_layout: CheckpointLayout<ReadOnly>,
         }
 
         let start = Instant::now();
@@ -2319,15 +2279,19 @@ impl StateManagerImpl {
                     let base_manifest = state_metadata.manifest()?.clone();
                     Some((base_manifest, *base_height))
                 })
-                .map(|(base_manifest, base_height)| {
-                    let base_snapshot: Option<&Snapshot> = states
-                        .snapshots
-                        .iter()
-                        .find(|snapshot| snapshot.height == base_height);
-                    PreviousCheckpointInfo {
-                        dirty_pages: get_dirty_pages(state, base_snapshot),
-                        base_manifest,
-                        base_height,
+                .and_then(|(base_manifest, base_height)| {
+                    if let Ok(checkpoint_layout) = self.state_layout.checkpoint(base_height) {
+                        Some(PreviousCheckpointInfo {
+                            dirty_pages: get_dirty_pages(state),
+                            base_manifest,
+                            base_height,
+                            checkpoint_layout,
+                        })
+                    } else {
+                        warn!(self.log,
+                            "Failed to get base checkpoint layout for height {}. Fallback to full manifest computation",
+                            base_height);
+                        None
                     }
                 })
         };
@@ -2425,6 +2389,7 @@ impl StateManagerImpl {
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
                      dirty_pages,
+                     checkpoint_layout,
                      base_manifest,
                      base_height,
                  }| {
@@ -2433,6 +2398,7 @@ impl StateManagerImpl {
                         base_height,
                         target_height: height,
                         dirty_memory_pages: dirty_pages,
+                        base_checkpoint: checkpoint_layout,
                     }
                 },
             )

@@ -20,7 +20,7 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
-use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
+use ic_state_manager::{DirtyPageMap, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -365,6 +365,36 @@ fn temporary_directory_gets_cleaned() {
                 .is_none(),
             "tmp directory is not empty"
         );
+    });
+}
+
+#[test]
+fn checkpoint_marked_ro_at_restart() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let canister_100_layout = state_manager
+            .state_layout()
+            .checkpoint(height(1))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+
+        let canister_100_memory = canister_100_layout.vmemory_0();
+        make_mutable(&canister_100_memory).unwrap();
+
+        // Check that there are mutable files before the restart...
+        let checkpoints_path = state_manager.state_layout().checkpoints();
+        assert!(std::panic::catch_unwind(|| {
+            assert_all_files_are_readonly(&checkpoints_path);
+        })
+        .is_err());
+
+        // ...but not after.
+        restart_fn(state_manager, None);
+        assert_all_files_are_readonly(&checkpoints_path);
     });
 }
 
@@ -3063,7 +3093,6 @@ fn can_short_circuit_state_sync() {
 fn can_get_dirty_pages() {
     use ic_replicated_state::page_map::PageIndex;
     use ic_state_manager::get_dirty_pages;
-    use ic_state_manager::Snapshot;
 
     fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
         let canister_state = state.canister_state_mut(&canister_id).unwrap();
@@ -3094,16 +3123,12 @@ fn can_get_dirty_pages() {
 
     state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
-        let snapshot0 = Snapshot {
-            height: height(0),
-            state: Arc::new(state.clone()),
-        };
         insert_dummy_canister(&mut state, canister_test_id(80));
         insert_dummy_canister(&mut state, canister_test_id(90));
         insert_dummy_canister(&mut state, canister_test_id(100));
 
         update_state(&mut state, canister_test_id(80));
-        let dirty_pages = get_dirty_pages(&state, Some(&snapshot0));
+        let dirty_pages = get_dirty_pages(&state);
         // dirty_pages should be empty because there is no base checkpoint for the page
         // deltas and the canister binaries are new.
         assert!(dirty_pages.is_empty());
@@ -3111,71 +3136,52 @@ fn can_get_dirty_pages() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
         let (_height, mut state) = state_manager.take_tip();
-        let snapshot1 = Snapshot {
-            height: height(1),
-            state: Arc::new(state.clone()),
-        };
         update_state(&mut state, canister_test_id(90));
-        let mut dirty_pages = get_dirty_pages(&state, Some(&snapshot1));
+        let mut dirty_pages = get_dirty_pages(&state);
         let mut expected_dirty_pages = vec![
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(80))),
+                page_type: PageMapType::WasmMemory(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(80))),
+                page_type: PageMapType::StableMemory(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(90))),
+                page_type: PageMapType::WasmMemory(canister_test_id(90)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(90))),
+                page_type: PageMapType::StableMemory(canister_test_id(90)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(100))),
+                page_type: PageMapType::WasmMemory(canister_test_id(100)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(100))),
+                page_type: PageMapType::StableMemory(canister_test_id(100)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(80))),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(90))),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(100))),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                file_type: FileType::WasmBinary(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                file_type: FileType::WasmBinary(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                file_type: FileType::WasmBinary(canister_test_id(100)),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
                 page_delta_indices: vec![],
             },
         ];
@@ -3187,67 +3193,53 @@ fn can_get_dirty_pages() {
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
         let (_height, mut state) = state_manager.take_tip();
-        let snapshot2 = Snapshot {
-            height: height(2),
-            state: Arc::new(state.clone()),
-        };
         update_state(&mut state, canister_test_id(100));
         // It could happen during canister upgrade.
         drop_page_map(&mut state, canister_test_id(100));
         update_state(&mut state, canister_test_id(100));
         replace_wasm(&mut state, canister_test_id(100));
-        let mut dirty_pages = get_dirty_pages(&state, Some(&snapshot2));
+        let mut dirty_pages = get_dirty_pages(&state);
         // wasm memory was dropped, but stable memory wasn't
         let mut expected_dirty_pages = vec![
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(80))),
+                page_type: PageMapType::WasmMemory(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(80))),
+                page_type: PageMapType::StableMemory(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(90))),
+                page_type: PageMapType::WasmMemory(canister_test_id(90)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(90))),
+                page_type: PageMapType::StableMemory(canister_test_id(90)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(100))),
+                page_type: PageMapType::StableMemory(canister_test_id(100)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(80))),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(90))),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(100))),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(2),
-                file_type: FileType::WasmBinary(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                file_type: FileType::WasmBinary(canister_test_id(90)),
-                page_delta_indices: vec![],
             },
         ];
 
@@ -4581,10 +4573,12 @@ fn can_recover_ingress_history() {
     });
 }
 
-fn assert_directory_is_readonly(path: &Path) {
+/// Check that all the files (i.e. non-directories) with paths starting with provided path are
+/// readonly.
+fn assert_all_files_are_readonly(path: &Path) {
     if path.is_dir() {
         for entry in path.read_dir().unwrap() {
-            assert_directory_is_readonly(&entry.unwrap().path());
+            assert_all_files_are_readonly(&entry.unwrap().path());
         }
     } else {
         assert!(path.metadata().unwrap().permissions().readonly());
@@ -4593,7 +4587,7 @@ fn assert_directory_is_readonly(path: &Path) {
 
 /// Check that all checkpoints in `layout` are readonly in the sense that all non-directories are marked readonly.
 fn assert_checkpoints_are_readonly(layout: &StateLayout) {
-    assert_directory_is_readonly(&layout.checkpoints())
+    assert_all_files_are_readonly(&layout.checkpoints())
 }
 
 #[test]
