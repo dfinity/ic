@@ -1,6 +1,6 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::{
-    InstallCodeCall, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
+    InstallCodeCall, RawRandContext, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
 };
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
@@ -23,6 +23,7 @@ use ic_types::{
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
     ingress::WasmResult,
     messages::{CallbackId, CanisterCall, Payload},
+    ExecutionRound,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -636,7 +637,7 @@ fn subnet_call_contexts_deserialization() {
         method_name: "transform".to_string(),
         context: vec![0, 1, 2],
     };
-    let mut system_call_context_manager: SubnetCallContextManager =
+    let mut subnet_call_context_manager: SubnetCallContextManager =
         SubnetCallContextManager::default();
 
     // Define HTTP request.
@@ -653,7 +654,7 @@ fn subnet_call_contexts_deserialization() {
         transform: Some(transform.clone()),
         time: mock_time(),
     };
-    system_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
+    subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
     ));
 
@@ -667,7 +668,7 @@ fn subnet_call_contexts_deserialization() {
         effective_canister_id: canister_test_id(3),
         time: mock_time(),
     };
-    let call_id = system_call_context_manager.push_install_code_call(install_code_call.clone());
+    let call_id = subnet_call_context_manager.push_install_code_call(install_code_call.clone());
 
     // Define stop canister request.
     let request = RequestBuilder::default()
@@ -680,22 +681,33 @@ fn subnet_call_contexts_deserialization() {
         time: mock_time(),
     };
     let stop_canister_call_id =
-        system_call_context_manager.push_stop_canister_call(stop_canister_call.clone());
+        subnet_call_context_manager.push_stop_canister_call(stop_canister_call.clone());
+
+    // Define RawRand context.
+    let raw_rand_request = RequestBuilder::default()
+        .sender(canister_test_id(10))
+        .receiver(canister_test_id(20))
+        .build();
+    subnet_call_context_manager.push_raw_rand_request(
+        raw_rand_request.clone(),
+        ExecutionRound::new(5),
+        mock_time(),
+    );
 
     // Encode and decode.
-    let system_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&system_call_context_manager).into();
-    let mut deserialized_system_call_context_manager: SubnetCallContextManager =
-        SubnetCallContextManager::try_from((mock_time(), system_call_context_manager_proto))
+    let subnet_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&subnet_call_context_manager).into();
+    let mut deserialized_subnet_call_context_manager: SubnetCallContextManager =
+        SubnetCallContextManager::try_from((mock_time(), subnet_call_context_manager_proto))
             .unwrap();
 
     // Check HTTP request deserialization.
     assert_eq!(
-        deserialized_system_call_context_manager
+        deserialized_subnet_call_context_manager
             .canister_http_request_contexts
             .len(),
         1
     );
-    let deserialized_http_request_context = deserialized_system_call_context_manager
+    let deserialized_http_request_context = deserialized_subnet_call_context_manager
         .canister_http_request_contexts
         .get(&CallbackId::from(0))
         .unwrap();
@@ -708,23 +720,34 @@ fn subnet_call_contexts_deserialization() {
 
     // Check install code call deserialization.
     assert_eq!(
-        deserialized_system_call_context_manager.install_code_calls_len(),
+        deserialized_subnet_call_context_manager.install_code_calls_len(),
         1
     );
-    let deserialized_install_code_call = deserialized_system_call_context_manager
+    let deserialized_install_code_call = deserialized_subnet_call_context_manager
         .remove_install_code_call(call_id)
         .expect("Did not find the install code call.");
     assert_eq!(deserialized_install_code_call, install_code_call);
 
     // Check stop canister request deserialization.
     assert_eq!(
-        deserialized_system_call_context_manager.stop_canister_calls_len(),
+        deserialized_subnet_call_context_manager.stop_canister_calls_len(),
         1
     );
-    let deserialized_stop_canister_call = deserialized_system_call_context_manager
+    let deserialized_stop_canister_call = deserialized_subnet_call_context_manager
         .remove_stop_canister_call(stop_canister_call_id)
         .expect("Did not find the stop canister call.");
     assert_eq!(deserialized_stop_canister_call, stop_canister_call);
+
+    // Check raw rand request deserialization.
+    let deserialized_raw_rand_requests = deserialized_subnet_call_context_manager.raw_rand_contexts;
+    assert_eq!(
+        deserialized_raw_rand_requests,
+        vec![RawRandContext {
+            request: raw_rand_request,
+            execution_round_id: ExecutionRound::new(5),
+            time: mock_time(),
+        }]
+    )
 }
 
 #[test]
