@@ -29,7 +29,7 @@ pub enum RpcNodeProvider {
 }
 
 impl RpcNodeProvider {
-    pub fn api<T: RpcTransport>(&self) -> RpcApi {
+    pub fn api(&self) -> RpcApi {
         let url = match self {
             Self::Ethereum(provider) => provider.ethereum_mainnet_endpoint_url(),
             Self::Sepolia(provider) => provider.ethereum_sepolia_endpoint_url(),

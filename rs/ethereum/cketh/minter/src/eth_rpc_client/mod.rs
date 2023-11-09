@@ -1,7 +1,7 @@
 use crate::eth_rpc::{
     self, are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam,
-    Hash, HttpOutcallError, HttpResponsePayload, JsonRpcError, LogEntry, ResponseSizeEstimate,
-    RpcError, SendRawTransactionResult,
+    Hash, HttpOutcallError, HttpResponsePayload, JsonRpcError, LogEntry, ProviderError,
+    ResponseSizeEstimate, RpcError, SendRawTransactionResult,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
@@ -33,7 +33,7 @@ pub trait RpcTransport: Debug {
     // TODO: remove after refactoring to `call_json_rpc()`
     fn get_subnet_size() -> u32;
 
-    fn resolve_api(provider: RpcNodeProvider) -> RpcApi;
+    fn resolve_api(provider: RpcNodeProvider) -> Result<RpcApi, ProviderError>;
 
     async fn call_json_rpc<T: DeserializeOwned>(
         provider: RpcNodeProvider,
@@ -53,8 +53,8 @@ impl RpcTransport for DefaultTransport {
         unimplemented!()
     }
 
-    fn resolve_api(provider: RpcNodeProvider) -> RpcApi {
-        provider.api::<Self>()
+    fn resolve_api(provider: RpcNodeProvider) -> Result<RpcApi, ProviderError> {
+        Ok(provider.api())
     }
 
     async fn call_json_rpc<T: DeserializeOwned>(
