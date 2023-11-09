@@ -12000,11 +12000,39 @@ lazy_static! {
             coefficient_intervals: vec![
                 LinearScalingCoefficient {
                     from_direct_participation_icp_e8s: Some(0),
-                    to_direct_participation_icp_e8s: Some(u64::MAX),
-                    slope_numerator: Some(1),
-                    slope_denominator: Some(1),
+                    to_direct_participation_icp_e8s: Some(3600000000000),
+                    slope_numerator: Some(0),
+                    slope_denominator: Some(100000000000000),
                     intercept_icp_e8s: Some(0),
-                }
+                },
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(3600000000000),
+                    to_direct_participation_icp_e8s: Some(3752190620030),
+                    slope_numerator: Some(0),
+                    slope_denominator: Some(100000000000000),
+                    intercept_icp_e8s: Some(0),
+                },
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(3752190620030),
+                    to_direct_participation_icp_e8s: Some(3924720277787),
+                    slope_numerator: Some(60000000000000),
+                    slope_denominator: Some(100000000000000),
+                    intercept_icp_e8s: Some(0),
+                },
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(3924720277787),
+                    to_direct_participation_icp_e8s: Some(4328479872989),
+                    slope_numerator: Some(90000000000000),
+                    slope_denominator: Some(100000000000000),
+                    intercept_icp_e8s: Some(0),
+                },
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(4328479872989),
+                    to_direct_participation_icp_e8s: Some(u64::MAX),
+                    slope_numerator: Some(100000000000000),
+                    slope_denominator: Some(100000000000000),
+                    intercept_icp_e8s: Some(0),
+                },
             ],
             ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionSwapPb {
                 serialized_representation: SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR.clone(),
