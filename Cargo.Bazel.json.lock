@@ -1,5 +1,5 @@
 {
-  "checksum": "74913a15ae3f6f5dd6d526c71b3135ced10d7fd450a0c47fd07dcf261ef7dccd",
+  "checksum": "444b1dcaeab1e81dc11d7a8d46da2d3cc515cd0aceae1b24065870f580d84095",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14190,11 +14190,16 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-encoder 0.31.0",
+              "id": "wasm-encoder 0.31.1",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasm-smith 0.12.11",
+              "id": "wasm-encoder 0.36.2",
+              "target": "wasm_encoder",
+              "alias": "wasm_encoder_0_36"
+            },
+            {
+              "id": "wasm-smith 0.12.23",
               "target": "wasm_smith"
             },
             {
@@ -56108,13 +56113,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasm-encoder 0.31.0": {
+    "wasm-encoder 0.31.1": {
       "name": "wasm-encoder",
-      "version": "0.31.0",
+      "version": "0.31.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.31.0/download",
-          "sha256": "06a3d1b4a575ffb873679402b2aedb3117555eb65c27b1b86c8a91e574bc2a2a"
+          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.31.1/download",
+          "sha256": "41763f20eafed1399fff1afb466496d3a959f58241436cfdc17e3f5ca954de16"
         }
       },
       "targets": [
@@ -56143,7 +56148,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.31.0"
+        "version": "0.31.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -56186,13 +56191,55 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasm-smith 0.12.11": {
-      "name": "wasm-smith",
-      "version": "0.12.11",
+    "wasm-encoder 0.36.2": {
+      "name": "wasm-encoder",
+      "version": "0.36.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-smith/0.12.11/download",
-          "sha256": "09a683710b09c4d35e9bf711a0f116cabde0f13a505ea6d7b5aea74b5a150367"
+          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.36.2/download",
+          "sha256": "822b645bf4f2446b949776ffca47e2af60b167209ffb70814ef8779d299cd421"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.36.2"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
+    },
+    "wasm-smith 0.12.23": {
+      "name": "wasm-smith",
+      "version": "0.12.23",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/wasm-tools",
+          "commitish": {
+            "Rev": "a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+          },
+          "strip_prefix": "crates/wasm-smith"
         }
       },
       "targets": [
@@ -56230,18 +56277,18 @@
               "target": "leb128"
             },
             {
-              "id": "wasm-encoder 0.30.0",
+              "id": "wasm-encoder 0.36.2",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.108.0",
+              "id": "wasmparser 0.116.1",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.12.11"
+        "version": "0.12.23"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -56426,6 +56473,52 @@
         },
         "edition": "2021",
         "version": "0.112.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
+    },
+    "wasmparser 0.116.1": {
+      "name": "wasmparser",
+      "version": "0.116.1",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/wasm-tools",
+          "commitish": {
+            "Rev": "a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+          },
+          "strip_prefix": "crates/wasmparser"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "indexmap 2.1.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.18",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.116.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },

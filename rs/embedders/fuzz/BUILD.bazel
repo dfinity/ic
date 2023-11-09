@@ -6,11 +6,14 @@ package(default_visibility = ["//visibility:private"])
 MACRO_DEPENDENCIES = []
 
 WASMTIME_FUZZER_DEPENDENCIES = [
+    "//rs/embedders",
     "//rs/test_utilities",
+    "//rs/replicated_state",
     "//rs/types/types",
     "@crate_index//:libfuzzer-sys",
     "@crate_index//:arbitrary",
     "@crate_index//:wasm-smith",
+    "@crate_index//:wasm_encoder_0_36",
 ]
 
 rust_fuzz_test_binary(
@@ -18,6 +21,7 @@ rust_fuzz_test_binary(
     srcs = [
         "fuzz_targets/execute_with_wasmtime.rs",
         "fuzz_targets/ic_wasm.rs",
+        "fuzz_targets/transform.rs",
     ],
     crate_root = "fuzz_targets/execute_with_wasmtime.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -29,52 +33,56 @@ rust_fuzz_test_binary_afl(
     srcs = [
         "fuzz_targets/execute_with_wasmtime.rs",
         "fuzz_targets/ic_wasm.rs",
+        "fuzz_targets/transform.rs",
     ],
     crate_root = "fuzz_targets/execute_with_wasmtime.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = WASMTIME_FUZZER_DEPENDENCIES,
 )
 # Temporarily disable these targets until wasm_smith is patched.
-#
-# WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
-#     "//rs/config",
-#     "//rs/cycles_account_manager",
-#     "//rs/embedders",
-#     "//rs/monitoring/logger",
-#     "//rs/monitoring/metrics",
-#     "//rs/replicated_state",
-#     "//rs/test_utilities",
-#     "//rs/interfaces",
-#     "//rs/registry/subnet_type",
-#     "//rs/system_api",
-#     "//rs/types/types",
-#     "//rs/types/wasm_types",
-#     "@crate_index//:arbitrary",
-#     "@crate_index//:wasm-smith",
-#     "@crate_index//:libfuzzer-sys",
-# ]
 
-# rust_fuzz_test_binary(
-#     name = "execute_with_wasm_executor_libfuzzer",
-#     srcs = [
-#         "fuzz_targets/execute_with_wasm_executor.rs",
-#         "fuzz_targets/ic_wasm.rs",
-#     ],
-#     crate_root = "fuzz_targets/execute_with_wasm_executor.rs",
-#     proc_macro_deps = MACRO_DEPENDENCIES,
-#     deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
-# )
+WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
+    "//rs/config",
+    "//rs/cycles_account_manager",
+    "//rs/embedders",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/replicated_state",
+    "//rs/test_utilities",
+    "//rs/interfaces",
+    "//rs/registry/subnet_type",
+    "//rs/system_api",
+    "//rs/types/types",
+    "//rs/types/wasm_types",
+    "@crate_index//:arbitrary",
+    "@crate_index//:wasm-smith",
+    "@crate_index//:libfuzzer-sys",
+    "@crate_index//:wasm_encoder_0_36",
+]
 
-# rust_fuzz_test_binary_afl(
-#     name = "execute_with_wasm_executor_afl",
-#     srcs = [
-#         "fuzz_targets/execute_with_wasm_executor.rs",
-#         "fuzz_targets/ic_wasm.rs",
-#     ],
-#     crate_root = "fuzz_targets/execute_with_wasm_executor.rs",
-#     proc_macro_deps = MACRO_DEPENDENCIES,
-#     deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
-# )
+rust_fuzz_test_binary(
+    name = "execute_with_wasm_executor_libfuzzer",
+    srcs = [
+        "fuzz_targets/execute_with_wasm_executor.rs",
+        "fuzz_targets/ic_wasm.rs",
+        "fuzz_targets/transform.rs",
+    ],
+    crate_root = "fuzz_targets/execute_with_wasm_executor.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
+)
+
+rust_fuzz_test_binary_afl(
+    name = "execute_with_wasm_executor_afl",
+    srcs = [
+        "fuzz_targets/execute_with_wasm_executor.rs",
+        "fuzz_targets/ic_wasm.rs",
+        "fuzz_targets/transform.rs",
+    ],
+    crate_root = "fuzz_targets/execute_with_wasm_executor.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
+)
 
 EMBEDDERS_FUZZER_DEPENDENCIES = [
     "//rs/config",
@@ -101,10 +109,14 @@ rust_binary(
     proc_macro_deps = [],
     version = "0.1.0",
     deps = [
+        "//rs/config",
+        "//rs/embedders",
+        "//rs/monitoring/logger",
         "//rs/test_utilities",
         "@crate_index//:arbitrary",
         "@crate_index//:clap",
         "@crate_index//:wasm-smith",
+        "@crate_index//:wasm_encoder_0_36",
         "@crate_index//:wasmprinter",
     ],
 )

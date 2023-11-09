@@ -1,5 +1,5 @@
 {
-  "checksum": "e786e2c5e643efd81a5c04d82a66d4d382e9fde17c4074cf48600f79d6320ee5",
+  "checksum": "d6e02a2b00f8469de164775a7e640d6846c839e5f25532ba882288da71b6b572",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14329,7 +14329,12 @@
               "target": "wasm_encoder"
             },
             {
-              "id": "wasm-smith 0.12.21",
+              "id": "wasm-encoder 0.36.2",
+              "target": "wasm_encoder",
+              "alias": "wasm_encoder_0_36"
+            },
+            {
+              "id": "wasm-smith 0.12.23",
               "target": "wasm_smith"
             },
             {
@@ -56615,13 +56620,55 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasm-smith 0.12.21": {
-      "name": "wasm-smith",
-      "version": "0.12.21",
+    "wasm-encoder 0.36.2": {
+      "name": "wasm-encoder",
+      "version": "0.36.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-smith/0.12.21/download",
-          "sha256": "fef779c243bbf04d9f03333c2cb50b98047c6dcc2a1db0cc7d0691e4135064b4"
+          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.36.2/download",
+          "sha256": "822b645bf4f2446b949776ffca47e2af60b167209ffb70814ef8779d299cd421"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.36.2"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
+    },
+    "wasm-smith 0.12.23": {
+      "name": "wasm-smith",
+      "version": "0.12.23",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/wasm-tools",
+          "commitish": {
+            "Rev": "a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+          },
+          "strip_prefix": "crates/wasm-smith"
         }
       },
       "targets": [
@@ -56659,18 +56706,18 @@
               "target": "leb128"
             },
             {
-              "id": "wasm-encoder 0.35.0",
+              "id": "wasm-encoder 0.36.2",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.115.0",
+              "id": "wasmparser 0.116.1",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.12.21"
+        "version": "0.12.23"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -56855,6 +56902,52 @@
         },
         "edition": "2021",
         "version": "0.115.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
+    },
+    "wasmparser 0.116.1": {
+      "name": "wasmparser",
+      "version": "0.116.1",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/wasm-tools",
+          "commitish": {
+            "Rev": "a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+          },
+          "strip_prefix": "crates/wasmparser"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "indexmap 2.1.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.20",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.116.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },

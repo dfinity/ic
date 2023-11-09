@@ -2855,7 +2855,8 @@ dependencies = [
  "walrus 0.19.0",
  "warp",
  "wasm-bindgen",
- "wasm-encoder 0.31.0",
+ "wasm-encoder 0.31.1",
+ "wasm-encoder 0.36.2",
  "wasm-smith",
  "wasmparser 0.109.0",
  "wasmprinter",
@@ -10869,9 +10870,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.31.0"
+version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06a3d1b4a575ffb873679402b2aedb3117555eb65c27b1b86c8a91e574bc2a2a"
+checksum = "41763f20eafed1399fff1afb466496d3a959f58241436cfdc17e3f5ca954de16"
 dependencies = [
  "leb128",
 ]
@@ -10886,17 +10887,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm-smith"
-version = "0.12.11"
+name = "wasm-encoder"
+version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09a683710b09c4d35e9bf711a0f116cabde0f13a505ea6d7b5aea74b5a150367"
+checksum = "822b645bf4f2446b949776ffca47e2af60b167209ffb70814ef8779d299cd421"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
+name = "wasm-encoder"
+version = "0.36.2"
+source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
+name = "wasm-smith"
+version = "0.12.23"
+source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
 dependencies = [
  "arbitrary",
  "flagset",
  "indexmap 2.1.0",
  "leb128",
- "wasm-encoder 0.30.0",
- "wasmparser 0.108.0",
+ "wasm-encoder 0.36.2",
+ "wasmparser 0.116.1",
 ]
 
 [[package]]
@@ -10949,6 +10966,15 @@ name = "wasmparser"
 version = "0.112.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e986b010f47fcce49cf8ea5d5f9e5d2737832f12b53ae8ae785bbe895d0877bf"
+dependencies = [
+ "indexmap 2.1.0",
+ "semver",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.116.1"
+source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
 dependencies = [
  "indexmap 2.1.0",
  "semver",
