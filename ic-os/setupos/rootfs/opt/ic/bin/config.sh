@@ -18,6 +18,16 @@ ipv6_prefix=""
 ipv6_subnet=""
 ipv6_gateway=""
 
+function print_config_file() {
+    if [ -e "${CONFIG_INI}" ]; then
+        echo "Found ${CONFIG_INI}. Contents:"
+        cat "${CONFIG_INI}"
+    else
+        log_and_reboot_on_error "1" "config.ini not found. Please copy a valid config.ini to the SetupOS installer config partition."
+    fi
+
+}
+
 function create_config_tmp() {
     if [ ! -e "${CONFIG_TMP}" ]; then
         # Create fresh config tmp directory
@@ -104,6 +114,7 @@ function verify_variables() {
 main() {
     source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
+    print_config_file
     create_config_tmp
     clone_config
     normalize_config
