@@ -344,7 +344,7 @@ bazel-test-all-rebuild:
   script:
     - !reference [.bazel-test-all, script]
 
-bazel-build-macos:
+bazel-test-macos:
   extends:
     - .bazel-test-all
     - .bazel-rules-pipeline-no-merge-train
@@ -352,8 +352,8 @@ bazel-build-macos:
     - macos
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
-    BAZEL_COMMAND: "build"
-    BAZEL_EXTRA_ARGS: "--config macos_ci"
+    BAZEL_COMMAND: "test"
+    BAZEL_EXTRA_ARGS: "--config macos_ci --test_tag_filters=test_macos"
     BAZEL_TARGETS: "//rs/... //publish/binaries/..."
   timeout: 90 minutes
 

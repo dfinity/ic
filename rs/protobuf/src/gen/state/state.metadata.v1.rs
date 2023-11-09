@@ -293,6 +293,16 @@ pub struct StopCanisterCallTree {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RawRandContext {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<super::super::queues::v1::Request>,
+    #[prost(message, optional, tag = "2")]
+    pub time: ::core::option::Option<Time>,
+    #[prost(uint64, tag = "3")]
+    pub execution_round_id: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetCallContextManager {
     #[prost(uint64, tag = "1")]
     pub next_callback_id: u64,
@@ -320,6 +330,8 @@ pub struct SubnetCallContextManager {
     pub next_stop_canister_call_id: u64,
     #[prost(message, repeated, tag = "15")]
     pub stop_canister_calls: ::prost::alloc::vec::Vec<StopCanisterCallTree>,
+    #[prost(message, repeated, tag = "16")]
+    pub raw_rand_contexts: ::prost::alloc::vec::Vec<RawRandContext>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -360,6 +372,32 @@ pub struct NodePublicKeyEntry {
     pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
     #[prost(bytes = "vec", tag = "2")]
     pub public_key: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeBlockmakerStats {
+    #[prost(message, optional, tag = "1")]
+    pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(uint64, tag = "2")]
+    pub blocks_proposed_total: u64,
+    #[prost(uint64, tag = "3")]
+    pub blocks_not_proposed_total: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockmakerStatsMap {
+    #[prost(message, repeated, tag = "1")]
+    pub node_stats: ::prost::alloc::vec::Vec<NodeBlockmakerStats>,
+    #[prost(uint64, tag = "2")]
+    pub blocks_proposed_total: u64,
+    #[prost(uint64, tag = "3")]
+    pub blocks_not_proposed_total: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockmakerMetricsTimeSeries {
+    #[prost(btree_map = "uint64, message", tag = "1")]
+    pub time_stamp_map: ::prost::alloc::collections::BTreeMap<u64, BlockmakerStatsMap>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -409,6 +447,8 @@ pub struct SystemMetadata {
         ::prost::alloc::vec::Vec<BitcoinGetSuccessorsFollowUpResponses>,
     #[prost(message, repeated, tag = "19")]
     pub node_public_keys: ::prost::alloc::vec::Vec<NodePublicKeyEntry>,
+    #[prost(message, optional, tag = "20")]
+    pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -15,8 +15,6 @@ def sanitize_external_crates(sanitizers_enabled):
         "wasmtime": FUZZING_ANNOTATION,
         "bitcoin": FUZZING_ANNOTATION,
         "bincode": FUZZING_ANNOTATION,
-        "hex": FUZZING_ANNOTATION,
-        "subtle": FUZZING_ANNOTATION,
     }
 
 def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, sanitizers_enabled):
@@ -1311,8 +1309,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "wasm-encoder": crate.spec(
                 version = "^0.31.0",
             ),
+            "wasm-encoder_0_36": crate.spec(
+                package = "wasm-encoder",
+                version = "^0.36.2",
+            ),
             "wasm-smith": crate.spec(
-                version = "^0.12.4",
+                git = "https://github.com/dfinity/wasm-tools",
+                rev = "a4b464728f1202a7e3b8903cf4c09b067fc9986e",
             ),
             "wasmparser": crate.spec(
                 version = "^0.109.0",

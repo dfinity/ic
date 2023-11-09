@@ -153,7 +153,7 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
-use std::net::Ipv6Addr;
+use std::net::{Ipv6Addr, TcpStream};
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
@@ -188,10 +188,10 @@ const IC_DOMAIN: &str = "ic0.app";
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, alias = "registry-url")]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',')]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
-    nns_url: Url,
+    nns_urls: Vec<Url>,
 
     #[clap(short = 's', long)]
     /// The pem file containing a secret key to use while authenticating with
@@ -4363,11 +4363,52 @@ async fn get_subnet_record_with_details(
         .with_node_details(all_nodes_with_details)
 }
 
+/// Check if a connection to the Url can be established ==> Url is reachable
+fn is_url_reachable(url: &Url) -> bool {
+    let addrs = match url.socket_addrs(|| None) {
+        Ok(addrs) => addrs,
+        Err(err) => {
+            eprintln!("WARNING: could not resolve {}: {}", url, err);
+            return false;
+        }
+    };
+    for addr in addrs.into_iter() {
+        // A Url may have multiple IP addresses so we'll check if any of them are reachable
+        match TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(1)) {
+            Ok(_) => return true,
+            Err(err) => {
+                if url.to_string().contains(&addr.to_string()) {
+                    eprintln!("WARNING: could not connect to {}: {}, skipping", url, err);
+                } else {
+                    eprintln!(
+                        "WARNING: could not connect to {} ({}): {}, skipping",
+                        addr, url, err
+                    );
+                }
+            }
+        }
+    }
+    false
+}
+
 /// `main()` method for the `ic-admin` utility.
 #[tokio::main]
 async fn main() {
     let opts: Opts = Opts::parse();
-    let registry_canister = RegistryCanister::new(vec![opts.nns_url.clone()]);
+
+    // Check all NNS urls in parallel to see which ones are reachable (and join async)
+    let reachable_nns_urls: Vec<Url> = opts
+        .nns_urls
+        .iter()
+        .filter(|addr| is_url_reachable(addr))
+        .cloned()
+        .collect();
+
+    if reachable_nns_urls.is_empty() {
+        panic!("None of the provided NNS urls are reachable");
+    }
+
+    let registry_canister = RegistryCanister::new(reachable_nns_urls.clone());
 
     let sender = if opts.secret_key_pem.is_some() || opts.use_hsm {
         // Make sure to let the user know that we only actually use the sender
@@ -4475,7 +4516,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RemoveNodesFromSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4547,14 +4588,15 @@ async fn main() {
             }
             eprintln!("INFO: Fetching API Boundary nodes...");
             // list all API Boundary Nodes
-            let api_bn_node_ids = get_api_boundary_node_ids(opts.nns_url.clone())
+            let api_bn_node_ids = get_api_boundary_node_ids(reachable_nns_urls.clone())
                 .iter()
                 .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap()))
                 .collect();
             seen.extend(&api_bn_node_ids);
             topology.api_boundary_nodes = api_bn_node_ids;
-            // list all remaining nodes as unassigned nodes
-            let unassigned_node_ids = all_nodes_with_details
+
+            // all remaining nodes are unassigned nodes
+            topology.unassigned_nodes = all_nodes_with_details
                 .into_iter()
                 .filter_map(|(node_id, node_details)| {
                     let node_id = NodeId::from(node_id);
@@ -4565,7 +4607,6 @@ async fn main() {
                     }
                 })
                 .collect::<IndexMap<_, _>>();
-            topology.unassigned_nodes = unassigned_node_ids;
             println!("{}", serde_json::to_string_pretty(&topology).unwrap());
         }
         SubCommand::ConvertNumericNodeIdToPrincipalId(
@@ -4682,7 +4723,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateSubnetReplicaVersion,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4711,7 +4752,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    vec![opts.nns_url.clone()],
+                    reachable_nns_urls.clone(),
                 )),
                 None,
             );
@@ -4735,7 +4776,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateElectedReplicaVersions,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4751,7 +4792,7 @@ async fn main() {
                 cmd,
                 NnsFunction::CreateSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4765,7 +4806,7 @@ async fn main() {
             propose_to_create_service_nervous_system(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4780,7 +4821,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AddNodeToSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4795,7 +4836,7 @@ async fn main() {
                 cmd,
                 NnsFunction::ChangeSubnetMembership,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4810,7 +4851,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RecoverSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4825,7 +4866,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateConfigOfSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4840,7 +4881,7 @@ async fn main() {
                 cmd,
                 NnsFunction::NnsCanisterInstall,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4859,7 +4900,7 @@ async fn main() {
                     cmd,
                     NnsFunction::NnsRootUpgrade,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -4875,7 +4916,7 @@ async fn main() {
                     cmd,
                     NnsFunction::NnsCanisterUpgrade,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -4894,7 +4935,7 @@ async fn main() {
                 cmd,
                 NnsFunction::HardResetNnsRootToVersion,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4909,7 +4950,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UninstallCode,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4924,7 +4965,7 @@ async fn main() {
                 cmd,
                 NnsFunction::IcpXdrConversionRate,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4939,7 +4980,7 @@ async fn main() {
                 cmd,
                 NnsFunction::StopOrStartNnsCanister,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4954,7 +4995,7 @@ async fn main() {
                 cmd,
                 NnsFunction::StopOrStartNnsCanister,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4969,7 +5010,7 @@ async fn main() {
                 cmd,
                 NnsFunction::ClearProvisionalWhitelist,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4984,7 +5025,7 @@ async fn main() {
                 cmd,
                 NnsFunction::SetAuthorizedSubnetworks,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4999,7 +5040,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateSubnetType,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5014,7 +5055,7 @@ async fn main() {
                 cmd,
                 NnsFunction::ChangeSubnetTypeAssignment,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5040,7 +5081,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RemoveNodes,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5055,7 +5096,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AssignNoid,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5076,7 +5117,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    vec![opts.nns_url.clone()],
+                    reachable_nns_urls.clone(),
                 )),
                 None,
             );
@@ -5104,7 +5145,7 @@ async fn main() {
             );
         }
         SubCommand::UpdateRegistryLocalStore(cmd) => {
-            update_registry_local_store(opts.nns_url, cmd).await;
+            update_registry_local_store(reachable_nns_urls, cmd).await;
         }
         SubCommand::ProposeToUpdateNodeOperatorConfig(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5112,7 +5153,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateNodeOperatorConfig,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5134,7 +5175,7 @@ async fn main() {
                 cmd,
                 NnsFunction::SetFirewallConfig,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5152,7 +5193,7 @@ async fn main() {
                     cmd,
                     NnsFunction::AddFirewallRules,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -5171,7 +5212,7 @@ async fn main() {
                     cmd,
                     NnsFunction::RemoveFirewallRules,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -5190,7 +5231,7 @@ async fn main() {
                     cmd,
                     NnsFunction::UpdateFirewallRules,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -5204,7 +5245,7 @@ async fn main() {
             get_firewall_rules(cmd, &registry_canister).await;
         }
         SubCommand::GetFirewallRulesForNode(cmd) => {
-            get_firewall_rules_for_node(cmd, &registry_canister, opts.nns_url).await;
+            get_firewall_rules_for_node(cmd, &registry_canister, reachable_nns_urls).await;
         }
         SubCommand::GetFirewallRulesetHash(cmd) => {
             get_firewall_ruleset_hash(cmd);
@@ -5215,7 +5256,7 @@ async fn main() {
             propose_to_add_or_remove_node_provider(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5233,7 +5274,7 @@ async fn main() {
             submit_root_proposal_to_upgrade_governance_canister(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5243,7 +5284,7 @@ async fn main() {
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
-                opts.nns_url,
+                reachable_nns_urls,
                 opts.verify_nns_responses,
                 opts.nns_public_key_pem_file,
                 sender,
@@ -5255,7 +5296,7 @@ async fn main() {
             vote_on_root_proposal_to_upgrade_governance_canister(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5279,7 +5320,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AddOrRemoveDataCenters,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5336,7 +5377,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateNodeRewardsTable,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5351,7 +5392,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateUnassignedNodesConfig,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5373,7 +5414,7 @@ async fn main() {
         SubCommand::GetMonthlyNodeProviderRewards => {
             let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5391,7 +5432,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RemoveNodeOperators,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5406,7 +5447,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RerouteCanisterRanges,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5421,7 +5462,7 @@ async fn main() {
                 cmd,
                 NnsFunction::PrepareCanisterMigration,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5436,7 +5477,7 @@ async fn main() {
                 cmd,
                 NnsFunction::CompleteCanisterMigration,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5459,7 +5500,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AddSnsWasm,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5474,7 +5515,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateSnsWasmSnsSubnetIds,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5489,7 +5530,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateAllowedPrincipals,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5504,7 +5545,7 @@ async fn main() {
             propose_to_open_sns_token_swap(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5518,7 +5559,7 @@ async fn main() {
                 get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
 
             let agent = make_canister_client(
-                opts.nns_url,
+                reachable_nns_urls,
                 opts.verify_nns_responses,
                 opts.nns_public_key_pem_file,
                 sender,
@@ -5548,7 +5589,7 @@ async fn main() {
                 cmd,
                 NnsFunction::BitcoinSetConfig,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5563,7 +5604,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateElectedHostosVersions,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5578,7 +5619,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateNodesHostosVersion,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5591,7 +5632,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    vec![opts.nns_url.clone()],
+                    reachable_nns_urls.clone(),
                 )),
                 None,
             );
@@ -5624,7 +5665,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AddApiBoundaryNode,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5639,7 +5680,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RemoveApiBoundaryNodes,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5654,7 +5695,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateApiBoundaryNodeDomain,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5669,7 +5710,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateApiBoundaryNodesVersion,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5689,7 +5730,7 @@ async fn main() {
             .await;
         }
         SubCommand::GetApiBoundaryNodes => {
-            let records = get_api_boundary_node_ids(opts.nns_url.clone());
+            let records = get_api_boundary_node_ids(reachable_nns_urls.clone());
             println!(
                 "{}",
                 serde_json::to_string_pretty(&records)
@@ -6089,12 +6130,12 @@ async fn get_firewall_rules(cmd: GetFirewallRulesCmd, registry_canister: &Regist
 async fn get_firewall_rules_for_node(
     cmd: GetFirewallRulesForNodeCmd,
     registry_canister: &RegistryCanister,
-    nns_url: Url,
+    nns_urls: Vec<Url>,
 ) {
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
             tokio::runtime::Handle::current(),
-            vec![nns_url],
+            nns_urls,
         )),
         None,
     );
@@ -6393,11 +6434,11 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
     }
 }
 
-fn get_api_boundary_node_ids(nns_url: Url) -> Vec<String> {
+fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
             tokio::runtime::Handle::current(),
-            vec![nns_url],
+            nns_url,
         )),
         None,
     );
@@ -6580,9 +6621,9 @@ fn get_root_subnet_pub_key(
         .ok_or_else(|| "Root subnet public key is not found".to_string())
 }
 
-/// Fetch registry records from the given `nns_url`, and update the local
+/// Fetch registry records from the given `nns_urls`, and update the local
 /// registry store with the new records.
-async fn update_registry_local_store(nns_url: Url, cmd: UpdateRegistryLocalStoreCmd) {
+async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLocalStoreCmd) {
     eprintln!("RegistryLocalStore path: {:?}", cmd.local_store_path);
     let local_store = Arc::new(LocalStoreImpl::new(cmd.local_store_path));
     let local_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
@@ -6608,7 +6649,7 @@ async fn update_registry_local_store(nns_url: Url, cmd: UpdateRegistryLocalStore
             }
         }
     };
-    let remote_canister = RegistryCanister::new(vec![nns_url.clone()]);
+    let remote_canister = RegistryCanister::new(nns_urls);
     let response = remote_canister
         .get_certified_changes_since(latest_version.get(), &nns_pub_key)
         .await;
@@ -6766,13 +6807,17 @@ struct RootCanisterClient(NnsCanisterClient);
 /// Build a new canister client.
 /// `nns_public_key_pem` is the key used for response verification. If None mainnet public key is used.
 fn make_canister_client(
-    nns_url: Url,
+    nns_urls: Vec<Url>,
     verify_nns_responses: bool,
     nns_public_key_pem_file: Option<PathBuf>,
     sender: Sender,
 ) -> Agent {
     // If we talk to `ic0.app` we verify against mainnet root key by default.
-    if verify_nns_responses || nns_url.domain().map_or(false, |d| d.contains(IC_DOMAIN)) {
+    if verify_nns_responses
+        || nns_urls[0]
+            .domain()
+            .map_or(false, |d| d.contains(IC_DOMAIN))
+    {
         let nns_key = if let Some(path) = nns_public_key_pem_file {
             parse_threshold_sig_key(&path).expect("Failed to parse PEM file.")
         } else {
@@ -6781,9 +6826,9 @@ fn make_canister_client(
             parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)
                 .expect("Failed to decode mainnet public key.")
         };
-        Agent::new(nns_url, sender).with_nns_public_key(nns_key)
+        Agent::new(nns_urls[0].clone(), sender).with_nns_public_key(nns_key)
     } else {
-        Agent::new(nns_url, sender)
+        Agent::new(nns_urls[0].clone(), sender)
     }
 }
 

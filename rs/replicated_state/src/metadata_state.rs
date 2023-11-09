@@ -29,6 +29,7 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
+    batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -158,6 +159,11 @@ pub struct SystemMetadata {
     /// response limit. To work around this limitation, large responses are paginated
     /// and are stored here temporarily until they're fetched by the calling canister.
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
+
+    /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
+    /// by aggregating them and storing a running total over multiple days by node id and
+    /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
+    pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
 }
 
 /// Full description of the IC network toplogy.
@@ -566,6 +572,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     public_key: public_key.clone(),
                 })
                 .collect(),
+            blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
         }
     }
 }
@@ -673,6 +680,10 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             },
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses,
+            blockmaker_metrics_time_series: match item.blockmaker_metrics_time_series {
+                Some(metrics) => metrics.try_into()?,
+                None => BlockmakerMetricsTimeSeries::default(),
+            },
         })
     }
 }
@@ -708,6 +719,7 @@ impl SystemMetadata {
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
+            blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
         }
     }
 
@@ -975,6 +987,7 @@ impl SystemMetadata {
             subnet_metrics: _,
             ref expected_compiled_wasms,
             bitcoin_get_successors_follow_up_responses: _,
+            blockmaker_metrics_time_series: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -1897,6 +1910,244 @@ impl IngressHistoryState {
     }
 }
 
+/// The number of snapshots retained in the `BlockmakerMetricsTimeSeries`.
+const BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS: usize = 60;
+
+/// Converts `Time` to days since Unix epoch. This simply divides the timestamp by
+/// 24 hours.
+pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
+    time.as_nanos_since_unix_epoch() / (24 * 3600 * 1_000_000_000)
+}
+
+/// Metrics for a time series aggregated from the `BlockmakerMetrics` present in each batch.
+///
+/// Blockmaker stats are continuously accumulated for each node ID. On the first
+/// observation of each day (as determined by `days_since_unix_epoch()`) a snapshot along
+/// with a timestamp of the last observation on the previous day is stored in the metrics.
+/// For each day metrics were aggregated since the first observation, there is exactly one
+/// snapshot in the series (including 'today').
+///
+/// Once the maximum number of days has been reached:
+/// - The oldest entry is discarded to keep the dataset at a constant length.
+/// - The first observation of a new day induces a pruning process where a node with
+///   unchanged stats for the oldest and the newest snapshot is pruned from this and the
+///   following days. If a previously pruned node reappears, it will be added like any
+///   other new node and counting restarts from 0.
+///
+/// There is a runtime invariant (excluding checks at deserialization):
+/// - There are at most `BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS` snapshots.
+///
+/// There is an invariant (including checks at deserialization):
+/// - Each timestamp corresponding to a snapshot maps onto a unique day (as determined
+///   by `days_since_unix_epoch()`).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct BlockmakerMetricsTimeSeries(BTreeMap<Time, BlockmakerStatsMap>);
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BlockmakerStats {
+    /// Successfully proposed blocks (blocks that became part of the blockchain).
+    blocks_proposed_total: u64,
+    /// Failures to propose a block (when the node was block maker rank R but the
+    /// subnet accepted the block from the block maker with rank S > R).
+    blocks_not_proposed_total: u64,
+}
+
+/// Per-node and overall blockmaker stats.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BlockmakerStatsMap {
+    /// Maps a node ID to it's blockmaker stats.
+    node_stats: BTreeMap<NodeId, BlockmakerStats>,
+    /// Overall blockmaker stats for all node IDs.
+    subnet_stats: BlockmakerStats,
+}
+
+impl BlockmakerStatsMap {
+    /// Observes blockmaker metrics and then returns `self`.
+    fn and_observe(mut self, metrics: &BlockmakerMetrics) -> Self {
+        self.node_stats
+            .entry(metrics.blockmaker)
+            .or_default()
+            .blocks_proposed_total += 1;
+        for failed_blockmaker in &metrics.failed_blockmakers {
+            self.node_stats
+                .entry(*failed_blockmaker)
+                .or_default()
+                .blocks_not_proposed_total += 1;
+        }
+        self.subnet_stats.blocks_proposed_total += 1;
+        self.subnet_stats.blocks_not_proposed_total += metrics.failed_blockmakers.len() as u64;
+
+        self
+    }
+}
+
+impl BlockmakerMetricsTimeSeries {
+    /// Observes blockmaker metrics corresponding to a certain batch time.
+    pub fn observe(&mut self, batch_time: Time, metrics: &BlockmakerMetrics) {
+        match self.0.pop_last() {
+            Some((time, running_stats)) if time > batch_time => {
+                // Outdated metrics are ignored.
+                self.0.insert(time, running_stats);
+                return;
+            }
+            Some((time, mut running_stats))
+                if days_since_unix_epoch(time) < days_since_unix_epoch(batch_time) =>
+            {
+                // A new day has started, insert a new snapshot.
+                self.0.insert(time, running_stats.clone());
+                // If at capacity, prune node IDs from `running_stats`.
+                if self.0.len() == BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
+                    running_stats.node_stats.retain(|node_id, stats| {
+                        match self
+                            .0
+                            .first_key_value()
+                            .and_then(|(_, val)| val.node_stats.get(node_id))
+                        {
+                            // Retain node IDs that are not present in the first key value;
+                            // and node IDs that are present, but have unequal stats.
+                            None => true,
+                            Some(first_stats) => first_stats != stats,
+                        }
+                    });
+                }
+                // Observe the new metrics and insert `running_stats`.
+                self.0
+                    .insert(batch_time, running_stats.and_observe(metrics));
+            }
+            Some((_, running_stats)) => {
+                self.0
+                    .insert(batch_time, running_stats.and_observe(metrics));
+            }
+            None => {
+                self.0.insert(
+                    batch_time,
+                    BlockmakerStatsMap::default().and_observe(metrics),
+                );
+            }
+        }
+
+        // Ensure the time series is capped in length.
+        while self.0.len() > BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
+            self.0.pop_first();
+        }
+
+        debug_assert!(self.check_runtime_invariants());
+    }
+
+    /// Invariant check that returns an error if any invariant (including checks at
+    /// deserialization) does not hold.
+    fn check_invariants(&self) -> Result<(), String> {
+        if self
+            .0
+            .iter()
+            .zip(self.0.iter().skip(1))
+            .any(|((before, _), (after, _))| {
+                days_since_unix_epoch(*before) == days_since_unix_epoch(*after)
+            })
+        {
+            return Err("Found two timestamps on the same day.".into());
+        }
+        Ok(())
+    }
+
+    /// Invariant check that panics if any runtime invariant (excluding checks at deserialization)
+    /// does not hold. Intended to be called from within a `debug_assert!()` in production code.
+    fn check_runtime_invariants(&self) -> bool {
+        assert!(self.0.len() <= BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS);
+        assert!(self.check_invariants().is_ok());
+        true
+    }
+
+    /// Returns an iterator pointing at the first element of a chronologically sorted time series
+    /// whose timestamp is above or equal to the given time.
+    pub fn metrics_since(&self, time: Time) -> impl Iterator<Item = (&Time, &BlockmakerStatsMap)> {
+        use std::ops::Bound;
+        self.0
+            .range((Bound::Included(&time), Bound::Unbounded))
+            .take(BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS)
+    }
+}
+
+impl From<&BlockmakerStatsMap> for pb_metadata::BlockmakerStatsMap {
+    fn from(item: &BlockmakerStatsMap) -> Self {
+        Self {
+            node_stats: item
+                .node_stats
+                .iter()
+                .map(|(node_id, stats)| pb_metadata::NodeBlockmakerStats {
+                    node_id: Some(node_id_into_protobuf(*node_id)),
+                    blocks_proposed_total: stats.blocks_proposed_total,
+                    blocks_not_proposed_total: stats.blocks_not_proposed_total,
+                })
+                .collect::<Vec<_>>(),
+            blocks_proposed_total: item.subnet_stats.blocks_proposed_total,
+            blocks_not_proposed_total: item.subnet_stats.blocks_not_proposed_total,
+        }
+    }
+}
+
+impl From<&BlockmakerMetricsTimeSeries> for pb_metadata::BlockmakerMetricsTimeSeries {
+    fn from(item: &BlockmakerMetricsTimeSeries) -> Self {
+        Self {
+            time_stamp_map: item
+                .0
+                .iter()
+                .map(|(time, map)| (time.as_nanos_since_unix_epoch(), map.into()))
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::BlockmakerStatsMap> for BlockmakerStatsMap {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_metadata::BlockmakerStatsMap) -> Result<Self, Self::Error> {
+        Ok(Self {
+            node_stats: item
+                .node_stats
+                .into_iter()
+                .map(|e| {
+                    Ok((
+                        node_id_try_from_option(e.node_id)?,
+                        BlockmakerStats {
+                            blocks_proposed_total: e.blocks_proposed_total,
+                            blocks_not_proposed_total: e.blocks_not_proposed_total,
+                        },
+                    ))
+                })
+                .collect::<Result<BTreeMap<_, _>, Self::Error>>()?,
+            subnet_stats: BlockmakerStats {
+                blocks_proposed_total: item.blocks_proposed_total,
+                blocks_not_proposed_total: item.blocks_not_proposed_total,
+            },
+        })
+    }
+}
+
+impl TryFrom<pb_metadata::BlockmakerMetricsTimeSeries> for BlockmakerMetricsTimeSeries {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_metadata::BlockmakerMetricsTimeSeries) -> Result<Self, Self::Error> {
+        let time_series = Self(
+            item.time_stamp_map
+                .into_iter()
+                .map(|(time_nanos, blockmaker_stats_map)| {
+                    Ok((
+                        Time::from_nanos_since_unix_epoch(time_nanos),
+                        blockmaker_stats_map.try_into()?,
+                    ))
+                })
+                .collect::<Result<BTreeMap<_, _>, Self::Error>>()?,
+        );
+
+        time_series
+            .check_invariants()
+            .map_err(|err| Self::Error::Other(err))?;
+
+        Ok(time_series)
+    }
+}
+
 pub(crate) mod testing {
     use super::*;
 
@@ -1966,6 +2217,7 @@ pub(crate) mod testing {
             subnet_metrics: Default::default(),
             expected_compiled_wasms: Default::default(),
             bitcoin_get_successors_follow_up_responses: Default::default(),
+            blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
         };
     }
 }

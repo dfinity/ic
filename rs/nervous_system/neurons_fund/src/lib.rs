@@ -101,6 +101,7 @@ impl<F: InvertibleFunction + SerializableFunction + std::fmt::Debug> IdealMatchi
 
 /// A monotonically non-decreasing function. Returns a decimal amount of ICP (not e8s).
 pub trait NonDecreasingFunction {
+    /// Applies `self` over the specified amount in ICP e8s, returning an amount in ICP (not e8s).
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String>;
 
     /// Simply unwraps the result from `self.apply()`.
@@ -146,6 +147,65 @@ pub trait NonDecreasingFunction {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum InvertError {
+    ValueIsNegative(Decimal),
+    MaxArgumentValueError(String),
+    FunctionApplicationError(String),
+    MonotonicityAssumptionViolation {
+        left: u64,
+        target_y: Decimal,
+        right: u64,
+    },
+    InvertValueAboveU64Range {
+        lower: u64,
+        target_y: Decimal,
+    },
+    InvertValueBelowU64Range {
+        target_y: Decimal,
+        upper: u64,
+    },
+}
+
+impl ToString for InvertError {
+    fn to_string(&self) -> String {
+        let prefix = "Cannot invert ";
+        match self {
+            Self::ValueIsNegative(value) => {
+                format!("{}negative value {}.", prefix, value)
+            }
+            Self::MaxArgumentValueError(error) => {
+                format!("{}due to maximum argument error: {}", prefix, error)
+            }
+            Self::FunctionApplicationError(error) => {
+                format!("{}due to function application error: {}", prefix, error)
+            }
+            Self::MonotonicityAssumptionViolation {
+                left,
+                target_y,
+                right,
+            } => {
+                format!(
+                    "{}at target_y={}, as function is decreasing between {} and {}.",
+                    prefix, target_y, left, right,
+                )
+            }
+            Self::InvertValueAboveU64Range { lower, target_y } => {
+                format!(
+                    "{}at target_y={}, as function's inverse appears to be above {}.",
+                    prefix, target_y, lower,
+                )
+            }
+            Self::InvertValueBelowU64Range { target_y, upper } => {
+                format!(
+                    "{}at target_y={}, as function's inverse appears to be below {}.",
+                    prefix, target_y, upper,
+                )
+            }
+        }
+    }
+}
+
 /// An invertible function is a function that has an inverse (a.k.a. monotonically non-decreasing).
 ///
 /// Say we have an invertible function `f(x: u64) -> u64` and its inverse is `g(y: u64) -> u64`.
@@ -158,23 +218,35 @@ pub trait InvertibleFunction: NonDecreasingFunction {
     /// An error is returned if the function defined by `apply` is not monotonically increasing.
     ///
     /// The default implementation assumes the function is non-descending
-    fn invert(&self, target_y: Decimal) -> Result<u64, String> {
+    fn invert(&self, target_y: Decimal) -> Result<u64, InvertError> {
         if target_y.is_sign_negative() {
-            return Err(format!("Cannot invert negative value {}.", target_y));
+            return Err(InvertError::ValueIsNegative(target_y));
         }
 
         let left: u64 = 0;
-        let right: u64 = self.max_argument_icp_e8s()?;
+        let right: u64 = self
+            .max_argument_icp_e8s()
+            .map_err(InvertError::MaxArgumentValueError)?;
 
         // Search to find the highest `lower` where `f(lower) < target_y`,
         // and the lowest `higher` where `f(higher) >= target_y`.
         // These form the upper and lower bound of the "true" inverse.
         let search_result = binary_search::search_with_fallible_predicate(
-            |x| Ok::<_, String>(self.apply(*x)? >= target_y),
+            |x: &u64| -> Result<bool, InvertError> {
+                let y = self
+                    .apply(*x)
+                    .map_err(InvertError::FunctionApplicationError)?;
+                Ok(y >= target_y)
+            },
             left,
             right,
         )?;
-        let error = |x| Ok::<_, String>((self.apply(x)? - target_y).abs());
+        let error = |x: u64| -> Result<Decimal, InvertError> {
+            let y = self
+                .apply(x)
+                .map_err(InvertError::FunctionApplicationError)?;
+            Ok((y - target_y).abs())
+        };
         match search_result {
             // binary_search::search will return the two values inside the range that inclusively
             // "enclose" the exact inverse, if present. Let's return whichever was closer
@@ -192,9 +264,7 @@ pub trait InvertibleFunction: NonDecreasingFunction {
                 if error(lower)?.is_zero() {
                     Ok(lower)
                 } else {
-                    Err(format!(
-                        "inverse of function appears to be greater than {lower}"
-                    ))
+                    Err(InvertError::InvertValueAboveU64Range { lower, target_y })
                 }
             }
             // This case will be exercised if 0 is equal to or greater than the
@@ -203,19 +273,21 @@ pub trait InvertibleFunction: NonDecreasingFunction {
                 if error(upper)?.is_zero() {
                     Ok(upper)
                 } else {
-                    Err(format!(
-                        "inverse of function appears to be lower than {upper}"
-                    ))
+                    Err(InvertError::InvertValueBelowU64Range { target_y, upper })
                 }
             }
-            (None, None) => Err("invertible function must be non-decreasing".to_string()),
+            (None, None) => Err(InvertError::MonotonicityAssumptionViolation {
+                left,
+                target_y,
+                right,
+            }),
         }
     }
 }
 
 impl<T: NonDecreasingFunction> InvertibleFunction for T {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedLinearScalingCoefficient {
     pub from_direct_participation_icp_e8s: u64,
     pub to_direct_participation_icp_e8s: u64,
@@ -757,7 +829,7 @@ pub type PolynomialNeuronsFundParticipation =
     ValidatedNeuronsFundParticipationConstraints<PolynomialMatchingFunction>;
 
 // -------------------------------------------------------------------------------------------------
-// ------------------- IntervalPartition -----------------------------------------------------------
+// ------------------- Interval --------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
 pub trait Interval {
@@ -766,26 +838,10 @@ pub trait Interval {
     fn contains(&self, x: u64) -> bool {
         self.from() <= x && x < self.to()
     }
-}
-
-impl Interval for ValidatedLinearScalingCoefficient {
-    fn from(&self) -> u64 {
-        self.from_direct_participation_icp_e8s
-    }
-
-    fn to(&self) -> u64 {
-        self.to_direct_participation_icp_e8s
-    }
-}
-
-pub trait IntervalPartition<I> {
-    fn intervals(&self) -> Vec<&I>;
-
-    fn find_interval(&self, x: u64) -> Option<&I>
+    fn find(intervals: &Vec<Self>, x: u64) -> Option<&Self>
     where
-        I: Interval,
+        Self: Sized,
     {
-        let intervals = &self.intervals();
         if intervals.is_empty() {
             return None;
         }
@@ -829,18 +885,20 @@ pub trait IntervalPartition<I> {
                 // [Spec] -- given `0 < m` from (**), we know that `0 <= m-1`. QED
             } else {
                 // x \in intervals[m]
-                return Some(intervals[m]);
+                return Some(&intervals[m]);
             }
         }
         None
     }
 }
 
-impl<F> IntervalPartition<ValidatedLinearScalingCoefficient>
-    for ValidatedNeuronsFundParticipationConstraints<F>
-{
-    fn intervals(&self) -> Vec<&ValidatedLinearScalingCoefficient> {
-        self.coefficient_intervals.iter().collect()
+impl Interval for ValidatedLinearScalingCoefficient {
+    fn from(&self) -> u64 {
+        self.from_direct_participation_icp_e8s
+    }
+
+    fn to(&self) -> u64 {
+        self.to_direct_participation_icp_e8s
     }
 }
 
@@ -899,7 +957,7 @@ where
             slope_denominator,
             intercept_icp_e8s,
             ..
-        }) = self.find_interval(direct_participation_icp_e8s)
+        }) = Interval::find(&self.coefficient_intervals, direct_participation_icp_e8s)
         {
             // This value is how much of Neurons' Fund maturity we should "ideally" allocate.
             let ideal_icp = self
@@ -907,7 +965,7 @@ where
                 .apply(direct_participation_icp_e8s)?;
 
             // Convert to Decimal
-            let intercept_icp_e8s = rescale_to_icp(*intercept_icp_e8s);
+            let intercept_icp = rescale_to_icp(*intercept_icp_e8s);
             let slope_numerator = u64_to_dec(*slope_numerator);
             let slope_denominator = u64_to_dec(*slope_denominator);
 
@@ -931,17 +989,16 @@ where
             //     via the `(slope_numerator / slope_denominator)` factor.
             // (2) Some Neurons' fund neurons being too big to fully participate (at this direct
             //     participation amount, `direct_participation_icp_e8s`). This is taken into account
-            //     via the `intercept_icp_e8s` component.
+            //     via the `intercept_icp` component.
             // (3) The computed overall participation amount (unexpectedly) exceeded `hard_cap`; so
             //     we enforce the limited at `hard_cap`.
-            let effective_icp = hard_cap.min(intercept_icp_e8s.saturating_add(
+            let effective_icp = hard_cap.min(intercept_icp.saturating_add(
                 // `slope_denominator`` cannot be zero as it has been validated.
                 // See `LinearScalingCoefficientValidationError::DenominatorIsZero`.
                 // `slope_numerator / slope_denominator` is between 0.0 and 1.0.
                 // See `LinearScalingCoefficientValidationError::NumeratorGreaterThanDenominator`.
                 (slope_numerator / slope_denominator) * ideal_icp,
             ));
-
             return rescale_to_icp_e8s(effective_icp);
         }
 

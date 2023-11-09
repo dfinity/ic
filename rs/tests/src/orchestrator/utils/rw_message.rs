@@ -6,7 +6,17 @@ use reqwest::Url;
 use slog::{debug, info, Logger};
 use std::time::Duration;
 
-pub(crate) fn store_message(url: &Url, effective_canister_id: PrincipalId, msg: &str) -> Principal {
+pub(crate) fn store_message(
+    url: &Url,
+    effective_canister_id: PrincipalId,
+    msg: &str,
+    log: &Logger,
+) -> Principal {
+    info!(
+        log,
+        "Storing a message in canister with id {} at {}", effective_canister_id, url
+    );
+
     block_on(async {
         let agent = assert_create_agent(url.as_str()).await;
         let mcan = MessageCanister::new(&agent, effective_canister_id).await;
@@ -22,6 +32,11 @@ pub(crate) fn store_message_with_retries(
     msg: &str,
     log: &Logger,
 ) -> Principal {
+    info!(
+        log,
+        "Storing a message in canister with id {} at {}", effective_canister_id, url
+    );
+
     block_on(async {
         let agent = assert_create_agent(url.as_str()).await;
         let mcan = MessageCanister::new_with_retries(
@@ -102,6 +117,11 @@ async fn can_read_msg_impl(
     expected_msg: &str,
     retries: usize,
 ) -> bool {
+    info!(
+        log,
+        "Checking if we can read a message from canister with id {} at {}", canister_id, url
+    );
+
     for i in 0..=retries {
         debug!(log, "Try to create agent for node {}...", url);
 
@@ -128,6 +148,7 @@ async fn can_read_msg_impl(
         debug!(log, "Will retry {} more times", retries - i);
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
+
     false
 }
 

@@ -357,35 +357,33 @@ pub fn encode_metrics(
         "The total voting power, according to the most recent proposal.",
     )?;
 
-    if neuron_stable_indexes_building_is_enabled() {
-        let neuron_store::NeuronIndexesLens {
-            subaccount: subaccount_index_len,
-            principal: principal_index_len,
-            following: following_index_len,
-            known_neuron: known_neuron_index_len,
-        } = governance.neuron_store.stable_indexes_lens();
+    let neuron_store::NeuronIndexesLens {
+        subaccount: subaccount_index_len,
+        principal: principal_index_len,
+        following: following_index_len,
+        known_neuron: known_neuron_index_len,
+    } = governance.neuron_store.stable_indexes_lens();
 
-        w.encode_gauge(
-            "governance_subaccount_index_len",
-            subaccount_index_len as f64,
-            "Total number of entries in the subaccount index",
-        )?;
-        w.encode_gauge(
-            "governance_principal_index_len",
-            principal_index_len as f64,
-            "Total number of entries in the principal index",
-        )?;
-        w.encode_gauge(
-            "governance_following_index_len",
-            following_index_len as f64,
-            "Total number of entries in the following index",
-        )?;
-        w.encode_gauge(
-            "governance_known_neuron_index_len",
-            known_neuron_index_len as f64,
-            "Total number of entries in the known neuron index",
-        )?;
-    }
+    w.encode_gauge(
+        "governance_subaccount_index_len",
+        subaccount_index_len as f64,
+        "Total number of entries in the subaccount index",
+    )?;
+    w.encode_gauge(
+        "governance_principal_index_len",
+        principal_index_len as f64,
+        "Total number of entries in the principal index",
+    )?;
+    w.encode_gauge(
+        "governance_following_index_len",
+        following_index_len as f64,
+        "Total number of entries in the following index",
+    )?;
+    w.encode_gauge(
+        "governance_known_neuron_index_len",
+        known_neuron_index_len as f64,
+        "Total number of entries in the known neuron index",
+    )?;
 
     if let Some(metrics) = &governance.heap_data.metrics {
         w.encode_gauge(
@@ -534,11 +532,6 @@ pub fn encode_metrics(
 
 /// Whether we should start to copy inactive neurons into stable memory.
 fn is_copy_inactive_neurons_to_stable_memory_enabled() -> bool {
-    cfg! { any(test, feature = "test") }
-}
-
-/// Whether we should start to build neuron indexes in stable storage.
-fn neuron_stable_indexes_building_is_enabled() -> bool {
     true
 }
 

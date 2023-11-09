@@ -6081,6 +6081,318 @@ fn test_refresh_buyer_tokens() {
     }
 }
 
+#[test]
+fn test_refresh_buyer_tokens_with_neurons_fund_matched_funding() {
+    let user1 = PrincipalId::new_user_test_id(1);
+    let user2 = PrincipalId::new_user_test_id(2);
+    let user3 = PrincipalId::new_user_test_id(3);
+    let buy_token_ok = |swap: &mut Swap,
+                        user: &PrincipalId,
+                        icp_ledger_account_balance_e8s: u64,
+                        icp_accepted_participation_e8s: u64| {
+        assert_eq!(
+            swap.refresh_buyer_token_e8s(
+                *user,
+                None,
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    Account {
+                        owner: SWAP_CANISTER_ID.get().into(),
+                        subaccount: Some(principal_to_subaccount(user)),
+                    },
+                    Ok(Tokens::from_e8s(icp_ledger_account_balance_e8s)),
+                )]),
+            )
+            .now_or_never()
+            .unwrap()
+            .unwrap(),
+            RefreshBuyerTokensResponse {
+                icp_accepted_participation_e8s,
+                icp_ledger_account_balance_e8s,
+            }
+        );
+    };
+
+    let params = Some(Params {
+        min_direct_participation_icp_e8s: Some(250_000 * E8),
+        max_direct_participation_icp_e8s: Some(500_000 * E8),
+        min_participant_icp_e8s: 2 * E8,
+        max_participant_icp_e8s: 350_000 * E8,
+        sns_token_e8s: 1_000_000 * E8,
+        min_participants: 2,
+        ..params()
+    });
+    let amount_user_1 = 250_000 * E8;
+    let amount_user_2 = 150_000 * E8;
+    let amount_user_3 = 100_000 * E8;
+
+    let amount_nf_1 = 222_000 * E8;
+    let amount_nf_2 = 333_000 * E8;
+    let amount_nf_3 = 444_000 * E8;
+
+    let max_direct_amount = 500_000 * E8;
+
+    let total_nf_maturity_equivalent_icp_e8s = 4_000_000 * E8;
+    let max_neurons_fund_participation_icp_e8s = total_nf_maturity_equivalent_icp_e8s / 10;
+
+    let mut swap = {
+        let mut init = init_with_neurons_fund_funding();
+        let neurons_fund_participation_constraints = Some(NeuronsFundParticipationConstraints {
+            min_direct_participation_threshold_icp_e8s: Some(250_000 * E8),
+            max_neurons_fund_participation_icp_e8s: Some(max_neurons_fund_participation_icp_e8s),
+            // Set `slope_numerator` to zero, so the outcome does not depend on the kind of matching
+            // function that is used. Only `intercept_icp_e8s` will have an impact on the amount
+            // that the Neurons' Fund participates on each of the three intervals.
+            coefficient_intervals: vec![
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(0),
+                    to_direct_participation_icp_e8s: Some(250_000 * E8),
+                    slope_numerator: Some(0),
+                    slope_denominator: Some(1),
+                    intercept_icp_e8s: Some(0),
+                },
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(250_000 * E8),
+                    to_direct_participation_icp_e8s: Some(400_000 * E8),
+                    slope_numerator: Some(0),
+                    slope_denominator: Some(1),
+                    intercept_icp_e8s: Some(amount_nf_1),
+                },
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(400_000 * E8),
+                    to_direct_participation_icp_e8s: Some(500_000 * E8),
+                    slope_numerator: Some(0),
+                    slope_denominator: Some(1),
+                    intercept_icp_e8s: Some(amount_nf_2),
+                },
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(500_000 * E8),
+                    to_direct_participation_icp_e8s: Some(u64::MAX),
+                    slope_numerator: Some(0),
+                    slope_denominator: Some(1),
+                    intercept_icp_e8s: Some(amount_nf_3),
+                },
+            ],
+            ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+                serialized_representation: Some(
+                    (PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s)
+                        .unwrap())
+                    .serialize(),
+                ),
+            }),
+        });
+        println!("{:#?}", neurons_fund_participation_constraints);
+        init = Init {
+            neurons_fund_participation_constraints,
+            ..init
+        };
+        init.validate().unwrap();
+        let swap = Swap::new(init);
+        Swap {
+            params,
+            lifecycle: Open as i32,
+            ..swap
+        }
+    };
+
+    // Starting conditions
+    assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
+    assert_eq!(swap.current_neurons_fund_participation_e8s(), 0);
+    assert_eq!(swap.current_direct_participation_e8s(), 0);
+    assert_eq!(swap.current_total_participation_e8s(), 0);
+    assert_eq!(swap.available_direct_participation_e8s(), max_direct_amount);
+
+    buy_token_ok(&mut swap, &user1, amount_user_1, amount_user_1);
+
+    assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
+    assert_eq!(swap.current_direct_participation_e8s(), amount_user_1);
+    assert_eq!(swap.current_neurons_fund_participation_e8s(), amount_nf_1);
+    assert_eq!(
+        swap.current_total_participation_e8s(),
+        amount_user_1 + amount_nf_1
+    );
+    assert_eq!(
+        swap.available_direct_participation_e8s(),
+        max_direct_amount - amount_user_1
+    );
+
+    buy_token_ok(&mut swap, &user2, amount_user_2, amount_user_2);
+
+    assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
+    assert_eq!(swap.current_neurons_fund_participation_e8s(), amount_nf_2);
+    assert_eq!(
+        swap.current_direct_participation_e8s(),
+        amount_user_1 + amount_user_2
+    );
+    assert_eq!(
+        swap.current_total_participation_e8s(),
+        amount_user_1 + amount_user_2 + amount_nf_2
+    );
+    assert_eq!(
+        swap.available_direct_participation_e8s(),
+        max_direct_amount - amount_user_1 - amount_user_2
+    );
+
+    buy_token_ok(&mut swap, &user3, amount_user_3, amount_user_3);
+
+    assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
+    assert_eq!(
+        swap.current_neurons_fund_participation_e8s(),
+        max_neurons_fund_participation_icp_e8s
+    );
+    assert_eq!(
+        swap.current_direct_participation_e8s(),
+        amount_user_1 + amount_user_2 + amount_user_3
+    );
+    assert_eq!(
+        swap.current_total_participation_e8s(),
+        amount_user_1 + amount_user_2 + amount_user_3 + max_neurons_fund_participation_icp_e8s
+    );
+    assert_eq!(swap.available_direct_participation_e8s(), 0);
+}
+
+/// Similar to `test_refresh_buyer_tokens_with_neurons_fund_matched_funding`, but we switch off
+/// Neurons' Fund participation and expect there not to be any Neurons' Fund participation.
+#[test]
+fn test_refresh_buyer_tokens_without_neurons_fund_matched_funding() {
+    let user1 = PrincipalId::new_user_test_id(1);
+    let user2 = PrincipalId::new_user_test_id(2);
+    let user3 = PrincipalId::new_user_test_id(3);
+    let buy_token_ok = |swap: &mut Swap,
+                        user: &PrincipalId,
+                        icp_ledger_account_balance_e8s: u64,
+                        icp_accepted_participation_e8s: u64| {
+        assert_eq!(
+            swap.refresh_buyer_token_e8s(
+                *user,
+                None,
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    Account {
+                        owner: SWAP_CANISTER_ID.get().into(),
+                        subaccount: Some(principal_to_subaccount(user)),
+                    },
+                    Ok(Tokens::from_e8s(icp_ledger_account_balance_e8s)),
+                )]),
+            )
+            .now_or_never()
+            .unwrap()
+            .unwrap(),
+            RefreshBuyerTokensResponse {
+                icp_accepted_participation_e8s,
+                icp_ledger_account_balance_e8s,
+            }
+        );
+    };
+
+    let params = Some(Params {
+        min_direct_participation_icp_e8s: Some(250_000 * E8),
+        max_direct_participation_icp_e8s: Some(500_000 * E8),
+        min_participant_icp_e8s: 2 * E8,
+        max_participant_icp_e8s: 350_000 * E8,
+        sns_token_e8s: 1_000_000 * E8,
+        min_participants: 2,
+        ..params()
+    });
+    let amount_user_1 = 250_000 * E8;
+    let amount_user_2 = 150_000 * E8;
+    let amount_user_3 = 100_000 * E8;
+
+    let max_direct_amount = 500_000 * E8;
+
+    let total_nf_maturity_equivalent_icp_e8s = 2_000_000 * E8;
+
+    let mut swap = {
+        let mut init = init_with_neurons_fund_funding();
+        let neurons_fund_participation_constraints = Some(NeuronsFundParticipationConstraints {
+            min_direct_participation_threshold_icp_e8s: Some(250_000 * E8),
+            max_neurons_fund_participation_icp_e8s: Some(total_nf_maturity_equivalent_icp_e8s / 10),
+            // Set `slope_numerator` to zero, so the outcome does not depend on the kind of matching
+            // function that is used. Only `intercept_icp_e8s` will have an impact on the amount
+            // that the Neurons' Fund participates on each of the three intervals.
+            coefficient_intervals: vec![LinearScalingCoefficient {
+                from_direct_participation_icp_e8s: Some(0),
+                to_direct_participation_icp_e8s: Some(u64::MAX),
+                // Does not matter what we set hese fields to (as long as the payload validates),
+                // as the function should never be applied with the below `Init`:
+                // neurons_fund_participation: Some(false).
+                slope_numerator: Some(123_456_678 * E8),
+                slope_denominator: Some(123_456_678 * E8),
+                intercept_icp_e8s: Some(123_456_678 * E8),
+            }],
+            ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+                serialized_representation: Some(
+                    (PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s)
+                        .unwrap())
+                    .serialize(),
+                ),
+            }),
+        });
+        println!("{:#?}", neurons_fund_participation_constraints);
+        init = Init {
+            neurons_fund_participation_constraints,
+            neurons_fund_participation: Some(false),
+            ..init
+        };
+        init.validate().unwrap();
+        let swap = Swap::new(init);
+        Swap {
+            params,
+            lifecycle: Open as i32,
+            ..swap
+        }
+    };
+
+    // Starting conditions
+    assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
+    assert_eq!(swap.current_neurons_fund_participation_e8s(), 0);
+    assert_eq!(swap.current_direct_participation_e8s(), 0);
+    assert_eq!(swap.current_total_participation_e8s(), 0);
+    assert_eq!(swap.available_direct_participation_e8s(), max_direct_amount);
+
+    buy_token_ok(&mut swap, &user1, amount_user_1, amount_user_1);
+
+    assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
+    assert_eq!(swap.current_direct_participation_e8s(), amount_user_1);
+    assert_eq!(swap.current_neurons_fund_participation_e8s(), 0);
+    assert_eq!(swap.current_total_participation_e8s(), amount_user_1);
+    assert_eq!(
+        swap.available_direct_participation_e8s(),
+        max_direct_amount - amount_user_1
+    );
+
+    buy_token_ok(&mut swap, &user2, amount_user_2, amount_user_2);
+
+    assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
+    assert_eq!(swap.current_neurons_fund_participation_e8s(), 0);
+    assert_eq!(
+        swap.current_direct_participation_e8s(),
+        amount_user_1 + amount_user_2
+    );
+    assert_eq!(
+        swap.current_total_participation_e8s(),
+        amount_user_1 + amount_user_2
+    );
+    assert_eq!(
+        swap.available_direct_participation_e8s(),
+        max_direct_amount - amount_user_1 - amount_user_2
+    );
+
+    buy_token_ok(&mut swap, &user3, amount_user_3, amount_user_3);
+
+    assert_eq!(swap.max_direct_participation_e8s(), max_direct_amount);
+    assert_eq!(swap.current_neurons_fund_participation_e8s(), 0);
+    assert_eq!(
+        swap.current_direct_participation_e8s(),
+        amount_user_1 + amount_user_2 + amount_user_3
+    );
+    assert_eq!(
+        swap.current_total_participation_e8s(),
+        amount_user_1 + amount_user_2 + amount_user_3
+    );
+    assert_eq!(swap.available_direct_participation_e8s(), 0);
+}
+
 /// Test that the `refresh_buyer_token_e8s` function handles confirmations correctly.
 #[test]
 fn test_swap_participation_confirmation() {

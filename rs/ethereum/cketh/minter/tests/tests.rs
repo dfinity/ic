@@ -29,6 +29,7 @@ use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
 use std::collections::BTreeMap;
+use std::convert::identity;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -50,6 +51,7 @@ const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
 const DEFAULT_WITHDRAWAL_TRANSACTION_HASH: &str =
     "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5";
 const MINTER_ADDRESS: &str = "0xfd644a761079369962386f8e4259217c2a10b8d0";
+const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -62,14 +64,16 @@ fn should_deposit_and_withdraw() {
         .deposit(DepositParams::default())
         .expect_mint()
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
         .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
         .expect_withdrawal_request_accepted();
 
     let withdrawal_id = cketh.withdrawal_id().clone();
-    let cketh = cketh.wait_and_validate_withdrawal(
-        "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
-        true,
-    );
+    let cketh = cketh
+        .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+        .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
+            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+        }));
     assert_eq!(cketh.balance_of(caller), Nat::from(0));
 
     let max_fee_per_gas = Nat::from(33003708258u64);
@@ -172,10 +176,153 @@ fn should_block_withdrawal_to_blocked_address() {
         .deposit(DepositParams::default())
         .expect_mint()
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
         .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), blocked_address.clone())
         .expect_error(WithdrawalError::RecipientAddressBlocked {
             address: blocked_address,
         });
+}
+
+#[test]
+fn should_fail_to_withdraw_without_approval() {
+    let cketh = CkEthSetup::new();
+    let caller: Principal = cketh.caller.into();
+
+    cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_minter_withdraw_eth(
+            caller,
+            Nat::from(10),
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_error(WithdrawalError::InsufficientAllowance {
+            allowance: Nat::from(0_u64),
+        });
+}
+
+#[test]
+fn should_fail_to_withdraw_when_insufficient_funds() {
+    let cketh = CkEthSetup::new();
+    let caller: Principal = cketh.caller.into();
+    let deposit_amount = 10_000_000_000_000_000_u64;
+    let amount_after_approval = deposit_amount - CKETH_TRANSFER_FEE;
+    assert!(deposit_amount > amount_after_approval);
+
+    cketh
+        .deposit(DepositParams {
+            amount: deposit_amount,
+            ..Default::default()
+        })
+        .expect_mint()
+        .call_ledger_approve_minter(caller, deposit_amount, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(
+            caller,
+            Nat::from(deposit_amount),
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_error(WithdrawalError::InsufficientFunds {
+            balance: Nat::from(amount_after_approval),
+        });
+}
+
+#[test]
+fn should_fail_to_withdraw_too_small_amount() {
+    let cketh = CkEthSetup::new();
+    let caller: Principal = cketh.caller.into();
+    cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, 10_000, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(
+            caller,
+            Nat::from(CKETH_TRANSFER_FEE - 1),
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_error(WithdrawalError::AmountTooLow {
+            min_withdrawal_amount: CKETH_TRANSFER_FEE.into(),
+        });
+}
+
+#[test]
+fn should_not_finalize_transaction_when_receipts_do_not_match() {
+    let cketh = CkEthSetup::new();
+    let caller: Principal = cketh.caller.into();
+    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+
+    cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(
+            caller,
+            withdrawal_amount,
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_withdrawal_request_accepted()
+        .wait_and_validate_withdrawal(
+            ProcessWithdrawalParams::default().with_mock_eth_get_transaction_receipt(move |mock| {
+                mock.modify_response(
+                    JsonRpcProvider::Ankr,
+                    &mut |response: &mut ethers_core::types::TransactionReceipt| {
+                        response.status = Some(0.into())
+                    },
+                )
+                .modify_response(
+                    JsonRpcProvider::BlockPi,
+                    &mut |response: &mut ethers_core::types::TransactionReceipt| {
+                        response.status = Some(1.into())
+                    },
+                )
+            }),
+        )
+        .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
+            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+        }));
+}
+
+#[test]
+fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
+    let cketh = CkEthSetup::new();
+    let caller: Principal = cketh.caller.into();
+    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+
+    cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(
+            caller,
+            withdrawal_amount,
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_withdrawal_request_accepted()
+        .start_processing_withdrawals()
+        .retrieve_fee_history(move |mock| {
+            mock.modify_response(
+                JsonRpcProvider::Ankr,
+                &mut |response: &mut ethers_core::types::FeeHistory| {
+                    response.oldest_block = 0x17740742_u64.into()
+                },
+            )
+            .modify_response(
+                JsonRpcProvider::BlockPi,
+                &mut |response: &mut ethers_core::types::FeeHistory| {
+                    response.oldest_block = 0x17740743_u64.into()
+                },
+            )
+            .modify_response(
+                JsonRpcProvider::PublicNode,
+                &mut |response: &mut ethers_core::types::FeeHistory| {
+                    response.oldest_block = 0x17740744_u64.into()
+                },
+            )
+        })
+        .expect_status(RetrieveEthStatus::Pending);
 }
 
 #[test]
@@ -188,9 +335,10 @@ fn should_reimburse() {
     let cketh = cketh
         .deposit(DepositParams::default())
         .expect_mint()
-        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None);
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1);
 
-    let balance_before_withdrawal = cketh.setup.balance_of(caller);
+    let balance_before_withdrawal = cketh.balance_of(caller);
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
     let cketh = cketh
@@ -198,10 +346,19 @@ fn should_reimburse() {
         .expect_withdrawal_request_accepted();
 
     let withdrawal_id = cketh.withdrawal_id().clone();
-    let cketh = cketh.wait_and_validate_withdrawal(
-        "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
-        false,
-    );
+    let cketh = cketh
+        .wait_and_validate_withdrawal(
+            ProcessWithdrawalParams::default().with_mock_eth_get_transaction_receipt(move |mock| {
+                mock.modify_response_for_all(
+                    &mut |receipt: &mut ethers_core::types::TransactionReceipt| {
+                        receipt.status = Some(0_u64.into())
+                    },
+                )
+            }),
+        )
+        .expect_finalized_status(TxFinalizedStatus::PendingReimbursement(EthTransaction {
+            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+        }));
 
     assert_eq!(cketh.balance_of(caller), Nat::from(0));
 
@@ -215,7 +372,7 @@ fn should_reimburse() {
         balance_before_withdrawal.clone() - gas_cost.clone()
     );
 
-    let withdrawal_status = cketh.retrieve_eth_status(withdrawal_id.0.to_u64().unwrap());
+    let withdrawal_status = cketh.retrieve_eth_status(&withdrawal_id);
     assert_eq!(
         withdrawal_status,
         RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
@@ -365,7 +522,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
         next_transaction_nonce: 0.into(),
         ethereum_block_height: Default::default(),
         ethereum_contract_address: Some("0x907b6EFc1a398fD88A8161b3cA02eEc8Eaf72ca1".to_string()),
-        minimum_withdrawal_amount: 1.into(),
+        minimum_withdrawal_amount: CKETH_TRANSFER_FEE.into(),
         last_scraped_block_number: 3_956_206.into(),
     };
     let minter_arg = MinterArg::InitArg(args);
@@ -456,22 +613,18 @@ fn block_response(block_number: u64) -> ethers_core::types::Block<ethers_core::t
     }
 }
 
-fn transaction_receipt(
-    transaction_hash: String,
-    status: bool,
-    effective_gas_price: u64,
-) -> ethers_core::types::TransactionReceipt {
+fn transaction_receipt(transaction_hash: String) -> ethers_core::types::TransactionReceipt {
     let json_value = json!({
         "blockHash": DEFAULT_BLOCK_HASH,
         "blockNumber": format!("{:#x}", DEFAULT_BLOCK_NUMBER),
         "contractAddress": null,
         "cumulativeGasUsed": "0x8b2e10",
-        "effectiveGasPrice": format!("{:#x}", effective_gas_price),
+        "effectiveGasPrice": format!("{:#x}", EFFECTIVE_GAS_PRICE),
         "from": "0x1789f79e95324a47c5fd6693071188e82e9a3558",
         "gasUsed": "0x5208",
         "logs": [],
         "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-        "status": format!("{:#x}", status as u8),
+        "status": format!("{:#x}", 1_u8),
         "to": "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0",
         "transactionHash": transaction_hash,
         "transactionIndex": "0x32",
@@ -571,7 +724,7 @@ impl CkEthSetup {
         .unwrap()
     }
 
-    pub fn retrieve_eth_status(&self, block_index: u64) -> RetrieveEthStatus {
+    pub fn retrieve_eth_status(&self, block_index: &Nat) -> RetrieveEthStatus {
         Decode!(
             &assert_reply(
                 self.env
@@ -579,7 +732,7 @@ impl CkEthSetup {
                         self.caller,
                         self.minter_id,
                         "retrieve_eth_status",
-                        Encode!(&block_index).unwrap(),
+                        Encode!(&block_index.0.to_u64().unwrap()).unwrap(),
                     )
                     .expect("failed to get eth address")
             ),
@@ -610,7 +763,7 @@ impl CkEthSetup {
         amount: u64,
         from_subaccount: Option<[u8; 32]>,
     ) -> ApprovalFlow {
-        let approval_id = Decode!(&assert_reply(self.env.execute_ingress_as(
+        let approval_response = Decode!(&assert_reply(self.env.execute_ingress_as(
             PrincipalId::from(from),
             self.ledger_id,
             "icrc2_approve",
@@ -630,11 +783,29 @@ impl CkEthSetup {
             ).expect("failed to execute token transfer")),
             Result<Nat, ApproveError>
         )
-        .unwrap()
-        .expect("approve failed");
+        .unwrap();
         ApprovalFlow {
             setup: self,
-            _approval_id: approval_id,
+            approval_response,
+        }
+    }
+
+    pub fn call_minter_withdraw_eth(
+        self,
+        from: Principal,
+        amount: Nat,
+        recipient: String,
+    ) -> WithdrawalFlow {
+        let arg = WithdrawalArg { amount, recipient };
+        let message_id = self.env.send_ingress(
+            PrincipalId::from(from),
+            self.minter_id,
+            "withdraw_eth",
+            Encode!(&arg).expect("failed to encode withdraw args"),
+        );
+        WithdrawalFlow {
+            setup: self,
+            message_id,
         }
     }
 
@@ -761,8 +932,8 @@ impl Default for DepositParams {
             from_address: default_deposit_from_address(),
             recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
             amount: EXPECTED_BALANCE,
-            override_rpc_eth_get_block_by_number: Box::new(|builder| builder),
-            override_rpc_eth_get_logs: Box::new(|builder| builder),
+            override_rpc_eth_get_block_by_number: Box::new(identity),
+            override_rpc_eth_get_logs: Box::new(identity),
         }
     }
 }
@@ -874,27 +1045,26 @@ impl DepositFlow {
 
 pub struct ApprovalFlow {
     setup: CkEthSetup,
-    _approval_id: Nat,
+    approval_response: Result<Nat, ApproveError>,
 }
 
 impl ApprovalFlow {
-    pub fn call_minter_withdraw_eth(
-        self,
-        from: Principal,
-        amount: Nat,
-        recipient: String,
-    ) -> WithdrawalFlow {
-        let arg = WithdrawalArg { amount, recipient };
-        let message_id = self.setup.env.send_ingress(
-            PrincipalId::from(from),
-            self.setup.minter_id,
-            "withdraw_eth",
-            Encode!(&arg).expect("failed to encode withdraw args"),
+    pub fn expect_error(self, error: ApproveError) -> CkEthSetup {
+        assert_eq!(
+            self.approval_response,
+            Err(error),
+            "BUG: unexpected result during approval"
         );
-        WithdrawalFlow {
-            setup: self.setup,
-            message_id,
-        }
+        self.setup
+    }
+
+    pub fn expect_ok(self, ledger_approval_id: u64) -> CkEthSetup {
+        assert_eq!(
+            self.approval_response,
+            Ok(Nat::from(ledger_approval_id)),
+            "BUG: unexpected result during approval"
+        );
+        self.setup
     }
 }
 
@@ -938,83 +1108,287 @@ pub struct ProcessWithdrawal {
     withdrawal_request: RetrieveEthRequest,
 }
 
+pub struct ProcessWithdrawalParams {
+    pub override_rpc_eth_fee_history:
+        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+    pub override_rpc_latest_eth_get_transaction_count:
+        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+    pub override_rpc_eth_send_raw_transaction:
+        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+    pub override_rpc_finalized_eth_get_transaction_count:
+        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+    pub override_rpc_eth_get_transaction_receipt:
+        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+}
+
+impl Default for ProcessWithdrawalParams {
+    fn default() -> Self {
+        Self {
+            override_rpc_eth_fee_history: Box::new(identity),
+            override_rpc_latest_eth_get_transaction_count: Box::new(identity),
+            override_rpc_eth_send_raw_transaction: Box::new(identity),
+            override_rpc_finalized_eth_get_transaction_count: Box::new(identity),
+            override_rpc_eth_get_transaction_receipt: Box::new(identity),
+        }
+    }
+}
+
+impl ProcessWithdrawalParams {
+    pub fn with_mock_eth_get_transaction_receipt<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder + 'static,
+    >(
+        mut self,
+        override_mock: F,
+    ) -> Self {
+        self.override_rpc_eth_get_transaction_receipt = Box::new(override_mock);
+        self
+    }
+
+    pub fn with_mock_eth_fee_history<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder + 'static,
+    >(
+        mut self,
+        override_mock: F,
+    ) -> Self {
+        self.override_rpc_eth_fee_history = Box::new(override_mock);
+        self
+    }
+}
+
 impl ProcessWithdrawal {
     pub fn withdrawal_id(&self) -> &Nat {
         &self.withdrawal_request.block_index
     }
 
-    pub fn wait_and_validate_withdrawal(
-        self,
-        transaction_hash: String,
-        status: bool,
-    ) -> CkEthSetup {
-        let block_index = self.withdrawal_id().0.to_u64().unwrap();
-        assert_eq!(self.setup.retrieve_eth_status(block_index), Pending);
+    pub fn start_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal {
+        assert_eq!(
+            self.setup.retrieve_eth_status(self.withdrawal_id()),
+            Pending
+        );
         self.setup
             .env
             .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL);
+        FeeHistoryProcessWithdrawal {
+            setup: self.setup,
+            withdrawal_request: self.withdrawal_request,
+        }
+    }
 
-        MockJsonRpcProviders::when(JsonRpcMethod::EthFeeHistory)
-            .respond_for_all_with(fee_history())
+    pub fn wait_and_validate_withdrawal(
+        self,
+        params: ProcessWithdrawalParams,
+    ) -> TransactionReceiptProcessWithdrawal {
+        self.start_processing_withdrawals()
+            .retrieve_fee_history(params.override_rpc_eth_fee_history)
+            .expect_status(RetrieveEthStatus::Pending)
+            .retrieve_latest_transaction_count(params.override_rpc_latest_eth_get_transaction_count)
+            .expect_status(RetrieveEthStatus::TxCreated)
+            .send_raw_transaction(params.override_rpc_eth_send_raw_transaction)
+            .expect_status_sent()
+            .retrieve_finalized_transaction_count(
+                params.override_rpc_finalized_eth_get_transaction_count,
+            )
+            .expect_status_sent()
+            .retrieve_transaction_receipt(params.override_rpc_eth_get_transaction_receipt)
+    }
+}
+
+pub struct FeeHistoryProcessWithdrawal {
+    setup: CkEthSetup,
+    withdrawal_request: RetrieveEthRequest,
+}
+
+impl FeeHistoryProcessWithdrawal {
+    pub fn retrieve_fee_history<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
+    >(
+        self,
+        mut override_mock: F,
+    ) -> Self {
+        let default_eth_fee_history = MockJsonRpcProviders::when(JsonRpcMethod::EthFeeHistory)
+            .respond_for_all_with(fee_history());
+        (override_mock)(default_eth_fee_history)
             .build()
             .expect_rpc_calls(&self.setup);
+        self
+    }
 
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionCount)
-            .respond_for_all_with(transaction_count_response(0))
-            .with_request_params(json!([MINTER_ADDRESS, "latest"]))
-            .build()
-            .expect_rpc_calls(&self.setup);
+    pub fn expect_status(
+        self,
+        status: RetrieveEthStatus,
+    ) -> LatestTransactionCountProcessWithdrawal {
         assert_eq!(
-            self.setup.retrieve_eth_status(block_index),
-            RetrieveEthStatus::TxCreated
+            self.setup
+                .retrieve_eth_status(&self.withdrawal_request.block_index),
+            status,
+            "BUG: unexpected status while processing withdrawal"
         );
+        LatestTransactionCountProcessWithdrawal {
+            setup: self.setup,
+            withdrawal_request: self.withdrawal_request,
+        }
+    }
+}
 
-        MockJsonRpcProviders::when(JsonRpcMethod::EthSendRawTransaction)
-            .respond_with(JsonRpcProvider::Ankr, send_raw_transaction_response())
+pub struct LatestTransactionCountProcessWithdrawal {
+    setup: CkEthSetup,
+    withdrawal_request: RetrieveEthRequest,
+}
+
+impl LatestTransactionCountProcessWithdrawal {
+    pub fn retrieve_latest_transaction_count<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
+    >(
+        self,
+        mut override_mock: F,
+    ) -> Self {
+        let default_eth_get_latest_transaction_count =
+            MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionCount)
+                .respond_for_all_with(transaction_count_response(0))
+                .with_request_params(json!([MINTER_ADDRESS, "latest"]));
+        (override_mock)(default_eth_get_latest_transaction_count)
             .build()
             .expect_rpc_calls(&self.setup);
+        self
+    }
 
+    pub fn expect_status(self, status: RetrieveEthStatus) -> SendRawTransactionProcessWithdrawal {
         assert_eq!(
-            self.setup.retrieve_eth_status(block_index),
-            RetrieveEthStatus::TxSent(EthTransaction { transaction_hash })
+            self.setup
+                .retrieve_eth_status(&self.withdrawal_request.block_index),
+            status,
+            "BUG: unexpected status while processing withdrawal"
         );
+        SendRawTransactionProcessWithdrawal {
+            setup: self.setup,
+            withdrawal_request: self.withdrawal_request,
+        }
+    }
+}
 
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionCount)
-            .respond_for_all_with(transaction_count_response(1))
-            .with_request_params(json!([MINTER_ADDRESS, "finalized"]))
+pub struct SendRawTransactionProcessWithdrawal {
+    setup: CkEthSetup,
+    withdrawal_request: RetrieveEthRequest,
+}
+
+impl SendRawTransactionProcessWithdrawal {
+    pub fn send_raw_transaction<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
+    >(
+        self,
+        mut override_mock: F,
+    ) -> Self {
+        let default_eth_send_raw_transaction =
+            MockJsonRpcProviders::when(JsonRpcMethod::EthSendRawTransaction)
+                .respond_with(JsonRpcProvider::Ankr, send_raw_transaction_response());
+        (override_mock)(default_eth_send_raw_transaction)
             .build()
             .expect_rpc_calls(&self.setup);
+        self
+    }
 
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionReceipt)
-            .respond_for_all_with(transaction_receipt(
-                DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-                status,
-                EFFECTIVE_GAS_PRICE,
-            ))
+    pub fn expect_status_sent(self) -> FinalizedTransactionCountProcessWithdrawal {
+        let tx_hash = match self
+            .setup
+            .retrieve_eth_status(&self.withdrawal_request.block_index)
+        {
+            RetrieveEthStatus::TxSent(tx) => tx.transaction_hash,
+            other => panic!("BUG: unexpected transactions status {:?}", other),
+        };
+        FinalizedTransactionCountProcessWithdrawal {
+            setup: self.setup,
+            withdrawal_request: self.withdrawal_request,
+            sent_transaction_hash: tx_hash,
+        }
+    }
+}
+
+pub struct FinalizedTransactionCountProcessWithdrawal {
+    setup: CkEthSetup,
+    withdrawal_request: RetrieveEthRequest,
+    sent_transaction_hash: String,
+}
+
+impl FinalizedTransactionCountProcessWithdrawal {
+    pub fn retrieve_finalized_transaction_count<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
+    >(
+        self,
+        mut override_mock: F,
+    ) -> Self {
+        let default_eth_get_latest_transaction_count =
+            MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionCount)
+                .respond_for_all_with(transaction_count_response(1))
+                .with_request_params(json!([MINTER_ADDRESS, "finalized"]));
+        (override_mock)(default_eth_get_latest_transaction_count)
             .build()
             .expect_rpc_calls(&self.setup);
+        self
+    }
 
+    pub fn expect_status_sent(self) -> TransactionReceiptProcessWithdrawal {
+        assert_eq!(
+            self.setup
+                .retrieve_eth_status(&self.withdrawal_request.block_index),
+            RetrieveEthStatus::TxSent(EthTransaction {
+                transaction_hash: self.sent_transaction_hash.clone()
+            }),
+            "BUG: unexpected status while processing withdrawal"
+        );
+        TransactionReceiptProcessWithdrawal {
+            setup: self.setup,
+            withdrawal_request: self.withdrawal_request,
+            sent_transaction_hash: self.sent_transaction_hash,
+        }
+    }
+}
+
+pub struct TransactionReceiptProcessWithdrawal {
+    setup: CkEthSetup,
+    withdrawal_request: RetrieveEthRequest,
+    sent_transaction_hash: String,
+}
+
+impl TransactionReceiptProcessWithdrawal {
+    pub fn retrieve_transaction_receipt<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
+    >(
+        self,
+        mut override_mock: F,
+    ) -> Self {
+        let default_eth_get_transaction_receipt =
+            MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionReceipt)
+                .respond_for_all_with(transaction_receipt(self.sent_transaction_hash.clone()));
+        (override_mock)(default_eth_get_transaction_receipt)
+            .build()
+            .expect_rpc_calls(&self.setup);
+        self.check_audit_logs_and_upgrade()
+    }
+
+    fn check_audit_logs_and_upgrade(self) -> Self {
         self.setup.check_audit_log();
         self.setup.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
         self.setup.upgrade_minter();
+        self
+    }
 
-        let retrieve_eth_status = self.setup.retrieve_eth_status(block_index);
-        let eth_transaction = EthTransaction {
-            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-        };
-        if status {
-            assert_eq!(
-                retrieve_eth_status,
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(eth_transaction))
-            );
-        } else {
-            assert_eq!(
-                retrieve_eth_status,
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                    eth_transaction
-                ))
-            );
-        }
+    pub fn expect_status(self, status: RetrieveEthStatus) -> Self {
+        assert_eq!(
+            self.setup
+                .retrieve_eth_status(&self.withdrawal_request.block_index),
+            status,
+            "BUG: unexpected status while processing withdrawal"
+        );
+        self
+    }
+
+    pub fn expect_finalized_status(self, status: TxFinalizedStatus) -> CkEthSetup {
+        assert_eq!(
+            self.setup
+                .retrieve_eth_status(&self.withdrawal_request.block_index),
+            RetrieveEthStatus::TxFinalized(status),
+            "BUG: unexpected finalized status while processing withdrawal"
+        );
         self.setup
     }
 }
@@ -1030,6 +1404,7 @@ mod mock {
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponsePayload,
         PayloadBuilder, StateMachine,
     };
+    use serde::de::DeserializeOwned;
     use serde::Serialize;
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -1290,9 +1665,34 @@ mod mock {
             self
         }
 
+        pub fn modify_response<T: Serialize + DeserializeOwned, F: FnMut(&mut T)>(
+            mut self,
+            provider: JsonRpcProvider,
+            mutator: &mut F,
+        ) -> Self {
+            let previous_serialized_response = self
+                .responses
+                .remove(&provider)
+                .expect("BUG: no responses registered for provider");
+            let mut previous_response: T = serde_json::from_value(previous_serialized_response)
+                .expect("BUG: cannot deserialize previous response");
+            mutator(&mut previous_response);
+            self.respond_with(provider, previous_response)
+        }
+
         pub fn respond_for_all_with<T: Serialize + Clone>(mut self, response: T) -> Self {
             for provider in JsonRpcProvider::iter() {
                 self = self.respond_with(provider, response.clone());
+            }
+            self
+        }
+
+        pub fn modify_response_for_all<T: Serialize + DeserializeOwned, F: FnMut(&mut T)>(
+            mut self,
+            mutator: &mut F,
+        ) -> Self {
+            for provider in JsonRpcProvider::iter() {
+                self = self.modify_response(provider, mutator)
             }
             self
         }

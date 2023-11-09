@@ -281,9 +281,13 @@ fn ensure_debug_asserts_enabled() {
 }
 
 proptest! {
-    /// Checks `push_request` enforces sorted deadlines by inserting requests with random
-    /// deadlines and then checking whether `deadline_range_ends` is sorted.
-    fn output_queue_push_request_enforces_sorted_deadlines(
+    /// Checks `push_request` enforces `OutputQueue` invariants. This is implicitly checked at
+    /// the bottom of `OutputQueue::push_request()`. There is another explicit check here after
+    /// the fact to ensure this test doesn't just silently pass if the implicit check is removed.
+    /// Additionally, an expected `deadline_range_ends` is reconstructed and then compared to
+    /// the actual version at at the end.
+    #[test]
+    fn output_queue_push_request_enforces_invariants(
         (requests, deadlines) in (2..=10_usize)
         .prop_flat_map(|num_requests| {
             (
@@ -308,17 +312,19 @@ proptest! {
         {
             q.push_request(request, deadline).unwrap();
 
-            if let Some((first_deadline, end)) = expected_deadline_range_ends.front_mut() {
-                if *first_deadline >= deadline {
+            match expected_deadline_range_ends.back_mut() {
+                Some((back_deadline, end)) if *back_deadline >= deadline => {
                     *end = index;
                 }
-            } else {
-                expected_deadline_range_ends.push_back((deadline, index));
+                _ => {
+                    expected_deadline_range_ends.push_back((deadline, index));
+                }
             }
 
             index += 1;
         }
 
+        prop_assert!(q.check_invariants());
         prop_assert_eq!(expected_deadline_range_ends, q.deadline_range_ends);
     }
 }

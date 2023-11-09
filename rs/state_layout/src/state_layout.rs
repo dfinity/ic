@@ -453,6 +453,23 @@ impl StateLayout {
         Ok(())
     }
 
+    /// Mark files (but not dirs) in all checkpoints readonly.
+    pub fn mark_checkpoint_files_readonly(
+        &self,
+        thread_pool: &mut Option<scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        for height in self.checkpoint_heights()? {
+            let path = self.checkpoint(height)?.raw_path().to_path_buf();
+            sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
+                .map_err(|err| LayoutError::IoError {
+                    path,
+                    message: format!("Could not sync and mark readonly checkpoint {}", height),
+                    io_err: err,
+                })?;
+        }
+        Ok(())
+    }
+
     /// Create tip handler. Could only be called once as TipHandler is an exclusive owner of the
     /// tip folder.
     pub fn capture_tip_handler(&self) -> TipHandler {

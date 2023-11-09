@@ -3,13 +3,17 @@ use ic_base_types::SubnetId;
 use ic_recovery::{cli, error::RecoveryResult, util, NeuronArgs, RecoveryArgs};
 use ic_subnet_splitting::{
     subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
+    utils::canister_id_ranges_to_strings,
     validation::validate_artifacts,
 };
 use ic_types::ReplicaVersion;
-use slog::Logger;
+use slog::{info, warn, Logger};
 use url::Url;
 
 use std::path::PathBuf;
+
+const FORUM_ANNOUNCEMENT_TEMPLATE_URL: &str =
+    "https://wiki.internetcomputer.org/wiki/Subnet_splitting_forum_announcement_template";
 
 #[derive(Parser)]
 struct SplitArgs {
@@ -95,9 +99,30 @@ fn subnet_splitting(
     mut neuron_args: Option<NeuronArgs>,
 ) {
     cli::print_step(&logger, "Subnet Splitting");
+
+    info!(
+        logger,
+        "Splitting canisters within ranges {:?} out of subnet with id {} \
+        into subnet with id {}",
+        canister_id_ranges_to_strings(&subnet_splitting_args.canister_id_ranges_to_move),
+        subnet_splitting_args.source_subnet_id,
+        subnet_splitting_args.destination_subnet_id
+    );
+    warn!(
+        logger,
+        "Don't forget to announce at the forum the upcoming series of proposals to split the subnet"
+    );
+    warn!(
+        logger,
+        "See the template at: {}", FORUM_ANNOUNCEMENT_TEMPLATE_URL
+    );
+
+    cli::wait_for_confirmation(&logger);
+
     if !recovery_args.skip_prompts {
         cli::wait_for_confirmation(&logger);
     }
+
     if neuron_args.is_none() && !recovery_args.test_mode {
         neuron_args = Some(cli::read_neuron_args(&logger));
     }

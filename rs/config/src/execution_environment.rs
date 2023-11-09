@@ -1,5 +1,5 @@
 use crate::embedders::Config as EmbeddersConfig;
-use crate::{flag_status::FlagStatus, subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS};
+use crate::flag_status::FlagStatus;
 use ic_base_types::{CanisterId, NumSeconds};
 use ic_types::{
     Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
@@ -57,6 +57,10 @@ const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
 pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
+
+/// The maximum number of instructions for inspect_message calls.
+const MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS: NumInstructions =
+    NumInstructions::new(200_000_000);
 
 /// The maximum depth of call graphs allowed for composite query calls
 pub(crate) const MAX_QUERY_CALL_DEPTH: usize = 6;
@@ -242,7 +246,8 @@ impl Default for Config {
         Self {
             embedders_config: EmbeddersConfig::default(),
             create_funds_whitelist: String::default(),
-            max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
+            max_instructions_for_message_acceptance_calls:
+                MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS,
             subnet_memory_threshold: SUBNET_MEMORY_THRESHOLD,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
             subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,

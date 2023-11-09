@@ -1,6 +1,8 @@
 [Unit]
 Description=Generate ssh keys on first boot
-RequiresMountsFor=/var
+# We must wait for var to be mounted over before interacting with it
+After=var.mount
+Wants=var.mount
 Before=ssh.service
 
 [Service]

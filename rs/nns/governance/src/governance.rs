@@ -1643,19 +1643,9 @@ impl Governance {
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
-        let neuron_indexes_migration = heap_governance_proto
-            .migrations
-            .as_ref()
-            .and_then(|migrations| migrations.neuron_indexes_migration.clone())
-            .unwrap_or_default();
-
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored(
-                heap_neurons,
-                topic_followee_map,
-                neuron_indexes_migration,
-            ),
+            neuron_store: NeuronStore::new_restored(heap_neurons, topic_followee_map),
             env,
             ledger,
             cmc,
@@ -6603,24 +6593,8 @@ impl Governance {
     }
 
     fn maybe_run_validations(&mut self) {
-        // We do not run validations when any migration is in progress since the data might not be
-        // valid yet.
-        if !crate::neuron_stable_indexes_building_is_enabled() {
-            return;
-        }
         // Running validations might increase heap size. Do not run it when heap should not grow.
         if self.check_heap_can_grow().is_err() {
-            return;
-        }
-        if self
-            .heap_data
-            .migrations
-            .as_ref()
-            .and_then(|migrations| migrations.neuron_indexes_migration.clone())
-            .unwrap_or_default()
-            .migration_status()
-            != MigrationStatus::Succeeded
-        {
             return;
         }
         self.neuron_data_validator

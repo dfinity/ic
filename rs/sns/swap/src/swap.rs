@@ -522,27 +522,9 @@ impl Swap {
             })
     }
 
-    /// The maximum overall amount (in ICP e8s) that can be collected in this swap.
-    pub fn max_total_participation_e8s(&self) -> u64 {
-        self.params
-            .as_ref()
-            .expect("Expected params to be set")
-            .max_direct_participation_icp_e8s
-            .expect("Expected params.max_direct_participation_icp_e8s to be set")
-            .saturating_add(self.max_neurons_fund_participation_e8s())
-    }
-
     /// The total amount of ICP e8s contributed by the Neurons' Fund.
     pub fn current_neurons_fund_participation_e8s(&self) -> u64 {
         self.neurons_fund_participation_icp_e8s.unwrap_or(0)
-    }
-
-    /// The maximum Neurons' Fund participation amount (in ICP e8s).
-    pub fn max_neurons_fund_participation_e8s(&self) -> u64 {
-        self.cf_participants
-            .iter()
-            .map(|x| x.participant_total_icp_e8s())
-            .fold(0, |sum, v| sum.saturating_add(v))
     }
 
     /// The total amount of ICP e8s contributed by direct participants.
@@ -613,15 +595,28 @@ impl Swap {
                         return;
                     }
                 };
-                let neurons_fund_participation_icp_e8s = match participation
-                    .apply(direct_participation_icp_e8s)
-                {
-                    Ok(neurons_fund_participation_icp_e8s) => neurons_fund_participation_icp_e8s,
+                let neurons_fund_participation_icp_e8s = match MatchedParticipationFunction::apply(
+                    &participation,
+                    direct_participation_icp_e8s,
+                ) {
+                    Ok(neurons_fund_participation_icp_e8s) => {
+                        // Capping mitigates a potentially confusing situation in which the Swap's
+                        // best `neurons_fund_participation_icp_e8s` estimate for whatever reason
+                        // exceeds the amount allocated by the Neurons' Fund before the swap started.
+                        neurons_fund_participation_icp_e8s.min(
+                            // Defaulting to `u64::MAX` since we are computing minimum. Practically,
+                            // this shouldn't happen, as `max_neurons_fund_participation_icp_e8s`
+                            // is expected to be set here.
+                            constraints
+                                .max_neurons_fund_participation_icp_e8s
+                                .unwrap_or(u64::MAX),
+                        )
+                    }
                     Err(err) => {
                         log!(
                             ERROR,
                             "Cannot compute neurons_fund_participation_icp_e8s for \
-                            direct_participation_icp_e8s={}: {}",
+                        direct_participation_icp_e8s={}: {}",
                             direct_participation_icp_e8s,
                             err.to_string(),
                         );
@@ -644,8 +639,12 @@ impl Swap {
             }
             (None, _) => {
                 // Fixed funding scheme
-                self.neurons_fund_participation_icp_e8s =
-                    Some(self.max_neurons_fund_participation_e8s());
+                self.neurons_fund_participation_icp_e8s = Some(
+                    self.cf_participants
+                        .iter()
+                        .map(|x| x.participant_total_icp_e8s())
+                        .fold(0, |sum, v| sum.saturating_add(v)),
+                )
             }
         }
     }
@@ -1366,8 +1365,8 @@ impl Swap {
         if new_balance_e8s.saturating_sub(old_amount_icp_e8s) >= max_increment_e8s {
             log!(
                 INFO,
-                "Swap has reached ICP target of {}",
-                self.max_total_participation_e8s()
+                "Swap has reached the direct participation target of {} ICP e8s.",
+                self.max_direct_participation_e8s(),
             );
         }
 

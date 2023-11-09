@@ -9,11 +9,12 @@ use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option, CanisterId, NodeId, RegistryVersion, Time,
+    node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, NodeId,
+    RegistryVersion, Time,
 };
 use phantom_newtype::Id;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom},
     sync::Arc,
 };
@@ -193,6 +194,7 @@ pub struct SubnetCallContextManager {
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
     canister_management_calls: CanisterManagementCalls,
+    pub raw_rand_contexts: VecDeque<RawRandContext>,
 }
 
 impl SubnetCallContextManager {
@@ -358,6 +360,19 @@ impl SubnetCallContextManager {
     pub fn stop_canister_calls_len(&self) -> usize {
         self.canister_management_calls.stop_canister_calls_len()
     }
+
+    pub fn push_raw_rand_request(
+        &mut self,
+        request: Request,
+        execution_round_id: ExecutionRound,
+        time: Time,
+    ) {
+        self.raw_rand_contexts.push_back(RawRandContext {
+            request,
+            execution_round_id,
+            time,
+        });
+    }
 }
 
 impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
@@ -454,6 +469,11 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .canister_management_calls
                 .stop_canister_call_manager
                 .next_call_id,
+            raw_rand_contexts: item
+                .raw_rand_contexts
+                .iter()
+                .map(|context| context.into())
+                .collect(),
         }
     }
 }
@@ -548,6 +568,11 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             next_call_id: item.next_stop_canister_call_id,
             stop_canister_calls,
         };
+        let mut raw_rand_contexts = VecDeque::<RawRandContext>::new();
+        for pb_context in item.raw_rand_contexts {
+            let context = RawRandContext::try_from((time, pb_context))?;
+            raw_rand_contexts.push_back(context);
+        }
 
         Ok(Self {
             next_callback_id: item.next_callback_id,
@@ -561,6 +586,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 install_code_call_manager,
                 stop_canister_call_manager,
             },
+            raw_rand_contexts,
         })
     }
 }
@@ -947,6 +973,41 @@ impl TryFrom<(Time, pb_metadata::StopCanisterCall)> for StopCanisterCall {
     }
 }
 
+/// Struct for tracking the required information needed for creating a response.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RawRandContext {
+    pub request: Request,
+    pub time: Time,
+    pub execution_round_id: ExecutionRound,
+}
+
+impl From<&RawRandContext> for pb_metadata::RawRandContext {
+    fn from(context: &RawRandContext) -> Self {
+        pb_metadata::RawRandContext {
+            request: Some((&context.request).into()),
+            execution_round_id: context.execution_round_id.get(),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::RawRandContext)> for RawRandContext {
+    type Error = ProxyDecodeError;
+    fn try_from((time, context): (Time, pb_metadata::RawRandContext)) -> Result<Self, Self::Error> {
+        let request: Request = try_from_option_field(context.request, "RawRandContext::request")?;
+
+        Ok(RawRandContext {
+            request,
+            execution_round_id: ExecutionRound::new(context.execution_round_id),
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
 mod testing {
     use super::*;
 
@@ -983,6 +1044,7 @@ mod testing {
             bitcoin_get_successors_contexts: Default::default(),
             bitcoin_send_transaction_internal_contexts: Default::default(),
             canister_management_calls,
+            raw_rand_contexts: Default::default(),
         };
     }
 }
