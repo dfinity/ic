@@ -63,6 +63,8 @@ impl StateSyncManagerHandlerMetrics {
 pub(crate) struct OngoingStateSyncMetrics {
     pub download_task_monitor: TaskMonitor,
     pub allowed_parallel_downloads: IntGauge,
+    pub chunk_size_compressed_total: IntCounter,
+    pub chunk_size_decompressed_total: IntCounter,
     pub chunks_to_download_calls_total: IntCounter,
     pub chunks_to_download_total: IntCounter,
     pub peers_serving_state: IntGauge,
@@ -81,6 +83,14 @@ impl OngoingStateSyncMetrics {
             allowed_parallel_downloads: metrics_registry.int_gauge(
                 "state_sync_manager_allowed_parallel_downloads",
                 "Number outstanding download requests that are allowed.",
+            ),
+            chunk_size_compressed_total: metrics_registry.int_counter(
+                "state_sync_manager_chunk_size_compressed_total",
+                "Sum of all chunks received from transport.",
+            ),
+            chunk_size_decompressed_total: metrics_registry.int_counter(
+                "state_sync_manager_chunk_size_decompressed_total",
+                "Sum of all chunks received after decompresssion.",
             ),
             chunks_to_download_calls_total: metrics_registry.int_counter(
                 "state_sync_manager_chunks_to_download_calls_total",
