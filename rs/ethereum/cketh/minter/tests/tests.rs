@@ -69,6 +69,7 @@ fn should_deposit_and_withdraw() {
         .expect_withdrawal_request_accepted();
 
     let withdrawal_id = cketh.withdrawal_id().clone();
+    let time = cketh.setup.env.get_time().as_nanos_since_unix_epoch();
     let cketh = cketh
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
         .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
@@ -86,6 +87,7 @@ fn should_deposit_and_withdraw() {
             ledger_burn_index: withdrawal_id.clone(),
             from: caller,
             from_subaccount: None,
+            created_at: Some(time),
         },
         EventPayload::CreatedTransaction {
             withdrawal_id: withdrawal_id.clone(),
@@ -341,6 +343,8 @@ fn should_reimburse() {
     let balance_before_withdrawal = cketh.balance_of(caller);
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
+    let time_before_withdrawal = cketh.env.get_time().as_nanos_since_unix_epoch();
+
     let cketh = cketh
         .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
         .expect_withdrawal_request_accepted();
@@ -393,6 +397,7 @@ fn should_reimburse() {
             ledger_burn_index: withdrawal_id.clone(),
             from: caller,
             from_subaccount: None,
+            created_at: Some(time_before_withdrawal),
         },
         EventPayload::CreatedTransaction {
             withdrawal_id: withdrawal_id.clone(),

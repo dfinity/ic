@@ -25,6 +25,15 @@
 {% endmatch %}
 {%- endmacro %}
 
+{% macro format_opt_timestamp(maybe_ts) -%}
+{% match maybe_ts %}
+  {%- when Some with (ts) -%}
+  {{ ts|timestamp_to_datetime }}
+  {%- when None -%}
+  N/A
+{% endmatch %}
+{%- endmacro %}
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -273,6 +282,7 @@
                     <th>Ledger Burn Index</th>
                     <th>Destination</th>
                     <th>Amount (Wei)</th>
+                    <th>Created At</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -281,6 +291,7 @@
                     <td class="numeric">{{ withdrawal.ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(withdrawal.destination) %}</td>
                     <td class="numeric">{{ withdrawal.withdrawal_amount }}</td>
+                    <td>{% call format_opt_timestamp(withdrawal.created_at) %}</td>
                 </tr>
                 {% endfor %}
                 </tbody>

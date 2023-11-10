@@ -19,7 +19,7 @@ ic-stable-structures = { workspace = true }
 num-traits = "0.2.14"
 serde = { workspace = true }
 serde_json = { workspace = true }
-time = { version = "0.3.20", features = ["formatting"] }
+time = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"

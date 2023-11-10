@@ -22,16 +22,24 @@ use std::fmt;
 /// Ethereum withdrawal request issued by the user.
 #[derive(Clone, Eq, PartialEq, Encode, Decode)]
 pub struct EthWithdrawalRequest {
+    /// The ETH amount that the receiver will get, not accounting for the Ethereum transaction fees.
     #[n(0)]
     pub withdrawal_amount: Wei,
+    /// The address to which the minter will send ETH.
     #[n(1)]
     pub destination: Address,
+    /// The transaction ID of the ckETH burn operation.
     #[cbor(n(2), with = "crate::cbor::id")]
     pub ledger_burn_index: LedgerBurnIndex,
+    /// The owner of the account from which the minter burned ckETH.
     #[cbor(n(3), with = "crate::cbor::principal")]
     pub from: Principal,
+    /// The subaccount from which the minter burned ckETH.
     #[n(4)]
     pub from_subaccount: Option<Subaccount>,
+    /// The IC time at which the withdrawal request arrived.
+    #[n(5)]
+    pub created_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
@@ -638,6 +646,14 @@ impl EthTransactions {
         ensure_eq!(self.reimbursed, other.reimbursed);
 
         Ok(())
+    }
+
+    pub fn oldest_incomplete_withdrawal_timestamp(&self) -> Option<u64> {
+        self.withdrawal_requests
+            .iter()
+            .chain(self.maybe_reimburse.values())
+            .flat_map(|req| req.created_at.into_iter())
+            .min()
     }
 }
 

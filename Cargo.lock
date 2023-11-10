@@ -5740,6 +5740,7 @@ dependencies = [
  "strum_macros 0.24.3",
  "thiserror",
  "thousands",
+ "time 0.3.22",
 ]
 
 [[package]]

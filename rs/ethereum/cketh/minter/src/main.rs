@@ -174,6 +174,8 @@ async fn withdraw_eth(
         ledger_canister_id,
     };
 
+    let now = ic_cdk::api::time();
+
     log!(INFO, "[withdraw]: burning {:?}", amount);
     match client
         .transfer_from(TransferFromArgs {
@@ -183,7 +185,8 @@ async fn withdraw_eth(
             amount: Nat::from(amount),
             fee: None,
             memo: None,
-            created_at_time: None,
+            created_at_time: None, // We don't set this field to disable transaction deduplication
+                                   // which is unnecessary in canister-to-canister calls.
         })
         .await
     {
@@ -196,6 +199,7 @@ async fn withdraw_eth(
                 ledger_burn_index,
                 from: caller,
                 from_subaccount: None,
+                created_at: Some(now),
             };
 
             log!(
@@ -371,12 +375,14 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     ledger_burn_index,
                     from,
                     from_subaccount,
+                    created_at,
                 }) => EP::AcceptedEthWithdrawalRequest {
                     withdrawal_amount: withdrawal_amount.into(),
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),
                     from,
                     from_subaccount: from_subaccount.map(|s| s.0),
+                    created_at,
                 },
                 EventType::CreatedTransaction {
                     withdrawal_id,
@@ -486,6 +492,18 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_total_unspent_tx_fees",
                     s.eth_balance.total_unspent_tx_fees().as_f64(),
                     "Total amount of unspent fees across all finalized transaction ckETH -> ETH",
+                )?;
+
+                let now_nanos = ic_cdk::api::time();
+                let age_nanos = now_nanos.saturating_sub(
+                    s.eth_transactions
+                        .oldest_incomplete_withdrawal_timestamp()
+                        .unwrap_or(now_nanos),
+                );
+                w.encode_gauge(
+                    "cketh_oldest_incomplete_eth_withdrawal_request_age_seconds",
+                    (age_nanos / 1_000_000_000) as f64,
+                    "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
                 Ok(())

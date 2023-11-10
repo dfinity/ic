@@ -259,6 +259,7 @@ pub mod events {
             ledger_burn_index: Nat,
             from: Principal,
             from_subaccount: Option<[u8; 32]>,
+            created_at: Option<u64>,
         },
         CreatedTransaction {
             withdrawal_id: Nat,
