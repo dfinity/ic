@@ -33,12 +33,9 @@ enum Commands {
     },
     /// Delete a testnet
     Delete {
-        /// Testnet name (excludes namespace)
-        #[arg(short, long, conflicts_with = "namespace")]
-        name: Option<String>,
-        /// Testnet namespace
-        #[arg(long)]
-        namespace: Option<String>,
+        /// Testnet index
+        #[arg(short, long)]
+        index: u32,
     },
     /// List all testnets
     List {},
@@ -66,17 +63,17 @@ async fn main() -> Result<()> {
                 .create()
                 .await?;
         }
-        Some(Commands::Delete { name, namespace }) => {
-            TNet::delete(name.clone(), namespace.clone()).await?;
+        Some(Commands::Delete { index }) => {
+            TNet::delete(*index).await?;
         }
         Some(Commands::List {}) => {
             let list = TNet::list().await?;
             if list.is_empty() {
                 println!("No resources found");
             } else {
-                println!(" {:>10}     NAME", "NAMESPACE");
-                for (ns, name) in list {
-                    println!(" {:>10}  ⎈  {}", ns, name);
+                println!(" {:>10}     NAME", "ID");
+                for (id, name) in list {
+                    println!(" {:>10}  ⎈  {}", id, name);
                 }
             }
         }

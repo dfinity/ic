@@ -5339,12 +5339,12 @@ tnet-test:
             -n "$NAME"
       fi
 
-      NS=$(./$TNETCTL list | grep $NAME | awk '{ print $1 }')
-      kubectl -n "$NS" wait --timeout=120s --for=condition=PodScheduled pod/tnet-operator
+      TNET_OPERATOR=$(./$TNETCTL list | grep $NAME | awk '{ print $1 }')-operator
+      kubectl -n tnets wait --timeout=120s --for=condition=PodScheduled pod/"$TNET_OPERATOR"
       sleep 30
-      kubectl -n "$NS" logs -f tnet-operator -c init &
+      kubectl -n tnets logs -f "$TNET_OPERATOR" -c init &
       timeout 10m \
-          bash -c "kubectl -n $NS logs -f tnet-operator -c init | grep -q 'All NNS canisters have been set up'"
+          bash -c "kubectl -n tnets logs -f $TNET_OPERATOR -c init | grep -q 'All NNS canisters have been set up'"
       kill "$(jobs -p)" || true
   tags:
     - dfinity-ic

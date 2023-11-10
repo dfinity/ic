@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{anyhow, Result};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::DynamicObject;
 use kube::api::{Patch, PatchParams};
 use kube::Api;
@@ -198,7 +199,6 @@ spec:
 pub async fn prepare_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) -> Result<()> {
     let vm_name: String = node.name.as_ref().unwrap().to_string();
     let vmi_name: String = format!("{}-disk-setup", &node.name.as_ref().unwrap());
-    let namespace: String = tnet.namespace.as_ref().unwrap().to_string();
     let ipv6_addr: String = node.ipv6_addr.unwrap().to_string();
     let url_image: String = tnet.image_url.clone();
     let url_config: String = node.config_url.as_ref().unwrap().to_string();
@@ -207,12 +207,13 @@ pub async fn prepare_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) 
     let yaml = VMI_SETUP_TEMPLATE
         .replace("{vm_name}", &vm_name)
         .replace("{vmi_name}", &vmi_name)
-        .replace("{tnet}", &namespace)
+        .replace("{tnet}", &TNet::owner_config_map_name(tnet.index.unwrap()))
         .replace("{ipv6}", &ipv6_addr)
         .replace("{url_image}", &url_image)
         .replace("{url_config}", &url_config);
-    // println!("{}", yaml);
-    let data: serde_json::Value = serde_yaml::from_str(&yaml)?;
+
+    let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
+    data.metadata.owner_references = vec![tnet.owner_reference()].into();
     let response = k8s_client
         .api_vmi
         .patch(
@@ -232,10 +233,10 @@ pub async fn create_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) -
 
     wait_for_event(
         k8s_client.client.clone(),
+        &tnet.namespace,
         "Signaled Deletion",
         "VirtualMachineInstance",
         &vmi_name,
-        tnet.namespace.as_ref().unwrap(),
         600,
     )
     .await
@@ -270,9 +271,10 @@ pub async fn create_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) -
     let yaml = VM_HOST_DISK_TEMPLATE
         .replace("{nodename}", nodename)
         .replace("{name}", &vm_name)
-        .replace("{tnet}", tnet.namespace.as_ref().unwrap())
+        .replace("{tnet}", &TNet::owner_config_map_name(tnet.index.unwrap()))
         .replace("{ipv6}", &node.ipv6_addr.as_ref().unwrap().to_string());
-    let data: serde_json::Value = serde_yaml::from_str(&yaml)?;
+    let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
+    data.metadata.owner_references = vec![tnet.owner_reference()].into();
     let response = &k8s_client
         .api_vm
         .patch(
@@ -287,12 +289,18 @@ pub async fn create_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) -
     Ok(())
 }
 
-pub async fn create_vm(api: &Api<DynamicObject>, name: &str, ipv6: &str) -> Result<()> {
+pub async fn create_vm(
+    api: &Api<DynamicObject>,
+    name: &str,
+    ipv6: &str,
+    owner: OwnerReference,
+) -> Result<()> {
     info!("Creating virtual machine {}", name);
     let yaml = VM_PVC_TEMPLATE
         .replace("{name}", name)
         .replace("{ipv6}", ipv6);
-    let data: serde_json::Value = serde_yaml::from_str(&yaml)?;
+    let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
+    data.metadata.owner_references = vec![owner].into();
     let response = api
         .patch(
             name,

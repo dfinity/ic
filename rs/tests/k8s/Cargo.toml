@@ -9,6 +9,7 @@ edition = "2021"
 release = false
 
 [dependencies]
+backon = "0.4.1"
 ic-prep = { path = "../../prep" }
 ic-types = { path = "../../types/types" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
