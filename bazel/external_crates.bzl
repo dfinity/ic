@@ -910,6 +910,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                     "zeroize",
                 ],
             ),
+            "rgb": crate.spec(
+                version = "^0.8.37",
+            ),
             "regex": crate.spec(
                 version = "^1.3.9",
             ),
@@ -1152,6 +1155,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "tester": crate.spec(
                 version = "^0.7.0",
+            ),
+            "textplots": crate.spec(
+                version = "^0.8",
             ),
             "thiserror": crate.spec(
                 version = "^1.0",

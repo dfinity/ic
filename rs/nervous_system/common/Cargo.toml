@@ -35,6 +35,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
 json5 = "0.4.1"
+lazy_static = "1.4.0"
 maplit = "1.0.2"
 mockall = "0.11.1"
 priority-queue = "1.3.1"
@@ -42,6 +43,9 @@ prost = { workspace = true }
 rust_decimal = "1.25"
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+assert_matches = "1.3.0"
 
 [build-dependencies]
 build-info-build = { workspace = true }

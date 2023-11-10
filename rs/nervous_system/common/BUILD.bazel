@@ -26,6 +26,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:json5",
+    "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
     "@crate_index//:priority-queue",
@@ -37,6 +38,7 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
+    "@crate_index//:rust_decimal_macros",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -47,7 +49,12 @@ DEV_DEPENDENCIES = [
     "//rs/nns/governance",
     "@crate_index//:proptest",
     "@crate_index//:serde_bytes",
-]
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "@crate_index//:assert_matches",
+    ],
+})
 
 MACRO_DEV_DEPENDENCIES = [
     "@crate_index//:serde_derive",

@@ -1,5 +1,5 @@
 {
-  "checksum": "1405c4fd18223a79e1291e168047d466471178d3bd2c2110b545a404864aa1fb",
+  "checksum": "744a446ffe12412c22e1975d49b0a21e54747bab82b84578ac8b5e70f5be330a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13829,6 +13829,10 @@
               "target": "retain_mut"
             },
             {
+              "id": "rgb 0.8.37",
+              "target": "rgb"
+            },
+            {
               "id": "ring 0.16.20",
               "target": "ring"
             },
@@ -14040,6 +14044,10 @@
             {
               "id": "tester 0.7.0",
               "target": "tester"
+            },
+            {
+              "id": "textplots 0.8.4",
+              "target": "textplots"
             },
             {
               "id": "thiserror 1.0.43",
@@ -14833,6 +14841,49 @@
         "version": "0.11.0"
       },
       "license": "MIT"
+    },
+    "drawille 0.3.0": {
+      "name": "drawille",
+      "version": "0.3.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/drawille/0.3.0/download",
+          "sha256": "e64e461c3f1e69d99372620640b3fd5f0309eeda2e26e4af69f6760c0e1df845"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "drawille",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "drawille",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "colored 2.0.4",
+              "target": "colored"
+            },
+            {
+              "id": "fnv 1.0.7",
+              "target": "fnv"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.3.0"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "dtoa 1.0.9": {
       "name": "dtoa",
@@ -24058,7 +24109,7 @@
               "target": "quick_xml"
             },
             {
-              "id": "rgb 0.8.36",
+              "id": "rgb 0.8.37",
               "target": "rgb"
             },
             {
@@ -41617,13 +41668,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "rgb 0.8.36": {
+    "rgb 0.8.37": {
       "name": "rgb",
-      "version": "0.8.36",
+      "version": "0.8.37",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rgb/0.8.36/download",
-          "sha256": "20ec2d3e3fc7a92ced357df9cebd5a10b6fb2aa1ee797bf7e9ce2f17dffc8f59"
+          "url": "https://crates.io/api/v1/crates/rgb/0.8.37/download",
+          "sha256": "05aaa8004b64fd573fc9d002f4e632d51ad4f026c2b5ba95fcb6c2f32c2c47d8"
         }
       },
       "targets": [
@@ -41660,7 +41711,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.8.36"
+        "version": "0.8.37"
       },
       "license": "MIT"
     },
@@ -50113,6 +50164,49 @@
         "version": "0.7.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "textplots 0.8.4": {
+      "name": "textplots",
+      "version": "0.8.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/textplots/0.8.4/download",
+          "sha256": "2171116bd71c738068fe42091b1509d70135a768443c9afd6c179b83dc6cdc79"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "textplots",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "textplots",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "drawille 0.3.0",
+              "target": "drawille"
+            },
+            {
+              "id": "rgb 0.8.37",
+              "target": "rgb"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.8.4"
+      },
+      "license": "MIT"
     },
     "textwrap 0.16.0": {
       "name": "textwrap",
