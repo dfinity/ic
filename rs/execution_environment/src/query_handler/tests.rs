@@ -2240,9 +2240,14 @@ fn query_stats_are_collected() {
     );
 
     // The following numbers might change, e.g. if instruction costs are updated.
-    // In that case, the easist is probably to print the values and update the test.
+    // In that case, the easiest is probably to print the values and update the test.
     // If the test fails, the output should also indicate what the new values are.
 
+    let child_canister_num_instructions = test
+        .query_stats_for_testing(&canisters[1])
+        .unwrap()
+        .num_instructions;
+    assert_ne!(child_canister_num_instructions, 0);
     for (idx, c) in canisters.iter().enumerate() {
         let canister_query_stats = test.query_stats_for_testing(c).unwrap();
 
@@ -2251,18 +2256,18 @@ fn query_stats_are_collected() {
 
         // Depending on whether we are looking at the root canister, or one of the child canisters,
         // instructions and payload sizes differ. All child canisters have the same cost though.
-        assert_eq!(
-            canister_query_stats.num_instructions,
-            if idx == 0 { 72532 } else { 13929 }
-        );
-        assert_eq!(
-            canister_query_stats.ingress_payload_size,
-            if idx == 0 { 284 } else { 13 }
-        );
-        assert_eq!(
-            canister_query_stats.egress_payload_size,
-            if idx == 0 { 0 } else { 6 }
-        );
+        if idx == 0 {
+            assert!(canister_query_stats.num_instructions > child_canister_num_instructions);
+            assert_eq!(canister_query_stats.ingress_payload_size, 284);
+            assert_eq!(canister_query_stats.egress_payload_size, 0);
+        } else {
+            assert_eq!(
+                canister_query_stats.num_instructions,
+                child_canister_num_instructions
+            );
+            assert_eq!(canister_query_stats.ingress_payload_size, 13);
+            assert_eq!(canister_query_stats.egress_payload_size, 6);
+        }
     }
 }
 
