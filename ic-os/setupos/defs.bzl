@@ -31,6 +31,7 @@ def image_deps(mode, _malicious = False):
         "rootfs": {
             # base layer
             ":rootfs-tree.tar": "/",
+            "//publish/binaries:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
         },
 
         # Set various configuration values

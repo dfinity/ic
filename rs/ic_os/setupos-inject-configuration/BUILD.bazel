@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap_4_0_0",
     "@crate_index//:ipnet",
@@ -15,9 +16,7 @@ DEPENDENCIES = [
     "//rs/ic_os/partition_tools",
 ]
 
-DEV_DEPENDENCIES = [
-    "@crate_index//:once_cell",
-]
+DEV_DEPENDENCIES = []
 
 MACRO_DEPENDENCIES = []
 

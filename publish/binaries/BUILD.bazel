@@ -7,6 +7,8 @@ LINUX_ONLY = [
     "vsock_guest",
     "vsock_host",
     "guestos_tool",
+    "hostos_tool",
+    "setupos_tool",
 ]
 
 NO_STRIP = [
@@ -28,6 +30,7 @@ BINARIES = {
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
     "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
+    "hostos_tool": "//rs/ic_os/hostos_tool:hostos_tool",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
@@ -53,6 +56,7 @@ BINARIES = {
     "orchestrator": "//rs/orchestrator",
     "prometheus-config-updater": "//rs/observability/prometheus_config_updater:prometheus_config_updater",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
+    "setupos_tool": "//rs/ic_os/setupos_tool:setupos_tool",
     "snptool": "//rs/ic_os/snptool:snptool",
     "sns": "//rs/sns/cli:sns",
     "sns-test-feature": "//rs/sns/cli:sns--test_feature",
@@ -90,6 +94,7 @@ BINARIES = {
             "//ic-os/boundary-guestos/envs:__subpackages__",
             "//ic-os/guestos/envs:__subpackages__",
             "//ic-os/hostos/envs:__subpackages__",
+            "//ic-os/setupos/envs:__subpackages__",
         ],
     )
     for name in BINARIES

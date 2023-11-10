@@ -1,0 +1,15 @@
+[package]
+name = "utils"
+version = "1.0.0"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+anyhow = {version = "^1"} 
+serde = { version = "^1.0.171", features = ["derive"] }
+serde_json = {version = "^1.0.40"}
+serde_with = "1.6.2"
+url = { version = "2.1.1", features = ["serde"] }
+
+[dev-dependencies]
+once_cell = "1.8"
+

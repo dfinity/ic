@@ -1,5 +1,5 @@
 {
-  "checksum": "9a654349c69091970381a485baba296828f4a55f536c6feb1b902fd2b961df2e",
+  "checksum": "86d79655c6bc22533e199853b543083ada5acdc6161e3cc1fd450e91dd0bc395",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8464,6 +8464,7 @@
             "error-context",
             "help",
             "std",
+            "string",
             "suggestions",
             "usage"
           ],
@@ -8524,6 +8525,7 @@
             "error-context",
             "help",
             "std",
+            "string",
             "suggestions",
             "usage"
           ],
@@ -13824,6 +13826,10 @@
             {
               "id": "pin-project-lite 0.2.13",
               "target": "pin_project_lite"
+            },
+            {
+              "id": "ping 0.5.0",
+              "target": "ping"
             },
             {
               "id": "pkcs8 0.10.2",
@@ -35812,6 +35818,53 @@
         "version": "0.1.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "ping 0.5.0": {
+      "name": "ping",
+      "version": "0.5.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ping/0.5.0/download",
+          "sha256": "985c8af0584bf35ecfb95a65b74a457782966e1ab8f2c94c01697a36432a5814"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ping",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ping",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "socket2 0.4.9",
+              "target": "socket2"
+            },
+            {
+              "id": "thiserror 1.0.49",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.0"
+      },
+      "license": "MIT"
     },
     "pkcs1 0.7.5": {
       "name": "pkcs1",

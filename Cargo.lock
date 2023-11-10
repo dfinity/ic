@@ -2095,6 +2095,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "config"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "config_writer_common"
 version = "0.1.0"
 dependencies = [
@@ -4291,6 +4298,17 @@ dependencies = [
  "libc",
  "match_cfg",
  "winapi",
+]
+
+[[package]]
+name = "hostos_tool"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap 4.4.6",
+ "config",
+ "network",
+ "utils",
 ]
 
 [[package]]
@@ -13204,6 +13222,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "network"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "config",
+ "hex",
+ "ping",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sha2 0.10.6",
+ "utils",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14220,6 +14254,17 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "ping"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "985c8af0584bf35ecfb95a65b74a457782966e1ab8f2c94c01697a36432a5814"
+dependencies = [
+ "rand 0.8.5",
+ "socket2 0.4.9",
+ "thiserror",
+]
 
 [[package]]
 name = "pkcs1"
@@ -16370,7 +16415,6 @@ dependencies = [
  "anyhow",
  "clap 4.4.6",
  "ipnet",
- "once_cell",
  "partition_tools",
  "serde",
  "serde_json",
@@ -16378,6 +16422,18 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "utils",
+]
+
+[[package]]
+name = "setupos_tool"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap 4.4.6",
+ "config",
+ "network",
+ "utils",
 ]
 
 [[package]]
@@ -18339,6 +18395,18 @@ name = "utf8parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
+
+[[package]]
+name = "utils"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "url",
+]
 
 [[package]]
 name = "uuid"

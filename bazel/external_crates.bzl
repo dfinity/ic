@@ -274,6 +274,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^4.0.0",
                 features = [
                     "derive",
+                    "string",
                 ],
             ),
             "cloudflare": crate.spec(
@@ -783,6 +784,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "pin-project-lite": crate.spec(
                 version = "^0.2",
+            ),
+            "ping": crate.spec(
+                version = "^0.5.0",
             ),
             "pkcs8": crate.spec(
                 version = "^0.10.2",
