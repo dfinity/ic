@@ -119,7 +119,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
                 provider
             );
             let result = eth_rpc::call::<T, _, _>(
-                T::resolve_api(*provider),
+                &T::resolve_api(*provider)?,
                 method.clone(),
                 params.clone(),
                 response_size_estimate,
@@ -163,12 +163,15 @@ impl<T: RpcTransport> EthRpcClient<T> {
             let mut fut = Vec::with_capacity(providers.len());
             for provider in providers {
                 log!(DEBUG, "[parallel_call]: will call provider: {:?}", provider);
-                fut.push(eth_rpc::call::<T, _, _>(
-                    T::resolve_api(*provider),
-                    method.clone(),
-                    params.clone(),
-                    response_size_estimate,
-                ));
+                fut.push(async {
+                    eth_rpc::call::<T, _, _>(
+                        &T::resolve_api(*provider)?,
+                        method.clone(),
+                        params.clone(),
+                        response_size_estimate,
+                    )
+                    .await
+                });
             }
             futures::future::join_all(fut).await
         };

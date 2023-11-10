@@ -2,8 +2,6 @@ use candid::CandidType;
 use ic_cdk::api::management_canister::http_request::HttpHeader;
 use serde::Deserialize;
 
-use super::RpcTransport;
-
 pub(crate) const MAINNET_PROVIDERS: &[RpcNodeProvider] = &[
     RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
     RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),

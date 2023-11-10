@@ -682,7 +682,7 @@ impl HttpResponsePayload for TransactionCount {}
 
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
 pub async fn call<T, I, O>(
-    api: RpcApi,
+    api: &RpcApi,
     method: impl Into<String>,
     params: I,
     mut response_size_estimate: ResponseSizeEstimate,
@@ -699,21 +699,17 @@ where
         method: eth_method.clone(),
         id: 1,
     };
-    let url = api.url;
+    let url = &api.url;
     let mut headers = vec![HttpHeader {
         name: "Content-Type".to_string(),
         value: "application/json".to_string(),
     }];
-    headers.extend(api.headers);
+    headers.extend(api.headers.clone());
 
     loop {
         rpc_request.id = mutate_state(State::next_request_id);
         let payload = serde_json::to_string(&rpc_request).unwrap();
-        log!(
-            TRACE_HTTP,
-            "Calling url: {}, with payload: {payload}",
-            url.clone()
-        );
+        log!(TRACE_HTTP, "Calling url: {}, with payload: {payload}", url);
 
         let effective_size_estimate = response_size_estimate.get() + HEADER_SIZE_LIMIT;
         let transform_op = O::response_transform()
