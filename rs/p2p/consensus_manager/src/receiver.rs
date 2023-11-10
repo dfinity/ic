@@ -210,6 +210,8 @@ where
                     let (peer_rx,id, attr) = result.expect("Should not be cancelled or panic");
                     self.metrics.download_task_finished_total.inc();
 
+                    debug_assert!(peer_rx.has_changed().is_ok());
+
                     // peer advertised after task finished.
                     if !peer_rx.borrow().is_empty() {
                         self.metrics.download_task_restart_after_join_total.inc();
@@ -227,7 +229,6 @@ where
                             ),
                             &self.rt_handle,
                         );
-
                     } else {
                         self.active_downloads.remove(&id);
                     }
@@ -362,12 +363,18 @@ where
 
         while let Priority::Stash = priority {
             select! {
-                _ = priority_fn_watcher.changed() => {
+                Ok(_) = priority_fn_watcher.changed() => {
                     priority = priority_fn_watcher.borrow_and_update()(id, attr);
                 }
-                _ = peer_rx.changed() => {
-                    if peer_rx.borrow().is_empty() {
-                        return DownloadResult::AllPeersDeletedTheArtifact;
+                res = peer_rx.changed() => {
+                    match res {
+                        Ok(()) if peer_rx.borrow().is_empty() => {
+                            return DownloadResult::AllPeersDeletedTheArtifact;
+                        },
+                        Ok(()) => {},
+                        Err(_) => {
+                            return DownloadResult::AllPeersDeletedTheArtifact;
+                        }
                     }
                 }
             }
@@ -396,25 +403,32 @@ where
                     let request = build_rpc_handler_request(Artifact::TAG.into(), &id);
 
                     let peer_deleted_the_artifact = async {
-                        peer_rx.changed().await;
+                        peer_rx.changed().await?;
                         while peer_rx.borrow().contains(&peer) {
-                            peer_rx.changed().await;
+                            peer_rx.changed().await?;
                         }
+                        Ok::<_, watch::error::RecvError>(())
                     };
 
                     let priority_is_drop = async {
-                        priority_fn_watcher.changed().await;
+                        priority_fn_watcher.changed().await?;
                         while Priority::Drop != priority_fn_watcher.borrow()(id, attr) {
-                            priority_fn_watcher.changed().await;
+                            priority_fn_watcher.changed().await?;
                         }
+                        Ok::<_, watch::error::RecvError>(())
                     };
 
                     select! {
                         _ = time::sleep(Duration::from_secs(5)) => {}
 
-                        _ = peer_deleted_the_artifact => {}
+                        res = peer_deleted_the_artifact => {
+                            if res.is_err() {
+                                result =  DownloadResult::AllPeersDeletedTheArtifact;
+                                break;
+                            }
+                        }
 
-                        _ = priority_is_drop => {
+                        Ok(_)  = priority_is_drop => {
                             result = DownloadResult::PriorityIsDrop;
                             break;
                         }
@@ -477,20 +491,13 @@ where
         match download_result {
             DownloadResult::Completed(artifact, peer_id) => {
                 // Send artifact to pool
-                sender
-                    .send(UnvalidatedArtifactEvent::Insert((artifact, peer_id)))
-                    .expect("Channel should not be closed");
+                sender.send(UnvalidatedArtifactEvent::Insert((artifact, peer_id)));
 
                 // wait for deletion from peers
-                peer_rx
-                    .wait_for(|p| p.is_empty())
-                    .await
-                    .expect("Channel should not be closed");
+                peer_rx.wait_for(|p| p.is_empty()).await;
 
                 // Purge from the unvalidated pool
-                sender
-                    .send(UnvalidatedArtifactEvent::Remove(id.clone()))
-                    .expect("Channel should not be closed");
+                sender.send(UnvalidatedArtifactEvent::Remove(id.clone()));
                 metrics
                     .download_task_result_total
                     .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
@@ -498,10 +505,7 @@ where
             }
             DownloadResult::PriorityIsDrop => {
                 // wait for deletion from peers
-                peer_rx
-                    .wait_for(|p| p.is_empty())
-                    .await
-                    .expect("Channel should not be closed");
+                peer_rx.wait_for(|p| p.is_empty()).await;
                 metrics
                     .download_task_result_total
                     .with_label_values(&[DOWNLOAD_TASK_RESULT_DROP])
