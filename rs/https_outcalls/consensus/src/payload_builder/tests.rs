@@ -16,7 +16,6 @@ use ic_interfaces::{
         CanisterHttpTransientValidationError,
     },
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
-    time_source::SysTimeSource,
     validation::ValidationError,
 };
 use ic_logger::replica_logger::no_op_logger;
@@ -823,10 +822,7 @@ pub(crate) fn add_received_shares_to_pool(
             timestamp: mock_time(),
         });
 
-        pool.apply_changes(
-            &SysTimeSource::new(),
-            vec![CanisterHttpChangeAction::MoveToValidated(share)],
-        );
+        pool.apply_changes(vec![CanisterHttpChangeAction::MoveToValidated(share)]);
     }
 }
 
@@ -836,13 +832,10 @@ pub(crate) fn add_own_share_to_pool(
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {
-    pool.apply_changes(
-        &SysTimeSource::new(),
-        vec![CanisterHttpChangeAction::AddToValidated(
-            share.clone(),
-            content.clone(),
-        )],
-    );
+    pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+        share.clone(),
+        content.clone(),
+    )]);
 }
 
 /// Creates a [`CanisterHttpResponseShare`] from [`CanisterHttpResponseMetadata`]

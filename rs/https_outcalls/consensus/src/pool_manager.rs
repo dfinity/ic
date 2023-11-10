@@ -405,7 +405,6 @@ pub mod test {
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
-    use ic_test_utilities::MockTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{
         crypto::{CryptoHash, CryptoHashOf},
@@ -515,10 +514,9 @@ pub mod test {
 
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                canister_http_pool.apply_changes(
-                    &MockTimeSource::new(),
-                    vec![CanisterHttpChangeAction::AddToValidated(share, content)],
-                );
+                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+                    share, content,
+                )]);
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
                     shim,
@@ -694,10 +692,9 @@ pub mod test {
                     signature,
                 };
 
-                canister_http_pool.apply_changes(
-                    &MockTimeSource::new(),
-                    vec![CanisterHttpChangeAction::AddToValidated(share, content)],
-                );
+                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+                    share, content,
+                )]);
 
                 // Now that there are shares in the pool, we should be able to
                 // call generate_change_set again without send being called.

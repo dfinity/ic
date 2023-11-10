@@ -1,8 +1,5 @@
 use super::types::*;
-use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
-    time_source::TimeSource,
-};
+use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities::types::ids::node_test_id;
 use ic_types::{artifact::Priority, time::Time};
@@ -11,7 +8,6 @@ use std::time::Duration;
 
 fn execute_instance(
     instance: &ConsensusInstance,
-    time_source: &dyn TimeSource,
     use_priority_fn: bool,
     logger: &ReplicaLogger,
 ) -> Option<Time> {
@@ -98,7 +94,7 @@ fn execute_instance(
             }
         }
         // Move new messages into out_queue.
-        for message in instance.driver.step(time_source) {
+        for message in instance.driver.step() {
             out_queue.push(Message { message, timestamp })
         }
         Some(timestamp)
@@ -132,9 +128,7 @@ impl ExecutionStrategy for GlobalMessage {
                 let t_j = j.in_queue.borrow().peek().map(|x| x.timestamp());
                 compare_timestamp(t_i, t_j)
             })
-            .and_then(|instance| {
-                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger)
-            })
+            .and_then(|instance| execute_instance(instance, self.use_priority_fn, logger))
     }
 }
 
@@ -156,8 +150,7 @@ impl ExecutionStrategy for RandomExecute {
         let mut rng = runner.rng();
         instances.shuffle(&mut *rng);
         while let Some(instance) = instances.pop() {
-            let result =
-                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger);
+            let result = execute_instance(instance, self.use_priority_fn, logger);
             if result.is_some() {
                 return result;
             }
@@ -188,8 +181,6 @@ impl ExecutionStrategy for GlobalClock {
                 let t_j = j.in_queue.borrow().peek().map(|_| *j.clock.borrow());
                 compare_timestamp(t_i, t_j)
             })
-            .and_then(|instance| {
-                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger)
-            })
+            .and_then(|instance| execute_instance(instance, self.use_priority_fn, logger))
     }
 }

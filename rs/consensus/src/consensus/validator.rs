@@ -1967,7 +1967,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::RandomBeacon(beacon_2))
             );
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // share_3 now validates
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -2083,7 +2083,7 @@ pub mod test {
             );
 
             // Accept changes
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Insert random tape at height 4, check if it is ignored
             let content = RandomTapeContent::new(Height::from(4));
@@ -2106,7 +2106,7 @@ pub mod test {
             );
 
             // Accept changes
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Set expected batch height to height 4, check if tape_3 is ignored
             let content = RandomTapeContent::new(Height::from(3));
@@ -2424,7 +2424,7 @@ pub mod test {
             pool.insert_unvalidated(test_block.clone());
             let valid_results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_valid(&valid_results, &test_block);
-            pool.apply_changes(time_source.as_ref(), valid_results);
+            pool.apply_changes(valid_results);
 
             let mut next_block = pool.make_next_block_from_parent(test_block.as_ref());
             next_block.signature.signer = get_block_maker_by_rank(
@@ -2520,7 +2520,7 @@ pub mod test {
             pool.insert_unvalidated(test_block.clone());
             let results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_invalid(&results, &test_block);
-            pool.apply_changes(time_source.as_ref(), results);
+            pool.apply_changes(results);
 
             // Construct a block with a registry version that is higher than any we
             // currently recognize. This should yield an empty change set
@@ -2717,7 +2717,7 @@ pub mod test {
 
             // after we finalize a block with time `block_time`, the validator should reject
             // a child block with a smaller time
-            pool.apply_changes(time_source.as_ref(), results);
+            pool.apply_changes(results);
             pool.notarize(&test_block);
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
@@ -2867,7 +2867,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
             ));
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
@@ -2875,7 +2875,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::RemoveFromUnvalidated(ConsensusMessage::Notarization(_))
             ));
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Finally, changeset should be empty.
             assert!(validator
@@ -2943,7 +2943,7 @@ pub mod test {
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
             ));
             assert_eq!(changeset.len(), 1);
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Next run does not consider the extra Finalization.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -3111,7 +3111,7 @@ pub mod test {
                     ChangeAction::MoveToValidated(notarization.into_message())
                 ]
             );
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
         })
     }
 }

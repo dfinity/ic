@@ -289,7 +289,6 @@ impl ReplayValidator {
         target_height: Height,
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
         let validator = self.get_validator();
-        let time = self.get_timesource();
 
         let mut invalid_artifacts = Vec::new();
 
@@ -329,7 +328,7 @@ impl ReplayValidator {
             if changes.is_empty() {
                 break;
             } else {
-                pool.apply_changes(time.as_ref(), changes);
+                pool.apply_changes(changes);
             }
         }
 

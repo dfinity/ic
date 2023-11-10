@@ -9,12 +9,10 @@ use ic_interfaces::{
     certification,
     consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
-    time_source::TimeSource,
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
-use ic_test_utilities::MockTimeSource;
 use ic_types::{consensus::ConsensusMessage, NodeId};
 use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
@@ -66,7 +64,7 @@ impl<'a> ConsensusDriver<'a> {
     /// occur.
     ///
     /// Return a list of output messages produced in the process.
-    pub fn step(&self, time_source: &dyn TimeSource) -> Vec<InputMessage> {
+    pub fn step(&self) -> Vec<InputMessage> {
         let mut to_deliver = Vec::new();
         loop {
             let changeset = self
@@ -86,8 +84,8 @@ impl<'a> ConsensusDriver<'a> {
                     // AddToValidated are what we have produced.
                     // We will deliver them to peers.
                     ChangeAction::AddToValidated(to_add) => {
-                        debug_print_msg(&self.logger, "Deliver", to_add);
-                        to_deliver.push(InputMessage::Consensus(to_add.clone()));
+                        debug_print_msg(&self.logger, "Deliver", &to_add.msg);
+                        to_deliver.push(InputMessage::Consensus(to_add.msg.clone()));
                     }
                     _ => (),
                 }
@@ -95,7 +93,7 @@ impl<'a> ConsensusDriver<'a> {
             self.consensus_pool
                 .write()
                 .unwrap()
-                .apply_changes(time_source, changeset);
+                .apply_changes(changeset);
         }
         loop {
             let changeset = self.dkg.on_state_change(&*self.dkg_pool.read().unwrap());
@@ -110,7 +108,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let dkg_pool = &mut self.dkg_pool.write().unwrap();
-                dkg_pool.apply_changes(&MockTimeSource::new(), changeset);
+                dkg_pool.apply_changes(changeset);
             }
         }
         loop {
@@ -131,7 +129,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let mut certification_pool = self.certification_pool.write().unwrap();
-                certification_pool.apply_changes(&MockTimeSource::new(), changeset);
+                certification_pool.apply_changes(changeset);
             }
         }
         to_deliver

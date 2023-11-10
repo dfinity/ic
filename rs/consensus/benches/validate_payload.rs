@@ -23,7 +23,7 @@ use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_pool::MutablePool,
     consensus::{PayloadBuilder, PayloadValidationError},
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool},
+    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     time_source::TimeSource,
     validation::ValidationResult,
 };
@@ -53,6 +53,7 @@ use ic_types::{
     crypto::Signed,
     ingress::{IngressState, IngressStatus},
     signature::*,
+    time::UNIX_EPOCH,
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
 };
 use std::sync::{Arc, RwLock};
@@ -274,11 +275,12 @@ fn add_past_blocks(
 
         parent = block.clone();
         let proposal = BlockProposal::fake(block, node_test_id(i));
-        changeset.push(ChangeAction::AddToValidated(proposal.into_message()));
+        changeset.push(ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+            msg: proposal.into_message(),
+            timestamp: UNIX_EPOCH,
+        }));
     }
-    let time_source = FastForwardTimeSource::new();
-    consensus_pool.apply_changes(time_source.as_ref(), changeset);
-
+    consensus_pool.apply_changes(changeset);
     parent
 }
 
