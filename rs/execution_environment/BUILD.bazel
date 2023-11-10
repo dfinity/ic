@@ -237,3 +237,33 @@ rust_bench(
         "//rs/types/types_test_utils",
     ] + BENCH_DEPENDENCIES,
 )
+
+rust_library(
+    name = "utils",
+    srcs = ["benches/management_canister/utils.rs"],
+    aliases = ALIASES,
+    deps = [
+        ":execution_environment_bench",
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ] + BENCH_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "management_canister_bench",
+    srcs = glob(["benches/management_canister/*.rs"]),
+    data = DATA + ["//rs/execution_environment/benches/management_canister/test_canister"],
+    env = dict(ENV.items() + [
+        ("TEST_CANISTER_WASM_PATH", "$(rootpath //rs/execution_environment/benches/management_canister/test_canister)"),
+    ]),
+    deps = [
+        ":execution_environment_bench",
+        ":utils",
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ] + BENCH_DEPENDENCIES,
+)
