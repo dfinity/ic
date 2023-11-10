@@ -1927,12 +1927,13 @@ pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
 /// For each day metrics were aggregated since the first observation, there is exactly one
 /// snapshot in the series (including 'today').
 ///
-/// Once the maximum number of days has been reached:
-/// - The oldest entry is discarded to keep the dataset at a constant length.
-/// - The first observation of a new day induces a pruning process where a node with
-///   unchanged stats for the oldest and the newest snapshot is pruned from this and the
-///   following days. If a previously pruned node reappears, it will be added like any
-///   other new node and counting restarts from 0.
+/// The number of snapshots is capped at `BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS` by
+/// discarding the oldest snapshot(s) once this limit is exceeded.
+///
+/// To ensure the roster of node IDs does not grow indefinitely, Node IDs whose stats are
+/// equal in two consecutive snapshots, are pruned from the metrics such that they are missing
+/// from that point on. If such a node reappears later on, it will be added as a new node with
+/// restarted stats.
 ///
 /// There is a runtime invariant (excluding checks at deserialization):
 /// - There are at most `BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS` snapshots.
@@ -1984,47 +1985,41 @@ impl BlockmakerStatsMap {
 impl BlockmakerMetricsTimeSeries {
     /// Observes blockmaker metrics corresponding to a certain batch time.
     pub fn observe(&mut self, batch_time: Time, metrics: &BlockmakerMetrics) {
-        match self.0.pop_last() {
+        let running_stats = match self.0.pop_last() {
             Some((time, running_stats)) if time > batch_time => {
                 // Outdated metrics are ignored.
                 self.0.insert(time, running_stats);
                 return;
             }
-            Some((time, mut running_stats))
-                if days_since_unix_epoch(time) < days_since_unix_epoch(batch_time) =>
-            {
-                // A new day has started, insert a new snapshot.
-                self.0.insert(time, running_stats.clone());
-                // If at capacity, prune node IDs from `running_stats`.
-                if self.0.len() == BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
-                    running_stats.node_stats.retain(|node_id, stats| {
-                        match self
-                            .0
-                            .first_key_value()
-                            .and_then(|(_, val)| val.node_stats.get(node_id))
-                        {
-                            // Retain node IDs that are not present in the first key value;
-                            // and node IDs that are present, but have unequal stats.
-                            None => true,
-                            Some(first_stats) => first_stats != stats,
-                        }
-                    });
+            Some((time, mut running_stats)) => {
+                if days_since_unix_epoch(time) < days_since_unix_epoch(batch_time) {
+                    // Prune stale node IDs from `running_stats` by comparing its stats with
+                    // those of the previous day.
+                    if let Some(last_snapshot) =
+                        self.0.last_key_value().map(|(_, val)| &val.node_stats)
+                    {
+                        running_stats.node_stats.retain(|node_id, stats| {
+                            match last_snapshot.get(node_id) {
+                                // Retain node IDs that are not present in the last snapshot;
+                                // and node IDs that are present, but have unequal stats.
+                                None => true,
+                                Some(last_stats) => last_stats != stats,
+                            }
+                        });
+                    }
+
+                    // A new day has started, insert a new snapshot.
+                    self.0.insert(time, running_stats.clone());
                 }
-                // Observe the new metrics and insert `running_stats`.
-                self.0
-                    .insert(batch_time, running_stats.and_observe(metrics));
+
+                running_stats
             }
-            Some((_, running_stats)) => {
-                self.0
-                    .insert(batch_time, running_stats.and_observe(metrics));
-            }
-            None => {
-                self.0.insert(
-                    batch_time,
-                    BlockmakerStatsMap::default().and_observe(metrics),
-                );
-            }
-        }
+            None => BlockmakerStatsMap::default(),
+        };
+
+        // Observe the new metrics and replace `running_stats`.
+        self.0
+            .insert(batch_time, running_stats.and_observe(metrics));
 
         // Ensure the time series is capped in length.
         while self.0.len() > BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
