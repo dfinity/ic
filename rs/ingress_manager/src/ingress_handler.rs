@@ -154,7 +154,7 @@ mod tests {
     use ic_interfaces::{
         artifact_pool::{MutablePool, UnvalidatedArtifact},
         ingress_pool::ChangeAction,
-        time_source::{SysTimeSource, TimeSource},
+        time_source::TimeSource,
     };
     use ic_interfaces_state_manager::StateManager;
     use ic_test_utilities::{
@@ -364,7 +364,7 @@ mod tests {
                         timestamp: time,
                     });
                     let change_set = ingress_manager.on_state_change(ingress_pool);
-                    ingress_pool.apply_changes(&SysTimeSource::new(), change_set);
+                    ingress_pool.apply_changes(change_set);
                     ingress_manager.on_state_change(ingress_pool)
                 });
 

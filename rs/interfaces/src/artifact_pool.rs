@@ -1,6 +1,5 @@
 //! The artifact pool public interface that defines the Consensus-P2P API.
 //! Consensus clients must implement the traits in this file in order to use the IC P2P protocol.
-use crate::time_source::TimeSource;
 use ic_types::{
     artifact::{Advert, ArtifactKind, PriorityFn},
     NodeId, Time,
@@ -54,11 +53,7 @@ pub trait MutablePool<Artifact: ArtifactKind> {
     fn remove(&mut self, id: &Artifact::Id);
 
     /// Applies a set of change actions to the pool.
-    fn apply_changes(
-        &mut self,
-        time_source: &dyn TimeSource,
-        change_set: Self::ChangeSet,
-    ) -> ChangeResult<Artifact>;
+    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<Artifact>;
 }
 
 pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync {

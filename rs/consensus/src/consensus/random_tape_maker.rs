@@ -191,6 +191,7 @@ mod tests {
     use crate::consensus::add_all_to_validated;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{consensus::fake::*, message_routing::FakeMessageRouting};
     use ic_types::consensus::{ConsensusMessage, HasHeight};
@@ -234,7 +235,10 @@ mod tests {
 
             // After adding our random tape share for height 2, we should not create
             // any more shares
-            pool.apply_changes(time_source.as_ref(), add_all_to_validated(shares));
+            pool.apply_changes(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
             let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
             assert_eq!(shares.len(), 0);
 
@@ -255,7 +259,10 @@ mod tests {
             // when we advance the pool by three heights again (advancing the finalized
             // height to 7), but we add a full random tape for height 7, we should
             // only construct a share for heights 6 and 8.
-            pool.apply_changes(time_source.as_ref(), add_all_to_validated(shares));
+            pool.apply_changes(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
             let mut round = pool.prepare_round().dont_add_random_tape();
             round.advance();
             round.advance();
@@ -277,7 +284,10 @@ mod tests {
             // 8 already was delivered so there is no need to construct random tape 8
             // anymore. We therefore expect the random tape maker to only add a
             // share for height 10.
-            pool.apply_changes(time_source.as_ref(), add_all_to_validated(shares));
+            pool.apply_changes(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
             let mut round = pool.prepare_round().dont_add_random_tape();
             round.advance();
             round.advance();

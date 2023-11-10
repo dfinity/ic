@@ -5,8 +5,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact},
-    consensus_pool::{ChangeAction, ChangeSet},
-    time_source::SysTimeSource,
+    consensus_pool::{ChangeAction, ChangeSet, ValidatedConsensusArtifact},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -17,6 +16,7 @@ use ic_types::{
         BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, HasHeight,
         Notarization, RandomBeacon, RandomTape,
     },
+    time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId,
 };
 use prost::Message;
@@ -89,8 +89,11 @@ pub(crate) fn insert_cup_at_height(
     let file = &cup_file_name(backup_dir, height);
     if let Some(cup) = read_cup_file(file) {
         pool.apply_changes(
-            &SysTimeSource::new(),
-            ChangeAction::AddToValidated(cup.into_message()).into(),
+            ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                msg: cup.into_message(),
+                timestamp: UNIX_EPOCH,
+            })
+            .into(),
         );
         Ok(())
     } else {

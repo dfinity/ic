@@ -66,10 +66,7 @@ impl<
         let change_set = self
             .change_set_producer
             .on_state_change(&self.pool.read().unwrap());
-        self.pool
-            .write()
-            .unwrap()
-            .apply_changes(time_source, change_set)
+        self.pool.write().unwrap().apply_changes(change_set)
     }
 }
 
@@ -130,9 +127,6 @@ impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<
         let change_set = self
             .client
             .on_state_change(&self.ingress_pool.read().unwrap());
-        self.ingress_pool
-            .write()
-            .unwrap()
-            .apply_changes(time_source, change_set)
+        self.ingress_pool.write().unwrap().apply_changes(change_set)
     }
 }

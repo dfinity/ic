@@ -19,7 +19,7 @@ use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
-    time_source::{SysTimeSource, TimeSource},
+    time_source::TimeSource,
 };
 use ic_test_utilities::{
     mock_time,
@@ -81,7 +81,7 @@ proptest! {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(&SysTimeSource::new(), vec![ChangeAction::MoveToValidated((
+                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                             message_id.clone(),
                             node_test_id(0),
                             m.count_bytes(),

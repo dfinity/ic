@@ -343,7 +343,6 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
-                time_source,
                 state_manager,
                 ..
             } = dependencies(pool_config, 1);
@@ -446,7 +445,7 @@ mod tests {
             );
 
             // No more purge action when called again
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
             let pool_reader = PoolReader::new(&pool);
             let changeset = purger.on_state_change(&pool_reader);
             assert_eq!(changeset.len(), 0);

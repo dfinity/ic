@@ -644,37 +644,33 @@ impl TestConsensusPool {
     pub fn insert_random_tape(&mut self, height: Height) {
         let msg = RandomTape::fake(RandomTapeContent::new(height)).into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(
-            time_source.as_ref(),
-            vec![ChangeAction::AddToValidated(msg)],
-        );
+        self.apply_changes(vec![ChangeAction::AddToValidated(
+            ValidatedConsensusArtifact {
+                msg,
+                timestamp: time_source.get_relative_time(),
+            },
+        )]);
     }
 
     pub fn purge_validated_below<T: ConsensusMessageHashable + HasHeight>(&mut self, value: T) {
         let msg = value.into_message();
-        let time_source = self.time_source.clone();
-        self.apply_changes(
-            time_source.as_ref(),
-            vec![ChangeAction::PurgeValidatedBelow(msg.height())],
-        );
+        self.apply_changes(vec![ChangeAction::PurgeValidatedBelow(msg.height())]);
     }
 
     pub fn insert_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(
-            time_source.as_ref(),
-            vec![ChangeAction::AddToValidated(msg)],
-        );
+        self.apply_changes(vec![ChangeAction::AddToValidated(
+            ValidatedConsensusArtifact {
+                msg,
+                timestamp: time_source.get_relative_time(),
+            },
+        )]);
     }
 
     pub fn remove_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
-        let time_source = self.time_source.clone();
-        self.apply_changes(
-            time_source.as_ref(),
-            vec![ChangeAction::RemoveFromUnvalidated(msg)],
-        );
+        self.apply_changes(vec![ChangeAction::RemoveFromUnvalidated(msg)]);
     }
 
     pub fn insert_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
@@ -723,11 +719,7 @@ impl MutablePool<ConsensusArtifact> for TestConsensusPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(
-        &mut self,
-        time_source: &dyn TimeSource,
-        change_set: ChangeSet,
-    ) -> ChangeResult<ConsensusArtifact> {
-        self.pool.apply_changes(time_source, change_set)
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
+        self.pool.apply_changes(change_set)
     }
 }

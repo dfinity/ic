@@ -20,7 +20,7 @@ use ic_constants::MAX_INGRESS_TTL;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    time_source::{SysTimeSource, TimeSource},
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
@@ -296,7 +296,7 @@ fn setup(
 fn on_state_change(pool: &mut IngressPoolImpl, manager: &IngressManager) -> usize {
     let changeset = manager.on_state_change(pool);
     let n = changeset.len();
-    pool.apply_changes(&SysTimeSource::new(), changeset);
+    pool.apply_changes(changeset);
     n
 }
 
