@@ -94,11 +94,18 @@ require {
 allow node_exporter_t node_t:tcp_socket { node_bind };
 allow node_exporter_t hplip_port_t:tcp_socket { name_bind };
 
-# Allow to interact with tmfiles
+# Allow to interact with tmpfiles
 require {
     type node_exporter_var_lib_t;
 }
-allow systemd_tmpfiles_t node_exporter_var_lib_t:dir { create getattr open read relabelfrom relabelto };
+allow systemd_tmpfiles_t node_exporter_var_lib_t:dir { create getattr setattr open read relabelfrom relabelto };
+# Allow manageboot.sh domain to create and write files to node_exporter_var_lib_t directory
+# in order to generate prometheus text metrics in /run/node_exporter/collector_textfile
+require {
+    type ic_manageboot_t;
+}
+create_files_pattern(ic_manageboot_t, node_exporter_var_lib_t, node_exporter_var_lib_t)
+write_files_pattern(ic_manageboot_t, node_exporter_var_lib_t, node_exporter_var_lib_t)
 
 # Allow to read from /var/run/<users>
 require {
