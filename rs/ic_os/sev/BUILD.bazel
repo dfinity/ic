@@ -21,6 +21,7 @@ rust_library(
         "//rs/registry/subnet_features",
         "//rs/types/base_types",
         "//rs/types/types",
+        "@crate_index//:anyhow",
         "@crate_index//:openssl",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
@@ -40,5 +41,6 @@ rust_test(
     deps = [
         ":sev",
         "@crate_index//:assert_matches",
+        "@crate_index//:tempfile",
     ],
 )

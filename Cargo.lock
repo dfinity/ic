@@ -7614,6 +7614,7 @@ dependencies = [
 name = "ic-icos-sev"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "assert_matches",
  "async-trait",
  "ic-base-types",
@@ -7627,6 +7628,7 @@ dependencies = [
  "serde_cbor",
  "sev",
  "sha2 0.9.9",
+ "tempfile",
  "thiserror",
  "tokio",
 ]
