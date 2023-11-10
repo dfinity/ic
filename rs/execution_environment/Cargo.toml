@@ -122,3 +122,8 @@ name = "scheduler"
 [[bench]]
 harness = false
 name = "100k_canisters"
+
+[[bench]]
+harness = false
+name = "management_canister_bench"
+path = "benches/management_canister/main.rs"
