@@ -587,6 +587,7 @@ fn state_equivalence() {
         ledger_burn_index: LedgerBurnIndex::new(10),
         from: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
         from_subaccount: None,
+        created_at: Some(1699527697000000000),
     };
     let withdrawal_request2 = EthWithdrawalRequest {
         ledger_burn_index: LedgerBurnIndex::new(20),
@@ -685,6 +686,7 @@ fn state_equivalence() {
                     .parse()
                     .unwrap(),
                 from_subaccount: None,
+                created_at: Some(1699527697000000000),
             }
         },
         reimbursement_requests: btreemap! {
@@ -1126,6 +1128,7 @@ mod eth_balance {
                     .parse()
                     .unwrap(),
                 from_subaccount: None,
+                created_at: Some(1699527697000000000),
             };
             apply_state_transition(
                 state,

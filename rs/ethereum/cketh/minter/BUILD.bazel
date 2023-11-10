@@ -137,6 +137,7 @@ rust_test(
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
+        "@crate_index//:time",
     ],
 ) for (target_suffix, features) in [
     ("", []),
