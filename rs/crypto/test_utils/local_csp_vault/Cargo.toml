@@ -15,5 +15,5 @@ ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-crypto-node-key-validation = {path = "../../node_key_validation" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 ic-types = { path = "../../../types/types" }
-mockall = "0.7.2"
+mockall = { workspace = true }
 serde_bytes = { workspace = true }

@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/crypto/tls_interfaces",
     "//rs/ic_os/sev",
     "//rs/interfaces",
+    "//rs/interfaces/mocks",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/p2p/consensus_manager",

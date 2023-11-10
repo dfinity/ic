@@ -30,7 +30,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mock! {
     pub Scheduler {}
-    trait Scheduler {
+    impl Scheduler for Scheduler {
         type State = ReplicatedState;
         fn execute_round(
             &self,

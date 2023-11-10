@@ -1218,7 +1218,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-types",
  "lazy_static",
- "mockall 0.11.4",
+ "mockall",
  "nix 0.24.3",
  "opentelemetry 0.18.0",
  "opentelemetry-prometheus 0.11.0",
@@ -1249,7 +1249,7 @@ dependencies = [
  "ic-agent",
  "ic-utils 0.27.0",
  "indoc",
- "mockall 0.11.4",
+ "mockall",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
  "prometheus",
@@ -1707,7 +1707,7 @@ dependencies = [
  "idna 0.3.0",
  "instant-acme",
  "leb128",
- "mockall 0.11.4",
+ "mockall",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
  "pem 1.1.1",
@@ -1738,7 +1738,7 @@ dependencies = [
  "futures",
  "hyper 0.14.26",
  "hyper-rustls",
- "mockall 0.11.4",
+ "mockall",
  "nix 0.24.3",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -1768,7 +1768,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-certified-map",
  "ic-stable-structures",
- "mockall 0.11.4",
+ "mockall",
  "priority-queue",
  "prometheus",
  "publicsuffix",
@@ -2808,7 +2808,7 @@ dependencies = [
  "flate2",
  "futures",
  "httptest",
- "mockall 0.11.4",
+ "mockall",
  "nix 0.24.3",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -3130,12 +3130,6 @@ name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
-
-[[package]]
-name = "downcast"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bb454f0228b18c7f4c3b0ebbee346ed9c52e7443b0999cd543ff3571205701d"
 
 [[package]]
 name = "downcast"
@@ -3750,15 +3744,6 @@ checksum = "8835f84f38484cc86f110a805655697908257fb9a7af005234060891557198e9"
 dependencies = [
  "nonempty",
  "thiserror",
-]
-
-[[package]]
-name = "fragile"
-version = "1.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7464c5c4a3f014d9b2ec4073650e5c06596f385060af740fc45ad5a19f959e8"
-dependencies = [
- "fragile 2.0.0",
 ]
 
 [[package]]
@@ -4904,7 +4889,7 @@ dependencies = [
  "hyper 0.14.26",
  "ic-agent",
  "indoc",
- "mockall 0.11.4",
+ "mockall",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
  "prometheus",
@@ -5019,7 +5004,7 @@ dependencies = [
  "jemalloc-ctl",
  "jemallocator",
  "lazy_static",
- "mockall 0.11.4",
+ "mockall",
  "moka",
  "prometheus",
  "rand 0.8.5",
@@ -5141,7 +5126,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-logger",
  "ic-types",
- "mockall 0.11.4",
+ "mockall",
  "prometheus",
  "proptest",
  "prost",
@@ -5299,7 +5284,7 @@ dependencies = [
  "libc",
  "libflate",
  "memory_tracker",
- "mockall 0.7.2",
+ "mockall",
  "nix 0.24.3",
  "rayon",
  "serde_json",
@@ -5787,6 +5772,7 @@ dependencies = [
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
+ "ic-interfaces-mocks",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
@@ -5808,7 +5794,6 @@ dependencies = [
  "ic-test-utilities-registry",
  "ic-types",
  "ic-utils 0.9.0",
- "mockall 0.7.2",
  "phantom_newtype",
  "prometheus",
  "proptest",
@@ -5846,7 +5831,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-types",
  "ic-types-test-utils",
- "mockall 0.11.4",
+ "mockall",
  "phantom_newtype",
  "prometheus",
  "rand 0.8.5",
@@ -5875,7 +5860,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
- "mockall 0.7.2",
+ "mockall",
  "slog",
 ]
 
@@ -5989,7 +5974,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "maplit",
- "mockall 0.8.3",
+ "mockall",
  "parking_lot 0.12.1",
  "proptest",
  "proptest-derive",
@@ -6335,7 +6320,7 @@ dependencies = [
  "ic-types-test-utils",
  "ic-utils 0.9.0",
  "lazy_static",
- "mockall 0.7.2",
+ "mockall",
  "num_cpus",
  "parking_lot 0.12.1",
  "proptest",
@@ -6855,7 +6840,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-tls-interfaces",
  "ic-types",
- "mockall 0.7.2",
+ "mockall",
 ]
 
 [[package]]
@@ -6889,7 +6874,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-tls-interfaces",
  "ic-types",
- "mockall 0.7.2",
+ "mockall",
  "serde_bytes",
 ]
 
@@ -6957,7 +6942,7 @@ name = "ic-crypto-test-utils-root-of-trust"
 version = "0.9.0"
 dependencies = [
  "ic-types",
- "mockall 0.11.4",
+ "mockall",
  "thiserror",
 ]
 
@@ -7025,7 +7010,7 @@ dependencies = [
  "async-trait",
  "ic-base-types",
  "ic-crypto-tls-interfaces",
- "mockall 0.11.4",
+ "mockall",
  "tokio",
 ]
 
@@ -7351,7 +7336,6 @@ dependencies = [
  "libflate",
  "maplit",
  "memory_tracker",
- "mockall 0.7.2",
  "nix 0.24.3",
  "num-rational",
  "num-traits",
@@ -7434,6 +7418,7 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-error-types",
  "ic-interfaces",
+ "ic-interfaces-mocks",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
@@ -7452,7 +7437,7 @@ dependencies = [
  "ic-types",
  "ic-validator",
  "maplit",
- "mockall 0.11.4",
+ "mockall",
  "phantom_newtype",
  "pretty_assertions",
  "prometheus",
@@ -7577,7 +7562,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-types",
- "mockall 0.7.2",
+ "mockall",
  "prometheus",
  "prost",
  "slog",
@@ -8055,6 +8040,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-interfaces-mocks",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
@@ -8128,7 +8114,17 @@ version = "0.9.0"
 dependencies = [
  "ic-interfaces-certified-stream-store",
  "ic-types",
- "mockall 0.11.4",
+ "mockall",
+]
+
+[[package]]
+name = "ic-interfaces-mocks"
+version = "0.9.0"
+dependencies = [
+ "ic-interfaces",
+ "ic-protobuf",
+ "ic-types",
+ "mockall",
 ]
 
 [[package]]
@@ -8147,7 +8143,7 @@ dependencies = [
  "ic-base-types",
  "ic-interfaces-registry",
  "ic-types",
- "mockall 0.11.4",
+ "mockall",
 ]
 
 [[package]]
@@ -8168,7 +8164,7 @@ dependencies = [
  "ic-interfaces-state-manager",
  "ic-replicated-state",
  "ic-types",
- "mockall 0.11.4",
+ "mockall",
 ]
 
 [[package]]
@@ -8190,7 +8186,7 @@ version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-interfaces-transport",
- "mockall 0.11.4",
+ "mockall",
 ]
 
 [[package]]
@@ -8399,7 +8395,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "lazy_static",
  "maplit",
- "mockall 0.7.2",
+ "mockall",
  "prometheus",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -8479,7 +8475,7 @@ dependencies = [
  "json5",
  "lazy_static",
  "maplit",
- "mockall 0.11.4",
+ "mockall",
  "priority-queue",
  "proptest",
  "prost",
@@ -8734,7 +8730,7 @@ dependencies = [
  "itertools",
  "lazy_static",
  "maplit",
- "mockall 0.11.4",
+ "mockall",
  "on_wire",
  "pretty_assertions",
  "proptest",
@@ -9091,6 +9087,7 @@ dependencies = [
  "ic-https-outcalls-adapter-client",
  "ic-icos-sev",
  "ic-interfaces",
+ "ic-interfaces-mocks",
  "ic-interfaces-registry",
  "ic-interfaces-transport",
  "ic-logger",
@@ -9109,7 +9106,6 @@ dependencies = [
  "ic-types",
  "linked-hash-map",
  "lru",
- "mockall 0.7.2",
  "parking_lot 0.12.1",
  "prometheus",
  "serde",
@@ -9139,6 +9135,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-icos-sev",
  "ic-interfaces",
+ "ic-interfaces-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-peer-manager",
@@ -9154,7 +9151,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
- "mockall 0.11.4",
+ "mockall",
  "quinn",
  "serde",
  "slog",
@@ -10955,7 +10952,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-wasm-types",
  "lazy_static",
- "mockall 0.7.2",
+ "mockall",
  "nix 0.24.3",
  "parking_lot 0.12.1",
  "phantom_newtype",
@@ -11307,7 +11304,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-test-utilities",
  "ic-types",
- "mockall 0.11.4",
+ "mockall",
  "rand 0.8.5",
  "thiserror",
 ]
@@ -11552,7 +11549,7 @@ dependencies = [
  "ic-xnet-hyper",
  "ic-xnet-uri",
  "maplit",
- "mockall 0.7.2",
+ "mockall",
  "nix 0.24.3",
  "prometheus",
  "proptest",
@@ -13051,71 +13048,17 @@ checksum = "d07cbe42e2a8dd41df582fb8e00fc24d920b5561cc301fcb6d14e2e0434b500f"
 
 [[package]]
 name = "mockall"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01458f8a19b10cb28195290942e3149161c75acf67ebc8fbf714ab67a2b943bc"
-dependencies = [
- "cfg-if 0.1.10",
- "downcast 0.10.0",
- "fragile 1.2.2",
- "lazy_static",
- "mockall_derive 0.7.2",
- "predicates 1.0.8",
- "predicates-tree",
-]
-
-[[package]]
-name = "mockall"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41cabea45a7fc0e37093f4f30a5e2b62602253f91791c057d5f0470c63260c3d"
-dependencies = [
- "cfg-if 0.1.10",
- "downcast 0.10.0",
- "fragile 1.2.2",
- "lazy_static",
- "mockall_derive 0.8.3",
- "predicates 1.0.8",
- "predicates-tree",
-]
-
-[[package]]
-name = "mockall"
 version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c84490118f2ee2d74570d114f3d0493cbf02790df303d2707606c3e14e07c96"
 dependencies = [
  "cfg-if 1.0.0",
- "downcast 0.11.0",
- "fragile 2.0.0",
+ "downcast",
+ "fragile",
  "lazy_static",
- "mockall_derive 0.11.4",
+ "mockall_derive",
  "predicates 2.1.5",
  "predicates-tree",
-]
-
-[[package]]
-name = "mockall_derive"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a673cb441f78cd9af4f5919c28576a3cc325fb6b54e42f7047dacce3c718c17b"
-dependencies = [
- "cfg-if 0.1.10",
- "proc-macro2 1.0.66",
- "quote 1.0.31",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "mockall_derive"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c461918bf7f59eefb1459252756bf2351a995d6bd510d0b2061bd86bcdabfa6"
-dependencies = [
- "cfg-if 0.1.10",
- "proc-macro2 1.0.66",
- "quote 1.0.31",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -13831,7 +13774,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-types",
  "ic-utils 0.9.0",
- "mockall 0.8.3",
+ "mockall",
  "nix 0.24.3",
  "prometheus",
  "prost",

@@ -54,7 +54,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
-mockall = "0.7.2"
+mockall = { workspace = true }
 nix = { workspace = true }
 parking_lot = "0.12.1"
 phantom_newtype = { path = "../phantom_newtype" }

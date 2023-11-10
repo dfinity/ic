@@ -1615,6 +1615,7 @@ pub mod test {
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::{artifact_pool::MutablePool, messaging::XNetTransientValidationError};
+    use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -1625,7 +1626,6 @@ pub mod test {
         consensus::fake::*,
         crypto::CryptoReturningOk,
         matches_pattern,
-        message_routing::MockMessageRouting,
         state_manager::RefMockStateManager,
         types::ids::{node_test_id, subnet_test_id},
         FastForwardTimeSource,

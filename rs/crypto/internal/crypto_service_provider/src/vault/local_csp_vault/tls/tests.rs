@@ -22,14 +22,13 @@ mod keygen {
     use crate::vault::api::TlsHandshakeCspVault;
     use crate::vault::local_csp_vault::LocalCspVault;
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-    use ic_test_utilities::MockTimeSource;
-    use ic_types::time::Time;
     use mockall::Sequence;
     use proptest::proptest;
     use rand::SeedableRng;
     use rand::{CryptoRng, Rng};
     use std::collections::BTreeSet;
     use std::sync::Arc;
+    use std::time::Duration;
     use time::macros::datetime;
     use x509_parser::num_bigint;
     use x509_parser::{certificate::X509Certificate, prelude::FromDer, x509::X509Name}; // re-export of num_bigint
@@ -268,11 +267,10 @@ mod keygen {
         fn should_pass_the_correct_time_and_date(secs in 0..i64::MAX / NANOS_PER_SEC) {
             const GRACE_PERIOD_SECS: i64 = 120;
 
-            let mut mock = MockTimeSource::new();
-            mock.expect_get_relative_time()
-                .return_const(Time::from_secs_since_unix_epoch(secs as u64).expect("failed to create Time object"));
+            let time_source = FastForwardTimeSource::new();
+            time_source.advance_time(Duration::from_secs(secs as u64));
             let csp_vault = LocalCspVault::builder_for_test()
-                .with_time_source(Arc::new(mock))
+                .with_time_source(time_source)
                 .build();
 
             let cert = csp_vault

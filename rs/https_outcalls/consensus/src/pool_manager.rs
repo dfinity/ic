@@ -419,7 +419,7 @@ pub mod test {
         pub NonBlockingChannel<Request: 'static> {
         }
 
-        pub trait NonBlockingChannel<Request> {
+        impl<Request> NonBlockingChannel<Request> for NonBlockingChannel<Request> {
             type Response = CanisterHttpResponse;
 
             fn send(&self, request: Request) -> Result<(), SendError<Request>>;

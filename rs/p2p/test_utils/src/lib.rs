@@ -7,6 +7,7 @@ use futures::{
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
+use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::{start_peer_manager, SubnetTopology};
@@ -20,7 +21,7 @@ use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::{consensus::MockConsensusCache, types::ids::subnet_test_id};
+use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities_registry::add_subnet_record;
 use std::{
     collections::{HashMap, HashSet},
@@ -126,10 +127,10 @@ impl RegistryConsensusHandle {
     }
 }
 
-pub fn create_registry_handle() -> (MockConsensusCache, RegistryConsensusHandle) {
+pub fn create_registry_handle() -> (MockConsensusPoolCache, RegistryConsensusHandle) {
     let oldest_registry_version = Arc::new(AtomicU64::new(0));
     let oldest_registry_version_c = oldest_registry_version.clone();
-    let mut mock_cache = MockConsensusCache::new();
+    let mut mock_cache = MockConsensusPoolCache::new();
     mock_cache
         .expect_get_oldest_registry_version_in_use()
         .returning(move || RegistryVersion::from(oldest_registry_version.load(Ordering::SeqCst)));
@@ -196,7 +197,7 @@ pub fn create_peer_manager_with_local_store(
 ) {
     let oldest_registry_version = Arc::new(AtomicU64::new(0));
     let oldest_registry_version_c = oldest_registry_version.clone();
-    let mut mock_cache = MockConsensusCache::new();
+    let mut mock_cache = MockConsensusPoolCache::new();
     mock_cache
         .expect_get_oldest_registry_version_in_use()
         .returning(move || RegistryVersion::from(oldest_registry_version.load(Ordering::SeqCst)));
