@@ -2,11 +2,7 @@
 pub mod batch;
 pub mod fake;
 
-use mockall::predicate::*;
-use mockall::*;
-
 use crate::crypto::empty_ni_dkg_transcripts_with_committee;
-use ic_base_types::RegistryVersion;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
     validation::*,
@@ -60,34 +56,6 @@ pub fn assert_action_invalid<T: ConsensusMessageHashable>(action: ChangeAction, 
         ChangeAction::HandleInvalid(actual, _) => assert_eq!(actual, msg.clone().into_message()),
         _ => panic!("Expected HandleInvalid ChangeAction"),
     }
-}
-
-mock! {
-
-    pub ConsensusCache {}
-
-    pub trait ConsensusPoolCache: Send + Sync {
-        fn finalized_block(&self) -> Block;
-
-        fn catch_up_package(&self) -> CatchUpPackage;
-
-        fn summary_block(&self) -> Block;
-
-        fn cup_as_protobuf(&self) -> pb::CatchUpPackage;
-
-        fn get_oldest_registry_version_in_use(&self) -> RegistryVersion;
-    }
-
-}
-
-mock! {
-
-    pub ConsensusTime {}
-
-    pub trait ConsensusTime: Send + Sync {
-        fn consensus_time(&self) -> Option<Time>;
-    }
-
 }
 
 // CachedData for fake ConsensusPoolCache

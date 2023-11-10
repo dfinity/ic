@@ -33,7 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/test_utilities",
-    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:mockall",
     "@crate_index//:wat",
 ]
 

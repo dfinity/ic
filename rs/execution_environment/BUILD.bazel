@@ -75,7 +75,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:insta",
     "@crate_index//:libflate",
     "@crate_index//:maplit",
-    "@crate_index//:mockall_0_7_2",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
     "@crate_index//:wasmparser",

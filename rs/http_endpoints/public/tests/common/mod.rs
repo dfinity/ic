@@ -15,6 +15,7 @@ use ic_interfaces::{
     execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
 };
+use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
@@ -36,7 +37,6 @@ use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
-    consensus::MockConsensusCache,
     crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
     mock_time,
     state::ReplicatedStateBuilder,
@@ -247,8 +247,8 @@ pub fn dummy_timestamp() -> Time {
 }
 
 // Basic mock consensus pool cache at height 1.
-pub fn basic_consensus_pool_cache() -> MockConsensusCache {
-    let mut mock_consensus_cache = MockConsensusCache::new();
+pub fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
+    let mut mock_consensus_cache = MockConsensusPoolCache::new();
     mock_consensus_cache
         .expect_finalized_block()
         .returning(move || {

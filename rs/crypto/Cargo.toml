@@ -96,7 +96,7 @@ ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logge
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 maplit = "1.0.2"
-mockall = "0.8.3"
+mockall = { workspace = true }
 proptest = "1.0"
 proptest-derive = "0.3.0"
 prost = { workspace = true }

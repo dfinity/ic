@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/crypto/node_key_validation",
     "//rs/crypto/tls_interfaces",
     "//rs/types/types",
-    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:mockall",
     "@crate_index//:serde_bytes",
 ]
 

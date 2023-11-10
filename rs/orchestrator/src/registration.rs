@@ -782,7 +782,7 @@ mod tests {
         mock! {
             pub KeyRotationCryptoComponent{}
 
-            pub trait KeyManager {
+            impl KeyManager for KeyRotationCryptoComponent {
                 fn check_keys_with_registry(
                     &self,
                     registry_version: RegistryVersion,
@@ -798,7 +798,7 @@ mod tests {
                 ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
             }
 
-            pub trait BasicSigner<MessageId> {
+            impl BasicSigner<MessageId> for KeyRotationCryptoComponent {
                 fn sign_basic(
                     &self,
                     message: &MessageId,
@@ -807,7 +807,7 @@ mod tests {
                 ) -> CryptoResult<BasicSigOf<MessageId>>;
             }
 
-            pub trait ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> {
+            impl ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> for KeyRotationCryptoComponent {
                 fn verify_combined_threshold_sig_by_public_key(
                     &self,
                     signature: &CombinedThresholdSigOf<CatchUpContentProtobufBytes>,
@@ -818,7 +818,7 @@ mod tests {
             }
 
             #[async_trait]
-            pub trait TlsHandshake {
+            impl TlsHandshake for KeyRotationCryptoComponent {
                 async fn perform_tls_server_handshake(
                     &self,
                     tcp_stream: TcpStream,

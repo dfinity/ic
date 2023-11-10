@@ -27,6 +27,7 @@ use ic_interfaces::{
     time_source::TimeSource,
     validation::ValidationResult,
 };
+use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
@@ -35,7 +36,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis, MockConsensusTime},
+    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis},
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,

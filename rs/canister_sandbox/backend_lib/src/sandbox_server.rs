@@ -300,7 +300,7 @@ mod tests {
         pub ControllerService {
         }
 
-        trait ControllerService {
+        impl ControllerService for ControllerService {
             fn execution_finished(
                 &self, req : protocol::ctlsvc::ExecutionFinishedRequest
             ) -> rpc::Call<protocol::ctlsvc::ExecutionFinishedReply>;

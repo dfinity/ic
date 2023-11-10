@@ -106,11 +106,11 @@ fn get_peer_addr(node_record: &NodeRecord) -> Option<SocketAddr> {
 mod tests {
     use super::*;
     use crate::download_management::tests::new_test_gossip_impl_with_registry;
+    use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use ic_interfaces_registry::RegistryClient;
     use ic_protobuf::registry::node::v1::ConnectionEndpoint;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities::{
-        consensus::MockConsensusCache,
         p2p::{p2p_test_setup_logger, test_group_set_registry, P2P_SUBNET_ID_DEFAULT},
         port_allocation::allocate_ports,
         types::ids::subnet_test_id,
@@ -155,7 +155,7 @@ mod tests {
         registry_client.update_to_latest_version();
 
         // Create consensus cache that returns a oldest registry version higher than the the local view.
-        let mut mock_consensus_cache = MockConsensusCache::new();
+        let mut mock_consensus_cache = MockConsensusPoolCache::new();
         let consensus_registry_client = registry_client.clone();
         mock_consensus_cache
             .expect_get_oldest_registry_version_in_use()

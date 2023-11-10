@@ -332,9 +332,9 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::message_routing::MockMessageRouting;
     use ic_types::{crypto::CryptoHash, CryptoHashOfState};
     use std::sync::{Arc, RwLock};
 

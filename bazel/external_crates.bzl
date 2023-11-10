@@ -667,15 +667,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 ],
             ),
             "mockall": crate.spec(
-                version = "^0.11.1",
-            ),
-            "mockall-0_7_2": crate.spec(
-                package = "mockall",
-                version = "^0.7.2",
-            ),
-            "mockall-0_8_3": crate.spec(
-                package = "mockall",
-                version = "^0.8.3",
+                version = "^0.11.4",
             ),
             "moka": crate.spec(
                 version = "^0.12",

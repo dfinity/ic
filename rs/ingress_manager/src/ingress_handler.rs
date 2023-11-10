@@ -156,9 +156,9 @@ mod tests {
         ingress_pool::ChangeAction,
         time_source::TimeSource,
     };
+    use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager::StateManager;
     use ic_test_utilities::{
-        consensus::MockConsensusTime,
         history::MockIngressHistory,
         mock_time,
         state_manager::FakeStateManager,

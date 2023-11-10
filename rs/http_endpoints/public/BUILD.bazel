@@ -68,6 +68,7 @@ DEV_DEPENDENCIES = [
     "//rs/canonical_state",
     "//rs/certification/test-utils",
     "//rs/crypto/tls_interfaces/mocks",
+    "//rs/interfaces/mocks",
     "//rs/interfaces/registry/mocks",
     "//rs/interfaces/state_manager/mocks",
     "//rs/protobuf",
