@@ -16,7 +16,7 @@ use dashmap::DashMap;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use tracing::info;
+use tracing::warn;
 use url::Url;
 
 use crate::{
@@ -402,17 +402,19 @@ impl<T: Check> Check for WithMetricsCheck<T> {
             .with_label_values(&labels[1..4])
             .set(out.is_ok().into());
 
-        info!(
-            action = "check",
-            result,
-            duration,
-            block_height,
-            replica_version,
-            subnet_id,
-            node_id,
-            node_addr,
-            error = out.as_ref().err().map(|x| x.to_string()),
-        );
+        if let Err(e) = &out {
+            warn!(
+                action = "check",
+                result,
+                duration,
+                block_height,
+                replica_version,
+                subnet_id,
+                node_id,
+                node_addr,
+                error = e.to_string(),
+            );
+        }
 
         out
     }

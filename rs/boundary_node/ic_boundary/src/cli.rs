@@ -58,41 +58,58 @@ pub struct RegistryConfig {
     pub disable_registry_replicator: bool,
 
     /// Minimum snapshot version age to be useful for initial publishing, in seconds
-    #[clap(long, default_value = "15")]
+    #[clap(long, default_value = "10")]
     pub min_version_age: u64,
 }
 
 #[derive(Args)]
 pub struct ListenConfig {
-    // Port to listen for HTTP
+    /// Port to listen for HTTP
     #[clap(long, default_value = "80")]
     pub http_port: u16,
 
-    // Port to listen for HTTPS
+    /// Port to listen for HTTPS
     #[cfg(feature = "tls")]
     #[clap(long, default_value = "443")]
     pub https_port: u16,
 
-    // Timeout for the whole HTTP request in seconds
-    #[clap(long, default_value = "4")]
+    /// Timeout for the whole HTTP request in seconds
+    #[clap(long, default_value = "600")]
     pub http_timeout: u64,
 
-    // Timeout for the HTTP connect phase in seconds
+    /// Timeout for the HTTP connect phase in seconds
     #[clap(long, default_value = "2")]
     pub http_timeout_connect: u64,
+
+    /// Max number of in-flight requests that can be served in parallel
+    /// If this is exceeded - new requests would be throttled
+    #[clap(long, default_value = "512")]
+    pub max_concurrency: usize,
+
+    /// How frequently to send TCP/HTTP2 keepalives, in seconds
+    #[clap(long, default_value = "15")]
+    pub http_keepalive: u64,
+
+    /// How long to wait for a keepalive response, in seconds
+    #[clap(long, default_value = "3")]
+    pub http_keepalive_timeout: u64,
+
+    /// How long to keep idle outgoing connections open
+    #[clap(long, default_value = "10")]
+    pub http_idle_timeout: u64,
 }
 
 #[derive(Args)]
 pub struct HealthChecksConfig {
-    // How frequently to run node checks in seconds
+    /// How frequently to run node checks in seconds
     #[clap(long, default_value = "10")]
     pub check_interval: u64,
 
-    // How many attempts to do when checking a node
+    /// How many attempts to do when checking a node
     #[clap(long, default_value = "3")]
     pub check_retries: u32,
 
-    // How long to wait between retries in seconds
+    /// How long to wait between retries in seconds
     #[clap(long, default_value = "1")]
     pub check_retry_interval: u64,
 

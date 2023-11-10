@@ -40,27 +40,15 @@ use crate::{
 
 const KB: f64 = 1024.0;
 
-pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.1, 0.2, 0.4, 0.8, 2.0, 4.0];
-pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] =
-    &[128.0, 256.0, 512.0, KB, 2.0 * KB, 4.0 * KB, 8.0 * KB];
-pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] =
-    &[1.0 * KB, 8.0 * KB, 64.0 * KB, 256.0 * KB, 512.0 * KB];
+pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.2, 1.0, 2.0];
+pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] = &[128.0, KB, 2.0 * KB, 4.0 * KB, 8.0 * KB];
+pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] = &[1.0 * KB, 8.0 * KB, 64.0 * KB, 256.0 * KB];
 
 // https://prometheus.io/docs/instrumenting/exposition_formats/#basic-info
 const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 
 const NODE_ID_LABEL: &str = "node_id";
 const SUBNET_ID_LABEL: &str = "subnet_id";
-
-const LABELS_HTTP: &[&str] = &[
-    "request_type",
-    "status_code",
-    SUBNET_ID_LABEL,
-    NODE_ID_LABEL,
-    "error_cause",
-    "cache_status",
-    "cache_bypass",
-];
 
 pub struct MetricsCache {
     buffer: Vec<u8>,
@@ -76,7 +64,7 @@ impl MetricsCache {
 }
 
 // Iterates over given metric families and removes metrics that have
-// node_id/subnet_id labels and where the corresponding nodes are
+// node_id+subnet_id labels and where the corresponding nodes are
 // not present in the registry snapshot
 fn remove_stale_nodes(
     snapshot: Arc<RegistrySnapshot>,
@@ -105,8 +93,10 @@ fn remove_stale_nodes(
                 match (node_id, subnet_id) {
                     (Some(node_id), Some(subnet_id)) => snapshot
                         .nodes
-                        .get(node_id) // Check if the node_id is in the snapshot
-                        .map(|x| x.subnet_id.to_string() == subnet_id) // Check if its subnet_id matches, otherwise the metrics needs to be removed
+                        // Check if the node_id is in the snapshot
+                        .get(node_id)
+                        // Check if its subnet_id matches, otherwise the metric needs to be removed
+                        .map(|x| x.subnet_id.to_string() == subnet_id)
                         .unwrap_or(false),
 
                     // Otherwise just pass this metric through
@@ -485,10 +475,19 @@ pub struct HttpMetricParams {
     pub durationer: HistogramVec,
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
+    pub cache_counter: IntCounterVec,
 }
 
 impl HttpMetricParams {
     pub fn new(registry: &Registry, action: &str) -> Self {
+        const LABELS_HTTP: &[&str] = &[
+            "request_type",
+            "status_code",
+            SUBNET_ID_LABEL,
+            NODE_ID_LABEL,
+            "error_cause",
+        ];
+
         Self {
             action: action.to_string(),
 
@@ -523,6 +522,14 @@ impl HttpMetricParams {
                 format!("Records the size of {action} responses"),
                 LABELS_HTTP,
                 HTTP_RESPONSE_SIZE_BUCKETS.to_vec(),
+                registry
+            )
+            .unwrap(),
+
+            cache_counter: register_int_counter_vec_with_registry!(
+                format!("{action}_cache"),
+                format!("Counts cache results"),
+                &["cache_status", "cache_bypass"],
                 registry
             )
             .unwrap(),
@@ -614,6 +621,7 @@ pub async fn metrics_middleware(
         durationer,
         request_sizer,
         response_sizer,
+        cache_counter,
     } = metric_params;
 
     // Closure that gets called when the response body is fully read (or an error occurs)
@@ -638,16 +646,21 @@ pub async fn metrics_middleware(
         let cache_status_lbl = &cache_status.to_string();
         let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
 
-        // TODO Potential cardinality is about 8M which is a lot
-        // Check over a long period in PROD and measure
+        // TODO Potential cardinality is up to 900K which is a lot
+        // In reality it's less thank 80K which is still high
+        // Check over a long period
         let labels = &[
-            request_type.as_str(),            // x4
-            status_code.as_str(),             // x27 average
-            subnet_id_lbl.as_str(),           // x37 but since each node is in a single subnet -> x1
-            node_id_lbl.as_str(),             // x550
-            error_cause_lbl.as_str(),         // x15 but not sure if all errors would ever manifest
-            cache_status_lbl.as_str(),        // x4
-            cache_bypass_reason_lbl.as_str(), // x5 but since it relates only to BYPASS cache status -> total for 2 fields is x9
+            request_type.as_str(),    // x3
+            status_code.as_str(),     // x27 but usually x8
+            subnet_id_lbl.as_str(),   // x37 but since each node is in a single subnet -> x1
+            node_id_lbl.as_str(),     // x550
+            error_cause_lbl.as_str(), // x15 but usually x6
+        ];
+
+        // Cardinality x9
+        let labels_cache = &[
+            cache_status_lbl.as_str(),        // x5
+            cache_bypass_reason_lbl.as_str(), // x6 but since it relates only to BYPASS cache status -> total for 2 fields is x10
         ];
 
         counter.with_label_values(labels).inc();
@@ -658,6 +671,7 @@ pub async fn metrics_middleware(
         response_sizer
             .with_label_values(labels)
             .observe(response_size as f64);
+        cache_counter.with_label_values(labels_cache).inc();
 
         info!(
             action,

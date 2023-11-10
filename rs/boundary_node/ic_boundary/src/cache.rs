@@ -11,42 +11,19 @@ use axum::{
 };
 use http::header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH};
 use http::{response, Version};
-use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
-use hyper::body;
+use http_body::combinators::UnsyncBoxBody;
 use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
-use crate::routes::{ApiError, ErrorCause, RequestContext};
+use crate::{
+    http::read_streaming_body,
+    routes::{ApiError, ErrorCause, RequestContext},
+};
 
 // Standard response used to pass between middlewares
 type AxumResponse = Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>;
 
 // A list of possible Cache-Control directives that ask us not to cache the response
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];
-
-// Read the body from the available stream enforcing a size limit
-async fn read_streaming_body<H: HttpBody>(
-    body_stream: H,
-    size_limit: usize,
-) -> Result<Vec<u8>, ErrorCause>
-where
-    <H as HttpBody>::Error: std::error::Error + Send + Sync + 'static,
-{
-    let limited_body = Limited::new(body_stream, size_limit);
-
-    match body::to_bytes(limited_body).await {
-        Ok(data) => Ok(data.to_vec()),
-
-        Err(err) => {
-            if err.downcast_ref::<LengthLimitError>().is_some() {
-                return Err(ErrorCause::Other("too large response body".into()));
-            }
-
-            Err(ErrorCause::Other(format!(
-                "unable to read response body: {err}"
-            )))
-        }
-    }
-}
 
 // Reason why the caching was skipped
 #[derive(Debug, Clone, PartialEq)]
