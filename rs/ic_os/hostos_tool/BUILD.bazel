@@ -1,10 +1,11 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 DEPENDENCIES = [
+    "//rs/ic_os/config",
+    "//rs/ic_os/network",
+    "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap_4_0_0",
-    "@crate_index//:itertools",
-    "@crate_index//:regex",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -12,23 +13,15 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_binary(
-    name = "guestos_tool",
+    name = "hostos_tool",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_name = "guestos_tool",
+    crate_name = "hostos_tool",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     visibility = ["//visibility:public"],
-    deps = DEPENDENCIES,
-)
-
-rust_test(
-    name = "test",
-    size = "small",
-    srcs = glob(["src/**/*.rs"]),
-    crate = ":guestos_tool",
     deps = DEPENDENCIES,
 )

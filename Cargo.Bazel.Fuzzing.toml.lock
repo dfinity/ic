@@ -2732,6 +2732,7 @@ dependencies = [
  "pem 1.1.1",
  "pico-args 0.3.4",
  "pin-project-lite",
+ "ping",
  "pkcs8",
  "pkg-config",
  "pprof",
@@ -6939,6 +6940,17 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "ping"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "985c8af0584bf35ecfb95a65b74a457782966e1ab8f2c94c01697a36432a5814"
+dependencies = [
+ "rand 0.8.5",
+ "socket2 0.4.9",
+ "thiserror",
+]
 
 [[package]]
 name = "pkcs1"

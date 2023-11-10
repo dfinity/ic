@@ -1,7 +1,10 @@
+use std::fs::File;
+use std::path::Path;
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use url::Url;
-
-use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct DeploymentJson {
@@ -39,6 +42,11 @@ pub struct Resources {
     pub memory: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu: Option<String>,
+}
+
+pub fn read_deployment_file(deployment_json: &Path) -> Result<DeploymentJson> {
+    let file = File::open(deployment_json).context("failed to open deployment config file")?;
+    serde_json::from_reader(&file).context("Invalid json content")
 }
 
 #[cfg(test)]
