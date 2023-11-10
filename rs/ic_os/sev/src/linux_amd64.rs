@@ -10,7 +10,7 @@ References:
     x509.to_pem()
 */
 
-use crate::SnpError;
+use crate::{load_certs, pem_to_der, SnpError};
 use crate::{ValidateAttestationError, ValidateAttestedStream};
 use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
@@ -21,14 +21,10 @@ use openssl::x509::X509;
 use serde::{Deserialize, Serialize};
 use sev::firmware::guest::AttestationReport;
 use sha2::Digest;
-use std::fs;
+
 use std::path::Path;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-
-static ARK_PEM: &str = "/run/ic-node/config/ark.pem";
-static ASK_PEM: &str = "/run/ic-node/config/ask.pem";
-static VCEK_PEM: &str = "/run/ic-node/config/vcek.pem";
 
 #[derive(Deserialize, Serialize)]
 pub struct AttestationPackage {
@@ -40,56 +36,11 @@ pub struct AttestationPackage {
 pub struct Sev {
     pub node_id: NodeId,
     pub registry: Arc<dyn RegistryClient>,
-    pub ark: Option<X509>,
-    pub ask: Option<X509>,
-    pub vcek: Option<X509>,
-    pub ask_der: Vec<u8>,
-    pub vcek_der: Vec<u8>,
 }
 
 impl Sev {
     pub fn new(node_id: NodeId, registry: Arc<dyn RegistryClient>) -> Self {
-        let ask = read_pem(ASK_PEM);
-        let vcek = read_pem(VCEK_PEM);
-        let ask_der = pem_to_der(&ask);
-        let vcek_der = pem_to_der(&vcek);
-        Self {
-            node_id,
-            registry,
-            ark: read_pem(ARK_PEM),
-            ask,
-            vcek,
-            ask_der,
-            vcek_der,
-        }
-    }
-
-    pub fn is_available(&self) -> bool {
-        self.ark.is_some()
-            && self.ask.is_some()
-            && self.vcek.is_some()
-            && !self.ask_der.is_empty()
-            && !self.vcek_der.is_empty()
-    }
-}
-
-fn read_pem(path: &str) -> Option<X509> {
-    if let Ok(f) = fs::read(path) {
-        X509::from_pem(&f).map_or_else(|_| None, Some)
-    } else {
-        None
-    }
-}
-
-fn pem_to_der(pem: &Option<X509>) -> Vec<u8> {
-    if let Some(pem) = pem {
-        if let Ok(der) = pem.to_der() {
-            der
-        } else {
-            Vec::new()
-        }
-    } else {
-        Vec::new()
+        Self { node_id, registry }
     }
 }
 
@@ -104,14 +55,9 @@ where
         peer: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
+        // TODO: Replace this with `sev_status` feature check in subnet registry
         if true {
             return Ok(stream);
-        }
-
-        if !self.is_available() {
-            return Err(ValidateAttestationError::HandshakeError {
-                description: "certificates not available".into(),
-            });
         }
 
         // Read seed_id, peer_tls_certificate, my tls_certificate from registry.
@@ -133,7 +79,7 @@ where
         let chip_id = transport_info.chip_id;
         if chip_id.is_none() {
             return Err(ValidateAttestationError::HandshakeError {
-                description: "missing chip_id".into(),
+                description: "missing chip_id.".into(),
             });
         }
         let peer_tls_certificate = self
@@ -155,7 +101,7 @@ where
                 description: "tls_certificate missing".into(),
             })?;
 
-        // Get my attestation report.
+        // Get an attestation report with the hash of the tls certificate as report data.
         let mut guest_firmware = sev::firmware::guest::Firmware::open().map_err(|_| {
             ValidateAttestationError::HandshakeError {
                 description: "unable to open sev guest firmware".into(),
@@ -170,10 +116,17 @@ where
                 description: "unable to get attestation report".into(),
             })?;
         let measurement = report.measurement;
+
+        // Load the certs required to send with the report
+        let certs = load_certs().map_err(|e| ValidateAttestationError::CertificatesError {
+            description: format!("{}", e),
+        })?;
+
+        // Create my attestation package to send to the peer
         let package = AttestationPackage {
             report,
-            ask_der: self.ask_der.clone(),
-            vcek_der: self.vcek_der.clone(),
+            ask_der: pem_to_der(&certs.ask),
+            vcek_der: pem_to_der(&certs.vcek),
         };
 
         // Write my attestation package to peer.
@@ -223,7 +176,7 @@ where
         })?;
 
         // Validate peer attestation package.
-        if !is_cert_chain_valid(self.ark.as_ref().unwrap(), &peer_ask, &peer_vcek) {
+        if !is_cert_chain_valid(certs.ark.as_ref().unwrap(), &peer_ask, &peer_vcek) {
             return Err(ValidateAttestationError::HandshakeError {
                 description: "attestation cert chain invalid".to_string(),
             });

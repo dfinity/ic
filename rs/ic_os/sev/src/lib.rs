@@ -13,6 +13,10 @@ use async_trait::async_trait;
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
 use std::fmt::{Display, Formatter};
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod certs;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub use certs::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ValidateAttestationError {
@@ -23,6 +27,9 @@ pub enum ValidateAttestationError {
         description: String,
     },
     HandshakeError {
+        description: String,
+    },
+    CertificatesError {
         description: String,
     },
 }
