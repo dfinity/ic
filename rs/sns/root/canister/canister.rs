@@ -26,7 +26,6 @@ use ic_sns_root::{
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
-use serde_bytes::ByteBuf;
 use std::cell::RefCell;
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
@@ -214,37 +213,6 @@ fn change_canister(proposal: ChangeCanisterProposal) {
     CanisterRuntime::spawn_future(ic_nervous_system_root::change_canister::change_canister::<
         CanisterRuntime,
     >(proposal));
-}
-
-// This method returns an error to the caller if the ledger upgrade failed.
-// This is in contrast to the previous method "change_canister" that returns before doing the upgrade.
-#[candid_method(update)]
-#[update]
-async fn change_ledger_canister_await(ledger_wasm: ByteBuf, ledger_upgrade_arg: ByteBuf) {
-    log!(INFO, "change_ledger_canister_await");
-    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
-
-    let ledger_canister = STATE.with(|state| state.borrow().ledger_canister_id());
-
-    // For more details, please refer to the comments above the (definition of the)
-    // stop_before_installing field in ChangeCanisterProposal.
-    let stop_before_installing = true;
-    let change_canister_proposal = ChangeCanisterProposal::new(
-        stop_before_installing,
-        ic_ic00_types::CanisterInstallMode::Upgrade,
-        ledger_canister.try_into().unwrap(),
-    )
-    .with_wasm(ledger_wasm.into_vec())
-    .with_arg(ledger_upgrade_arg.into_vec());
-
-    assert_change_canister_proposal_is_valid(&change_canister_proposal);
-
-    // We can await the full outcome of the upgrade.
-    // This will not cause a deadlock because we made sure that caller is the governance-canister and the target-canister is the ledger-canister.
-    ic_nervous_system_root::change_canister::change_canister::<CanisterRuntime>(
-        change_canister_proposal,
-    )
-    .await
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used

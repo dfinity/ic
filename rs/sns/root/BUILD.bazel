@@ -29,7 +29,6 @@ DEPENDENCIES = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:prost",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [

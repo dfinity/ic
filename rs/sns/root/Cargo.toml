@@ -34,7 +34,6 @@ ic-sns-swap = { path = "../swap" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 prost = { workspace = true }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 
 [dev-dependencies]
 ic-sns-root-protobuf-generator = { path = "./protobuf_generator" }

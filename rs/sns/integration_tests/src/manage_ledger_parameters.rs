@@ -1,6 +1,6 @@
 use candid::Encode;
 use candid::{Nat, Principal};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
@@ -10,7 +10,7 @@ use ic_nns_test_utils::{
     state_test_helpers::{
         icrc1_balance, icrc1_fee, icrc1_transfer, query, setup_nns_canisters,
         sns_claim_staked_neuron, sns_make_proposal, sns_stake_neuron,
-        sns_wait_for_proposal_execution,
+        sns_wait_for_proposal_execution, update,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -98,6 +98,11 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
         &state_machine,
         sns_canisters.governance_canister_id,
         change_ledger_transfer_fee_proposal_id,
+    );
+
+    wait_for_ledger_canister_to_start_after_an_upgrade(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
     );
 
     // check that the fee on the ledger has changed.
@@ -266,6 +271,11 @@ fn test_manage_ledger_parameters_change_fee_collector() {
         change_fee_collector_proposal_id,
     );
 
+    wait_for_ledger_canister_to_start_after_an_upgrade(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+    );
+
     // check that a transfer does send the fee to the new fee_collector now.
     icrc1_transfer(
         &state_machine,
@@ -293,4 +303,22 @@ fn test_manage_ledger_parameters_change_fee_collector() {
         ),
         DEFAULT_TRANSFER_FEE
     );
+}
+
+fn wait_for_ledger_canister_to_start_after_an_upgrade(
+    machine: &StateMachine,
+    ledger_id: CanisterId,
+) {
+    for i in 0..=20 {
+        match update(machine, ledger_id, "icrc1_fee", Encode!().unwrap()) {
+            Ok(_) => break,
+            Err(call_error) => println!(
+                "call error when checking if ledger is running: {:?}",
+                call_error
+            ),
+        }
+        if i == 20 {
+            panic!("cannot verify the ledger is running.");
+        }
+    }
 }

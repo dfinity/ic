@@ -1276,15 +1276,26 @@ message Governance {
 
   // An upgrade in progress, defined as a version target and a time at which it is considered failed.
   message UpgradeInProgress {
-    // Version to  be upgraded to
-    Version target_version = 1;
+    
     // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
-    uint64 mark_failed_at_seconds = 2;
+    uint64 mark_failed_at_seconds = 1;
     // Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
     // allowing us to fail in case we otherwise have gotten stuck.
-    uint64 checking_upgrade_lock = 3;
+    uint64 checking_upgrade_lock = 2;
     // The proposal that initiated this upgrade
-    uint64 proposal_id = 4;
+    uint64 proposal_id = 3;
+    
+    message ManageLedgerParametersPendingVersionData {
+      uint64 ledger_canister_info_version_number_before_upgrade = 1;
+      ManageLedgerParameters manage_ledger_parameters_request = 2;      
+      bytes ledger_wasm_hash = 3;     
+    }
+         
+    oneof target_version {  
+      Version upgrade_sns_to_next_version = 4;
+      ManageLedgerParametersPendingVersionData manage_ledger_parameters = 5;
+    }
+    
   }
 
   // Version SNS is in process of upgrading to.
