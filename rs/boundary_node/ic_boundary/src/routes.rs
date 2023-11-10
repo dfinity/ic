@@ -45,7 +45,8 @@ use {
 
 use crate::{
     cache::CacheStatus,
-    http::{reqwest_error_infer, HttpClient},
+    core::MAX_REQUEST_BODY_SIZE,
+    http::{read_streaming_body, reqwest_error_infer, HttpClient},
     persist::Routes,
     snapshot::Node,
 };
@@ -115,10 +116,11 @@ impl fmt::Display for RequestType {
 }
 
 // Categorized possible causes for request processing failures
-// Use String and not Error since it's not cloneable
+// Not using Error as inner type since it's not cloneable
 #[derive(Debug, Clone)]
 pub enum ErrorCause {
-    UnableToReadBody,
+    UnableToReadBody(String),
+    PayloadTooLarge(usize),
     UnableToParseCBOR(String), // TODO just use MalformedRequest?
     MalformedRequest(String),
     MalformedResponse(String),
@@ -139,7 +141,8 @@ impl ErrorCause {
     pub fn status_code(&self) -> StatusCode {
         match self {
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::UnableToReadBody => StatusCode::BAD_REQUEST,
+            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
             Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
             Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
             Self::MalformedResponse(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -159,6 +162,8 @@ impl ErrorCause {
     pub fn details(&self) -> Option<String> {
         match self {
             Self::Other(x) => Some(x.clone()),
+            Self::PayloadTooLarge(x) => Some(format!("maximum body size is {x} bytes")),
+            Self::UnableToReadBody(x) => Some(x.clone()),
             Self::UnableToParseCBOR(x) => Some(x.clone()),
             Self::MalformedRequest(x) => Some(x.clone()),
             Self::MalformedResponse(x) => Some(x.clone()),
@@ -175,7 +180,8 @@ impl fmt::Display for ErrorCause {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Other(_) => write!(f, "general_error"),
-            Self::UnableToReadBody => write!(f, "unable_to_read_body"),
+            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
+            Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
             Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
             Self::MalformedRequest(_) => write!(f, "malformed_request"),
             Self::MalformedResponse(_) => write!(f, "malformed_response"),
@@ -528,10 +534,7 @@ pub async fn preprocess_request(
 
     // Consume body
     let (parts, body) = request.into_parts();
-    let body = hyper::body::to_bytes(body)
-        .await
-        .map_err(|_| ErrorCause::UnableToReadBody)?
-        .to_vec();
+    let body = read_streaming_body(body, MAX_REQUEST_BODY_SIZE).await?;
 
     // Parse the request body
     let envelope: ICRequestEnvelope = serde_cbor::from_slice(&body)
