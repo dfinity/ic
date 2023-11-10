@@ -323,7 +323,7 @@ impl OngoingStateSync {
         };
 
         let chunk_add_result = tokio::task::spawn_blocking(move || {
-            let chunk = parse_chunk_handler_response(response, chunk_id)?;
+            let chunk = parse_chunk_handler_response(response, chunk_id, metrics)?;
             Ok(tracker.lock().unwrap().add_chunk(chunk))
         })
         .await

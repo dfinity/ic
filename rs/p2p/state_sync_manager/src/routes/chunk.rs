@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::metrics::StateSyncManagerHandlerMetrics;
+use crate::metrics::{OngoingStateSyncMetrics, StateSyncManagerHandlerMetrics};
 use crate::ongoing::DownloadChunkError;
 use axum::{
     body::Bytes,
@@ -99,17 +99,25 @@ pub(crate) fn build_chunk_handler_request(
 pub(crate) fn parse_chunk_handler_response(
     response: Response<Bytes>,
     chunk_id: ChunkId,
+    metrics: OngoingStateSyncMetrics,
 ) -> Result<ArtifactChunk, DownloadChunkError> {
     let (parts, body) = response.into_parts();
 
     match parts.status {
         StatusCode::OK => {
+            metrics
+                .chunk_size_compressed_total
+                .inc_by(body.len() as u64);
             let decompressed = zstd::bulk::decompress(&body, MAX_CHUNK_SIZE).map_err(|e| {
                 DownloadChunkError::RequestError {
                     chunk_id,
                     err: e.to_string(),
                 }
             })?;
+
+            metrics
+                .chunk_size_decompressed_total
+                .inc_by(decompressed.len() as u64);
 
             let pb =
                 pb::StateSyncChunkResponse::decode(Bytes::from(decompressed)).map_err(|e| {
