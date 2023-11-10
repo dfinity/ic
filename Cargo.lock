@@ -8451,6 +8451,7 @@ name = "ic-nervous-system-common"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "assert_matches",
  "async-trait",
  "build-info",
  "build-info-build",
@@ -8475,6 +8476,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "json5",
+ "lazy_static",
  "maplit",
  "mockall 0.11.4",
  "priority-queue",
@@ -15583,9 +15585,9 @@ dependencies = [
 
 [[package]]
 name = "rgb"
-version = "0.8.36"
+version = "0.8.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20ec2d3e3fc7a92ced357df9cebd5a10b6fb2aa1ee797bf7e9ce2f17dffc8f59"
+checksum = "05aaa8004b64fd573fc9d002f4e632d51ad4f026c2b5ba95fcb6c2f32c2c47d8"
 dependencies = [
  "bytemuck",
 ]

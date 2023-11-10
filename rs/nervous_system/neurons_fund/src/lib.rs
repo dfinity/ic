@@ -308,6 +308,7 @@ impl Default for ValidatedLinearScalingCoefficient {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ValidatedNeuronsFundParticipationConstraints<F> {
     pub min_direct_participation_threshold_icp_e8s: u64,
     pub max_neurons_fund_participation_icp_e8s: u64,
