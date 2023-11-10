@@ -114,6 +114,57 @@ fn counter_canister_call_test() {
         )
         .unwrap();
 
+    // Make a self-call with a large argument.
+    let msg_id = env1
+        .submit_ingress_as(
+            user_id,
+            canister_id1,
+            "update",
+            wasm()
+                .inter_update(
+                    canister_id1,
+                    CallArgs::default().eval_other_side(
+                        wasm()
+                            .push_bytes_wasm_push_bytes_and_reply(10_000_000)
+                            .build(),
+                    ),
+                )
+                .build(),
+        )
+        .unwrap();
+    env1.execute_round();
+    let wasm_result = env1.await_ingress(msg_id, MAX_TICKS).unwrap();
+    match wasm_result {
+        WasmResult::Reply(bytes) => assert_eq!(bytes, 10_000_000_u32.to_le_bytes()),
+        _ => panic!("unreachable"),
+    };
+
+    // Make a xnet-call with too large argument.
+    let msg_id = env1
+        .submit_ingress_as(
+            user_id,
+            canister_id1,
+            "update",
+            wasm()
+                .inter_update(
+                    canister_id2,
+                    CallArgs::default().eval_other_side(
+                        wasm()
+                            .push_bytes_wasm_push_bytes_and_reply(10_000_000)
+                            .build(),
+                    ),
+                )
+                .build(),
+        )
+        .unwrap();
+    env1.execute_round();
+    let wasm_result = env1.await_ingress(msg_id, MAX_TICKS).unwrap();
+    match wasm_result {
+        // The call fails with CANISTER_ERROR reject code (5).
+        WasmResult::Reject(reject) => assert_eq!(reject.as_bytes(), 5_u32.to_le_bytes().to_vec()),
+        _ => panic!("unreachable"),
+    };
+
     // Set global data on the 1st subnet.
     let msg1_id = env1
         .submit_ingress_as(

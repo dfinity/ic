@@ -402,6 +402,16 @@ fn eval(ops_bytes: OpsBytes) {
                 let amount_high = stack.pop_int64();
                 stack.push_blob(api::cycles_burn128(amount_high, amount_low))
             }
+            Ops::BlobLength => {
+                let data = stack.pop_blob();
+                stack.push_int(data.len() as u32);
+            }
+            Ops::PushEqualBytes => {
+                let length = stack.pop_int();
+                let byte = stack.pop_int();
+                let data = vec![byte as u8; length as usize];
+                stack.push_blob(data);
+            }
         }
     }
 }
