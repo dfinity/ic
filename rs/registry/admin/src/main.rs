@@ -3659,10 +3659,10 @@ struct ProposeToCreateServiceNervousSystemCmd {
     swap_minimum_participants: u64,
 
     #[clap(long, value_parser=parse_tokens)]
-    swap_minimum_icp: nervous_system_pb::Tokens,
+    swap_minimum_direct_participation_icp: nervous_system_pb::Tokens,
 
     #[clap(long, value_parser=parse_tokens)]
-    swap_maximum_icp: nervous_system_pb::Tokens,
+    swap_maximum_direct_participation_icp: nervous_system_pb::Tokens,
 
     #[clap(long, value_parser=parse_tokens)]
     swap_minimum_participant_icp: nervous_system_pb::Tokens,
@@ -3688,11 +3688,8 @@ struct ProposeToCreateServiceNervousSystemCmd {
     #[clap(long, value_parser=parse_duration)]
     swap_duration: nervous_system_pb::Duration,
 
-    #[clap(long, value_parser=parse_tokens)]
-    neurons_fund_investment_icp: nervous_system_pb::Tokens,
-
-    #[clap(long)]
-    neurons_fund_participation: Option<bool>,
+    #[clap(long, action)]
+    neurons_fund_participation: bool, // defaults to false if unset (due to `action`)
 
     // Ledger
     // ------
@@ -3774,8 +3771,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             swap_amount,
 
             swap_minimum_participants,
-            swap_minimum_icp,
-            swap_maximum_icp,
+            swap_minimum_direct_participation_icp,
+            swap_maximum_direct_participation_icp,
             swap_minimum_participant_icp,
             swap_maximum_participant_icp,
             swap_neuron_count,
@@ -3785,7 +3782,6 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             restrict_swap_in_country: restricted_countries,
             swap_start_time,
             swap_duration,
-            neurons_fund_investment_icp,
             neurons_fund_participation,
 
             transaction_fee,
@@ -3897,17 +3893,14 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
         let swap_parameters = {
             let minimum_participants = Some(swap_minimum_participants);
-            let minimum_direct_participation_icp =
-                swap_minimum_icp.checked_sub(&neurons_fund_investment_icp);
-            let maximum_direct_participation_icp =
-                swap_maximum_icp.checked_sub(&neurons_fund_investment_icp);
-            let minimum_icp = Some(swap_minimum_icp);
-            let maximum_icp = Some(swap_maximum_icp);
+            let minimum_direct_participation_icp = Some(swap_minimum_direct_participation_icp);
+            let maximum_direct_participation_icp = Some(swap_maximum_direct_participation_icp);
+            let neurons_fund_participation = Some(neurons_fund_participation);
+
             let minimum_participant_icp = Some(swap_minimum_participant_icp);
             let maximum_participant_icp = Some(swap_maximum_participant_icp);
             let start_time = swap_start_time;
             let duration = Some(swap_duration);
-            let neurons_fund_investment_icp = Some(neurons_fund_investment_icp);
 
             let neuron_basket_construction_parameters = {
                 let count = Some(swap_neuron_count);
@@ -3921,6 +3914,11 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
             let restricted_countries =
                 restricted_countries.map(|iso_codes| nervous_system_pb::Countries { iso_codes });
+
+            // Deprecated fields
+            let minimum_icp = None;
+            let maximum_icp = None;
+            let neurons_fund_investment_icp = None;
 
             Some(SwapParameters {
                 minimum_participants,

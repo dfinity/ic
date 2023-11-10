@@ -71,9 +71,6 @@ Swap:
     minimum_direct_participation_icp: 1000000000 e8s
     maximum_direct_participation_icp: 3000000000000 e8s
 
-    minimum_icp: 1000000000 e8s
-    maximum_icp: 3000000000000 e8s
-
     minimum_participant_icp: 1000000000 e8s
     maximum_participant_icp: 3000000000000 e8s
 
@@ -83,4 +80,4 @@ Swap:
 
     duration: 7 days
 
-    neurons_fund_investment_icp: 0 tokens
+    neurons_fund_participation: true

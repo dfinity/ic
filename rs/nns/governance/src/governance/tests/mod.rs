@@ -17,6 +17,7 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+#[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::{self as sns_init_pb};
@@ -1707,63 +1708,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         let payload = CreateServiceNervousSystem {
             swap_parameters: Some(SwapParameters {
                 neurons_fund_participation: None,
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let error = SnsInitPayload::try_from(payload).unwrap_err();
-
-        assert!(error.contains("neurons_fund_participation"));
-    }
-}
-
-#[cfg(not(feature = "test"))]
-mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_without_test_feature {
-    use super::*;
-    use crate::pb::v1::create_service_nervous_system::SwapParameters;
-    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM;
-
-    // Alias types from crate::pb::v1::...
-    //
-    // This is done within another mod to differentiate against types that have
-    // similar names as types found in ic_sns_init.
-    mod src {
-        pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
-    }
-
-    // TODO NNS1-2687: remove this test entirely
-    #[test]
-    fn test_neurons_fund_participation_false_not_allowed() {
-        // Step 1: Prepare the world. (In this case, trivial.)
-
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                neurons_fund_participation: Some(false),
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let error = SnsInitPayload::try_from(payload).unwrap_err();
-
-        assert!(error.contains("neurons_fund_participation"));
-    }
-
-    // TODO NNS1-2687: remove this test entirely
-    #[test]
-    fn test_neurons_fund_participation_true_not_allowed() {
-        // Step 1: Prepare the world. (In this case, trivial.)
-
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                neurons_fund_participation: Some(true),
                 ..CREATE_SERVICE_NERVOUS_SYSTEM
                     .swap_parameters
                     .clone()
