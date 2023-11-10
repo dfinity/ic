@@ -11,13 +11,13 @@ use tracing::*;
 
 pub async fn wait_for_event(
     client: Client,
+    namespace: &str,
     message: &str,
     kind: &str,
     name: &str,
-    ns: &str,
     timeout: u64,
 ) -> Result<()> {
-    let events: Api<Event> = Api::namespaced(client, ns);
+    let events: Api<Event> = Api::namespaced(client, namespace);
     let wc = watcher::Config::default();
     let ew = watcher(events, wc).applied_objects();
 

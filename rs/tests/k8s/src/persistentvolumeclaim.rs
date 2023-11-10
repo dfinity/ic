@@ -6,6 +6,7 @@ use k8s_openapi::api::core::v1::{
     TypedLocalObjectReference,
 };
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::{ObjectMeta, PostParams};
 use kube::Api;
 use tracing::*;
@@ -17,11 +18,13 @@ pub async fn create_pvc(
     volume_mode: Option<String>,
     storage_class_name: Option<String>,
     data_source: Option<TypedLocalObjectReference>,
+    owner: OwnerReference,
 ) -> Result<PersistentVolumeClaim> {
     info!("Creating persistent volume claim {}", name);
     let pvc = PersistentVolumeClaim {
         metadata: ObjectMeta {
             name: Some(name.to_string()),
+            owner_references: vec![owner].into(),
             ..Default::default()
         },
         spec: Some(PersistentVolumeClaimSpec {

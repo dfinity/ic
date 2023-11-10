@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use k8s_openapi::api::core::v1::{
     Container, PersistentVolumeClaimVolumeSource, Pod, PodSpec, Volume, VolumeMount,
 };
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::{DeleteParams, ListParams, ObjectList, ObjectMeta, PostParams};
 use kube::Api;
 use tracing::*;
@@ -15,6 +16,7 @@ pub async fn create_pod(
     init_command: Vec<&str>,
     command: Vec<&str>,
     volume: Option<(&str, &str)>,
+    owner: OwnerReference,
 ) -> Result<Pod> {
     if api.get(name).await.is_ok() {
         return Err(anyhow!("Pod {} already exists!", name));
@@ -66,6 +68,7 @@ pub async fn create_pod(
     let pod = Pod {
         metadata: ObjectMeta {
             name: Some(name.to_string()),
+            owner_references: vec![owner].into(),
             ..Default::default()
         },
         spec: Some(podspec),

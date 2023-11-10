@@ -1,12 +1,18 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::env::var;
 use std::net::Ipv6Addr;
+
+use backon::ExponentialBuilder;
+use backon::Retryable;
 
 use anyhow::{anyhow, Result};
 use cidr::Ipv6Cidr;
 use k8s_openapi::api::core::v1::{
-    Namespace, PersistentVolumeClaim, Pod, TypedLocalObjectReference,
+    ConfigMap, PersistentVolumeClaim, Pod, TypedLocalObjectReference,
 };
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
+use kube::api::{ListParams, PostParams};
+use kube::core::ObjectMeta;
 use kube::ResourceExt;
 use kube::{
     api::{Api, DynamicObject, GroupVersionKind},
@@ -21,7 +27,6 @@ use tracing::*;
 
 use crate::datavolume::*;
 use crate::event::*;
-use crate::namespace::*;
 use crate::persistentvolumeclaim::*;
 use crate::pod::*;
 use crate::prep::*;
@@ -37,6 +42,13 @@ static CONFIG_URL: Lazy<String> = Lazy::new(|| {
 static BUCKET: Lazy<String> = Lazy::new(|| {
     var("BUCKET").unwrap_or("tnet-config-5f1a0cb6-fdf2-4ca8-b816-9b9c2ffa1669".to_string())
 });
+static NAMESPACE: Lazy<String> = Lazy::new(|| var("NAMESPACE").unwrap_or("tnets".to_string()));
+
+static TNET_STATIC_LABELS: Lazy<BTreeMap<String, String>> =
+    Lazy::new(|| BTreeMap::from([("app".to_string(), "tnet".to_string())]));
+
+static TNET_INDEX_LABEL: &str = "tnet.internetcomputer.org/index";
+static TNET_NAME_LABEL: &str = "tnet.internetcomputer.org/name";
 
 pub struct K8sClient {
     pub(crate) client: Client,
@@ -48,21 +60,21 @@ pub struct K8sClient {
 }
 
 impl K8sClient {
-    pub async fn new(client: Client, namespace: &str) -> Result<Self> {
-        let api_pod: Api<Pod> = Api::namespaced(client.clone(), namespace);
-        let api_pvc: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), namespace);
+    pub async fn new(client: Client) -> Result<Self> {
+        let api_pod: Api<Pod> = Api::namespaced(client.clone(), &NAMESPACE);
+        let api_pvc: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &NAMESPACE);
 
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api_dv = Api::<DynamicObject>::namespaced_with(client.clone(), namespace, &ar);
+        let api_dv = Api::<DynamicObject>::namespaced_with(client.clone(), &NAMESPACE, &ar);
 
         let gvk = GroupVersionKind::gvk("kubevirt.io", "v1", "VirtualMachine");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api_vm = Api::<DynamicObject>::namespaced_with(client.clone(), namespace, &ar);
+        let api_vm = Api::<DynamicObject>::namespaced_with(client.clone(), &NAMESPACE, &ar);
 
         let gvk = GroupVersionKind::gvk("kubevirt.io", "v1", "VirtualMachineInstance");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api_vmi = Api::<DynamicObject>::namespaced_with(client.clone(), namespace, &ar);
+        let api_vmi = Api::<DynamicObject>::namespaced_with(client.clone(), &NAMESPACE, &ar);
 
         Ok(Self {
             client,
@@ -90,64 +102,81 @@ pub struct TNet {
     pub(crate) image_url: String,
     ipv6_net: Option<Ipv6Cidr>,
     config_url: Option<String>,
-    index: Option<u32>,
-    pub(crate) namespace: Option<String>,
+    pub(crate) index: Option<u32>,
+    pub(crate) namespace: String,
     nns_nodes: Vec<TNode>,
     app_nodes: Vec<TNode>,
     k8s: Option<K8sClient>,
+    owner: ConfigMap,
 }
 
 impl TNet {
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
+            namespace: NAMESPACE.clone(),
             ..Default::default()
         }
     }
 
-    pub async fn delete(name: Option<String>, namespace: Option<String>) -> Result<()> {
-        let client = Client::try_default().await?;
-        let api: Api<Namespace> = Api::all(client.clone());
+    pub fn owner_config_map_name(idx: u32) -> String {
+        format!("tnet-{}", idx)
+    }
 
-        if let Some(name) = name {
-            let labels = Some(BTreeMap::from([("tnet".to_string(), name.to_string())]));
-            let namespaces = get_namespaces(&api, labels).await?;
-
-            if namespaces.items.is_empty() {
-                return Err(anyhow!("No testnet '{}' found!", name));
-            } else if namespaces.items.len() > 1 {
-                return Err(anyhow!("Multiple testnets '{}' found!", name));
-            }
-
-            let namespace = namespaces.items[0].name_any();
-            delete_namespace(&api, &namespace).await?;
-        } else if let Some(namespace) = namespace {
-            delete_namespace(&api, &namespace).await?;
-        } else {
-            return Err(anyhow!("name or namespace expected!"));
+    pub fn owner_reference(&self) -> OwnerReference {
+        OwnerReference {
+            api_version: k8s_openapi::api_version(&self.owner).to_owned(),
+            kind: k8s_openapi::kind(&self.owner).to_owned(),
+            name: self
+                .owner
+                .metadata
+                .name
+                .clone()
+                .expect("should have a name"),
+            uid: self.owner.metadata.uid.clone().expect("should have uid"),
+            ..Default::default()
         }
+    }
 
+    fn get_tnet_index(cm: &ConfigMap) -> Result<u32> {
+        Ok(cm
+            .metadata
+            .labels
+            .as_ref()
+            .unwrap()
+            .get(TNET_INDEX_LABEL)
+            .unwrap_or(&"-".to_string())
+            .parse()?)
+    }
+
+    pub async fn delete(idx: u32) -> Result<()> {
+        let client = Client::try_default().await?;
+        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &NAMESPACE);
+
+        api.delete(&Self::owner_config_map_name(idx), &Default::default())
+            .await?;
         Ok(())
     }
 
     pub async fn list() -> Result<Vec<(String, String)>> {
         let client = Client::try_default().await?;
-        let api: Api<Namespace> = Api::all(client.clone());
+        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &NAMESPACE);
 
-        let labels = Some(BTreeMap::from([("app".to_string(), "tnet".to_string())]));
-        Ok(get_namespaces(&api, labels)
+        let label_selector = TNET_STATIC_LABELS
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<String>>()
+            .join(",");
+
+        Ok(api
+            .list(&ListParams::default().labels(&label_selector))
             .await?
             .iter()
-            .map(|ns| {
+            .map(|cm| {
                 (
-                    ns.name_any(),
-                    ns.metadata
-                        .labels
-                        .as_ref()
-                        .unwrap()
-                        .get("tnet")
-                        .unwrap_or(&"-".to_string())
-                        .into(),
+                    cm.name_any(),
+                    cm.metadata.labels.as_ref().expect("should have labels")[TNET_NAME_LABEL]
+                        .clone(),
                 )
             })
             .collect::<Vec<(String, String)>>())
@@ -227,9 +256,8 @@ impl TNet {
         Ok(())
     }
 
-    fn autoconfigure(&mut self, index: u32) -> &Self {
-        self.index = Some(index);
-        self.namespace = Some(format!("tnet-{}", index));
+    fn autoconfigure(&mut self) -> &Self {
+        let index = self.index.expect("should have an index");
         self.config_url = Some(format!(
             "{}/{}/{}/tnet-{}",
             *CONFIG_URL, *BUCKET, self.version, index
@@ -240,7 +268,7 @@ impl TNet {
         let mut iter = self.ipv6_net.unwrap().iter();
         iter.next(); // skip network address
         self.nns_nodes.iter_mut().for_each(|node| {
-            node.name = Some(format!("nns-{}", count));
+            node.name = Some(format!("{}-nns-{}", self.owner.name_any(), count));
             node.config_url = Some(format!(
                 "{}/{}.img",
                 self.config_url.clone().unwrap(),
@@ -251,7 +279,7 @@ impl TNet {
         });
         let mut count = 0;
         self.app_nodes.iter_mut().for_each(|node| {
-            node.name = Some(format!("app-{}", count));
+            node.name = Some(format!("{}-app-{}", self.owner.name_any(), count));
             node.config_url = Some(format!(
                 "{}/{}.img",
                 self.config_url.clone().unwrap(),
@@ -268,67 +296,62 @@ impl TNet {
         self
     }
 
-    async fn allocate_namespace(&mut self) -> Result<String> {
+    async fn tnet_owner(&mut self) -> Result<()> {
         let client = Client::try_default().await?;
-        let api_ns = Api::all(client.clone());
+        let config_map_api = Api::<ConfigMap>::namespaced(client.clone(), &NAMESPACE);
 
         debug!("Allocating namespace");
-        // get indexes of used testnet namespaces
-        let labels = Some(BTreeMap::from([("app".to_string(), "tnet".to_string())]));
-        let used_ns_list = get_namespaces(&api_ns, labels).await?;
-        let used_ns_idx_list = used_ns_list
-            .items
-            .iter()
-            .map(|ns| {
-                ns.labels()
-                    .get("index")
-                    .unwrap_or(&"0".to_string())
-                    .parse::<u32>()
-                    .unwrap()
-            })
-            .collect::<HashSet<u32>>();
+        let config_map = (|| async {
+            let tnet_name = self.name.clone();
+            let mut rng = rand::thread_rng();
 
-        // choose a random unused index
-        let ns_idx_list = (0..65536)
-            .filter(|idx| !used_ns_idx_list.contains(idx))
-            .collect::<Vec<u32>>();
-        let mut rng = rand::thread_rng();
-        let mut generate_random_index = || -> u32 {
-            let ns_idx = ns_idx_list.choose(&mut rng).unwrap().to_owned();
-            ns_idx
-        };
+            let tnet_idx = (0..65536)
+                .collect::<Vec<u32>>()
+                .choose(&mut rng)
+                .unwrap()
+                .to_owned();
+            config_map_api
+                .create(
+                    &PostParams::default(),
+                    &ConfigMap {
+                        metadata: ObjectMeta {
+                            name: format!("tnet-{}", tnet_idx).into(),
+                            labels: [
+                                (TNET_NAME_LABEL.to_string(), tnet_name),
+                                (TNET_INDEX_LABEL.to_string(), tnet_idx.to_string()),
+                            ]
+                            .into_iter()
+                            .chain(TNET_STATIC_LABELS.clone().into_iter())
+                            .collect::<BTreeMap<String, String>>()
+                            .into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                )
+                .await
+        })
+        .retry(&ExponentialBuilder::default())
+        .await?;
 
-        let mut ns_idx = 0;
-        let mut ns_name = "".to_string();
-        for _ in 0..10 {
-            ns_idx = generate_random_index();
-            ns_name = format!("tnet-{}", ns_idx);
-            let labels = Some(BTreeMap::from([
-                ("app".to_string(), "tnet".to_string()),
-                ("tnet".to_string(), self.name.clone()),
-                ("index".to_string(), ns_idx.to_string()),
-            ]));
-            if create_namespace(&api_ns, &ns_name, labels).await.is_ok() {
-                break;
-            }
-        }
+        self.k8s = Some(K8sClient::new(client.clone()).await?);
+        self.index = Self::get_tnet_index(&config_map)?.into();
+        self.owner = config_map;
+        self.autoconfigure();
 
-        self.autoconfigure(ns_idx);
-        self.k8s = Some(K8sClient::new(client, &ns_name).await?);
-
-        Ok(ns_name)
+        Ok(())
     }
 
     pub async fn create(&mut self) -> Result<&Self> {
-        let ns_name = self.allocate_namespace().await?;
+        self.tnet_owner().await?;
         let k8s_client = &self.k8s.as_ref().unwrap();
 
         // tnet guestos image
-        let tnet_image = "tnet-image-guestos";
+        let tnet_image = &format!("{}-image-guestos", self.owner.name_any());
         let source = DvSource::url(self.image_url.clone());
         let dvinfo = DvInfo::new(tnet_image, source, "archive", "32Gi");
         info!("Creating DV {} from {}", tnet_image, self.image_url);
-        create_datavolume(&k8s_client.api_dv, &dvinfo).await?;
+        create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
 
         // generate and upload node config images
         generate_config(
@@ -342,23 +365,24 @@ impl TNet {
         // tnet-config-init for nns init
         let config_url = format!("{}/init.tar", self.config_url.clone().unwrap());
         let source = DvSource::url(config_url);
-        let dvinfo = DvInfo::new("tnet-config-init", source, "archive", "128Mi");
-        create_datavolume(&k8s_client.api_dv, &dvinfo).await?;
+        let dv_info_name = format!("{}-config-init", self.owner.name_any());
+        let dvinfo = DvInfo::new(&dv_info_name, source, "archive", "128Mi");
+        create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
 
         // nns-config and app-config images
         for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
             let dvname = format!("{}-config", node.name.clone().unwrap());
             let source = DvSource::url(node.config_url.clone().unwrap());
             let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "12Mi");
-            create_datavolume(&k8s_client.api_dv, &dvinfo).await?;
+            create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
         }
 
         wait_for_event(
             self.k8s.as_ref().unwrap().client.clone(),
+            &NAMESPACE,
             "Import Successful",
             "PersistentVolumeClaim",
             tnet_image,
-            &ns_name,
             180,
         )
         .await
@@ -384,6 +408,7 @@ impl TNet {
                 None,
                 None,
                 data_source,
+                self.owner_reference(),
             )
             .await?;
         }
@@ -394,6 +419,7 @@ impl TNet {
                 &self.k8s.as_ref().unwrap().api_vm,
                 &node.name.clone().unwrap(),
                 &node.ipv6_addr.unwrap().to_string(),
+                self.owner_reference(),
             )
             .await?;
         }
@@ -408,7 +434,7 @@ impl TNet {
         // initialize nns
         create_pod(
             &k8s_client.api_pod,
-            "tnet-operator",
+            &format!("{}-operator", self.owner.name_any()),
             "ubuntu:20.04",
             vec![
                 "/usr/bin/bash",
@@ -449,7 +475,8 @@ impl TNet {
                 "-c",
                 "tail -f /dev/null",
             ],
-            Some(("tnet-config-init", "/mnt")),
+            Some((&dv_info_name, "/mnt")),
+            self.owner_reference(),
         )
         .await?;
 
@@ -457,7 +484,7 @@ impl TNet {
     }
 
     pub async fn create_local(&mut self) -> Result<&Self> {
-        self.allocate_namespace().await?;
+        self.tnet_owner().await?;
         let k8s_client = &self.k8s.as_ref().unwrap();
 
         // generate and upload node config images
@@ -535,6 +562,7 @@ impl TNet {
                 "tail -f /dev/null",
             ],
             None,
+            self.owner_reference(),
         )
         .await?;
 
@@ -556,7 +584,6 @@ mod tests {
         assert_eq!(tnet.ipv6_net, None);
         assert_eq!(tnet.config_url, None);
         assert_eq!(tnet.index, None);
-        assert_eq!(tnet.namespace, None);
     }
 
     #[tokio::test]
@@ -577,7 +604,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_allocate_namespace() {
+    async fn test_tnet_owner() {
         // TODO:
     }
 }
