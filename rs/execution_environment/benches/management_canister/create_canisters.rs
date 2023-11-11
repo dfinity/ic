@@ -43,7 +43,6 @@ fn run_bench<M: criterion::measurement::Measurement>(
 
 pub fn create_canisters_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("create_canisters");
-    group.sample_size(20);
 
     run_bench(&mut group, "10", 10);
     run_bench(&mut group, "100", 100);

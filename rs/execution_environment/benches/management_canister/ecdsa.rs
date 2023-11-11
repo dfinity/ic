@@ -79,7 +79,6 @@ fn run_bench<M: criterion::measurement::Measurement>(
 fn ecdsa_public_key_benchmark(c: &mut Criterion) {
     let method = "ecdsa_public_key";
     let mut group = c.benchmark_group(method);
-    group.sample_size(20);
 
     run_bench(
         &mut group,
@@ -135,7 +134,6 @@ fn ecdsa_public_key_benchmark(c: &mut Criterion) {
 fn sign_with_ecdsa_benchmark(c: &mut Criterion) {
     let method = "sign_with_ecdsa";
     let mut group = c.benchmark_group(method);
-    group.sample_size(20);
 
     run_bench(
         &mut group,
