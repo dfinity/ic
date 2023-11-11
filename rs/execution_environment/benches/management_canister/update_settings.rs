@@ -64,7 +64,6 @@ fn run_bench<M: criterion::measurement::Measurement>(
 
 pub fn update_settings_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("update_settings");
-    group.sample_size(20);
 
     run_bench(
         &mut group,

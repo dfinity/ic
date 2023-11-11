@@ -66,7 +66,6 @@ fn run_bench<M: criterion::measurement::Measurement>(
 
 pub fn install_code_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("install_code");
-    group.sample_size(20);
 
     run_bench(
         &mut group,
