@@ -73,6 +73,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             withdrawal_id,
             reimbursed_in_block,
             reimbursed_amount: _,
+            transaction_hash: _,
         }) => {
             state
                 .eth_transactions

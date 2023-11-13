@@ -37,7 +37,7 @@ async fn mint_cketh() {
                 to: event.principal.into(),
                 fee: None,
                 created_at_time: None,
-                memo: None,
+                memo: Some(event.clone().into()),
                 amount: candid::Nat::from(event.value),
             })
             .await

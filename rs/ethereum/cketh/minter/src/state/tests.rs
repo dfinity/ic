@@ -691,6 +691,9 @@ fn state_equivalence() {
         },
         reimbursement_requests: btreemap! {
             LedgerBurnIndex::new(3) => ReimbursementRequest {
+                transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
+                .parse()
+                .unwrap()),
                 withdrawal_id: LedgerBurnIndex::new(3),
                 reimbursed_amount: Wei::new(100_000_000_000),
                 to: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae".parse().unwrap(),
@@ -699,6 +702,9 @@ fn state_equivalence() {
         },
         reimbursed: btreemap! {
             LedgerBurnIndex::new(6) => Reimbursed {
+                transaction_hash: "0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
+                .parse()
+                .unwrap(),
                 reimbursed_in_block: LedgerMintIndex::new(150),
                 reimbursed_amount: Wei::new(10_000_000_000_000),
                 withdrawal_id: LedgerBurnIndex::new(6),

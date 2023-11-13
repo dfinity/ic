@@ -281,6 +281,7 @@ pub mod events {
             reimbursed_in_block: Nat,
             withdrawal_id: Nat,
             reimbursed_amount: Nat,
+            transaction_hash: String,
         },
     }
 }

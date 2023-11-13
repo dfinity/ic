@@ -233,6 +233,7 @@ type Event = record {
             reimbursed_in_block : nat;
             reimbursed_amount : nat;
             withdrawal_id : nat;
+            transaction_hash : text;
         };
     };
 };

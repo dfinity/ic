@@ -4,4 +4,4 @@ pub mod principal;
 pub mod u256;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;

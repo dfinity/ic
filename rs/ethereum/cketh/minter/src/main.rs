@@ -184,7 +184,7 @@ async fn withdraw_eth(
             to: ic_cdk::id().into(),
             amount: Nat::from(amount),
             fee: None,
-            memo: None,
+            memo: Some(destination.into()),
             created_at_time: None, // We don't set this field to disable transaction deduplication
                                    // which is unnecessary in canister-to-canister calls.
         })
@@ -416,10 +416,12 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id,
                     reimbursed_in_block,
                     reimbursed_amount,
+                    transaction_hash,
                 }) => EP::ReimbursedEthWithdrawal {
                     withdrawal_id: withdrawal_id.get().into(),
                     reimbursed_in_block: reimbursed_in_block.get().into(),
                     reimbursed_amount: reimbursed_amount.into(),
+                    transaction_hash: transaction_hash.to_string(),
                 },
             },
         }

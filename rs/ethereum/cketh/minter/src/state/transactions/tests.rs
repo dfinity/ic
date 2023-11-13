@@ -1297,6 +1297,7 @@ mod eth_transactions {
             assert_eq!(
                 reimbursement_request,
                 &ReimbursementRequest {
+                    transaction_hash: Some(receipt.transaction_hash),
                     withdrawal_id: ledger_burn_index,
                     to: candid::Principal::from_str(
                         crate::state::transactions::tests::DEFAULT_PRINCIPAL,
