@@ -814,11 +814,7 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    // TODO: replace the next code line with the following commented line
-    // once the mainnet ic-recovery contains the commits we need.
-    // let ic_recovery_path = env.get_path(IC_RECOVERY);
-    let ic_recovery_path = env.get_dependency_path("rs/recovery/ic-recovery");
-
+    let ic_recovery_path = env.get_path(IC_RECOVERY);
     let mut cmd = Command::new(ic_recovery_path);
     cmd.arg("--skip-prompts")
         .arg("--dir")
