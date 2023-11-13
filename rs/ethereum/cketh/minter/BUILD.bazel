@@ -187,6 +187,7 @@ rust_test(
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:num-traits",
+        "@crate_index//:rlp",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
