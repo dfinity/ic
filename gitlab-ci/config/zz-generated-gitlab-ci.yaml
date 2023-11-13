@@ -3074,31 +3074,6 @@ build-setupos-base-dev-sev:
     IMAGE: setupos-base-dev-sev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev-sev
     SHELL_WRAPPER: "/usr/bin/time"
-cargo-audit:
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".build-k8s-legacy"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:abeca4a820610c129da6c2ad7c3544817cc8fc57d775259a17a674f89afedd14
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "cargo-audit"
-  script:
-    - cd rs; cargo audit
-  tags:
-    - dfinity-ic
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=--strip-all"
-    SHELL_WRAPPER: "/usr/bin/time"
 cargo-build-release-linux:
   artifacts:
     expire_in: 3 days
