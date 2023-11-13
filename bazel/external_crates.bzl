@@ -1317,7 +1317,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "wasm-smith": crate.spec(
                 git = "https://github.com/dfinity/wasm-tools",
-                rev = "a4b464728f1202a7e3b8903cf4c09b067fc9986e",
+                rev = "4d402ea9ff1d17cfe3d2ef4654428ac326c94475",
             ),
             "wasmparser": crate.spec(
                 version = "^0.109.0",

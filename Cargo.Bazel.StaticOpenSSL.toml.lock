@@ -10861,7 +10861,7 @@ dependencies = [
 [[package]]
 name = "wasm-encoder"
 version = "0.36.2"
-source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+source = "git+https://github.com/dfinity/wasm-tools?rev=4d402ea9ff1d17cfe3d2ef4654428ac326c94475#4d402ea9ff1d17cfe3d2ef4654428ac326c94475"
 dependencies = [
  "leb128",
 ]
@@ -10869,7 +10869,7 @@ dependencies = [
 [[package]]
 name = "wasm-smith"
 version = "0.12.23"
-source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+source = "git+https://github.com/dfinity/wasm-tools?rev=4d402ea9ff1d17cfe3d2ef4654428ac326c94475#4d402ea9ff1d17cfe3d2ef4654428ac326c94475"
 dependencies = [
  "arbitrary",
  "flagset",
@@ -10937,7 +10937,7 @@ dependencies = [
 [[package]]
 name = "wasmparser"
 version = "0.116.1"
-source = "git+https://github.com/dfinity/wasm-tools?rev=a4b464728f1202a7e3b8903cf4c09b067fc9986e#a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+source = "git+https://github.com/dfinity/wasm-tools?rev=4d402ea9ff1d17cfe3d2ef4654428ac326c94475#4d402ea9ff1d17cfe3d2ef4654428ac326c94475"
 dependencies = [
  "indexmap 2.1.0",
  "semver",

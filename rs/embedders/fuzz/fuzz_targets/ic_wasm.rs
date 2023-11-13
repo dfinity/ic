@@ -142,6 +142,10 @@ impl Config for ICWasmConfig {
         Some(Cow::from(disallow_exports))
     }
 
+    fn disallow_export_name_prefix(&self) -> Option<Cow<'_, [String]>> {
+        Some(Cow::from(vec!["canister_".to_string()]))
+    }
+
     fn export_func_name(&self) -> Option<Cow<'_, [String]>> {
         Some(Cow::from(vec![
             "canister_init".to_string(),

@@ -1,5 +1,5 @@
 {
-  "checksum": "ecc55a397807d62b4034c084148adec0c042c3500efa3825861f10b4687059b5",
+  "checksum": "9741bbb81e5b8fb7ec14409ca303a8b5ad0a806eddc6eaba8aac23773e308f6d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -56059,7 +56059,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/wasm-tools",
           "commitish": {
-            "Rev": "a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+            "Rev": "4d402ea9ff1d17cfe3d2ef4654428ac326c94475"
           },
           "strip_prefix": "crates/wasm-smith"
         }
@@ -56305,7 +56305,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/wasm-tools",
           "commitish": {
-            "Rev": "a4b464728f1202a7e3b8903cf4c09b067fc9986e"
+            "Rev": "4d402ea9ff1d17cfe3d2ef4654428ac326c94475"
           },
           "strip_prefix": "crates/wasmparser"
         }
