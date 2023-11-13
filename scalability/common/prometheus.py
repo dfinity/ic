@@ -15,7 +15,7 @@ from common import metrics  # noqa
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("no_prometheus", False, "Set true to disable querying Prometheus.")
 gflags.DEFINE_string(
-    "prometheus_url", "https://ic-metrics-prometheus-staging.ch1-obsstage1.dfinity.network", "The URL to the prometheus service."
+    "prometheus_url", "https://victoria.staging.dfinity.network/select/0/prometheus", "The URL to the prometheus service."
 )
 
 def __json_loads_wrapper(str):
