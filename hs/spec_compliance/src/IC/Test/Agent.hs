@@ -68,6 +68,7 @@ module IC.Test.Agent
     ecdsaSK,
     ecdsaUser,
     enum,
+    enumNothing,
     envelope,
     envelopeFor,
     extractCertData,
@@ -1134,6 +1135,9 @@ callIC''' ic00' ecid l x = ic00' ecid (T.pack (symbolVal l)) (Candid.encode x)
 
 enum :: (AllUniqueLabels r, KnownSymbol l, (r .! l) ~ ()) => Label l -> Var r
 enum l = V.IsJust l ()
+
+enumNothing :: (AllUniqueLabels r, KnownSymbol l, (r .! l) ~ Maybe t) => Label l -> Var r
+enumNothing l = V.IsJust l Nothing
 
 -- Other utilities
 
