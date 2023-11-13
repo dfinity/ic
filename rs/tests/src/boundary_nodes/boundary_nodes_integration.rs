@@ -1110,7 +1110,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
         let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
         let client_builder = client_builder
             .danger_accept_invalid_certs(true)
-            .resolve("raw.{host}", bn_addr.into());
+            .resolve(&format!("raw.{host}"), bn_addr.into());
         (client_builder, host.to_string())
     };
     let client = client_builder.build().unwrap();
