@@ -24,9 +24,9 @@ use tokio::{
 
 use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, Data, SlotNumber};
 
-const ENABLE_ARTIFACT_PUSH: bool = false;
-/// Artifact push threshold. Artifacts smaller or equal than this are pushed.
-const ARTIFACT_PUSH_THRESHOLD: usize = 5 * 1024;
+/// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
+/// in size are pushed.
+const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
 
 //TODO(NET-1539): Move all these bounds to the ArtifactKind trait directly.
 // pub trait Send + Sync + Hash +'static: Send + Sync  + Hash + 'static {}
@@ -183,7 +183,7 @@ where
         pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     ) {
         // Try to push artifact if size below threshold && the artifact is not a relay.
-        let push_artifact = ENABLE_ARTIFACT_PUSH && advert.size <= ARTIFACT_PUSH_THRESHOLD;
+        let push_artifact = advert.size < ARTIFACT_PUSH_THRESHOLD_BYTES;
 
         let data = if push_artifact {
             let id = advert.id.clone();
@@ -342,9 +342,9 @@ mod tests {
 
     use super::*;
 
-    // Verify that initial validated pool is sent to peers.
+    /// Verify that initial validated pool is sent to peers.
     #[test]
-    fn initial_valiated_pool_is_sent_to_all_peers() {
+    fn initial_validated_pool_is_sent_to_all_peers() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -372,6 +372,9 @@ mod tests {
             mock_reader
                 .expect_get_all_validated_by_filter()
                 .returning(|_| Box::new(std::iter::once(1)));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
 
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
             ConsensusManagerSender::run(
@@ -386,7 +389,7 @@ mod tests {
         });
     }
 
-    // Verify that advert is sent to multiple peers.
+    /// Verify that advert is sent to multiple peers.
     #[test]
     fn send_advert_to_all_peers() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -415,6 +418,9 @@ mod tests {
             mock_reader
                 .expect_get_all_validated_by_filter()
                 .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
 
             let (tx, rx) = tokio::sync::mpsc::channel(100);
             ConsensusManagerSender::run(
@@ -438,7 +444,7 @@ mod tests {
         });
     }
 
-    // Verify that increasing connection id causes advert to be resent.
+    /// Verify that increasing connection id causes advert to be resent.
     #[test]
     fn resend_advert_to_reconnected_peer() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -477,6 +483,9 @@ mod tests {
             mock_reader
                 .expect_get_all_validated_by_filter()
                 .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
 
             let (tx, rx) = tokio::sync::mpsc::channel(100);
             ConsensusManagerSender::run(
@@ -544,6 +553,9 @@ mod tests {
             mock_reader
                 .expect_get_all_validated_by_filter()
                 .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
 
             let (tx, rx) = tokio::sync::mpsc::channel(100);
             ConsensusManagerSender::run(
@@ -594,6 +606,9 @@ mod tests {
             mock_reader
                 .expect_get_all_validated_by_filter()
                 .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
 
             let (tx, rx) = tokio::sync::mpsc::channel(100);
             ConsensusManagerSender::run(
@@ -658,6 +673,9 @@ mod tests {
             mock_reader
                 .expect_get_all_validated_by_filter()
                 .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
 
             let (tx, rx) = tokio::sync::mpsc::channel(100);
             ConsensusManagerSender::run(
@@ -668,7 +686,7 @@ mod tests {
                 Arc::new(mock_transport),
                 rx,
             );
-            // Send advert and verify commit it.
+            // Send advert and verify commit id.
             tx.blocking_send(ArtifactProcessorEvent::Advert(
                 U64Artifact::message_to_advert(&1),
             ))
