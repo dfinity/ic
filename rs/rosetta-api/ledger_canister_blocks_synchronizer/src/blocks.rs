@@ -129,8 +129,8 @@ mod database_access {
             } => {
                 let op_string: &str = operation_type.into();
                 let from_account = from.to_hex();
-                let allowance = allowance.get_e8s();
-                let expected_allowance = expected_allowance.map(|a| a.get_e8s());
+                let allowance = allowance.get_e8s().to_string();
+                let expected_allowance = expected_allowance.map(|a| a.get_e8s().to_string());
                 let spender_account = spender.to_hex();
                 let expires_at = expires_at.map(timestamp_to_iso8601);
                 let fees = fee.get_e8s();
@@ -782,8 +782,8 @@ impl Blocks {
                 to_account VARCHAR(64),
                 spender_account VARCHAR(64),
                 amount INTEGER,
-                allowance INTEGER,
-                expected_allowance INTEGER,
+                allowance TEXT,
+                expected_allowance TEXT,
                 fee INTEGER,
                 created_at_time TEXT,
                 expires_at TEXT,
