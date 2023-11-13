@@ -98,6 +98,7 @@ pub struct TNode {
 pub struct TNet {
     name: String,
     version: String,
+    init_nns: bool,
     use_zero_version: bool,
     pub(crate) image_url: String,
     ipv6_net: Option<Ipv6Cidr>,
@@ -188,6 +189,12 @@ impl TNet {
             "{}/ic/{}/guest-os/disk-img-dev/disk-img.tar.gz",
             *CDN_URL, self.version
         );
+        self
+    }
+
+    pub fn init_nns(mut self, init_nns: bool) -> Self {
+        self.init_nns = init_nns;
+
         self
     }
 
@@ -432,53 +439,55 @@ impl TNet {
             .join(" ");
 
         // initialize nns
-        create_pod(
-            &k8s_client.api_pod,
-            &format!("{}-operator", self.owner.name_any()),
-            "ubuntu:20.04",
-            vec![
-                "/usr/bin/bash",
-                "-c",
-                &format!(
-                    r#"
-                    set -eEuo pipefail
+        if self.init_nns {
+            create_pod(
+                &k8s_client.api_pod,
+                &format!("{}-operator", self.owner.name_any()),
+                "ubuntu:20.04",
+                vec![
+                    "/usr/bin/bash",
+                    "-c",
+                    &format!(
+                        r#"
+                        set -eEuo pipefail
 
-                    if [ -e /mnt/ic-nns-init.complete ]; then
-                      echo NNS already initialized, nothing to do
-                      exit 0
-                    fi
+                        if [ -e /mnt/ic-nns-init.complete ]; then
+                          echo NNS already initialized, nothing to do
+                          exit 0
+                        fi
 
-                    apt update && apt install -y parallel wget iputils-ping libssl1.1="1.1.1f-1ubuntu2"
-                    gunzip /mnt/*.gz /mnt/canisters/*.gz || true
-                    chmod u+x /mnt/ic-nns-init
+                        apt update && apt install -y parallel wget iputils-ping libssl1.1="1.1.1f-1ubuntu2"
+                        gunzip /mnt/*.gz /mnt/canisters/*.gz || true
+                        chmod u+x /mnt/ic-nns-init
 
-                    timeout 10m bash -c 'until parallel -u ping -c1 -W1 ::: {} >/dev/null;
-                    do
-                      echo Waiting for NNS nodes to come up...
-                      sleep 5
-                    done'
+                        timeout 10m bash -c 'until parallel -u ping -c1 -W1 ::: {} >/dev/null;
+                        do
+                          echo Waiting for NNS nodes to come up...
+                          sleep 5
+                        done'
 
-                    echo NNS nodes seem to be up...
-                    echo Giving them 2 minutes to settle...
-                    sleep 120
-                    echo Initiliazing NNS nodes...
-                    /mnt/ic-nns-init --url 'http://[{}]:8080' \
-                      --registry-local-store-dir /mnt/ic_registry_local_store \
-                      --wasm-dir /mnt/canisters --http2-only 2>&1 | tee /mnt/ic-nns-init.log
-                    touch /mnt/ic-nns-init.complete
-                    "#,
-                    nns_ips, self.nns_nodes[0].ipv6_addr.unwrap()
-                ),
-            ],
-            vec![
-                "/usr/bin/bash",
-                "-c",
-                "tail -f /dev/null",
-            ],
-            Some((&dv_info_name, "/mnt")),
-            self.owner_reference(),
-        )
-        .await?;
+                        echo NNS nodes seem to be up...
+                        echo Giving them 2 minutes to settle...
+                        sleep 120
+                        echo Initiliazing NNS nodes...
+                        /mnt/ic-nns-init --url 'http://[{}]:8080' \
+                          --registry-local-store-dir /mnt/ic_registry_local_store \
+                          --wasm-dir /mnt/canisters --http2-only 2>&1 | tee /mnt/ic-nns-init.log
+                        touch /mnt/ic-nns-init.complete
+                        "#,
+                        nns_ips, self.nns_nodes[0].ipv6_addr.unwrap()
+                    ),
+                ],
+                vec![
+                    "/usr/bin/bash",
+                    "-c",
+                    "tail -f /dev/null",
+                ],
+                Some((&dv_info_name, "/mnt")),
+                self.owner_reference(),
+            )
+            .await?;
+        }
 
         Ok(self)
     }
@@ -515,56 +524,59 @@ impl TNet {
 
         // initialize nns
         // TODO: save init state somehere (host-based pvc)
-        create_pod(
-            &k8s_client.api_pod,
-            "tnet-operator",
-            "ubuntu:20.04",
-            vec![
-                "/usr/bin/bash",
-                "-c",
-                &format!(
-                    r#"
-                    set -eEuo pipefail
+        // initialize nns
+        if self.init_nns {
+            create_pod(
+                &k8s_client.api_pod,
+                "tnet-operator",
+                "ubuntu:20.04",
+                vec![
+                    "/usr/bin/bash",
+                    "-c",
+                    &format!(
+                        r#"
+                        set -eEuo pipefail
 
-                    if [ -e /mnt/ic-nns-init.complete ]; then
-                      echo NNS already initialized, nothing to do
-                      exit 0
-                    fi
+                        if [ -e /mnt/ic-nns-init.complete ]; then
+                          echo NNS already initialized, nothing to do
+                          exit 0
+                        fi
 
-                    apt update && apt install -y parallel wget iputils-ping libssl1.1="1.1.1f-1ubuntu2"
-                    pushd /mnt
-                    wget {}
-                    tar -xf init.tar
-                    popd
-                    gunzip /mnt/*.gz /mnt/canisters/*.gz || true
-                    chmod u+x /mnt/ic-nns-init
+                        apt update && apt install -y parallel wget iputils-ping libssl1.1="1.1.1f-1ubuntu2"
+                        pushd /mnt
+                        wget {}
+                        tar -xf init.tar
+                        popd
+                        gunzip /mnt/*.gz /mnt/canisters/*.gz || true
+                        chmod u+x /mnt/ic-nns-init
 
-                    timeout 10m bash -c 'until parallel -u ping -c1 -W1 ::: {} >/dev/null;
-                    do
-                      echo Waiting for NNS nodes to come up...
-                      sleep 5
-                    done'
+                        timeout 10m bash -c 'until parallel -u ping -c1 -W1 ::: {} >/dev/null;
+                        do
+                          echo Waiting for NNS nodes to come up...
+                          sleep 5
+                        done'
 
-                    echo NNS nodes seem to be up...
-                    sleep 30
-                    echo Initiliazing NNS nodes...
-                    /mnt/ic-nns-init --url 'http://[{}]:8080' \
-                      --registry-local-store-dir /mnt/ic_registry_local_store \
-                      --wasm-dir /mnt/canisters --http2-only 2>&1 | tee /mnt/ic-nns-init.log
-                    touch /mnt/ic-nns-init.complete
-                    "#,
-                    config_url, nns_ips, self.nns_nodes[0].ipv6_addr.unwrap()
-                ),
-            ],
-            vec![
-                "/usr/bin/bash",
-                "-c",
-                "tail -f /dev/null",
-            ],
-            None,
-            self.owner_reference(),
-        )
-        .await?;
+                        echo NNS nodes seem to be up...
+                        sleep 30
+                        echo Initiliazing NNS nodes...
+                        /mnt/ic-nns-init --url 'http://[{}]:8080' \
+                          --registry-local-store-dir /mnt/ic_registry_local_store \
+                          --wasm-dir /mnt/canisters --http2-only 2>&1 | tee /mnt/ic-nns-init.log
+                        touch /mnt/ic-nns-init.complete
+                        "#,
+                        config_url, nns_ips, self.nns_nodes[0].ipv6_addr.unwrap()
+                    ),
+                ],
+                vec![
+                    "/usr/bin/bash",
+                    "-c",
+                    "tail -f /dev/null",
+                ],
+                None,
+                self.owner_reference(),
+            )
+            .await?;
+        }
 
         Ok(self)
     }
