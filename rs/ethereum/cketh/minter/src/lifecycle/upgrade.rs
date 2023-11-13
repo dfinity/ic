@@ -3,6 +3,7 @@ use crate::logs::INFO;
 use crate::state::audit::{process_event, replay_events, EventType};
 use crate::state::mutate_state;
 use crate::state::STATE;
+use crate::storage::total_event_count;
 use candid::{CandidType, Deserialize, Nat};
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
@@ -31,9 +32,12 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {
 
     let end = ic_cdk::api::instruction_counter();
 
+    let event_count = total_event_count();
+    let instructions_consumed = end - start;
+
     log!(
         INFO,
-        "[upgrade]: upgrade consumed {} instructions",
-        end - start
+        "[upgrade]: replaying {event_count} events consumed {instructions_consumed} instructions ({} instructions per event on average)",
+        instructions_consumed / event_count
     );
 }
