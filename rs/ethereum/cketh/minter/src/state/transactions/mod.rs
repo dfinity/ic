@@ -52,6 +52,11 @@ pub struct ReimbursementRequest {
     pub to: Principal,
     #[n(3)]
     pub to_subaccount: Option<Subaccount>,
+    #[n(4)]
+    /// Transaction hash of the failed ETH transaction.
+    /// We use this hash to link the mint reimbursement transaction
+    /// on the ledger with the failed ETH transaction.
+    pub transaction_hash: Option<Hash>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
@@ -62,6 +67,8 @@ pub struct Reimbursed {
     pub withdrawal_id: LedgerBurnIndex,
     #[n(2)]
     pub reimbursed_amount: Wei,
+    #[n(3)]
+    pub transaction_hash: Hash,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode)]
@@ -416,6 +423,7 @@ impl EthTransactions {
                         .withdrawal_amount
                         .checked_sub(finalized_tx.effective_transaction_fee())
                         .expect("the fee paid should never be greater than the withdrawn amount"),
+                    transaction_hash: Some(receipt.transaction_hash),
                 },
             );
         }
@@ -437,6 +445,7 @@ impl EthTransactions {
                     withdrawal_id,
                     reimbursed_in_block,
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
+                    transaction_hash: reimbursement_request.transaction_hash.unwrap(),
                 },
             ),
             None

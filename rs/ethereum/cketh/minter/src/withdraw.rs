@@ -57,11 +57,12 @@ pub async fn process_reimbursement() {
                 owner: reimbursement_request.to,
                 subaccount: reimbursement_request
                     .to_subaccount
+                    .as_ref()
                     .map(|subaccount| subaccount.0),
             },
             fee: None,
             created_at_time: None,
-            memo: None,
+            memo: Some(reimbursement_request.clone().into()),
             amount: Nat::from(reimbursement_request.reimbursed_amount),
         };
         let block_index = match client.transfer(args).await {
@@ -90,6 +91,7 @@ pub async fn process_reimbursement() {
                     withdrawal_id: reimbursement_request.withdrawal_id,
                     reimbursed_in_block: LedgerMintIndex::new(block_index),
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
+                    transaction_hash: reimbursement_request.transaction_hash.unwrap(),
                 }),
             )
         });
