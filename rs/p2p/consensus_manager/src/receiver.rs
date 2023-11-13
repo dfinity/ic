@@ -1,10 +1,3 @@
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    hash::Hash,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
-
 use crate::{
     metrics::{
         ConsensusManagerMetrics, DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED,
@@ -30,6 +23,12 @@ use ic_types::artifact::{Advert, ArtifactKind, Priority, PriorityFn};
 use ic_types::NodeId;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    hash::Hash,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use tokio::{
     runtime::Handle,
     select,
@@ -40,6 +39,8 @@ use tokio::{
     task::JoinSet,
     time::{self, MissedTickBehavior},
 };
+
+const PRIORITY_FUNCTION_UPDATE_FREQUENCY_SECONDS: u64 = 3;
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 type ReceivedAdvertSender<A> = Sender<(AdvertUpdate<A>, NodeId, ConnId)>;
@@ -191,16 +192,18 @@ where
     }
 
     async fn start_event_loop(mut self) {
-        let mut pfn_interval = time::interval(Duration::from_secs(1));
-        pfn_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let mut priority_fn_interval = time::interval(Duration::from_secs(
+            PRIORITY_FUNCTION_UPDATE_FREQUENCY_SECONDS,
+        ));
+        priority_fn_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             select! {
-                _ = pfn_interval.tick() => {
+                _ = priority_fn_interval.tick() => {
                     let pool = &self.raw_pool.read().unwrap();
                     let priority_fn = self.priority_fn_producer.get_priority_function(pool);
                     self.current_priority_fn.send_replace(priority_fn);
 
-                    pfn_interval.reset();
+                    priority_fn_interval.reset();
                 }
                 Some((advert_update, peer_id, conn_id)) = self.adverts_received.recv() => {
                     self.metrics.slot_table_updates_total.inc();
