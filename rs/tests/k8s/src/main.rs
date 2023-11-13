@@ -1,8 +1,14 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use k8s_openapi::chrono::Duration;
 use tracing_subscriber::EnvFilter;
 
 use k8s::tnet::TNet;
+
+fn parse_duration(arg: &str) -> Result<Duration, std::num::ParseIntError> {
+    let seconds = arg.parse()?;
+    Ok(Duration::seconds(seconds))
+}
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -33,6 +39,10 @@ enum Commands {
         /// APP subnet size
         #[arg(long)]
         app: usize,
+        /// TTL in seconds
+        #[arg(long)]
+        #[arg(value_parser = parse_duration)]
+        ttl: Option<Duration>,
     },
     /// Delete a testnet
     Delete {
@@ -59,14 +69,17 @@ async fn main() -> Result<()> {
             use_zero_version,
             nns,
             app,
+            ttl,
         }) => {
-            let _ = TNet::new(name)
+            let mut tnet = TNet::new(name)?
                 .version(version)
                 .use_zero_version(*use_zero_version)
                 .init_nns(*init_nns)
-                .topology(*nns, *app)
-                .create()
-                .await?;
+                .topology(*nns, *app);
+            if let Some(ttl) = ttl {
+                tnet = tnet.ttl(*ttl)?;
+            }
+            tnet.create().await?;
         }
         Some(Commands::Delete { index }) => {
             TNet::delete(*index).await?;

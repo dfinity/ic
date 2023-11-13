@@ -11,6 +11,9 @@ use k8s_openapi::api::core::v1::{
     ConfigMap, PersistentVolumeClaim, Pod, TypedLocalObjectReference,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
+use k8s_openapi::chrono::DateTime;
+use k8s_openapi::chrono::Duration;
+use k8s_openapi::chrono::Utc;
 use kube::api::{ListParams, PostParams};
 use kube::core::ObjectMeta;
 use kube::ResourceExt;
@@ -49,6 +52,7 @@ static TNET_STATIC_LABELS: Lazy<BTreeMap<String, String>> =
 
 static TNET_INDEX_LABEL: &str = "tnet.internetcomputer.org/index";
 static TNET_NAME_LABEL: &str = "tnet.internetcomputer.org/name";
+static TNET_TERMINATE_TIME_ANNOTATION: &str = "tnet.internetcomputer.org/terminate-time";
 
 pub struct K8sClient {
     pub(crate) client: Client,
@@ -109,15 +113,17 @@ pub struct TNet {
     app_nodes: Vec<TNode>,
     k8s: Option<K8sClient>,
     owner: ConfigMap,
+    terminate_time: DateTime<Utc>,
 }
 
 impl TNet {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str) -> Result<Self> {
         Self {
             name: name.to_string(),
             namespace: NAMESPACE.clone(),
             ..Default::default()
         }
+        .ttl(Duration::days(1))
     }
 
     pub fn owner_config_map_name(idx: u32) -> String {
@@ -208,6 +214,13 @@ impl TNet {
         self.nns_nodes = vec![Default::default(); nns_count];
         self.app_nodes = vec![Default::default(); app_count];
         self
+    }
+
+    pub fn ttl(mut self, ttl: Duration) -> Result<Self> {
+        self.terminate_time = k8s_openapi::chrono::Utc::now()
+            .checked_add_signed(ttl)
+            .ok_or(anyhow::anyhow!("failed to set terminate time"))?;
+        Ok(self)
     }
 
     async fn upload_config(&self) -> Result<()> {
@@ -329,6 +342,16 @@ impl TNet {
                             ]
                             .into_iter()
                             .chain(TNET_STATIC_LABELS.clone().into_iter())
+                            .collect::<BTreeMap<String, String>>()
+                            .into(),
+                            annotations: [(
+                                TNET_TERMINATE_TIME_ANNOTATION.to_string(),
+                                self.terminate_time.to_rfc3339_opts(
+                                    k8s_openapi::chrono::SecondsFormat::Secs,
+                                    true,
+                                ),
+                            )]
+                            .into_iter()
                             .collect::<BTreeMap<String, String>>()
                             .into(),
                             ..Default::default()
@@ -588,7 +611,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tnet_new() {
-        let tnet = TNet::new("testnet");
+        let tnet = TNet::new("testnet").expect("should create a testnet");
         assert_eq!(tnet.name, "testnet");
         assert_eq!(tnet.version, "");
         assert!(!tnet.use_zero_version);
@@ -600,7 +623,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_tnet_version() {
-        let tnet = TNet::new("testnet").version("1.0.0");
+        let tnet = TNet::new("testnet")
+            .expect("should create a testnet")
+            .version("1.0.0");
         assert_eq!(tnet.version, "1.0.0");
         assert_eq!(
             tnet.image_url,
@@ -610,7 +635,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_tnet_topology() {
-        let tnet = TNet::new("testnet").topology(2, 3);
+        let tnet = TNet::new("testnet")
+            .expect("should create a testnet")
+            .topology(2, 3);
         assert_eq!(tnet.nns_nodes.len(), 2);
         assert_eq!(tnet.app_nodes.len(), 3);
     }
