@@ -21,6 +21,10 @@ MACRO_DEPENDENCIES = [
 ]
 
 TEST_DEPENDENCIES = [
+    "//rs/universal_canister/lib",
+    "//rs/test_utilities/load_wasm",
+    "//rs/rosetta-api/icp_ledger",
+    "//rs/types/base_types",
     "@crate_index//:flate2",
 ]
 
@@ -37,11 +41,13 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     data = [
         "tests/counter.wasm",
+        "tests/icp_ledger.wasm",
         "//rs/pocket_ic_server:pocket-ic-server",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
+        "LEDGER_WASM": "packages/pocket-ic/tests/icp_ledger.wasm",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,

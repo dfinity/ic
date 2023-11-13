@@ -8,6 +8,7 @@ LIB_DEPENDENCIES = [
     "//rs/crypto/iccsa",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/registry/subnet_type",
+    "//rs/registry/proto_data_provider",
     "//rs/state_machine_tests",
     "//rs/interfaces/state_manager",
     "//packages/pocket-ic:pocket-ic",
@@ -15,6 +16,8 @@ LIB_DEPENDENCIES = [
     "//rs/types/ic00_types",
     "//rs/crypto/sha2",
     "//rs/utils",
+    "//rs/registry/routing_table",
+    "//rs/test_utilities",
     "@crate_index//:axum",
     "@crate_index//:itertools",
     "@crate_index//:tokio",
@@ -67,7 +70,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "1.0.0",
+    version = "2.0.0",
     deps = LIB_DEPENDENCIES,
 )
 

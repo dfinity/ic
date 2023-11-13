@@ -19,10 +19,10 @@ use pocket_ic_server::state_api::{
     state::PocketIcApiStateBuilder,
 };
 use pocket_ic_server::BlobStore;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
-use std::{collections::HashMap, sync::atomic::AtomicU64};
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
@@ -41,7 +41,7 @@ const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 /// The PocketIC server hosts and manages IC instances.
 #[derive(Parser)]
-#[clap(version = "1.0.0")]
+#[clap(version = "2.0.0")]
 struct Args {
     /// If you use PocketIC from the command line, you should not use this flag.
     /// Client libraries use this flag to provide a common identifier (the process ID of the test
@@ -96,15 +96,11 @@ async fn start(runtime: Arc<Runtime>) {
     let _guard = setup_tracing(args.pid);
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default().build();
-    let instance_map = Arc::new(RwLock::new(HashMap::new()));
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while
     let min_alive_until = Arc::new(RwLock::new(Instant::now()));
     let app_state = AppState {
-        instance_map,
-        instances_sequence_counter: Arc::new(AtomicU64::from(0)),
         api_state,
-        checkpoints: Arc::new(RwLock::new(HashMap::new())),
         min_alive_until,
         runtime,
         blob_store: Arc::new(InMemoryBlobStore::new()),
@@ -126,9 +122,6 @@ async fn start(runtime: Arc<Runtime>) {
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
-        //
-        // List all checkpoints.
-        .directory_route("/checkpoints", get(list_checkpoints))
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
@@ -259,12 +252,7 @@ fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::R
 
 async fn bump_last_request_timestamp<B>(
     State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state: _,
-        checkpoints: _,
-        min_alive_until,
-        ..
+        min_alive_until, ..
     }): State<AppState>,
     headers: HeaderMap,
     request: http::Request<B>,
@@ -288,10 +276,6 @@ async fn get_blob_store_entry(
     Path(id): Path<String>,
 ) -> Response {
     let hash = hex::decode(id);
-    if hash.is_err() {
-        return StatusCode::BAD_REQUEST.into_response();
-    }
-    let hash: Result<[u8; 32], Vec<u8>> = hash.unwrap().try_into();
     if hash.is_err() {
         return StatusCode::BAD_REQUEST.into_response();
     }
@@ -347,18 +331,6 @@ async fn set_blob_store_entry(
     };
     let blob_id = hex::encode(blob_store.store(blob).await.0);
     (StatusCode::OK, blob_id)
-}
-
-pub async fn list_checkpoints(
-    State(AppState { checkpoints, .. }): State<AppState>,
-) -> Json<Vec<String>> {
-    let checkpoints = checkpoints
-        .read()
-        .await
-        .keys()
-        .cloned()
-        .collect::<Vec<String>>();
-    Json(checkpoints)
 }
 
 pub async fn verify_signature(
@@ -417,7 +389,7 @@ impl BlobStore for InMemoryBlobStore {
     async fn store(&self, blob: BinaryBlob) -> BlobId {
         let mut hasher = Sha256::new();
         hasher.write(&blob.data);
-        let key = BlobId(hasher.finish());
+        let key = BlobId(hasher.finish().to_vec());
         let mut m = self.map.write().await;
         m.insert(key.clone(), blob);
         key
