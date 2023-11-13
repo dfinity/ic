@@ -253,10 +253,10 @@ icTests my_sub other_sub =
                                                                            >>= isErrOrReject [3, 5]
 
                                                                          step "Upgrade"
-                                                                         ic_install ic00 (enum #upgrade) can_id trivialWasmModule ""
+                                                                         ic_install ic00 (enumNothing #upgrade) can_id trivialWasmModule ""
 
                                                                          step "Upgrade as wrong user"
-                                                                         ic_install'' otherUser (enum #upgrade) can_id trivialWasmModule ""
+                                                                         ic_install'' otherUser (enumNothing #upgrade) can_id trivialWasmModule ""
                                                                            >>= isErrOrReject [3, 5]
 
                                                                          step "Change controller"
@@ -291,7 +291,7 @@ icTests my_sub other_sub =
                                                                          cs .! #module_hash @?= Just (sha256 trivialWasmModule)
 
                                                                          step "Upgrade to a compressed module"
-                                                                         ic_install ic00 (enum #upgrade) cid compressedModule ""
+                                                                         ic_install ic00 (enumNothing #upgrade) cid compressedModule ""
 
                                                                          cs <- ic_canister_status ic00 cid
                                                                          cs .! #module_hash @?= Just (sha256 compressedModule),
@@ -546,7 +546,7 @@ icTests my_sub other_sub =
                                                                            >>= isReject [3, 5]
 
                                                                          step "Upgrade"
-                                                                         ic_install (ic00via cid) (enum #upgrade) can_id trivialWasmModule ""
+                                                                         ic_install (ic00via cid) (enumNothing #upgrade) can_id trivialWasmModule ""
 
                                                                          step "Change controller"
                                                                          ic_set_controllers (ic00via cid) can_id [cid2]
