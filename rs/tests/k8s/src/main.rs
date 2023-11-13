@@ -21,6 +21,9 @@ enum Commands {
         /// Testnet version
         #[arg(short, long)]
         version: String,
+        /// Initialize a testnet
+        #[arg(long)]
+        init_nns: bool,
         /// Use a zero version within testnet
         #[arg(long)]
         use_zero_version: bool,
@@ -52,6 +55,7 @@ async fn main() -> Result<()> {
         Some(Commands::Create {
             name,
             version,
+            init_nns,
             use_zero_version,
             nns,
             app,
@@ -59,6 +63,7 @@ async fn main() -> Result<()> {
             let _ = TNet::new(name)
                 .version(version)
                 .use_zero_version(*use_zero_version)
+                .init_nns(*init_nns)
                 .topology(*nns, *app)
                 .create()
                 .await?;
