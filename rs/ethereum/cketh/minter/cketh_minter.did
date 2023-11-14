@@ -229,11 +229,11 @@ type Event = record {
             withdrawal_id : nat;
             transaction_receipt : TransactionReceipt;
         };
-          ReimbursedEthWithdrawal : record {
+        ReimbursedEthWithdrawal : record {
             reimbursed_in_block : nat;
             reimbursed_amount : nat;
             withdrawal_id : nat;
-            transaction_hash : text;
+            transaction_hash : opt text;
         };
     };
 };

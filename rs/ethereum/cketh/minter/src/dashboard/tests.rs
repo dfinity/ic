@@ -519,7 +519,7 @@ fn should_display_reimbursed_requests() {
                 apply_state_transition(
                     &mut state,
                     &EventType::ReimbursedEthWithdrawal(Reimbursed {
-                        transaction_hash: receipt.transaction_hash,
+                        transaction_hash: Some(receipt.transaction_hash),
                         withdrawal_id: id,
                         reimbursed_in_block,
                         reimbursed_amount,

@@ -431,7 +431,7 @@ fn should_reimburse() {
                 "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
             }},
         EventPayload::ReimbursedEthWithdrawal {
-            transaction_hash: "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+            transaction_hash: Some("0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()),
             reimbursed_amount: balance_before_withdrawal - gas_cost,
             withdrawal_id: withdrawal_id.clone(),
             reimbursed_in_block: withdrawal_id + 1,
