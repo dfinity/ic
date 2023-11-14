@@ -888,7 +888,7 @@ mod test {
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let metrics_registry = ic_metrics::MetricsRegistry::new();
-            let metrics = StateManagerMetrics::new(&metrics_registry);
+            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
             let tip_handler = layout.capture_tip_handler();
             let (_h, _s) = spawn_tip_thread(
                 log,

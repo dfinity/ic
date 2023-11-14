@@ -3,6 +3,7 @@ use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS}
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::lsmt_storage_default;
 use ic_ic00_types::CanisterStatusType;
+use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -34,9 +35,9 @@ use std::{collections::BTreeSet, fs::OpenOptions};
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
-fn state_manager_metrics() -> StateManagerMetrics {
+fn state_manager_metrics(log: &ReplicaLogger) -> StateManagerMetrics {
     let metrics_registry = ic_metrics::MetricsRegistry::new();
-    StateManagerMetrics::new(&metrics_registry)
+    StateManagerMetrics::new(&metrics_registry, log.clone())
 }
 
 fn thread_pool() -> scoped_threadpool::Pool {
@@ -68,12 +69,13 @@ fn make_checkpoint_and_get_state_impl(
     state: &ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
+    log: &ReplicaLogger,
 ) -> ReplicatedState {
     make_checkpoint(
         state,
         height,
         tip_channel,
-        &state_manager_metrics().checkpoint_metrics,
+        &state_manager_metrics(log).checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -85,8 +87,9 @@ fn make_checkpoint_and_get_state(
     state: &ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
+    log: &ReplicaLogger,
 ) -> ReplicatedState {
-    make_checkpoint_and_get_state_impl(state, height, tip_channel)
+    make_checkpoint_and_get_state_impl(state, height, tip_channel, log)
 }
 
 #[test]
@@ -98,11 +101,11 @@ fn can_make_a_checkpoint() {
             StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
         let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
+            log.clone(),
             tip_handler,
             layout.clone(),
             lsmt_storage_default(),
-            state_manager_metrics(),
+            state_manager_metrics(&log),
             MaliciousFlags::default(),
         );
 
@@ -117,7 +120,7 @@ fn can_make_a_checkpoint() {
             NumSeconds::from(100_000),
         ));
 
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
         // Ensure that checkpoint data is now available via layout API.
         assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
@@ -161,7 +164,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         let layout =
             StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
+        let state_manager_metrics = state_manager_metrics(&log);
         let (_tip_thread, tip_channel) = spawn_tip_thread(
             log,
             tip_handler,
@@ -212,9 +215,9 @@ fn can_recover_from_a_checkpoint() {
         let root = tmp.path().to_path_buf();
         let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
+        let state_manager_metrics = state_manager_metrics(&log);
         let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
+            log.clone(),
             tip_handler,
             layout.clone(),
             lsmt_storage_default(),
@@ -254,7 +257,7 @@ fn can_recover_from_a_checkpoint() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint(HEIGHT).unwrap(),
@@ -315,9 +318,9 @@ fn can_recover_an_empty_state() {
         let root = tmp.path().to_path_buf();
         let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
+        let state_manager_metrics = state_manager_metrics(&log);
         let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
+            log.clone(),
             tip_handler,
             layout.clone(),
             lsmt_storage_default(),
@@ -332,6 +335,7 @@ fn can_recover_an_empty_state() {
             &ReplicatedState::new(subnet_test_id(1), own_subnet_type),
             HEIGHT,
             &tip_channel,
+            &log,
         );
 
         let recovered_state = load_checkpoint(
@@ -351,7 +355,7 @@ fn returns_not_found_for_missing_checkpoints() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
         let root = tmp.path().to_path_buf();
-        let layout = StateLayout::try_new(log, root, &MetricsRegistry::new()).unwrap();
+        let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
 
         const MISSING_HEIGHT: Height = Height::new(42);
         match layout
@@ -361,7 +365,7 @@ fn returns_not_found_for_missing_checkpoints() {
                 load_checkpoint(
                     &c,
                     SubnetType::Application,
-                    &state_manager_metrics().checkpoint_metrics,
+                    &state_manager_metrics(&log).checkpoint_metrics,
                     Some(&mut thread_pool()),
                     Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
                 )
@@ -400,9 +404,9 @@ fn can_recover_a_stopping_canister() {
         let root = tmp.path().to_path_buf();
         let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
+        let state_manager_metrics = state_manager_metrics(&log);
         let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
+            log.clone(),
             tip_handler,
             layout.clone(),
             lsmt_storage_default(),
@@ -437,7 +441,7 @@ fn can_recover_a_stopping_canister() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint(HEIGHT).unwrap(),
@@ -468,9 +472,9 @@ fn can_recover_a_stopped_canister() {
         let root = tmp.path().to_path_buf();
         let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
+        let state_manager_metrics = state_manager_metrics(&log);
         let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
+            log.clone(),
             tip_handler,
             layout.clone(),
             lsmt_storage_default(),
@@ -496,7 +500,7 @@ fn can_recover_a_stopped_canister() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
         let loaded_state = load_checkpoint(
             &layout.checkpoint(HEIGHT).unwrap(),
@@ -521,9 +525,9 @@ fn can_recover_a_running_canister() {
         let root = tmp.path().to_path_buf();
         let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
+        let state_manager_metrics = state_manager_metrics(&log);
         let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
+            log.clone(),
             tip_handler,
             layout.clone(),
             lsmt_storage_default(),
@@ -549,7 +553,7 @@ fn can_recover_a_running_canister() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint(HEIGHT).unwrap(),
@@ -574,9 +578,9 @@ fn can_recover_subnet_queues() {
         let root = tmp.path().to_path_buf();
         let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
+        let state_manager_metrics = state_manager_metrics(&log);
         let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
+            log.clone(),
             tip_handler,
             layout.clone(),
             lsmt_storage_default(),
@@ -600,7 +604,7 @@ fn can_recover_subnet_queues() {
         );
 
         let original_state = state.clone();
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint(HEIGHT).unwrap(),
@@ -625,9 +629,9 @@ fn empty_protobufs_are_loaded_correctly() {
         let root = tmp.path().to_path_buf();
         let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
+        let state_manager_metrics = state_manager_metrics(&log);
         let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
+            log.clone(),
             tip_handler,
             layout.clone(),
             lsmt_storage_default(),
@@ -649,7 +653,7 @@ fn empty_protobufs_are_loaded_correctly() {
         );
         state.put_canister_state(canister_state);
 
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint(HEIGHT).unwrap(),

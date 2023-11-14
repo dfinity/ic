@@ -31,6 +31,13 @@ use maplit::btreemap;
 use proptest::prelude::*;
 use std::{sync::Arc, time::Duration};
 
+struct DummyMetrics;
+impl CheckpointLoadingMetrics for DummyMetrics {
+    fn raise_critical_error(&self, _: String) {
+        // Do nothing.
+    }
+}
+
 lazy_static! {
     static ref LOCAL_CANISTER: CanisterId = CanisterId::from(0x34);
     static ref REMOTE_CANISTER: CanisterId = CanisterId::from(0x134);
@@ -228,7 +235,12 @@ fn streams_stats_after_deserialization() {
 
     let system_metadata_proto: ic_protobuf::state::system_metadata::v1::SystemMetadata =
         (&system_metadata).into();
-    let deserialized_system_metadata = system_metadata_proto.try_into().unwrap();
+    let deserialized_system_metadata = (
+        system_metadata_proto,
+        &DummyMetrics as &dyn CheckpointLoadingMetrics,
+    )
+        .try_into()
+        .unwrap();
 
     // Ensure that the deserialized `SystemMetadata` is equal to the original.
     assert_eq!(system_metadata, deserialized_system_metadata);
@@ -448,12 +460,22 @@ fn roundtrip_encoding() {
     // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
     let mut proto = pb::SystemMetadata::from(&system_metadata);
     proto.canister_allocation_ranges = None;
-    assert_eq!(system_metadata, proto.try_into().unwrap());
+    assert_eq!(
+        system_metadata,
+        (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
+            .try_into()
+            .unwrap()
+    );
 
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
-        assert_eq!(*system_metadata, proto.try_into().unwrap());
+        assert_eq!(
+            *system_metadata,
+            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
+                .try_into()
+                .unwrap()
+        );
     }
 
     // Set `canister_allocation_ranges`, but not `last_generated_canister_id`.
@@ -1745,6 +1767,142 @@ fn blockmaker_metrics_time_series_observe_prunes() {
     );
 }
 
+struct BlockmakerMetricsFixture;
+impl BlockmakerMetricsFixture {
+    fn blockmaker_stats_map() -> BlockmakerStatsMap {
+        BlockmakerStatsMap {
+            node_stats: btreemap! {
+                node_test_id(0) => (1, 0).into(),
+                node_test_id(1) => (1, 0).into(),
+            },
+            subnet_stats: (2, 0).into(),
+        }
+    }
+
+    fn new_with_multiple_samples_per_day() -> BlockmakerMetricsTimeSeries {
+        let mut metrics = BlockmakerMetricsTimeSeries::default();
+        let batch_time = Time::from_nanos_since_unix_epoch(0);
+
+        // Insert two observations within 10 minutes violating the invariant.
+        metrics.0.insert(batch_time, Self::blockmaker_stats_map());
+        metrics.0.insert(
+            batch_time + Duration::from_secs(10),
+            Self::blockmaker_stats_map(),
+        );
+        metrics
+    }
+
+    fn new_with_too_many_observations() -> BlockmakerMetricsTimeSeries {
+        let mut metrics = BlockmakerMetricsTimeSeries::default();
+        let batch_time = Time::from_nanos_since_unix_epoch(0);
+
+        for i in 0..BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS + 1 {
+            metrics.0.insert(
+                batch_time + Duration::from_secs(i as u64 * 24 * 3600),
+                Self::blockmaker_stats_map(),
+            );
+        }
+        metrics
+    }
+
+    fn new_with_multiple_samples_per_day_and_max_num_samples() -> BlockmakerMetricsTimeSeries {
+        let mut metrics = BlockmakerMetricsFixture::new_with_multiple_samples_per_day();
+        let batch_time = Time::from_nanos_since_unix_epoch(0);
+
+        for i in 1..BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS - 1 {
+            metrics.0.insert(
+                batch_time + Duration::from_secs(i as u64 * 24 * 3600),
+                Self::blockmaker_stats_map(),
+            );
+        }
+
+        assert_eq!(
+            metrics.0.len(),
+            BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS
+        );
+
+        metrics
+    }
+}
+
+fn check_invariant_self_heals(mut metrics: BlockmakerMetricsTimeSeries, error: &str) {
+    let batch_time = Time::from_nanos_since_unix_epoch(0);
+
+    // Make sure the invariant is broken
+    assert_matches!(metrics.check_soft_invariants(), Err(err) if err.contains(error));
+
+    // The next observation should restore the soft invariant.
+    metrics.observe(
+        batch_time + Duration::from_secs(u64::MAX / 2),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(0),
+            failed_blockmakers: vec![],
+        },
+    );
+
+    assert!(metrics.check_soft_invariants().is_ok());
+}
+
+#[test]
+fn blockmaker_metrics_soft_invariant_multiple_samples_self_heals() {
+    check_invariant_self_heals(
+        BlockmakerMetricsFixture::new_with_multiple_samples_per_day_and_max_num_samples(),
+        "Found two timestamps",
+    );
+}
+
+#[test]
+fn blockmaker_metrics_soft_invariant_size_limit_self_heals() {
+    check_invariant_self_heals(
+        BlockmakerMetricsFixture::new_with_too_many_observations(),
+        "exceeds limit",
+    );
+}
+
+fn do_roundtrip_and_check_error(metrics: &BlockmakerMetricsTimeSeries, expected_error: &str) {
+    use std::sync::Mutex;
+
+    struct TestMetrics(Arc<Mutex<String>>);
+    impl CheckpointLoadingMetrics for TestMetrics {
+        fn raise_critical_error(&self, error: String) {
+            *self.0.lock().unwrap() = error;
+        }
+    }
+
+    let test_metrics = TestMetrics(Arc::new(Mutex::new("".to_string())));
+
+    // Currently the String stored in `TestMetrics` is still empty
+    assert!(test_metrics.0.lock().unwrap().len() == 0);
+
+    let pb_stats = pb_metadata::BlockmakerMetricsTimeSeries::from(metrics);
+    let deserialized_stats = BlockmakerMetricsTimeSeries::try_from((
+        pb_stats,
+        &test_metrics as &dyn CheckpointLoadingMetrics,
+    ))
+    .unwrap();
+
+    // But the invariant check done in deserialization will set the error message.
+    assert!(test_metrics.0.lock().unwrap().contains(expected_error));
+
+    // Assert the the (de)serialization roundtrip works as expected despite
+    // the invariant violation.
+    assert_eq!(metrics, &deserialized_stats);
+}
+
+#[test]
+fn blockmaker_metrics_soft_invariant_multiple_samples_bumps_critical_error_counter() {
+    let metrics = BlockmakerMetricsFixture::new_with_multiple_samples_per_day();
+    assert_matches!(metrics.check_soft_invariants(), Err(err) if err.contains("Found two timestamps"));
+    do_roundtrip_and_check_error(&metrics, "Found two timestamps");
+}
+
+#[test]
+fn blockmaker_metrics_soft_invariant_size_limit_bumps_critical_error_counter() {
+    let metrics = BlockmakerMetricsFixture::new_with_too_many_observations();
+    assert_matches!(metrics.check_soft_invariants(), Err(err) if err.contains("exceeds limit"));
+    do_roundtrip_and_check_error(&metrics, "exceeds limit");
+}
+
 // The compiler doesn't see the use of these constants inside the `proptest!` macro.
 #[allow(dead_code)]
 const MAX_NUM_DAYS: usize = BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS + 10;
@@ -1754,14 +1912,14 @@ const MAX_NUM_DAYS_NANOS: u64 = MAX_NUM_DAYS as u64 * 24 * 3600 * 1_000_000_000;
 const MAX_NODE_ID: u64 = 20;
 
 proptest! {
-    /// Checks `check_runtime_invariants()` does not panic when observing random node IDs
-    /// at random mostly sorted and slightly permuted timestamps.
+    /// Checks that `check_soft_invariants()` does not return an error when observing random
+    /// node IDs at random mostly sorted and slightly permuted timestamps.
     /// Such invariants are checked indirectly at the bottom of `observe()` where
-    /// `check_runtime_invariants()` is called. There is an additional call to
-    /// `check_runtime_invariants()` at the end of the test to ensure the test doesn't
+    /// `check_soft_invariants()` is called. There is an additional call to
+    /// `check_soft_invariants()` at the end of the test to ensure the test doesn't
     /// silently pass when the production code is changed.
     #[test]
-    fn blockmaker_metrics_check_runtime_invariants(
+    fn blockmaker_metrics_check_soft_invariants(
         (mut time_u64, node_ids_u64) in (0..MAX_NUM_DAYS)
         .prop_flat_map(|num_elements| {
             (
@@ -1809,6 +1967,6 @@ proptest! {
             );
         }
 
-        prop_assert!(metrics.check_runtime_invariants());
+        prop_assert!(metrics.check_soft_invariants().is_ok());
     }
 }

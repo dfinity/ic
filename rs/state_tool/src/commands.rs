@@ -10,3 +10,17 @@ pub mod split;
 pub mod split_manifest;
 mod utils;
 pub mod verify_manifest;
+
+fn logger() -> ic_logger::ReplicaLogger {
+    use slog::{slog_o, Drain};
+
+    let plain = slog_term::PlainSyncDecorator::new(std::io::stderr());
+    slog::Logger::root(
+        slog_term::FullFormat::new(plain)
+            .build()
+            .filter_level(slog::Level::Debug)
+            .fuse(),
+        slog_o!(),
+    )
+    .into()
+}

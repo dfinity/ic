@@ -18,7 +18,7 @@ fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, Checkpo
     let unused_height = Height::from(0);
     let own_subnet_type = SubnetType::Application;
     let dummy_metrics_registry = ic_metrics::MetricsRegistry::new();
-    let dummy_metrics = CheckpointMetrics::new(&dummy_metrics_registry);
+    let dummy_metrics = CheckpointMetrics::new(&dummy_metrics_registry, crate::commands::logger());
     let state_a = load_checkpoint(
         &CompleteCheckpointLayout::new_untracked(path_a, unused_height)?,
         own_subnet_type,
