@@ -513,6 +513,8 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
+                ic_cketh_minter::eth_rpc::encode_metrics(w)?;
+
                 Ok(())
             })
         }
