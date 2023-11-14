@@ -17,8 +17,7 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            NnsInstallationBuilder, RetrieveIpv4Addr, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::spawn_round_robin_workload_engine,
@@ -123,15 +122,6 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
         &logger,
         "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}",
         boundary_node.block_on_ipv4().unwrap()
-    );
-    info!(&logger, "Waiting for routes file");
-    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-    let cmd_output = boundary_node.block_on_bash_script(&sleep_command).unwrap();
-    info!(
-        logger,
-        "{BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'",
-        cmd_output.trim(),
     );
     info!(&logger, "Checking BN health");
     boundary_node

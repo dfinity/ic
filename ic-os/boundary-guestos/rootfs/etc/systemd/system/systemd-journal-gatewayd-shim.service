@@ -7,7 +7,7 @@ Wants=network-online.target
 Restart=always
 ExecStart=/opt/ic/bin/systemd-journal-gatewayd-shim \
     --addr [::]:19532 \
-    --units certificate-issuer.service,certificate-syncer.service
+    --units service-logs.service
 
 [Install]
 WantedBy=multi-user.target

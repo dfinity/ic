@@ -4,4 +4,3 @@ tmpfs    /tmp    tmpfs   defaults 0   2
 /dev/mapper/conf_crypt /boot/config ext4 defaults 0 2
 /dev/mapper/var_crypt   /var  ext4    defaults    0   2
 /dev/mapper/store-var--log  /var/log    ext4    defaults	0   2
-/dev/mapper/store-nginx--cache  /var/cache/nginx    ext4    defaults   0   2

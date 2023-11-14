@@ -32,10 +32,6 @@ service are started in the IC-OS boot sequence:
 
 - Start nginx
 
-- Start boundary-node-control-plane
-
-- Start ic_router_control_plane_watcher
-
 - Start icx_proxy
 
 - Start danted socks-proxy
@@ -135,13 +131,6 @@ Starts the `node_exporter` service to make machine metrics accessible externally
 Service: `nginx.service`
 
 Default starter script that comes with the package. Relevant information is here: `nginx.service.d/override.conf` and in `/etc/nginx`
-
-
-==  Start boundary-node-control-plane
-
-Service:  `boundary-node-control-plane.service`. Has a pre-execution phase that extracts the NNS URLs from `/boot/config/nns.conf`
-
-Generates JSON with routing tables, IP:port, node certificates these are stored in `/var/cache/ic_routes`
 
 ==  Start icx_proxy
 

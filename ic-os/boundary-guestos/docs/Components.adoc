@@ -6,18 +6,12 @@ The Boundary Node has a number of specific components:
 Nginx is used to serve assets such as the service worker, it acts as a proxy that dispatches requests to the IC and performs rate limiting. Nginx is extended by two modules
 
 - link:https://nginx.org/en/docs/njs/[njs] which provides a subset of the JavaScript language that allows extending nginx functionality
-- Support for cbor parsing via link:https://github.com/dfinity/nginx-module-cbor-input[nginx-module-cbor-input]
 
 In particular njs is used to for the link:../rootfs/etc/nginx/ic_router.js[`ic_router.js`]. The router maps a   `canister_id`  to a `subnet_id` and for the subnet to a `node_id`.
 
 == `icx-proxy`
 Transforms HTTP-to-canister request as API calls.
 More details can be found link:https://github.com/dfinity/icx-proxy[here].
-
-== `boundary-node-control-plane`
-- Contacts NNS and caches registry data and watches for changes
-- Heartbeats all nodes, moves down nodes from routing tables in case they are not reachable
-- Generates JSON with routing tables, IP:port, node certificates
 
 == Service worker
 JS script that is delivered to the browser to transform plain HTTP requests into API requests

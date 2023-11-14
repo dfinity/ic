@@ -1,0 +1,15 @@
+[Unit]
+Description=Boundary Node Service Logs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+LogRateLimitIntervalSec=1ms
+LogRateLimitBurst=1000
+User=vector
+Group=vector
+Restart=always
+ExecStart=/usr/bin/vector --config /etc/vector/service-logs.toml
+
+[Install]
+WantedBy=multi-user.target

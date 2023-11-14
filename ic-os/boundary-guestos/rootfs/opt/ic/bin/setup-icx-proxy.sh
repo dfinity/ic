@@ -69,10 +69,6 @@ function generate_icx_proxy_config() {
         UNIQUE_DOMAINS[$DOMAIN]=0
     done
 
-    for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
-        ARG_REPLICA_DOMAIN_ADDRS+=("--replica ${DOMAIN}|127.0.0.1:443")
-    done
-
     for DOMAIN in "${!UNIQUE_DOMAINS[@]}"; do
         ARG_DOMAINS+=("--domain ${DOMAIN}")
     done
@@ -83,7 +79,6 @@ function generate_icx_proxy_config() {
     get_nns_der >"${ROOT_KEY}"
 
     cat >"${ENV_FILE}" <<EOF
-REPLICA_DOMAIN_ADDRS=${ARG_REPLICA_DOMAIN_ADDRS[@]}
 DOMAINS=${ARG_DOMAINS[@]}
 SSL_OPTIONS=${SSL_OPTIONS:-}
 EOF

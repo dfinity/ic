@@ -37,15 +37,6 @@ pvs /dev/mapper/vda10-crypt >/dev/null 2>&1 || (
     retry vgchange --force -a y
 )
 
-# Set up nginx data store if it does not exist yet.
-lvs /dev/store/nginx-cache >/dev/null 2>&1 || (
-    echo "Logical volume 'nginx-cache' does not exist yet (first boot?), creating it."
-    # Limit to 25% of capacity.
-    TOTAL_SIZE=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512))
-    LV_SIZE=$(("$TOTAL_SIZE" / 4 / 1024 / 1024))
-    retry lvcreate --yes -L "$LV_SIZE"M -n nginx-cache store
-)
-
 # Set up log store if it does not exist yet.
 lvs /dev/store/var-log >/dev/null 2>&1 || (
     echo "Logical volume 'var-log' does not exist yet (first boot?), creating it."
