@@ -54,13 +54,19 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
     chmod 777 /usr/bin/bazel
 
 ARG nvm_version=v0.39.1
+ARG dependency_mgmt_agent_js_node_version=16
+ARG dependency_mgmt_nns_dapp_node_version=18
+ARG dependency_mgmt_default_node_version=19
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
 
 COPY typescript/service-worker/.nvmrc /tmp/sw.npmrc
 RUN . /opt/nvm/nvm.sh && \
-    nvm install $(cat /tmp/sw.npmrc)
+    nvm install $(cat /tmp/sw.npmrc) && \
+    nvm install ${dependency_mgmt_agent_js_node_version} && \
+    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
+    nvm install ${dependency_mgmt_default_node_version}
 
 RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 
