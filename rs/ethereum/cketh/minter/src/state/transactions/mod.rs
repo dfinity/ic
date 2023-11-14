@@ -116,7 +116,6 @@ impl fmt::Debug for EthWithdrawalRequest {
 /// 6. If a given transaction fails the minter will reimburse the user who requested the
 ///    withdrawal with the corresponding amount minus fees.
 #[derive(Clone, Debug, Eq, PartialEq)]
-// TODO FI-948: limit number of withdrawal_requests and pending transactions nonces
 pub struct EthTransactions {
     pub(in crate::state) withdrawal_requests: VecDeque<EthWithdrawalRequest>,
     pub(in crate::state) created_tx:

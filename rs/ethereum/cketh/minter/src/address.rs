@@ -125,30 +125,36 @@ fn keccak(bytes: &[u8]) -> [u8; 32] {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AddressValidationError {
-    ContractCreation,
+    Invalid { error: String },
+    NotSupported(Address),
+    Blocked(Address),
 }
 
 impl Display for AddressValidationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            AddressValidationError::ContractCreation => {
-                write!(
-                    f,
-                    "contract creation address {} is not supported",
-                    Address::ZERO
-                )
+            AddressValidationError::Invalid { error } => {
+                write!(f, "Invalid address: {}", error)
+            }
+            AddressValidationError::NotSupported(address) => {
+                write!(f, "Address {} is not supported", address)
+            }
+            AddressValidationError::Blocked(address) => {
+                write!(f, "address {} is blocked", address)
             }
         }
     }
 }
 
 /// Validate whether the given address can be used as the destination of an Ethereum transaction.
-// TODO FI-902: add blocklist check
-pub fn validate_address_as_destination(
-    address: Address,
-) -> Result<Address, AddressValidationError> {
+pub fn validate_address_as_destination(address: &str) -> Result<Address, AddressValidationError> {
+    let address =
+        Address::from_str(address).map_err(|e| AddressValidationError::Invalid { error: e })?;
     if address == Address::ZERO {
-        return Err(AddressValidationError::ContractCreation);
+        return Err(AddressValidationError::NotSupported(address));
+    }
+    if crate::blocklist::is_blocked(address) {
+        return Err(AddressValidationError::Blocked(address));
     }
     Ok(address)
 }
