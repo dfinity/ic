@@ -482,6 +482,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .value(&[("status", "rejected")], s.invalid_events.len() as f64)?;
 
                 w.encode_gauge(
+                    "cketh_event_count",
+                    storage::total_event_count() as f64,
+                    "Total number of events in the event log.",
+                )?;
+                w.encode_gauge(
                     "cketh_minter_eth_balance",
                     s.eth_balance.eth_balance().as_f64(),
                     "Known amount of ETH on the minter's address",
