@@ -55,13 +55,6 @@ function setup_permissions() {
     sudo rm -rf ${HOME}/.local/share/dfx
 }
 
-function setup_networking() {
-    echo "> Setting up networking plugins"
-
-    # add cni plugins
-    sudo apt install podman-machine-cni containernetworking-plugins -y
-}
-
 function setup_nvm() {
     echo "> Setting up nvm"
 
@@ -342,7 +335,6 @@ do
         --add-dependencies)
             shift
             setup_permissions; echo
-            setup_networking; echo
             setup_nvm; echo
             setup_dfx; echo
             setup_certs; echo
