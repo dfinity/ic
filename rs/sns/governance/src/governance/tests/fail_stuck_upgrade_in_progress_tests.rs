@@ -10,7 +10,7 @@ use crate::{
     },
     pb::v1::{
         get_proposal_response,
-        governance::{upgrade_in_progress, UpgradeInProgress, Version},
+        governance::{UpgradeInProgress, Version},
         governance_error::ErrorType,
         proposal::Action,
         Ballot, FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetProposal,
@@ -76,7 +76,7 @@ lazy_static! {
             root_canister_id: Some(PrincipalId::from(*TEST_ROOT_CANISTER_ID)),
             deployed_version: Some(SNS_VERSION_1.clone()),
             pending_version: Some(UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(SNS_VERSION_2.clone())),
+                target_version: Some(SNS_VERSION_2.clone()),
                 mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
                 checking_upgrade_lock: 10,
                 proposal_id: UPGRADE_PROPOSAL_ID,
@@ -170,9 +170,7 @@ fn test_does_nothing_if_upgrade_attempt_not_expired() {
     // real, not just because the world was (accidentally) already the
     // way we expected them afterwards.
     let expected_upgrade_in_progress = UpgradeInProgress {
-        target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-            SNS_VERSION_2.clone(),
-        )),
+        target_version: Some(SNS_VERSION_2.clone()),
         mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
         checking_upgrade_lock: 10,
         proposal_id: UPGRADE_PROPOSAL_ID,
@@ -251,9 +249,7 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
     assert_eq!(
         governance.proto.pending_version.clone().unwrap(),
         UpgradeInProgress {
-            target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                SNS_VERSION_2.clone()
-            )),
+            target_version: Some(SNS_VERSION_2.clone()),
             mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
             checking_upgrade_lock: 10,
             proposal_id: UPGRADE_PROPOSAL_ID,

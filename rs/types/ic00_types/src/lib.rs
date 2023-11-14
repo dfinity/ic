@@ -233,15 +233,6 @@ pub struct CanisterCodeDeploymentRecord {
     module_hash: [u8; WASM_HASH_LENGTH],
 }
 
-impl CanisterCodeDeploymentRecord {
-    pub fn mode(&self) -> CanisterInstallMode {
-        self.mode.clone()
-    }
-    pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
-        self.module_hash.clone()
-    }
-}
-
 /// `CandidType` for `CanisterControllersChangeRecord`
 /// ```text
 /// record {
@@ -373,14 +364,6 @@ impl CanisterChange {
             | CanisterChangeDetails::CanisterCodeUninstall => 0,
         };
         NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
-    }
-
-    pub fn canister_version(&self) -> u64 {
-        self.canister_version
-    }
-
-    pub fn details(&self) -> &CanisterChangeDetails {
-        &self.details
     }
 }
 

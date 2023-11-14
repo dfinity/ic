@@ -1462,42 +1462,19 @@ pub mod governance {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct UpgradeInProgress {
+        /// Version to  be upgraded to
+        #[prost(message, optional, tag = "1")]
+        pub target_version: ::core::option::Option<Version>,
         /// Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
-        #[prost(uint64, tag = "1")]
+        #[prost(uint64, tag = "2")]
         pub mark_failed_at_seconds: u64,
         /// Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
         /// allowing us to fail in case we otherwise have gotten stuck.
-        #[prost(uint64, tag = "2")]
+        #[prost(uint64, tag = "3")]
         pub checking_upgrade_lock: u64,
         /// The proposal that initiated this upgrade
-        #[prost(uint64, tag = "3")]
+        #[prost(uint64, tag = "4")]
         pub proposal_id: u64,
-        #[prost(oneof = "upgrade_in_progress::TargetVersion", tags = "4, 5")]
-        pub target_version: ::core::option::Option<upgrade_in_progress::TargetVersion>,
-    }
-    /// Nested message and enum types in `UpgradeInProgress`.
-    pub mod upgrade_in_progress {
-        #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Message)]
-        pub struct ManageLedgerParametersPendingVersionData {
-            #[prost(uint64, tag = "1")]
-            pub ledger_canister_info_version_number_before_upgrade: u64,
-            #[prost(message, optional, tag = "2")]
-            pub manage_ledger_parameters_request:
-                ::core::option::Option<super::super::ManageLedgerParameters>,
-            #[prost(bytes = "vec", tag = "3")]
-            pub ledger_wasm_hash: ::prost::alloc::vec::Vec<u8>,
-        }
-        #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Oneof)]
-        pub enum TargetVersion {
-            #[prost(message, tag = "4")]
-            UpgradeSnsToNextVersion(super::Version),
-            #[prost(message, tag = "5")]
-            ManageLedgerParameters(ManageLedgerParametersPendingVersionData),
-        }
     }
     #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]

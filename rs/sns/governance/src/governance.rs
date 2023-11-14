@@ -23,8 +23,8 @@ use crate::{
             get_neuron_response, get_proposal_response,
             governance::{
                 self, neuron_in_flight_command,
-                neuron_in_flight_command::Command as InFlightCommand, upgrade_in_progress,
-                MaturityModulation, NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
+                neuron_in_flight_command::Command as InFlightCommand, MaturityModulation,
+                NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -72,9 +72,7 @@ use dfn_core::api::{spawn, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, SpanStats};
-use ic_ic00_types::{
-    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
-};
+use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -2109,15 +2107,8 @@ impl Governance {
                 self.perform_transfer_sns_treasury_funds(transfer).await
             }
             Action::ManageLedgerParameters(manage_ledger_parameters) => {
-                let mlp_result = self
-                    .perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters)
-                    .await;
-                match mlp_result {
-                    // return here because a successfull perform_manage_ledger_parameters result means that the ledger upgrade is scheduled,
-                    // and the heartbeat logic will set the proposal execution status.
-                    Ok(()) => return,
-                    Err(e) => Err(e),
-                }
+                self.perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters)
+                    .await
             }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
@@ -2598,9 +2589,7 @@ impl Governance {
         // A canister upgrade has been successfully kicked-off. Set the pending upgrade-in-progress
         // field so that Governance's heartbeat logic can check on the status of this upgrade.
         self.proto.pending_version = Some(UpgradeInProgress {
-            target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                next_version,
-            )),
+            target_version: Some(next_version),
             mark_failed_at_seconds: self.env.now() + 5 * 60,
             checking_upgrade_lock: 0,
             proposal_id,
@@ -2688,30 +2677,6 @@ impl Governance {
         let current_version = self.proto.deployed_version_or_panic();
         let ledger_canister_id = self.proto.ledger_canister_id_or_panic();
 
-        let ledger_canister_info = self.env
-            .call_canister(
-                CanisterId::ic_00(),
-                "canister_info",
-                candid::encode_one(
-                    CanisterInfoRequest::new(
-                        ledger_canister_id.try_into().unwrap(),
-                        Some(20),
-                    )
-                ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error encoding canister_info request.\n{}", e)))?
-            )
-            .await
-            .map(|b| {
-                candid::decode_one::<CanisterInfoResponse>(&b)
-                .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error decoding canister_info response.\n{}", e)))
-            })
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
-
-        let current_ledger_version_number: u64 =
-            ledger_canister_info
-            .changes()
-            .last().ok_or(GovernanceError::new_with_message(ErrorType::External, "Could not execute proposal. Error finding current ledger canister_info version number".to_string()))?
-            .canister_version();
-
         let ledger_wasm = get_wasm(
             &*self.env,
             current_version.ledger_wasm_hash.to_vec(),
@@ -2733,7 +2698,7 @@ impl Governance {
         let ledger_upgrade_arg =
             candid::encode_one(&Some(LedgerArgument::Upgrade(Some(UpgradeArgs {
                 transfer_fee: manage_ledger_parameters.transfer_fee.map(|tf| tf.into()),
-                change_fee_collector: manage_ledger_parameters.set_fee_collector.clone().map(
+                change_fee_collector: manage_ledger_parameters.set_fee_collector.map(
                     |set_fee_collector| {
                         ChangeFeeCollector::SetTo(Account {
                             owner: set_fee_collector.owner.unwrap().into(), // unwrap checked in the validate_and_render_manage_ledger_parameters function
@@ -2755,28 +2720,12 @@ impl Governance {
         )
         .await?;
 
-        // A ledger upgrade has been successfully kicked-off. Set the pending upgrade-in-progress
-        // field so that Governance's heartbeat logic can check on the status of this upgrade.
-        // Since we are upgrading the ledger to it's current/same wasm module, the heartbeat must use the canister_info version number to check for the completion.
-        self.proto.pending_version = Some(UpgradeInProgress {
-            target_version: Some(upgrade_in_progress::TargetVersion::ManageLedgerParameters(
-                upgrade_in_progress::ManageLedgerParametersPendingVersionData {
-                    ledger_canister_info_version_number_before_upgrade:
-                        current_ledger_version_number,
-                    manage_ledger_parameters_request: Some(manage_ledger_parameters),
-                    ledger_wasm_hash: current_version.ledger_wasm_hash.to_vec(),
-                },
-            )),
-            mark_failed_at_seconds: self.env.now() + 5 * 60,
-            checking_upgrade_lock: 0,
-            proposal_id,
-        });
-
-        log!(
-            INFO,
-            "Successfully kicked off ManageLedgerParameters ledger upgrade."
-        );
-
+        if let Some(nervous_system_parameters) = self.proto.parameters.as_mut() {
+            if let Some(transfer_fee) = manage_ledger_parameters.transfer_fee {
+                nervous_system_parameters.transaction_fee_e8s = Some(transfer_fee);
+            }
+        }
+        
         Ok(())
     }
 
@@ -5021,244 +4970,90 @@ impl Governance {
             return;
         }
 
-        match target_version {
-            upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(target_version) => {
-                let running_version: Result<Version, String> =
-                    get_running_version(&*self.env, self.proto.root_canister_id_or_panic()).await;
+        let running_version: Result<Version, String> =
+            get_running_version(&*self.env, self.proto.root_canister_id_or_panic()).await;
 
-                // Mark the check as inactive after async call.
-                self.proto
-                    .pending_version
-                    .as_mut()
-                    .unwrap()
-                    .checking_upgrade_lock = 0;
-                // We cannot panic or we will get stuck with "checking_upgrade_lock" set to true.  We log
-                // the issue and return so the next check can be performed.
-                let mut running_version = match running_version {
-                    Ok(r) => r,
-                    Err(message) => {
-                        // Always log this, even if we are not yet marking as failed.
-                        log!(ERROR, "Could not get running version of SNS: {}", message);
-
-                        if self.env.now() > mark_failed_at {
-                            let error = format!(
-                                "Upgrade marked as failed at {} seconds from genesis. \
-                                    Governance could not determine running version from root: {}. \
-                                    Setting upgrade to failed to unblock retry.",
-                                self.env.now(),
-                                message,
-                            );
-                            self.fail_sns_upgrade_to_next_version_proposal(
-                                proposal_id,
-                                GovernanceError::new_with_message(ErrorType::External, error),
-                            );
-                        }
-                        return;
-                    }
-                };
-
-                // In this case, we do not have a running archive, so we just clone the value so the check
-                // does not fail on that account.
-                if running_version.archive_wasm_hash.is_empty() {
-                    running_version.archive_wasm_hash = target_version.archive_wasm_hash.clone();
-                }
-
-                let deployed_version = match self.proto.deployed_version.clone() {
-                    None => {
-                        let error = format!(
-                            "Upgrade marked as failed at {} seconds from genesis. \
-                        Governance had no recorded deployed_version.  \
-                        Setting it to currently running version and failing upgrade.",
-                            self.env.now(),
-                        );
-
-                        self.proto.deployed_version = Some(running_version);
-                        self.fail_sns_upgrade_to_next_version_proposal(
-                            proposal_id,
-                            GovernanceError::new_with_message(ErrorType::PreconditionFailed, error),
-                        );
-                        return;
-                    }
-                    Some(version) => version,
-                };
-
-                let expected_changes = deployed_version.changes_against(&target_version);
-
-                match running_version.version_has_expected_hashes(&expected_changes) {
-                    Ok(_) => {
-                        log!(
-                            INFO,
-                            "Upgrade marked successful at {} from genesis.  New Version: {:?}",
-                            self.env.now(),
-                            target_version
-                        );
-                        self.set_proposal_execution_status(proposal_id, Ok(()));
-                        self.proto.deployed_version = Some(target_version);
-                        self.proto.pending_version = None;
-                    }
-                    Err(errors) => {
-                        // We are past mark_failed_at_seconds.
-                        if self.env.now() > mark_failed_at {
-                            let error = format!(
-                                "Upgrade marked as failed at {} seconds from genesis. \
-                        Running system version does not match expected state.\n{:?}",
-                                self.env.now(),
-                                errors
-                            );
-
-                            self.fail_sns_upgrade_to_next_version_proposal(
-                                proposal_id,
-                                GovernanceError::new_with_message(ErrorType::External, error),
-                            );
-                        }
-                    }
-                }
-            }
-            upgrade_in_progress::TargetVersion::ManageLedgerParameters(
-                manage_ledger_parameters_pending_version_data,
-            ) => {
-                let canister_info_request = {
-                    match candid::encode_one(CanisterInfoRequest::new(
-                        self.proto.ledger_canister_id_or_panic().try_into().unwrap(),
-                        Some(20),
-                    )) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            self.proto
-                                .pending_version
-                                .as_mut()
-                                .unwrap()
-                                .checking_upgrade_lock = 0;
-
-                            log!(ERROR, "Error encoding canister_info request: {:?}", e);
-
-                            if self.env.now() > mark_failed_at {
-                                let error = format!(
-                                    "Upgrade marked as failed at {} seconds from genesis. \
-                                    Error encoding canister_info request. {:?}",
-                                    self.env.now(),
-                                    e
-                                );
-                                self.fail_manage_ledger_parameters_proposal(
-                                    proposal_id,
-                                    GovernanceError::new_with_message(ErrorType::External, error),
-                                );
-                            }
-
-                            return;
-                        }
-                    }
-                };
-
-                let ledger_canister_info_call_result = self
-                    .env
-                    .call_canister(CanisterId::ic_00(), "canister_info", canister_info_request)
-                    .await;
-
-                // Mark the check as inactive after async call.
-                self.proto
-                    .pending_version
-                    .as_mut()
-                    .unwrap()
-                    .checking_upgrade_lock = 0;
-
-                let ledger_canister_info = match ledger_canister_info_call_result {
-                    Ok(b) => match candid::decode_one::<CanisterInfoResponse>(&b) {
-                        Ok(ci) => ci,
-                        Err(e) => {
-                            log!(ERROR, "Error decoding canister_info response: {:?}", e);
-
-                            if self.env.now() > mark_failed_at {
-                                let error = format!(
-                                    "Upgrade marked as failed at {} seconds from genesis. \
-                                    Error decoding canister_info response. {:?}",
-                                    self.env.now(),
-                                    e
-                                );
-                                self.fail_manage_ledger_parameters_proposal(
-                                    proposal_id,
-                                    GovernanceError::new_with_message(ErrorType::External, error),
-                                );
-                            }
-
-                            return;
-                        }
-                    },
-                    Err(call_error) => {
-                        log!(
-                            ERROR,
-                            "Call error when calling for the ledger's canister_info: {:?}",
-                            call_error
-                        );
-
-                        if self.env.now() > mark_failed_at {
-                            let error = format!(
-                                "Upgrade marked as failed at {} seconds from genesis. \
-                                    Governance failed to read the ledger's canister_info from the management-canister: {:?}. \
-                                    Setting upgrade to failed to unblock retry.",
-                                self.env.now(),
-                                call_error,
-                            );
-                            self.fail_manage_ledger_parameters_proposal(
-                                proposal_id,
-                                GovernanceError::new_with_message(ErrorType::External, error),
-                            );
-                        }
-
-                        return;
-                    }
-                };
-
-                for canister_change in ledger_canister_info.changes().iter().rev() {
-                    if canister_change.canister_version()
-                        > manage_ledger_parameters_pending_version_data
-                            .ledger_canister_info_version_number_before_upgrade
-                    {
-                        if let CanisterChangeDetails::CanisterCodeDeployment(code_deployment) =
-                            canister_change.details()
-                        {
-                            if let CanisterInstallMode::Upgrade = code_deployment.mode() {
-                                if &code_deployment.module_hash()[..]
-                                    == &manage_ledger_parameters_pending_version_data
-                                        .ledger_wasm_hash[..]
-                                {
-                                    // Success
-                                    log!(
-                                        INFO,
-                                        "Upgrade marked successful at {} from genesis.",
-                                        self.env.now(),
-                                    );
-                                    self.set_proposal_execution_status(proposal_id, Ok(()));
-                                    self.proto.pending_version = None;
-
-                                    if let Some(nervous_system_parameters) =
-                                        self.proto.parameters.as_mut()
-                                    {
-                                        if let Some(Some(transfer_fee)) =
-                                            manage_ledger_parameters_pending_version_data
-                                                .manage_ledger_parameters_request
-                                                .as_ref()
-                                                .map(|r| r.transfer_fee)
-                                        {
-                                            nervous_system_parameters.transaction_fee_e8s =
-                                                Some(transfer_fee);
-                                        }
-                                    }
-
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
+        // Mark the check as inactive after async call.
+        self.proto
+            .pending_version
+            .as_mut()
+            .unwrap()
+            .checking_upgrade_lock = 0;
+        // We cannot panic or we will get stuck with "checking_upgrade_lock" set to true.  We log
+        // the issue and return so the next check can be performed.
+        let mut running_version = match running_version {
+            Ok(r) => r,
+            Err(message) => {
+                // Always log this, even if we are not yet marking as failed.
+                log!(ERROR, "Could not get running version of SNS: {}", message);
 
                 if self.env.now() > mark_failed_at {
                     let error = format!(
                         "Upgrade marked as failed at {} seconds from genesis. \
-                        Did not find an upgrade in the ledger's canister_info recent_changes.",
+                             Governance could not determine running version from root: {}. \
+                             Setting upgrade to failed to unblock retry.",
                         self.env.now(),
+                        message,
                     );
-                    self.fail_manage_ledger_parameters_proposal(
+                    self.fail_sns_upgrade_to_next_version_proposal(
+                        proposal_id,
+                        GovernanceError::new_with_message(ErrorType::External, error),
+                    );
+                }
+                return;
+            }
+        };
+
+        // In this case, we do not have a running archive, so we just clone the value so the check
+        // does not fail on that account.
+        if running_version.archive_wasm_hash.is_empty() {
+            running_version.archive_wasm_hash = target_version.archive_wasm_hash.clone();
+        }
+
+        let deployed_version = match self.proto.deployed_version.clone() {
+            None => {
+                let error = format!(
+                    "Upgrade marked as failed at {} seconds from genesis. \
+                Governance had no recorded deployed_version.  \
+                Setting it to currently running version and failing upgrade.",
+                    self.env.now(),
+                );
+
+                self.proto.deployed_version = Some(running_version);
+                self.fail_sns_upgrade_to_next_version_proposal(
+                    proposal_id,
+                    GovernanceError::new_with_message(ErrorType::PreconditionFailed, error),
+                );
+                return;
+            }
+            Some(version) => version,
+        };
+
+        let expected_changes = deployed_version.changes_against(&target_version);
+
+        match running_version.version_has_expected_hashes(&expected_changes) {
+            Ok(_) => {
+                log!(
+                    INFO,
+                    "Upgrade marked successful at {} from genesis.  New Version: {:?}",
+                    self.env.now(),
+                    target_version
+                );
+                self.set_proposal_execution_status(proposal_id, Ok(()));
+                self.proto.deployed_version = Some(target_version);
+                self.proto.pending_version = None;
+            }
+            Err(errors) => {
+                // We are past mark_failed_at_seconds.
+                if self.env.now() > mark_failed_at {
+                    let error = format!(
+                        "Upgrade marked as failed at {} seconds from genesis. \
+                Running system version does not match expected state.\n{:?}",
+                        self.env.now(),
+                        errors
+                    );
+
+                    self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
                         GovernanceError::new_with_message(ErrorType::External, error),
                     );
@@ -5274,13 +5069,6 @@ impl Governance {
         proposal_id: u64,
         error: GovernanceError,
     ) {
-        log!(ERROR, "{}", error.error_message);
-        let result = Err(error);
-        self.set_proposal_execution_status(proposal_id, result);
-        self.proto.pending_version = None;
-    }
-
-    fn fail_manage_ledger_parameters_proposal(&mut self, proposal_id: u64, error: GovernanceError) {
         log!(ERROR, "{}", error.error_message);
         let result = Err(error);
         self.set_proposal_execution_status(proposal_id, result);
@@ -7134,9 +6922,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.into()
-                )),
+                target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
                 proposal_id,
@@ -7451,9 +7237,7 @@ mod tests {
         // status is triggered.
         let mark_failed_at_seconds = governance.env.now() + ONE_DAY_SECONDS;
         governance.proto.pending_version = Some(UpgradeInProgress {
-            target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                next_version.clone().into(),
-            )),
+            target_version: Some(next_version.clone().into()),
             mark_failed_at_seconds,
             checking_upgrade_lock: 0,
             proposal_id: 0,
@@ -7463,9 +7247,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.clone().into()
-                )),
+                target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds,
                 checking_upgrade_lock: 0,
                 proposal_id: 0,
@@ -7537,11 +7319,7 @@ mod tests {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
                 pending_version: Some(UpgradeInProgress {
-                    target_version: Some(
-                        upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                            next_version.clone().into(),
-                        ),
-                    ),
+                    target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now - 1,
                     checking_upgrade_lock: 0,
                     proposal_id: 0,
@@ -7559,9 +7337,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.into()
-                )),
+                target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now - 1,
                 checking_upgrade_lock: 0,
                 proposal_id: 0,
@@ -7622,11 +7398,7 @@ mod tests {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
                 pending_version: Some(UpgradeInProgress {
-                    target_version: Some(
-                        upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                            next_version.clone().into(),
-                        ),
-                    ),
+                    target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
                     proposal_id,
@@ -7672,9 +7444,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.clone().into()
-                )),
+                target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
                 proposal_id,
@@ -7753,11 +7523,7 @@ mod tests {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
                 pending_version: Some(UpgradeInProgress {
-                    target_version: Some(
-                        upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                            next_version.clone().into(),
-                        ),
-                    ),
+                    target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 1,
                     checking_upgrade_lock: 0,
                     proposal_id,
@@ -7803,9 +7569,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.clone().into()
-                )),
+                target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 1,
                 checking_upgrade_lock: 0,
                 proposal_id,
@@ -7822,9 +7586,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.into()
-                )),
+                target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now + 1,
                 checking_upgrade_lock: 0,
                 proposal_id,
@@ -7894,11 +7656,7 @@ mod tests {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
                 pending_version: Some(UpgradeInProgress {
-                    target_version: Some(
-                        upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                            next_version.clone().into(),
-                        ),
-                    ),
+                    target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now - 1,
                     checking_upgrade_lock: 0,
                     proposal_id,
@@ -7944,9 +7702,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.clone().into()
-                )),
+                target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now - 1,
                 checking_upgrade_lock: 0,
                 proposal_id,
@@ -8147,11 +7903,7 @@ mod tests {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: None,
                 pending_version: Some(UpgradeInProgress {
-                    target_version: Some(
-                        upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                            next_version.clone().into(),
-                        ),
-                    ),
+                    target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
                     proposal_id,
@@ -8197,9 +7949,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.into()
-                )),
+                target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
                 proposal_id,
@@ -8287,11 +8037,7 @@ mod tests {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
                 pending_version: Some(UpgradeInProgress {
-                    target_version: Some(
-                        upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                            next_version.clone().into(),
-                        ),
-                    ),
+                    target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
                     proposal_id,
@@ -8309,9 +8055,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.clone().into()
-                )),
+                target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
                 proposal_id,
@@ -8371,11 +8115,7 @@ mod tests {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
                 pending_version: Some(UpgradeInProgress {
-                    target_version: Some(
-                        upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                            next_version.clone().into(),
-                        ),
-                    ),
+                    target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
                     proposal_id,
@@ -8393,9 +8133,7 @@ mod tests {
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
-                target_version: Some(upgrade_in_progress::TargetVersion::UpgradeSnsToNextVersion(
-                    next_version.clone().into()
-                )),
+                target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
                 proposal_id,
