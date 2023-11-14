@@ -13,7 +13,6 @@ server {
 
         # Prereqs
         include "includes/method_get.conf";
-        include "includes/empty_routes_503.conf";
         include "includes/denylist_451.conf";
 
         if ($is_bot = "1") {
@@ -30,7 +29,6 @@ server {
     # See https://dfinity.atlassian.net/browse/BOUN-534
     location /sw/ {
         internal;
-        include "includes/gzip.conf";
         rewrite ^/sw/(.*)$ $1 break;
 
         # Observability
@@ -63,11 +61,9 @@ server {
         # Update the Host header so that icx-proxy is able to process the request
         proxy_set_header Host "$inferred_canister_id.$primary_domain";
 
-        proxy_pass http://$icx_proxy;
+        proxy_pass http://icx_proxy;
         include "includes/proxy_headers.conf";
         include "/run/ic-node/etc/nginx/conf.d/proxy_headers_seo.conf";
-
-        add_header "X-Cache-Status" $upstream_cache_status;
     }
 
     location /_/raw/ {
@@ -75,7 +71,6 @@ server {
         include "includes/request_id.conf";
 
         # Prereqs
-        include "includes/empty_routes_503.conf";
         include "includes/denylist_451.conf";
 
         # CORS
@@ -87,10 +82,8 @@ server {
         # Update the Host header so that icx-proxy is able to process the request
         proxy_set_header Host "$inferred_canister_id.$primary_domain";
 
-        proxy_pass http://$icx_proxy;
+        proxy_pass http://icx_proxy;
         include "includes/proxy_headers.conf";
         include "/run/ic-node/etc/nginx/conf.d/proxy_headers_underscore.conf";
-
-        add_header "X-Cache-Status" $upstream_cache_status;
     }
 }

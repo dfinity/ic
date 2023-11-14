@@ -19,9 +19,8 @@ ExecStart=/opt/ic/bin/icx-proxy                                  \
     --canister-alias "dscvr:h5aet-waaaa-aaaab-qaamq-cai"         \
     --metrics-addr "[::]:9314"                                   \
     --root-key "/run/ic-node/etc/icx-proxy/root_key.der"         \
-    --ssl-root-certificate "/var/opt/nginx/ic/trusted_certs.pem" \
     # DO NOT ADD CURLY BRACES (they prevent n-arg expansion)     \
-    $REPLICA_DOMAIN_ADDRS                                        \
+    --replica http://127.0.0.1:4444                              \
     $DOMAINS                                                     \
     $SSL_OPTIONS
 
