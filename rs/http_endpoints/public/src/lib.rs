@@ -56,7 +56,6 @@ use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifactEvent,
     consensus_pool::ConsensusPoolCache,
     crypto::BasicSigner,
     execution_environment::{IngressFilterService, QueryExecutionService},
@@ -74,6 +73,7 @@ use ic_registry_client_helpers::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
@@ -251,7 +251,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,

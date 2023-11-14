@@ -1,6 +1,6 @@
 //! The consensus pool public interface.
 
-use crate::artifact_pool::UnvalidatedArtifact;
+use crate::p2p::consensus::UnvalidatedArtifact;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},

@@ -19,16 +19,15 @@ use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
 use ic_icos_sev::{Sev, ValidateAttestedStream};
 use ic_interfaces::{
-    artifact_manager::{ArtifactProcessorEvent, JoinGuard},
-    artifact_pool::UnvalidatedArtifactEvent,
-    state_sync_client::StateSyncClient,
+    p2p::artifact_manager::{ArtifactProcessorEvent, JoinGuard},
+    p2p::state_sync::StateSyncClient,
     time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
 use quinn::{
     self,
     udp::{EcnCodepoint, Transmit},
@@ -378,7 +377,7 @@ fn start_test_processor(
 ) -> (
     Box<dyn JoinGuard>,
     tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
-    crossbeam_channel::Sender<UnvalidatedArtifactEvent<U64Artifact>>,
+    crossbeam_channel::Sender<UnvalidatedArtifactMutation<U64Artifact>>,
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);
     let time_source = Arc::new(SysTimeSource::new());

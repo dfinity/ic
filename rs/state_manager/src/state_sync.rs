@@ -7,9 +7,11 @@ use crate::{
 };
 use ic_base_types::NodeId;
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor},
-    artifact_pool::{ChangeResult, UnvalidatedArtifactEvent},
-    state_sync_client::StateSyncClient,
+    p2p::{
+        artifact_manager::{ArtifactClient, ArtifactProcessor},
+        consensus::ChangeResult,
+        state_sync::StateSyncClient,
+    },
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
@@ -17,7 +19,7 @@ use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     artifact::{
         Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncFilter,
-        StateSyncMessage,
+        StateSyncMessage, UnvalidatedArtifactMutation,
     },
     chunkable::{ArtifactChunk, ChunkId, Chunkable, ChunkableArtifact},
     crypto::crypto_hash,
@@ -305,12 +307,12 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
     fn process_changes(
         &self,
         _time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactEvent<StateSyncArtifact>>,
+        artifact_events: Vec<UnvalidatedArtifactMutation<StateSyncArtifact>>,
     ) -> ChangeResult<StateSyncArtifact> {
         // Processes received state sync artifacts.
         for artifact_event in artifact_events {
             match artifact_event {
-                UnvalidatedArtifactEvent::Insert((message, peer_id)) => {
+                UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
                     let height = message.height;
                     info!(
                         self.log,
@@ -338,7 +340,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
                         message.root_hash,
                     );
                 }
-                UnvalidatedArtifactEvent::Remove(_) => {}
+                UnvalidatedArtifactMutation::Remove(_) => {}
             }
         }
 
@@ -398,7 +400,7 @@ impl StateSyncClient for StateSync {
     fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
         let _ = self.process_changes(
             &SysTimeSource::new(),
-            vec![UnvalidatedArtifactEvent::Insert((msg, peer_id))],
+            vec![UnvalidatedArtifactMutation::Insert((msg, peer_id))],
         );
     }
 }

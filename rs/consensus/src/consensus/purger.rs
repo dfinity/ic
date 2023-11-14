@@ -331,7 +331,7 @@ pub fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
 mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

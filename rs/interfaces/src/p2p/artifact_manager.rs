@@ -1,8 +1,10 @@
 //! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
-use crate::artifact_pool::{ChangeResult, UnvalidatedArtifactEvent};
+use crate::p2p::consensus::ChangeResult;
 use crate::time_source::TimeSource;
 use derive_more::From;
-use ic_types::artifact::{Advert, ArtifactKind, ArtifactPriorityFn, PriorityFn};
+use ic_types::artifact::{
+    Advert, ArtifactKind, ArtifactPriorityFn, PriorityFn, UnvalidatedArtifactMutation,
+};
 use ic_types::{artifact, chunkable, p2p, NodeId};
 
 /// Event loops/actors that implement a graceful shutdown on destruction implement this trait.
@@ -118,7 +120,7 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        new_artifact_events: Vec<UnvalidatedArtifactEvent<Artifact>>,
+        new_artifact_events: Vec<UnvalidatedArtifactMutation<Artifact>>,
     ) -> ChangeResult<Artifact>;
 }
 

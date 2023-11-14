@@ -8,14 +8,14 @@ use crate::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
-    },
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
         IngressPoolThrottler, PoolSection, SelectResult, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
+    },
+    p2p::consensus::{
+        ChangeResult, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
@@ -498,7 +498,7 @@ impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPr
 mod tests {
     use super::*;
     use ic_constants::MAX_INGRESS_TTL;
-    use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::{
         mock_time, types::ids::node_test_id, types::messages::SignedIngressBuilder,

@@ -511,9 +511,9 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
     use ic_interfaces::{
-        artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
+        p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         time_source::TimeSource,
     };
     use ic_test_utilities::{

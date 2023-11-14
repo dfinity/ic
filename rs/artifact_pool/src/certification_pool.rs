@@ -2,9 +2,9 @@ use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
-    artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
+    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

@@ -98,8 +98,8 @@ use crossbeam_channel::{select, tick, Receiver as CrossbeamReceiver, RecvError};
 use event_handler::GossipArc;
 use ic_config::transport::TransportConfig;
 use ic_interfaces::{
-    artifact_manager::{ArtifactManager, JoinGuard},
     consensus_pool::ConsensusPoolCache,
+    p2p::artifact_manager::{ArtifactManager, JoinGuard},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};

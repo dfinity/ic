@@ -9,13 +9,13 @@ use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
     batch_payload::{BatchPayloadBuilder, PastPayload},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
     },
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
+    p2p::consensus::{MutablePool, UnvalidatedArtifact},
     validation::ValidationError,
 };
 use ic_logger::replica_logger::no_op_logger;

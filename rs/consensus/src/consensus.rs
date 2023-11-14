@@ -42,13 +42,13 @@ use ic_consensus_utils::{
     membership::Membership, pool_reader::PoolReader, RoundRobin,
 };
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     dkg::DkgPool,
     ecdsa::EcdsaPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };

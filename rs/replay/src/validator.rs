@@ -15,10 +15,10 @@ use ic_consensus_utils::{
     pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
     certification::Verifier,
     consensus_pool::{ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool},
     messaging::MessageRouting,
+    p2p::consensus::{MutablePool, UnvalidatedArtifact},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;

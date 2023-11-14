@@ -21,9 +21,9 @@ use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_pool::MutablePool,
     consensus::{PayloadBuilder, PayloadValidationError},
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    p2p::consensus::MutablePool,
     time_source::TimeSource,
     validation::ValidationResult,
 };

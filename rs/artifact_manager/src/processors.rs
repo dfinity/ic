@@ -2,9 +2,9 @@
 //! P2P clients that require consensus over their artifacts.
 
 use ic_interfaces::{
-    artifact_manager::ArtifactProcessor,
-    artifact_pool::{
-        ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact, UnvalidatedArtifactEvent,
+    p2p::{
+        artifact_manager::ArtifactProcessor,
+        consensus::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     },
     time_source::TimeSource,
 };
@@ -45,13 +45,13 @@ impl<
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactEvent<A>>,
+        artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
     ) -> ChangeResult<A> {
         {
             let mut pool = self.pool.write().unwrap();
             for artifact_event in artifact_events {
                 match artifact_event {
-                    UnvalidatedArtifactEvent::Insert((message, peer_id)) => {
+                    UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
                         let unvalidated_artifact = UnvalidatedArtifact {
                             message,
                             peer_id,
@@ -59,7 +59,7 @@ impl<
                         };
                         pool.insert(unvalidated_artifact);
                     }
-                    UnvalidatedArtifactEvent::Remove(id) => pool.remove(&id),
+                    UnvalidatedArtifactMutation::Remove(id) => pool.remove(&id),
                 }
             }
         }
@@ -106,13 +106,13 @@ impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactEvent<IngressArtifact>>,
+        artifact_events: Vec<UnvalidatedArtifactMutation<IngressArtifact>>,
     ) -> ChangeResult<IngressArtifact> {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact_event in artifact_events {
                 match artifact_event {
-                    UnvalidatedArtifactEvent::Insert((message, peer_id)) => {
+                    UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
                         let unvalidated_artifact = UnvalidatedArtifact {
                             message,
                             peer_id,
@@ -120,7 +120,7 @@ impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<
                         };
                         ingress_pool.insert(unvalidated_artifact);
                     }
-                    UnvalidatedArtifactEvent::Remove(id) => ingress_pool.remove(&id),
+                    UnvalidatedArtifactMutation::Remove(id) => ingress_pool.remove(&id),
                 }
             }
         }

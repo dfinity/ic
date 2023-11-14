@@ -10,7 +10,6 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifactEvent,
     consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
@@ -43,6 +42,7 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
 };
 use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     batch::{BatchPayload, RawQueryStats, ValidationContext},
     consensus::{
@@ -406,7 +406,7 @@ pub fn start_http_endpoint(
     pprof_collector: Arc<dyn PprofCollector>,
 ) -> (
     IngressFilterHandle,
-    Receiver<UnvalidatedArtifactEvent<IngressArtifact>>,
+    Receiver<UnvalidatedArtifactMutation<IngressArtifact>>,
     QueryExecutionHandle,
 ) {
     let metrics = MetricsRegistry::new();

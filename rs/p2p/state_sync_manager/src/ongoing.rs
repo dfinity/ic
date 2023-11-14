@@ -20,7 +20,7 @@ use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
 use ic_async_utils::JoinMap;
-use ic_interfaces::state_sync_client::StateSyncClient;
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
 use ic_types::{

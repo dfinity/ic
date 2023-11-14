@@ -12,12 +12,12 @@ use crate::{
     IntoInner,
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::artifact_pool::{
-    ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
-};
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
     EcdsaPoolSectionOps, MutableEcdsaPoolSection,
+};
+use ic_interfaces::p2p::consensus::{
+    ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

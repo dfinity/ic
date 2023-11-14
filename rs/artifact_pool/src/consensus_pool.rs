@@ -9,12 +9,12 @@ use crate::{
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
-    artifact_pool::{ChangeResult, MutablePool, ValidatedPoolReader},
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
         ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
+    p2p::consensus::{ChangeResult, MutablePool, ValidatedPoolReader},
     time_source::RealClock,
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -901,7 +901,7 @@ mod tests {
     use crate::backup::{BackupAge, PurgingError};
 
     use super::*;
-    use ic_interfaces::artifact_pool::UnvalidatedArtifact;
+    use ic_interfaces::p2p::consensus::UnvalidatedArtifact;
     use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
