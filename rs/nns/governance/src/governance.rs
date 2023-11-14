@@ -1877,10 +1877,6 @@ impl Governance {
     /// Preconditions:
     /// - the given `neuron` already exists in `self.neuron_store.neurons`
     /// - the controller principal is self-authenticating
-    /// - the hot keys are not changed (it's easy to update hot keys via `manage_neuron` and doing
-    ///   it here would require updating `principal_to_neuron_ids_index`)
-    /// - the followees are not changed (it's easy to update followees via `manage_neuron` and doing
-    ///   it here would require updating `topic_followee_index`)
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         // The controller principal is self-authenticating.
@@ -1895,27 +1891,8 @@ impl Governance {
         let neuron_id = neuron.id.expect("Neuron must have a NeuronId");
         // Must clobber an existing neuron.
         self.with_neuron_mut(&neuron_id, |old_neuron| {
-            // Must NOT clobber hot keys.
-            if old_neuron.hot_keys != neuron.hot_keys {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Cannot update neuron's hot_keys via update_neuron.".to_string(),
-                ));
-            }
-
-            // Must NOT clobber followees.
-            if old_neuron.followees != neuron.followees {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Cannot update neuron's followees via update_neuron.".to_string(),
-                ));
-            }
-
-            // Now that neuron has been validated, update old_neuron.
             *old_neuron = neuron;
-
-            Ok(())
-        })? // We have to unwrap the parent result, but return the child result
+        })
     }
 
     /// Add a neuron to the list of neurons.
