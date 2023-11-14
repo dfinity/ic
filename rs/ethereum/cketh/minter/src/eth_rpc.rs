@@ -555,7 +555,7 @@ pub enum RpcError {
     // #[error("JSON-RPC error")]
     JsonRpcError(/* #[source] */ JsonRpcError),
     // #[error("data format error")]
-    DataFormatError(/* #[source] */ DataFormatError),
+    ValidateError(/* #[source] */ ValidateError),
 }
 
 impl From<ProviderError> for RpcError {
@@ -576,9 +576,9 @@ impl From<JsonRpcError> for RpcError {
     }
 }
 
-impl From<DataFormatError> for RpcError {
-    fn from(err: DataFormatError) -> Self {
-        RpcError::DataFormatError(err)
+impl From<ValidateError> for RpcError {
+    fn from(err: ValidateError) -> Self {
+        RpcError::ValidateError(err)
     }
 }
 
@@ -588,10 +588,6 @@ pub enum ProviderError {
     NoPermission,
     // #[error("too few cycles (expected {expected}, received {received})")]
     TooFewCycles { expected: u128, received: u128 },
-    // #[error("service URL parse error: {0}")]
-    ServiceUrlParseError(String),
-    // #[error("service host not allowed: {0}")]
-    ServiceHostNotAllowed(String),
     // #[error("provider not found")]
     ProviderNotFound,
 }
@@ -618,9 +614,17 @@ pub enum HttpOutcallError {
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
-pub enum DataFormatError {
+pub enum ValidateError {
     // #[error("invalid hex data: {0}")]
     InvalidHex(String),
+    // #[error("URL parse error: {0}")]
+    UrlParseError(String),
+    // #[error("hostname not allowed: {0}")]
+    HostNotAllowed(String),
+    // #[error("credential path not allowed: {0}")]
+    CredentialPathNotAllowed(String),
+    // #[error("credential header not allowed: {0}")]
+    CredentialHeaderNotAllowed(String),
 }
 
 pub fn are_errors_consistent<T: PartialEq>(
