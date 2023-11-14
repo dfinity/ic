@@ -191,6 +191,9 @@ where
         rt_handle.spawn(receive_manager.start_event_loop());
     }
 
+    /// Event loop that processes advert updates and artifact downloads.
+    /// The eventloop preserves the following invariant:
+    ///  - The number of download tasks is equal to the total number of distinct slot entries.
     async fn start_event_loop(mut self) {
         let mut priority_fn_interval = time::interval(Duration::from_secs(
             PRIORITY_FUNCTION_UPDATE_FREQUENCY_SECONDS,
@@ -199,47 +202,89 @@ where
         loop {
             select! {
                 _ = priority_fn_interval.tick() => {
-                    let pool = &self.raw_pool.read().unwrap();
-                    let priority_fn = self.priority_fn_producer.get_priority_function(pool);
-                    self.current_priority_fn.send_replace(priority_fn);
-
-                    priority_fn_interval.reset();
+                    self.handle_pfn_timer_tick();
                 }
                 Some((advert_update, peer_id, conn_id)) = self.adverts_received.recv() => {
-                    self.metrics.slot_table_updates_total.inc();
                     self.handle_advert_receive(advert_update, peer_id, conn_id);
                 }
                 Some(result) = self.artifact_processor_tasks.join_next() => {
-                    let (peer_rx,id, attr) = result.expect("Should not be cancelled or panic");
-                    self.metrics.download_task_finished_total.inc();
-
-                    debug_assert!(peer_rx.has_changed().is_ok());
-
-                    // peer advertised after task finished.
-                    if !peer_rx.borrow().is_empty() {
-                        self.metrics.download_task_restart_after_join_total.inc();
-                        self.metrics.download_task_started_total.inc();
-                        self.artifact_processor_tasks.spawn_on(
-                            Self::process_advert(
-                                id,
-                                attr,
-                                None,
-                                peer_rx,
-                                self.current_priority_fn.subscribe(),
-                                self.sender.clone(),
-                                self.transport.clone(),
-                                self.metrics.clone()
-                            ),
-                            &self.rt_handle,
-                        );
-                    } else {
-                        self.active_downloads.remove(&id);
+                    match result {
+                        Ok((receiver, id, attr)) => {
+                            self.handle_artifact_processor_joined(receiver, id, attr);
+                        }
+                        Err(err) => {
+                            // If the task panics we propagate the panic. But we allow tasks to be canceled.
+                            // Task can be cancelled if someone calls .abort()
+                            if err.is_panic() {
+                                std::panic::resume_unwind(err.into_panic());
+                            }
+                        }
                     }
                 }
                 Ok(()) = self.topology_watcher.changed() => {
                     self.handle_topology_update();
                 }
             }
+            debug_assert_eq!(
+                self.active_downloads.len(),
+                self.artifact_processor_tasks.len(),
+                "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
+            );
+            debug_assert_eq!(
+                self.artifact_processor_tasks.len(),
+                HashSet::<Artifact::Id>::from_iter(
+                    self.slot_table
+                        .iter()
+                        .flat_map(|(k, v)| v.iter())
+                        .map(|(_, s)| s.id.clone())
+                )
+                .len(),
+                "Number of download tasks differs from slot entries with distinct artifact IDs."
+            );
+            debug_assert!(
+                self.active_downloads
+                    .iter()
+                    .all(|(k, v)| { v.receiver_count() == 1 }),
+                "Some download task has two node receivers or it was dropped."
+            );
+        }
+    }
+
+    pub(crate) fn handle_pfn_timer_tick(&mut self) {
+        let pool = &self.raw_pool.read().unwrap();
+        let priority_fn = self.priority_fn_producer.get_priority_function(pool);
+        self.current_priority_fn.send_replace(priority_fn);
+    }
+
+    pub(crate) fn handle_artifact_processor_joined(
+        &mut self,
+        peer_rx: watch::Receiver<HashSet<NodeId>>,
+        id: Artifact::Id,
+        attr: Artifact::Attribute,
+    ) {
+        self.metrics.download_task_finished_total.inc();
+        // Invariant: Peer sender should only be dropped in this task..
+        debug_assert!(peer_rx.has_changed().is_ok());
+
+        // peer advertised after task finished.
+        if !peer_rx.borrow().is_empty() {
+            self.metrics.download_task_restart_after_join_total.inc();
+            self.metrics.download_task_started_total.inc();
+            self.artifact_processor_tasks.spawn_on(
+                Self::process_advert(
+                    id,
+                    attr,
+                    None,
+                    peer_rx,
+                    self.current_priority_fn.subscribe(),
+                    self.sender.clone(),
+                    self.transport.clone(),
+                    self.metrics.clone(),
+                ),
+                &self.rt_handle,
+            );
+        } else {
+            self.active_downloads.remove(&id);
         }
     }
 
@@ -249,6 +294,7 @@ where
         peer_id: NodeId,
         connection_id: ConnId,
     ) {
+        self.metrics.slot_table_updates_total.inc();
         let AdvertUpdate {
             slot_number,
             commit_id,
@@ -323,20 +369,16 @@ where
                 }
             }
         }
+
         if let Some(to_remove) = to_remove {
             // TODO: this should always be a Some.
             // Sender should not be dropped before all peers have overwritten/removed the slot.
-            if let Some(sender) = self.active_downloads.get_mut(&to_remove) {
-                self.metrics.slot_table_removals_total.inc();
-                sender.send_if_modified(|h| {
-                    if !h.remove(&peer_id) {
-                        panic!("Removed node should always be present")
-                    }
-                    true
-                });
-            } else {
-                panic!("Sender should always be present for slots in use");
-            }
+            let sender = self
+                .active_downloads
+                .get_mut(&to_remove)
+                .expect("Sender should always be present for slots in use");
+            self.metrics.slot_table_removals_total.inc();
+            sender.send_if_modified(|h| h.remove(&peer_id));
         }
     }
     /// Downloads a given artifact.
@@ -551,6 +593,10 @@ where
                     .any(|r| r)
             });
         }
+        debug_assert!(
+            self.slot_table.len() < self.topology_watcher.borrow().iter().count(),
+            "Slot table contains more nodes than nodes in subnet after pruning"
+        );
     }
 }
 
@@ -567,6 +613,7 @@ enum DownloadResult<T> {
     PriorityIsDrop,
 }
 
+#[derive(Debug)]
 struct SlotEntry<T> {
     conn_id: ConnId,
     commit_id: CommitId,
