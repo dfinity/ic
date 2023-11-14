@@ -92,6 +92,7 @@ const CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS: &str =
     "state_sync_chunk_id_usage_nearing_limits";
 
 /// Critical error tracking broken soft invariants encountered upon checkpoint loading.
+/// See note [Replicated State Invariants].
 pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
     "state_manager_checkpoint_soft_invariant_broken";
 
