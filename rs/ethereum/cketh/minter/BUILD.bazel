@@ -51,6 +51,7 @@ rust_library(
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
