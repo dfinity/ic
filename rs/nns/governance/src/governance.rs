@@ -1877,12 +1877,10 @@ impl Governance {
     /// Preconditions:
     /// - the given `neuron` already exists in `self.neuron_store.neurons`
     /// - the controller principal is self-authenticating
-    /// - the hot keys are not changed (it's easy to update hot keys
-    ///   via `manage_neuron` and doing it here would require updating
-    ///   `principal_to_neuron_ids_index`)
-    /// - the followees are not changed (it's easy to update followees
-    ///   via `manage_neuron` and doing it here would require updating
-    ///   `topic_followee_index`)
+    /// - the hot keys are not changed (it's easy to update hot keys via `manage_neuron` and doing
+    ///   it here would require updating `principal_to_neuron_ids_index`)
+    /// - the followees are not changed (it's easy to update followees via `manage_neuron` and doing
+    ///   it here would require updating `topic_followee_index`)
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         // The controller principal is self-authenticating.
@@ -1920,8 +1918,7 @@ impl Governance {
         })? // We have to unwrap the parent result, but return the child result
     }
 
-    /// Add a neuron to the list of neurons and update
-    /// `principal_to_neuron_ids_index`
+    /// Add a neuron to the list of neurons.
     ///
     /// Fails under the following conditions:
     /// - the maximum number of neurons has been reached, or
@@ -1973,19 +1970,12 @@ impl Governance {
             ));
         }
 
-        self.neuron_store
-            .add_neuron_to_principal_to_neuron_ids_index(
-                NeuronId { id: neuron_id },
-                neuron.principal_ids_with_special_permissions(),
-            );
-
         self.neuron_store.add_neuron(neuron)?;
 
         Ok(())
     }
 
-    /// Remove a neuron from the list of neurons and update
-    /// `principal_to_neuron_ids_index`
+    /// Remove a neuron from the list of neurons.
     ///
     /// Fail if the given `neuron_id` doesn't exist in `self.neuron_store`.
     /// Caller should make sure neuron.id = Some(NeuronId {id: neuron_id}).
@@ -2000,12 +1990,6 @@ impl Governance {
                 ),
             ));
         }
-
-        self.neuron_store
-            .remove_neuron_from_principal_to_neuron_ids_index(
-                neuron_id,
-                neuron.principal_ids_with_special_permissions(),
-            );
         self.neuron_store
             .remove_neuron(&neuron.id.expect("Neuron must have an id"));
 
@@ -2135,26 +2119,14 @@ impl Governance {
 
         let now = self.env.now();
         for neuron_id in neuron_ids {
-            let old_controller = self
-                .with_neuron_mut(&neuron_id, |neuron| {
-                    neuron.created_timestamp_seconds = now;
-                    neuron
-                        .controller
-                        .replace(new_controller)
-                        .expect("Neuron must have a controller")
-                })
-                .unwrap();
-
-            self.neuron_store
-                .remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                    neuron_id,
-                    old_controller,
-                );
-            self.neuron_store
-                .add_neuron_to_principal_in_principal_to_neuron_ids_index(
-                    neuron_id,
-                    new_controller,
-                );
+            self.with_neuron_mut(&neuron_id, |neuron| {
+                neuron.created_timestamp_seconds = now;
+                neuron
+                    .controller
+                    .replace(new_controller)
+                    .expect("Neuron must have a controller")
+            })
+            .unwrap();
         }
 
         Ok(())
@@ -6121,38 +6093,8 @@ impl Governance {
         };
         let _lock = self.lock_neuron_for_command(id.id, lock_command)?;
 
-        let neuron_controller_or_error = self.with_neuron_mut(
-            id,
-            |neuron| -> Result<Option<PrincipalId>, GovernanceError> {
-                neuron.configure(caller, now_seconds, c)?;
-                Ok(neuron.controller)
-            },
-        )?;
-        let neuron_controller = neuron_controller_or_error?;
+        self.with_neuron_mut(id, |neuron| neuron.configure(caller, now_seconds, c))??;
 
-        let op = c
-            .operation
-            .as_ref()
-            .expect("Configure must have an operation");
-
-        // Update neuron principal index (in the case of hotkey change).
-        match op {
-            manage_neuron::configure::Operation::AddHotKey(k) => {
-                let hot_key = k.new_hot_key.as_ref().expect("Must have a hot key");
-                self.neuron_store
-                    .add_neuron_to_principal_in_principal_to_neuron_ids_index(*id, *hot_key);
-            }
-            manage_neuron::configure::Operation::RemoveHotKey(k) => {
-                let hot_key = k.hot_key_to_remove.as_ref().expect("Must have a hot key");
-                if neuron_controller != Some(*hot_key) {
-                    self.neuron_store
-                        .remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                            *id, *hot_key,
-                        );
-                }
-            }
-            _ => (),
-        }
         Ok(())
     }
 
@@ -6440,16 +6382,13 @@ impl Governance {
             ));
         }
 
-        if let Some(old_name) = self.with_neuron_mut(&neuron_id, |neuron| {
+        self.with_neuron_mut(&neuron_id, |neuron| {
             neuron
                 .known_neuron_data
                 .replace(known_neuron_data.clone())
                 .map(|old_known_neuron_data| old_known_neuron_data.name)
-        })? {
-            self.neuron_store.remove_known_neuron_from_index(&old_name);
-        }
-        self.neuron_store
-            .add_known_neuron_to_index(&known_neuron_data.name);
+        })?;
+
         Ok(())
     }
 
