@@ -432,33 +432,44 @@ impl TransactionPrice {
         }
     }
 }
-
-pub fn estimate_transaction_price(fee_history: &FeeHistory) -> TransactionPrice {
+#[derive(Debug, PartialEq, Eq)]
+pub enum TransactionPriceEstimationError {
+    InvalidFeeHistory(String),
+    Overflow(String),
+}
+pub fn estimate_transaction_price(
+    fee_history: &FeeHistory,
+) -> Result<TransactionPrice, TransactionPriceEstimationError> {
     // average value between the `minSuggestedMaxPriorityFeePerGas`
     // used by Metamask, see
     // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
     const MIN_MAX_PRIORITY_FEE_PER_GAS: WeiPerGas = WeiPerGas::new(1_500_000_000); //1.5 gwei
     const TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
-    let base_fee_of_next_finalized_block = *fee_history
-        .base_fee_per_gas
-        .last()
-        .expect("base_fee_per_gas should not be empty to be able to evaluate transaction price");
+    let base_fee_of_next_finalized_block = *fee_history.base_fee_per_gas.last().ok_or(
+        TransactionPriceEstimationError::InvalidFeeHistory(
+            "base_fee_per_gas should not be empty to be able to evaluate transaction price"
+                .to_string(),
+        ),
+    )?;
     let max_priority_fee_per_gas = {
         let mut rewards: Vec<&WeiPerGas> = fee_history.reward.iter().flatten().collect();
         let historic_max_priority_fee_per_gas =
-            **median(&mut rewards).expect("should be non-empty with rewards of the last 5 blocks");
+            **median(&mut rewards).ok_or(TransactionPriceEstimationError::InvalidFeeHistory(
+                "should be non-empty with rewards of the last 5 blocks".to_string(),
+            ))?;
         historic_max_priority_fee_per_gas.max(MIN_MAX_PRIORITY_FEE_PER_GAS)
     };
     let max_fee_per_gas = base_fee_of_next_finalized_block
         .checked_mul(2_u8)
-        .expect("ERROR: overflow during transaction price estimation")
-        .checked_add(max_priority_fee_per_gas)
-        .expect("ERROR: overflow during transaction price estimation");
-    TransactionPrice {
+        .and_then(|base_fee_estimate| base_fee_estimate.checked_add(max_priority_fee_per_gas))
+        .ok_or(TransactionPriceEstimationError::Overflow(
+            "ERROR: overflow during transaction price estimation".to_string(),
+        ))?;
+    Ok(TransactionPrice {
         gas_limit: TRANSACTION_GAS_LIMIT,
         max_fee_per_gas,
         max_priority_fee_per_gas,
-    }
+    })
 }
 
 fn median<T: Ord>(values: &mut [T]) -> Option<&T> {

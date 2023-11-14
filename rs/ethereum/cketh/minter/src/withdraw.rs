@@ -130,7 +130,16 @@ pub async fn process_retrieve_eth_requests() {
             return;
         }
     };
-    let transaction_price = estimate_transaction_price(&fee_history);
+    let transaction_price = match estimate_transaction_price(&fee_history) {
+        Ok(transaction_price) => transaction_price,
+        Err(e) => {
+            log!(
+                INFO,
+                "Failed estimating transaction price to process ETH requests: {e:?}",
+            );
+            return;
+        }
+    };
     let max_transaction_fee = transaction_price.max_transaction_fee();
     log!(
         INFO,
