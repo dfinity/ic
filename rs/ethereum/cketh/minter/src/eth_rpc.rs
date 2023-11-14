@@ -555,7 +555,7 @@ pub enum RpcError {
     // #[error("JSON-RPC error")]
     JsonRpcError(/* #[source] */ JsonRpcError),
     // #[error("data format error")]
-    ValidateError(/* #[source] */ ValidateError),
+    ValidationError(/* #[source] */ ValidationError),
 }
 
 impl From<ProviderError> for RpcError {
@@ -576,9 +576,9 @@ impl From<JsonRpcError> for RpcError {
     }
 }
 
-impl From<ValidateError> for RpcError {
-    fn from(err: ValidateError) -> Self {
-        RpcError::ValidateError(err)
+impl From<ValidationError> for RpcError {
+    fn from(err: ValidationError) -> Self {
+        RpcError::ValidationError(err)
     }
 }
 
@@ -614,7 +614,7 @@ pub enum HttpOutcallError {
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
-pub enum ValidateError {
+pub enum ValidationError {
     // #[error("invalid hex data: {0}")]
     InvalidHex(String),
     // #[error("URL parse error: {0}")]
