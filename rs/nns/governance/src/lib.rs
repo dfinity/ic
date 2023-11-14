@@ -534,8 +534,3 @@ pub fn encode_metrics(
 fn is_copy_inactive_neurons_to_stable_memory_enabled() -> bool {
     true
 }
-
-/// Whether we should use neuron indexes in stable storage (instead of the ones on heap memory).
-fn use_neuron_stable_indexes() -> bool {
-    true
-}
