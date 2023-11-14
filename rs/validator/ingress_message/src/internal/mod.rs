@@ -202,6 +202,9 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         ic_validator::RequestValidationError::PathTooLongError { length, maximum } => {
             RequestValidationError::PathTooLongError { length, maximum }
         }
+        ic_validator::RequestValidationError::NonceTooBigError { num_bytes, maximum } => {
+            RequestValidationError::NonceTooBigError { num_bytes, maximum }
+        }
     }
 }
 fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> AuthenticationError {
