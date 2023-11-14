@@ -132,7 +132,8 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
         &eth_fee_history()
             .await
             .expect("ERROR: failed to retrieve fee history"),
-    );
+    )
+    .expect("ERROR: failed to estimate transaction price");
     Eip1559TransactionPrice::from(transaction_price)
 }
 

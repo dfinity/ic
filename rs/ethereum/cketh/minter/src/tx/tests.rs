@@ -1,6 +1,91 @@
 use crate::checked_amount::CheckedAmountOf;
 use proptest::strategy::Strategy;
 
+mod estimate_transaction_price {
+    use crate::eth_rpc::FeeHistory;
+    use crate::numeric::{BlockNumber, GasAmount, WeiPerGas};
+    use crate::tx::{
+        estimate_transaction_price, TransactionPrice, TransactionPriceEstimationError,
+    };
+    use assert_matches::assert_matches;
+    use proptest::collection::vec;
+    use proptest::prelude::any;
+    use proptest::{prop_assert_eq, proptest};
+    use std::cmp::max;
+
+    proptest! {
+        #[test]
+        fn should_estimate_transaction_price(
+            base_fee_per_gas in vec(any::<u64>(), 6),
+            reward in vec(any::<u64>(), 5)
+        ) {
+            let expected_base_fee_per_gas = base_fee_per_gas[5];
+            let expected_max_priority_fee_per_gas = {
+                let mut sorted_reward = reward.clone();
+                sorted_reward.sort();
+                let median = sorted_reward[2];
+                max(median, 1_500_000_000_u64)
+            };
+            let fee_history = fee_history(base_fee_per_gas, reward);
+            let expected_max_fee_per_gas =
+                2_u128 * (expected_base_fee_per_gas as u128) + (expected_max_priority_fee_per_gas as u128);
+
+            let result = estimate_transaction_price(&fee_history);
+
+            prop_assert_eq!(
+                result,
+                Ok(TransactionPrice {
+                    gas_limit: GasAmount::from(21_000_u64),
+                    max_fee_per_gas: WeiPerGas::from(expected_max_fee_per_gas),
+                    max_priority_fee_per_gas: WeiPerGas::from(expected_max_priority_fee_per_gas),
+                })
+            )
+        }
+    }
+
+    #[test]
+    fn should_fail_when_base_fee_per_gas_overflows() {
+        let fee_history = fee_history(
+            vec![
+                WeiPerGas::ZERO,
+                WeiPerGas::ZERO,
+                WeiPerGas::ZERO,
+                WeiPerGas::ZERO,
+                WeiPerGas::ZERO,
+                WeiPerGas::MAX,
+            ],
+            vec![0_u8, 0, 0, 0, 0],
+        );
+
+        let result = estimate_transaction_price(&fee_history);
+
+        assert_matches!(result, Err(TransactionPriceEstimationError::Overflow(_)));
+    }
+
+    #[test]
+    fn should_fail_when_max_priority_fee_per_gas_overflows() {
+        let fee_history = fee_history(vec![0_u8, 0, 0, 0, 0, 1], [WeiPerGas::MAX; 5].to_vec());
+        let result = estimate_transaction_price(&fee_history);
+        assert_matches!(result, Err(TransactionPriceEstimationError::Overflow(_)));
+    }
+
+    fn fee_history<U: Into<WeiPerGas>, V: Into<WeiPerGas>>(
+        base_fee_per_gas: Vec<U>,
+        reward: Vec<V>,
+    ) -> FeeHistory {
+        assert_eq!(
+            base_fee_per_gas.len(),
+            reward.len() + 1,
+            "base_fee_per_gas must contain a value for the next block"
+        );
+        FeeHistory {
+            oldest_block: BlockNumber::new(0x10f73fc),
+            base_fee_per_gas: base_fee_per_gas.into_iter().map(|x| x.into()).collect(),
+            reward: reward.into_iter().map(|x| vec![x.into()]).collect(),
+        }
+    }
+}
+
 mod transaction_price {
     mod increase_by_10_percent {
         use crate::numeric::WeiPerGas;
