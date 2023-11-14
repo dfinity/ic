@@ -10795,6 +10795,8 @@ dependencies = [
  "ic-utils 0.9.0",
  "prost",
  "scoped_threadpool",
+ "slog",
+ "slog-term",
  "tempfile",
 ]
 

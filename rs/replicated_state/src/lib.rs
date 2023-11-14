@@ -24,3 +24,11 @@ pub use metadata_state::{
 };
 pub use page_map::{PageIndex, PageMap};
 pub use replicated_state::{InputQueueType, NextInputQueue, ReplicatedState, StateError};
+
+/// Encapsulates metrics related to errors that can occur on checkpoint loading.
+/// The intention is to pass an implementation of this trait along with the actual
+/// struct to deserialize to the deserialization logic so that there is a way
+/// to record metrics from there.
+pub trait CheckpointLoadingMetrics {
+    fn raise_critical_error(&self, msg: String);
+}
