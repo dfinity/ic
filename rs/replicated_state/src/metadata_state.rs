@@ -2034,6 +2034,8 @@ impl BlockmakerMetricsTimeSeries {
     /// Check if any soft invariant is violated. We use soft invariants to refer
     /// to any invariants that the code maintains at all times, but the correctness
     /// of the code is not influenced if they break.
+    ///
+    /// Also see note [Replicated State Invariants].
     fn check_soft_invariants(&self) -> Result<(), String> {
         if self
             .0
