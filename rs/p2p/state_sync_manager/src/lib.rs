@@ -21,7 +21,7 @@ use std::{
 };
 
 use axum::{routing::any, Router};
-use ic_interfaces::state_sync_client::StateSyncClient;
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::Transport;

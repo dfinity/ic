@@ -13,9 +13,9 @@ use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
     ingress_manager::IngressSelector,
     ingress_pool::{ChangeAction, ChangeSet, IngressPool},
+    p2p::consensus::{MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;

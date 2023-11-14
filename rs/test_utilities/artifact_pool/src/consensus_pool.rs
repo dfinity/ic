@@ -3,13 +3,13 @@ use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    artifact_pool::{ChangeResult, MutablePool},
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
         PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
+    p2p::consensus::{ChangeResult, MutablePool},
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;

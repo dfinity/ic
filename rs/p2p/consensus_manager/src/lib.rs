@@ -6,15 +6,15 @@ use std::{
 use crate::metrics::ConsensusManagerMetrics;
 use axum::Router;
 use crossbeam_channel::Sender as CrossbeamSender;
-use ic_interfaces::{
+use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent,
-    artifact_pool::{PriorityFnAndFilterProducer, UnvalidatedArtifactEvent, ValidatedPoolReader},
+    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{Advert, ArtifactKind};
+use ic_types::artifact::{Advert, ArtifactKind, UnvalidatedArtifactMutation};
 use ic_types::NodeId;
 use phantom_newtype::AmountOf;
 use receiver::build_axum_router;
@@ -61,7 +61,7 @@ impl<'r> ConsensusManagerBuilder<'r> {
         adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-        sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
+        sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
     ) where
         Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
         Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
@@ -121,7 +121,7 @@ fn start_consensus_manager<Artifact, Pool>(
     adverts_received: Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>,
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-    sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
+    sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
 ) where

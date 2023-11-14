@@ -7,7 +7,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    artifact_pool::ChangeSetProducer, canister_http::*, consensus_pool::ConsensusPoolCache,
+    canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::ChangeSetProducer,
 };
 use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
@@ -399,7 +399,7 @@ pub mod test {
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_consensus_utils::crypto::SignVerify;
-    use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

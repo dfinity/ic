@@ -1,5 +1,5 @@
 use super::types::*;
-use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
+use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities::types::ids::node_test_id;
 use ic_types::{artifact::Priority, time::Time};

@@ -1614,7 +1614,7 @@ pub mod test {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_consensus_utils::get_block_maker_delay;
-    use ic_interfaces::{artifact_pool::MutablePool, messaging::XNetTransientValidationError};
+    use ic_interfaces::{messaging::XNetTransientValidationError, p2p::consensus::MutablePool};
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

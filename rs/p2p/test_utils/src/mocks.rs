@@ -2,7 +2,7 @@ use crate::consensus::U64Artifact;
 use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
-use ic_interfaces::{artifact_pool::ValidatedPoolReader, state_sync_client::StateSyncClient};
+use ic_interfaces::p2p::{consensus::ValidatedPoolReader, state_sync::StateSyncClient};
 use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::chunkable::ArtifactChunk;
 use ic_types::{

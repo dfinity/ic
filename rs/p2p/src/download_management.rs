@@ -1008,8 +1008,8 @@ where
 pub mod tests {
     use super::*;
     use crate::download_prioritization::DownloadPrioritizerError;
-    use ic_interfaces::artifact_manager::{ArtifactManager, OnArtifactError};
     use ic_interfaces::consensus_pool::ConsensusPoolCache;
+    use ic_interfaces::p2p::artifact_manager::{ArtifactManager, OnArtifactError};
     use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use ic_interfaces_registry::RegistryClient;
     use ic_interfaces_transport::TransportChannelId;

@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ic_interfaces::artifact_pool::{
+use ic_interfaces::p2p::consensus::{
     ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
     ValidatedPoolReader,
 };

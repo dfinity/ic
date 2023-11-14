@@ -28,7 +28,7 @@ use crate::{
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     messages::{HttpRequestError, MessageId, SignedIngress, SignedRequestBytes},
     p2p::GossipAdvert,
-    CryptoHashOfState, Height, Time,
+    CryptoHashOfState, Height, NodeId, Time,
 };
 use derive_more::{AsMut, AsRef, From, TryInto};
 #[cfg(test)]
@@ -276,6 +276,11 @@ pub trait ArtifactKind: Sized {
 
     /// Returns the advert of the given message.
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
+}
+
+pub enum UnvalidatedArtifactMutation<Artifact: ArtifactKind> {
+    Insert((Artifact::Message, NodeId)),
+    Remove(Artifact::Id),
 }
 
 /// A helper type that represents a type-indexed Advert.

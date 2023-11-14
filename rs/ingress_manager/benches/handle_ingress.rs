@@ -19,7 +19,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    p2p::consensus::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;

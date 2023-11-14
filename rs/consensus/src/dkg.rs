@@ -10,9 +10,9 @@ use crate::ecdsa::{
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     consensus_pool::ConsensusPoolCache,
     dkg::{ChangeAction, ChangeSet, DkgPool},
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -1609,8 +1609,8 @@ mod tests {
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_interfaces::{
-        artifact_pool::{MutablePool, UnvalidatedArtifact},
         consensus_pool::ConsensusPool,
+        p2p::consensus::{MutablePool, UnvalidatedArtifact},
     };
     use ic_interfaces_registry::RegistryVersionedRecord;
     use ic_logger::replica_logger::no_op_logger;

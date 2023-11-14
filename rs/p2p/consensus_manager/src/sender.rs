@@ -8,7 +8,9 @@ use std::{
 use axum::http::Request;
 use backoff::backoff::Backoff;
 use bytes::Bytes;
-use ic_interfaces::{artifact_manager::ArtifactProcessorEvent, artifact_pool::ValidatedPoolReader};
+use ic_interfaces::p2p::{
+    artifact_manager::ArtifactProcessorEvent, consensus::ValidatedPoolReader,
+};
 use ic_logger::{warn, ReplicaLogger};
 use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind};

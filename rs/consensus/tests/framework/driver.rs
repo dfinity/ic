@@ -5,10 +5,10 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::ConsensusGossipImpl;
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, MutablePool},
     certification,
     consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
+    p2p::consensus::{ChangeSetProducer, MutablePool},
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

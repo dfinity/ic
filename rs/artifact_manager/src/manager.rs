@@ -6,13 +6,13 @@
 //! It provides an interface to *Gossip* enabling it to interact with all the
 //! pools without knowing artifact-related details.
 use crate::ArtifactClientHandle;
-use ic_interfaces::{
-    artifact_manager::{ArtifactManager, OnArtifactError},
-    artifact_pool::UnvalidatedArtifactEvent,
-};
+use ic_interfaces::p2p::artifact_manager::{ArtifactManager, OnArtifactError};
 use ic_types::{
     artifact,
-    artifact::{Advert, ArtifactKind, ArtifactPriorityFn, ArtifactTag, Priority},
+    artifact::{
+        Advert, ArtifactKind, ArtifactPriorityFn, ArtifactTag, Priority,
+        UnvalidatedArtifactMutation,
+    },
     chunkable::{Chunkable, ChunkableArtifact},
     p2p, NodeId,
 };
@@ -249,7 +249,7 @@ where
             Ok(message) => {
                 // this sends to an unbounded channel, which is what we want here
                 self.sender
-                    .send(UnvalidatedArtifactEvent::Insert((message, peer_id)))
+                    .send(UnvalidatedArtifactMutation::Insert((message, peer_id)))
                     .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
                 Ok(())
             }

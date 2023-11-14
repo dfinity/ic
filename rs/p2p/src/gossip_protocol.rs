@@ -60,8 +60,8 @@ use crate::{
     utils::TransportChannelIdMapper,
     P2PError, P2PErrorCode,
 };
-use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
+use ic_interfaces::p2p::artifact_manager::ArtifactManager;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::{info, replica_logger::ReplicaLogger};

@@ -1035,7 +1035,7 @@ impl Player {
         let purge_height = cache.catch_up_package().height();
         println!("Removing all states below height {:?}", purge_height);
         self.state_manager.remove_states_below(purge_height);
-        use ic_interfaces::{artifact_pool::MutablePool, consensus_pool::ChangeAction};
+        use ic_interfaces::{consensus_pool::ChangeAction, p2p::consensus::MutablePool};
         pool.apply_changes(ChangeAction::PurgeValidatedBelow(purge_height).into());
         Ok(params)
     }

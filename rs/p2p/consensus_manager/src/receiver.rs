@@ -13,13 +13,11 @@ use axum::{
 };
 use bytes::Bytes;
 use crossbeam_channel::Sender as CrossbeamSender;
-use ic_interfaces::artifact_pool::{
-    PriorityFnAndFilterProducer, UnvalidatedArtifactEvent, ValidatedPoolReader,
-};
+use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
 use ic_logger::ReplicaLogger;
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{Advert, ArtifactKind, Priority, PriorityFn};
+use ic_types::artifact::{Advert, ArtifactKind, Priority, PriorityFn, UnvalidatedArtifactMutation};
 use ic_types::NodeId;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -129,7 +127,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, Receive
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
     current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-    sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
+    sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<Artifact::Id>>>,
     active_downloads: HashMap<Artifact::Id, watch::Sender<HashSet<NodeId>>>,
@@ -164,7 +162,7 @@ where
         adverts_received: Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-        sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
+        sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) {
@@ -471,7 +469,7 @@ where
         mut artifact: Option<(Artifact::Message, NodeId)>,
         mut peer_rx: watch::Receiver<HashSet<NodeId>>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-        sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
+        sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
     ) -> (
@@ -494,13 +492,13 @@ where
         match download_result {
             DownloadResult::Completed(artifact, peer_id) => {
                 // Send artifact to pool
-                sender.send(UnvalidatedArtifactEvent::Insert((artifact, peer_id)));
+                sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
 
                 // wait for deletion from peers
                 peer_rx.wait_for(|p| p.is_empty()).await;
 
                 // Purge from the unvalidated pool
-                sender.send(UnvalidatedArtifactEvent::Remove(id.clone()));
+                sender.send(UnvalidatedArtifactMutation::Remove(id.clone()));
                 metrics
                     .download_task_result_total
                     .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])

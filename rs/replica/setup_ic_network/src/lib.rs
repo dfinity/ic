@@ -33,11 +33,11 @@ use ic_https_outcalls_consensus::{
 use ic_icos_sev::Sev;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_manager::{ArtifactProcessorEvent, JoinGuard},
-    artifact_pool::{PriorityFnAndFilterProducer, UnvalidatedArtifactEvent},
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
+    p2p::artifact_manager::{ArtifactProcessorEvent, JoinGuard},
+    p2p::consensus::PriorityFnAndFilterProducer,
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::SysTimeSource,
 };
@@ -54,7 +54,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::{StateSync, StateSyncArtifact};
 use ic_transport::transport::create_transport;
 use ic_types::{
-    artifact::{Advert, ArtifactKind, ArtifactTag},
+    artifact::{Advert, ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation},
     artifact_kind::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
@@ -168,7 +168,7 @@ pub fn setup_consensus_and_p2p(
     registry_poll_delay_duration_ms: u64,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
+    Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let time_source = Arc::new(SysTimeSource::new());

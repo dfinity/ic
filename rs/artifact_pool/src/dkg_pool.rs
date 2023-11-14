@@ -3,8 +3,8 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     dkg::{ChangeAction, ChangeSet, DkgPool},
+    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

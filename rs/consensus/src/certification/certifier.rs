@@ -5,9 +5,9 @@ use ic_consensus_utils::{
     active_high_threshold_transcript, aggregate, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateManager;
@@ -619,8 +619,8 @@ mod tests {
     use super::*;
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::certification::CertificationPool;
+    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_logger::with_test_replica_logger;

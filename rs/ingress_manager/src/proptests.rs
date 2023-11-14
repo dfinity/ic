@@ -16,9 +16,9 @@
 use crate::tests::{access_ingress_pool, setup_with_params};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
+    p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     time_source::TimeSource,
 };
 use ic_test_utilities::{

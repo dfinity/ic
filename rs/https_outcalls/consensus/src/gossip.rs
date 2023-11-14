@@ -3,8 +3,8 @@
 pub use crate::pool_manager::CanisterHttpPoolManagerImpl;
 use ic_consensus_utils::registry_version_at_height;
 use ic_interfaces::{
-    artifact_pool::PriorityFnAndFilterProducer, canister_http::CanisterHttpPool,
-    consensus_pool::ConsensusPoolCache,
+    canister_http::CanisterHttpPool, consensus_pool::ConsensusPoolCache,
+    p2p::consensus::PriorityFnAndFilterProducer,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};

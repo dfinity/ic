@@ -2,7 +2,7 @@
 
 use crate::types::ids::node_test_id;
 use ic_config::logger::{default_logtarget, Config as LoggerConfig, LogFormat};
-use ic_interfaces::artifact_manager::JoinGuard;
+use ic_interfaces::p2p::artifact_manager::JoinGuard;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};

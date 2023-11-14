@@ -8,7 +8,7 @@ use axum::{
     http::{Request, Response, StatusCode},
 };
 use bytes::BytesMut;
-use ic_interfaces::state_sync_client::StateSyncClient;
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
 use ic_types::{

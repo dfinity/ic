@@ -10,12 +10,12 @@ use ic_consensus::{
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };

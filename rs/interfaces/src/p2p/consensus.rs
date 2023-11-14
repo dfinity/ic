@@ -92,11 +92,6 @@ pub trait ValidatedPoolReader<T: ArtifactKind> {
     ) -> Box<dyn Iterator<Item = T::Message> + '_>;
 }
 
-pub enum UnvalidatedArtifactEvent<Artifact: ArtifactKind> {
-    Insert((Artifact::Message, NodeId)),
-    Remove(Artifact::Id),
-}
-
 /// Unvalidated artifact
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnvalidatedArtifact<T> {

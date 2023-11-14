@@ -138,8 +138,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/interfaces/adapter_client/                          @dfinity-lab/teams/networking-team
 /rs/interfaces/certified_stream_store/                  @dfinity-lab/teams/message-routing-owners
 /rs/interfaces/registry/                                @dfinity-lab/teams/nns-team
-/rs/interfaces/src/artifact_manager.rs                  @dfinity-lab/teams/networking-team
-/rs/interfaces/src/artifact_pool.rs                     @dfinity-lab/teams/networking-team
 /rs/interfaces/src/canister_http.rs                     @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/consensus.rs                         @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/consensus_pool.rs                    @dfinity-lab/teams/consensus-owners
@@ -148,7 +146,8 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/interfaces/src/dkg.rs                               @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/execution_environment.rs             @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/interfaces/src/messaging.rs                         @dfinity-lab/teams/message-routing-owners
-/rs/interfaces/src/state_sync_client.rs                 @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/networking-team
+/rs/interfaces/src/p2p.rs                               @dfinity-lab/teams/networking-team
+/rs/interfaces/src/p2p/                                 @dfinity-lab/teams/networking-team
 /rs/interfaces/state_manager/                           @dfinity-lab/teams/message-routing-owners
 /rs/interfaces/transport/                               @dfinity-lab/teams/networking-team
 /rs/log_analyzer/                                       @dfinity-lab/teams/ic-testing-verification

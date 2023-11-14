@@ -4,8 +4,8 @@ use super::ConsensusModifier;
 use ic_consensus::consensus::ConsensusImpl;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    artifact_pool::ChangeSetProducer,
     consensus_pool::{ChangeAction::*, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    p2p::consensus::ChangeSetProducer,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::{ConsensusMessageHashable, NotarizationShare};

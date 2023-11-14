@@ -3,11 +3,11 @@
 //! Use this artifact pool *ONLY* for representing and testing pools backed by a
 //! filesystem tree like layout.
 
-use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
-use ic_interfaces::artifact_pool::{ChangeResult, UnvalidatedArtifactEvent};
+use ic_interfaces::p2p::artifact_manager::{ArtifactClient, ArtifactProcessor};
+use ic_interfaces::p2p::consensus::ChangeResult;
 use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{TestArtifact, TestArtifactId, TestArtifactMessage};
-use ic_types::artifact::{Advert, ArtifactId, Priority};
+use ic_types::artifact::{Advert, ArtifactId, Priority, UnvalidatedArtifactMutation};
 use ic_types::chunkable::Chunkable;
 use ic_types::crypto::CryptoHash;
 use ic_types::filetree_sync::{
@@ -41,7 +41,7 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
     fn process_changes(
         &self,
         _time_source: &dyn TimeSource,
-        _artifact_events: Vec<UnvalidatedArtifactEvent<TestArtifact>>,
+        _artifact_events: Vec<UnvalidatedArtifactMutation<TestArtifact>>,
     ) -> ChangeResult<TestArtifact> {
         let mut unvalidated_pool = self.file_tree_sync_unvalidated_pool.lock();
         let mut validated_pool = self.file_tree_sync_validated_pool.lock();
