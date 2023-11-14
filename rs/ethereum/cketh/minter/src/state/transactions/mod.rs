@@ -68,7 +68,7 @@ pub struct Reimbursed {
     #[n(2)]
     pub reimbursed_amount: Wei,
     #[n(3)]
-    pub transaction_hash: Hash,
+    pub transaction_hash: Option<Hash>,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode)]
@@ -445,7 +445,7 @@ impl EthTransactions {
                     withdrawal_id,
                     reimbursed_in_block,
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
-                    transaction_hash: reimbursement_request.transaction_hash.unwrap(),
+                    transaction_hash: reimbursement_request.transaction_hash,
                 },
             ),
             None

@@ -422,7 +422,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: withdrawal_id.get().into(),
                     reimbursed_in_block: reimbursed_in_block.get().into(),
                     reimbursed_amount: reimbursed_amount.into(),
-                    transaction_hash: transaction_hash.to_string(),
+                    transaction_hash: transaction_hash.map(|h| h.to_string()),
                 },
             },
         }

@@ -91,7 +91,7 @@ pub async fn process_reimbursement() {
                     withdrawal_id: reimbursement_request.withdrawal_id,
                     reimbursed_in_block: LedgerMintIndex::new(block_index),
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
-                    transaction_hash: reimbursement_request.transaction_hash.unwrap(),
+                    transaction_hash: reimbursement_request.transaction_hash,
                 }),
             )
         });
