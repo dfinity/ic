@@ -780,7 +780,7 @@ build-determinism:
 
 build-determinism-release:
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
   needs:
