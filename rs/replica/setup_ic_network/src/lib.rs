@@ -77,7 +77,7 @@ use std::{
 };
 use tokio::sync::mpsc::Sender as TokioSender;
 
-const ENABLE_NEW_STATE_SYNC: bool = false;
+const ENABLE_NEW_STATE_SYNC: bool = true;
 const ENABLE_NEW_P2P_CONSENSUS: bool = false;
 
 /// The P2P state sync client.
