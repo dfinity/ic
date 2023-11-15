@@ -15,46 +15,28 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     config.type_attribute(".", "#[derive(serde::Serialize)]");
 
-    config.type_attribute(
-        "ic_nns_common.pb.v1.CanisterId",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]",
-            "#[self_describing]",
-        ]
-        .join(" "),
-    );
+    for message_name in ["CanisterId", "NeuronId", "PrincipalId", "ProposalId"] {
+        config.type_attribute(
+            format!("ic_nns_common.pb.v1.{message_name}"),
+            [
+                "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]",
+                "#[self_describing]",
+            ]
+            .join(" "),
+        );
+    }
+
+    // Ideally, we'd get rid of these idiosyncracies, and just use the above loop for all our
+    // decorating needs.
     config.type_attribute(
         "ic_nns_common.pb.v1.NeuronId",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, Ord, PartialOrd, Copy, Eq, std::hash::Hash, comparable::Comparable)]",
-            "#[self_describing]",
-        ]
-        .join(" "),
+        "#[derive(PartialOrd, Ord, Copy, std::hash::Hash)]",
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.PrincipalId",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, PartialOrd, Ord, std::hash::Hash, comparable::Comparable)]",
-            "#[self_describing]",
-        ]
-        .join(" "),
+        "#[derive(PartialOrd, Ord, std::hash::Hash)]",
     );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.ProposalId",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, Copy, comparable::Comparable)]",
-            "#[self_describing]",
-        ]
-        .join(" "),
-    );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.MethodAuthzInfo",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
-    );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.CanisterAuthzInfo",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
-    );
+    config.type_attribute("ic_nns_common.pb.v1.ProposalId", "#[derive(Copy)]");
 
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);

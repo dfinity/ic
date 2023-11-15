@@ -83,7 +83,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -2487,11 +2487,11 @@ impl Governance {
             // upgrade when it might not have the context to parse those usefully.
             //
             // For more details, please refer to the comments above the (definition of the)
-            // stop_before_installing field in ChangeCanisterProposal.
+            // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
 
             let change_canister_arg =
-                ChangeCanisterProposal::new(stop_before_installing, mode, target_canister_id)
+                ChangeCanisterRequest::new(stop_before_installing, mode, target_canister_id)
                     .with_wasm(wasm)
                     .with_arg(arg)
                     .with_mode(mode);
@@ -6919,7 +6919,7 @@ mod tests {
                 env.require_call_canister_invocation(
                     root_canister_id,
                     "change_canister",
-                    Encode!(&ChangeCanisterProposal::new(
+                    Encode!(&ChangeCanisterRequest::new(
                         true,
                         CanisterInstallMode::Upgrade,
                         canister_id

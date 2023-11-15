@@ -11,13 +11,12 @@ use ic_nervous_system_clients::{
         canister_status, CanisterStatusResultFromManagementCanister, CanisterStatusType,
     },
 };
-use ic_nervous_system_common::MethodAuthzChange;
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
-/// The payload to a proposal to upgrade a canister.
+/// Argument to the similarly-named methods on the NNS and SNS root canisters.
 #[derive(CandidType, Serialize, Deserialize, Clone)]
-pub struct ChangeCanisterProposal {
+pub struct ChangeCanisterRequest {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
     ///
@@ -57,12 +56,9 @@ pub struct ChangeCanisterProposal {
     pub memory_allocation: Option<candid::Nat>,
     #[serde(serialize_with = "serialize_optional_nat")]
     pub query_allocation: Option<candid::Nat>,
-
-    /// Obsolete. Must be empty.
-    pub authz_changes: Vec<MethodAuthzChange>,
 }
 
-impl ChangeCanisterProposal {
+impl ChangeCanisterRequest {
     fn format(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut wasm_sha = Sha256::new();
         wasm_sha.write(&self.wasm_module);
@@ -71,7 +67,7 @@ impl ChangeCanisterProposal {
         arg_sha.write(&self.arg);
         let arg_sha = arg_sha.finish();
 
-        f.debug_struct("ChangeCanisterProposal")
+        f.debug_struct("ChangeCanisterRequest")
             .field("stop_before_installing", &self.stop_before_installing)
             .field("mode", &self.mode)
             .field("canister_id", &self.canister_id)
@@ -84,19 +80,19 @@ impl ChangeCanisterProposal {
     }
 }
 
-impl std::fmt::Debug for ChangeCanisterProposal {
+impl std::fmt::Debug for ChangeCanisterRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.format(f)
     }
 }
 
-impl std::fmt::Display for ChangeCanisterProposal {
+impl std::fmt::Display for ChangeCanisterRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.format(f)
     }
 }
 
-impl ChangeCanisterProposal {
+impl ChangeCanisterRequest {
     pub fn new(
         stop_before_installing: bool,
         mode: CanisterInstallMode,
@@ -113,7 +109,6 @@ impl ChangeCanisterProposal {
             compute_allocation: None,
             memory_allocation: Some(candid::Nat::from(default_memory_allocation)),
             query_allocation: None,
-            authz_changes: Vec::new(),
         }
     }
 
@@ -139,7 +134,7 @@ impl ChangeCanisterProposal {
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone)]
-pub struct AddCanisterProposal {
+pub struct AddCanisterRequest {
     /// A unique name for this canister.
     pub name: String,
 
@@ -158,12 +153,9 @@ pub struct AddCanisterProposal {
     pub query_allocation: Option<candid::Nat>,
 
     pub initial_cycles: u64,
-
-    /// Obsolete. Must be empty.
-    pub authz_changes: Vec<MethodAuthzChange>,
 }
 
-impl AddCanisterProposal {
+impl AddCanisterRequest {
     fn format(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut wasm_sha = Sha256::new();
         wasm_sha.write(&self.wasm_module);
@@ -172,7 +164,7 @@ impl AddCanisterProposal {
         arg_sha.write(&self.arg);
         let arg_sha = arg_sha.finish();
 
-        f.debug_struct("AddCanisterProposal")
+        f.debug_struct("AddCanisterRequest")
             .field("name", &self.name)
             .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
             .field("arg_sha256", &format!("{:x?}", arg_sha))
@@ -184,44 +176,38 @@ impl AddCanisterProposal {
     }
 }
 
-impl std::fmt::Debug for AddCanisterProposal {
+impl std::fmt::Debug for AddCanisterRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.format(f)
     }
 }
 
-impl std::fmt::Display for AddCanisterProposal {
+impl std::fmt::Display for AddCanisterRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.format(f)
     }
 }
 
 // The action to take on the canister.
-#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Debug)]
+#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CanisterAction {
     Stop,
     Start,
 }
 
-// A proposal payload to start/stop a nervous system canister.
-#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Debug)]
-pub struct StopOrStartCanisterProposal {
+/// Argument to the similarly-named methods on the NNS and SNS root canisters.
+#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug)]
+pub struct StopOrStartCanisterRequest {
     pub canister_id: CanisterId,
     pub action: CanisterAction,
 }
 
-pub async fn change_canister<Rt>(proposal: ChangeCanisterProposal)
+pub async fn change_canister<Rt>(request: ChangeCanisterRequest)
 where
     Rt: Runtime,
 {
-    assert!(
-        proposal.authz_changes.is_empty(),
-        "authz_changes is obsolete and must be empty. proposal: {:?}",
-        proposal
-    );
-
-    let canister_id = proposal.canister_id;
-    let stop_before_installing = proposal.stop_before_installing;
+    let canister_id = request.canister_id;
+    let stop_before_installing = request.stop_before_installing;
 
     if stop_before_installing {
         let stop_result = stop_canister::<Rt>(canister_id).await;
@@ -244,10 +230,10 @@ where
     //
     // Note that there's no guarantee that the canister to install/reinstall/upgrade
     // is actually stopped here, even if stop_before_installing is true. This is
-    // because there could be a concurrent proposal to restart it. This could be
+    // because there could be a concurrent request to restart it. This could be
     // guaranteed with a "stopped precondition" in the management canister, or
     // with some locking here.
-    let res = install_code(proposal).await;
+    let res = install_code(request).await;
     // For once, we don't want to unwrap the result here. The reason is that, if the
     // installation failed (e.g., the wasm was rejected because it's invalid),
     // then we want to restart the canister. So we just keep the res to be
@@ -263,16 +249,31 @@ where
 }
 
 /// Calls the "install_code" method of the management canister.
-async fn install_code(proposal: ChangeCanisterProposal) -> ic_cdk::api::call::CallResult<()> {
+async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::CallResult<()> {
+    let ChangeCanisterRequest {
+        mode,
+        canister_id,
+        wasm_module,
+        arg,
+        compute_allocation,
+        memory_allocation,
+        query_allocation,
+
+        stop_before_installing: _,
+    } = request;
+
+    let canister_id = canister_id.get();
+    let sender_canister_version = Some(ic_cdk::api::canister_version());
+
     let install_code_args = InstallCodeArgs {
-        mode: proposal.mode,
-        canister_id: proposal.canister_id.get(),
-        wasm_module: proposal.wasm_module,
-        arg: proposal.arg,
-        compute_allocation: proposal.compute_allocation,
-        memory_allocation: proposal.memory_allocation,
-        query_allocation: proposal.query_allocation,
-        sender_canister_version: Some(ic_cdk::api::canister_version()),
+        mode,
+        canister_id,
+        wasm_module,
+        arg,
+        compute_allocation,
+        memory_allocation,
+        query_allocation,
+        sender_canister_version,
     };
     // Warning: despite dfn_core::call returning a Result, it actually traps when
     // the callee traps! Use the public cdk instead, which does not have this

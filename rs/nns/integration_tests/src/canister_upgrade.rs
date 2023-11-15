@@ -2,7 +2,7 @@ use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     manage_neuron_response::{Command, MakeProposalResponse},
@@ -41,8 +41,8 @@ fn upgrade_canister() {
 
     assert_ne!(old_module_hash.as_slice(), new_module_hash);
 
-    let payload =
-        ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, lifeline_canister_id)
+    let change_canister_request =
+        ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, lifeline_canister_id)
             .with_memory_allocation(ic_nns_constants::memory_allocation_of(lifeline_canister_id))
             .with_wasm(wasm.to_vec());
     let proposal = Proposal {
@@ -51,7 +51,7 @@ fn upgrade_canister() {
         url: "".to_string(),
         action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-            payload: Encode!(&payload).expect("Error encoding proposal payload"),
+            payload: Encode!(&change_canister_request).expect("Error encoding proposal payload"),
         })),
     };
     // make proposal with neuron 1, it has enough voting power such that the proposal will be accepted

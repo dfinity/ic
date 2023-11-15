@@ -30,7 +30,7 @@ use ic_nervous_system_humanize::{
 };
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nervous_system_root::change_canister::{
-    AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
+    AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -886,9 +886,9 @@ impl ProposalTitle for StartCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<StopOrStartCanisterProposal> for StartCanisterCmd {
-    async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
-        StopOrStartCanisterProposal {
+impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
+    async fn payload(&self, _: Url) -> StopOrStartCanisterRequest {
+        StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Start,
         }
@@ -913,9 +913,9 @@ impl ProposalTitle for StopCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
-    async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
-        StopOrStartCanisterProposal {
+impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
+    async fn payload(&self, _: Url) -> StopOrStartCanisterRequest {
+        StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Stop,
         }
@@ -1913,8 +1913,8 @@ impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> ChangeCanisterProposal {
+impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
+    async fn payload(&self, _: Url) -> ChangeCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1925,7 +1925,7 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             .arg
             .as_ref()
             .map_or(vec![], |path| read_file_fully(path));
-        ChangeCanisterProposal {
+        ChangeCanisterRequest {
             stop_before_installing: !self.skip_stopping_before_installing,
             mode: self.mode,
             canister_id: self.canister_id,
@@ -1933,7 +1933,6 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             arg,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            authz_changes: vec![],
             query_allocation: None,
         }
     }
@@ -2064,8 +2063,8 @@ impl ProposalTitle for ProposeToAddNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> AddCanisterProposal {
+impl ProposalPayload<AddCanisterRequest> for ProposeToAddNnsCanisterCmd {
+    async fn payload(&self, _: Url) -> AddCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -2077,7 +2076,7 @@ impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
             .clone()
             .map_or(vec![], |path| read_file_fully(&path));
 
-        AddCanisterProposal {
+        AddCanisterRequest {
             name: self.name.clone(),
             wasm_module,
             arg,
@@ -2086,7 +2085,6 @@ impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
             initial_cycles: 1,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            authz_changes: vec![],
             query_allocation: None,
         }
     }
@@ -4902,7 +4900,7 @@ async fn main() {
                 .await;
             } else {
                 propose_external_proposal_from_command::<
-                    ChangeCanisterProposal,
+                    ChangeCanisterRequest,
                     ProposeToChangeNnsCanisterCmd,
                 >(
                     cmd,
@@ -6961,8 +6959,8 @@ impl RootCanisterClient {
             &cmd.wasm_module_sha256,
         )
         .await;
-        let root_proposal =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
                 .with_wasm(wasm_module);
 
@@ -6989,7 +6987,7 @@ impl RootCanisterClient {
             hex::encode(&module_hash)
         );
 
-        let serialized = Encode!(&module_hash, &root_proposal)
+        let serialized = Encode!(&module_hash, &change_canister_request)
             .expect("Error candid-serializing root proposal to upgrade governance canister.");
         let response = self
             .0
