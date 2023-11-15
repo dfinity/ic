@@ -1275,6 +1275,9 @@ pub struct Governance {
     pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
     #[prost(message, optional, tag = "26")]
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
+    #[prost(message, optional, tag = "27")]
+    pub mlp_pending_upgrade:
+        ::core::option::Option<governance::ManageLedgerParametersPendingUpgradeData>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1492,6 +1495,23 @@ pub mod governance {
         /// When current_basis_points was last updated (seconds since UNIX epoch).
         #[prost(uint64, optional, tag = "2")]
         pub updated_at_timestamp_seconds: ::core::option::Option<u64>,
+    }
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct ManageLedgerParametersPendingUpgradeData {
+        #[prost(uint64, tag = "1")]
+        pub ledger_canister_info_version_number_before_upgrade: u64,
+        #[prost(message, optional, tag = "2")]
+        pub manage_ledger_parameters_request: ::core::option::Option<super::ManageLedgerParameters>,
+        #[prost(bytes = "vec", tag = "3")]
+        pub ledger_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+        #[prost(uint64, tag = "4")]
+        pub mark_failed_at_seconds: u64,
+        #[prost(uint64, tag = "5")]
+        pub checking_upgrade_lock: u64,
+        #[prost(uint64, tag = "6")]
+        pub proposal_id: u64,
     }
     #[derive(
         candid::CandidType,
