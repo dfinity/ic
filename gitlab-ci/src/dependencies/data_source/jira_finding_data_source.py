@@ -76,7 +76,7 @@ class JiraFindingDataSource(FindingDataSource):
     subscribers: List[FindingDataSourceSubscriber]
     findings: Dict[Tuple[str, str, str, str], Tuple[Finding, Issue]]
     findings_cached_for_scanner: Set[str]
-    deleted_findings_cached: Dict[Tuple[str, str, str], List[Finding]]
+    deleted_findings_cached: Dict[Tuple[str, str, str], List[Tuple[Finding, Issue]]]
     risk_assessors: List[User]
 
     def __init__(self, subscribers: List[FindingDataSourceSubscriber], custom_jira: Optional[JIRA] = None):
@@ -547,7 +547,7 @@ class JiraFindingDataSource(FindingDataSource):
     ) -> List[Finding]:
         cache_key = (repository, scanner, dependency_id)
         if cache_key in self.deleted_findings_cached:
-            return deepcopy(self.deleted_findings_cached[cache_key])
+            return deepcopy(list(map(lambda x:x[0], self.deleted_findings_cached[cache_key])))
 
         logging.debug(f"get_deleted_findings({repository}, {scanner}, {dependency_id})")
         jql_query: str = (
@@ -566,9 +566,9 @@ class JiraFindingDataSource(FindingDataSource):
         for issue in issues:
             finding: Finding = self.__jira_to_finding(issue)
             if finding.repository == repository and finding.scanner == scanner and finding.vulnerable_dependency.id == dependency_id:
-                result.append(finding)
+                result.append((finding, issue))
         self.deleted_findings_cached[cache_key] = result
-        return deepcopy(result)
+        return deepcopy(list(map(lambda x:x[0], result)))
 
     def commit_has_block_exception(self, commit_type: CommitType, commit_hash: str) -> bool:
         logging.debug(f"commit_has_block_exception({commit_type}, {commit_hash})")
@@ -626,11 +626,20 @@ class JiraFindingDataSource(FindingDataSource):
 
     def link_findings(self, finding_a: Finding, finding_b: Finding):
         logging.debug(f"link_findings({finding_a}, {finding_b})")
-        self.__load_findings_for_scanner(finding_a.scanner)
-        self.__load_findings_for_scanner(finding_b.scanner)
 
-        if finding_a.id() in self.findings and finding_b.id() in self.findings:
+        # finding_a might be a deleted finding or an existing finding
+        deleted_finding_cache_key = (finding_a.repository, finding_a.scanner, finding_a.vulnerable_dependency.id)
+        jira_issue_a = None
+        if deleted_finding_cache_key in self.deleted_findings_cached:
+            for finding_issue in self.deleted_findings_cached[deleted_finding_cache_key]:
+                if finding_issue[0].more_info == finding_a.more_info:
+                    jira_issue_a = finding_issue[1]
+                    break
+        if not jira_issue_a and finding_a.id() in self.findings:
             _, jira_issue_a = self.findings[finding_a.id()]
+
+        # finding_b is always an existing finding
+        if jira_issue_a and finding_b.id() in self.findings:
             _, jira_issue_b = self.findings[finding_b.id()]
             self.jira.create_issue_link(type="Relates", inwardIssue=jira_issue_a.key, outwardIssue=jira_issue_b.key)
 
