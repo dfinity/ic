@@ -14,7 +14,6 @@ use std::{
     cmp,
     collections::{BTreeMap, HashMap, HashSet},
 };
-use wasmtime::{Config, OptLevel};
 
 use crate::wasm_utils::instrumentation::{
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
@@ -1314,34 +1313,40 @@ fn validate_code_section(
     Ok((max_function_size, max_complexity))
 }
 
-/// Sets Wasmtime flags to ensure deterministic execution.
-fn ensure_determinism(config: &mut Config) {
-    config
-        .wasm_threads(false)
-        .wasm_simd(false)
-        .cranelift_nan_canonicalization(true);
-}
-
-/// Explicitly disable Wasm features which aren't handled in validation and
-/// instrumentation.
-fn disable_unused_features(config: &mut wasmtime::Config) {
-    config.wasm_function_references(false);
-    config.wasm_relaxed_simd(false);
-    // The signal handler uses Posix signals, not Mach ports on MacOS.
-    config.macos_use_mach_ports(false);
-    // Disabling the address map saves about 20% of compile code size.
-    config.generate_address_map(false);
-    // Disable Wasm backtraces since we don't use them and don't have
-    // address maps.
-    config.wasm_backtrace(false);
-}
-
 /// Returns a Wasmtime config that is used for Wasm validation.
 pub fn wasmtime_validation_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
     let mut config = wasmtime::Config::default();
-    config.cranelift_opt_level(OptLevel::None);
-    ensure_determinism(&mut config);
-    disable_unused_features(&mut config);
+
+    // Keep this in the alphabetical order to simplify comparison with new
+    // `wasmtime::Config` methods in a new version of wasmtime.
+
+    // NaN canonicalization is needed for determinism.
+    config.cranelift_nan_canonicalization(true);
+    // Disable optimizations to keep compilation simple and fast.
+    // The assumption is that Wasm binaries have already been optimized.
+    config.cranelift_opt_level(wasmtime::OptLevel::None);
+    // Disabling the address map saves about 20% of compile code size.
+    config.generate_address_map(false);
+    // The signal handler uses Posix signals, not Mach ports on MacOS.
+    config.macos_use_mach_ports(false);
+    config.wasm_backtrace(false);
+    config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
+    config.wasm_bulk_memory(true);
+    config.wasm_function_references(false);
+    // Wasm memory64 and multi-memory features are disabled during validation,
+    // but enabled during execution for the Wasm-native stable memory
+    // implementation.
+    config.wasm_memory64(false);
+    config.wasm_multi_memory(false);
+    config.wasm_reference_types(true);
+    // The SIMD instructions are disable for determinism.
+    config.wasm_relaxed_simd(false);
+    config.wasm_simd(false);
+    // Tail calls may be enabled in the future.
+    config.wasm_tail_call(false);
+    // Threads are disabled for determinism.
+    config.wasm_threads(false);
+
     config
         // The maximum size in bytes where a linear memory is considered
         // static. Setting this to maximum Wasm memory size will guarantee

@@ -1,5 +1,6 @@
 use std::{ffi::OsString, fmt::Write, fs, path::PathBuf};
 
+use ic_embedders::wasm_utils::validation::wasmtime_validation_config;
 use wasmtime::{
     Config, Engine, Global, GlobalType, Instance, Linker, Memory, MemoryType, Mutability, Store,
     Table, TableType, Val, ValType,
@@ -739,13 +740,14 @@ fn run_testsuite(subdirectory: &str, config: &Config, parsing_multi_memory_enabl
     }
 }
 
-/// Note that the tests should pass with or without
-/// `cranelift_nan_canonicalization`. But we only use `wasmtime` with
-/// this feature enabled, so it's better to test the case we actually
-/// use.
+/// Returns the config that is as close as possible to the actual config used in
+/// production for validation.
 fn default_config() -> Config {
-    let mut config = Config::default();
-    config.cranelift_nan_canonicalization(true);
+    let mut config = wasmtime_validation_config(&ic_config::embedders::Config::default());
+    // Some tests require SIMD instructions to run.
+    config.wasm_simd(true);
+    // This is needed to avoid stack overflows in some tests.
+    config.max_wasm_stack(512 * 1024);
     config
 }
 
