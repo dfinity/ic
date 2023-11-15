@@ -146,7 +146,7 @@ impl EthRpcClient {
                     block,
                     include_full_transactions: false,
                 },
-                ResponseSizeEstimate::new(6 * 1024),
+                ResponseSizeEstimate::new(12 * 1024),
             )
             .await;
         results.reduce_with_equality()
