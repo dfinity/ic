@@ -284,6 +284,9 @@ where
         SchedulerConfig::application_subnet().scheduler_cores,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         subnet_configs.scheduler_config.heap_delta_rate_limit,
+        subnet_configs
+            .scheduler_config
+            .upload_wasm_chunk_instructions,
     );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(

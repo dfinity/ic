@@ -284,6 +284,7 @@ fn canister_manager_config(
         FlagStatus::Enabled,
         // 10 MiB should be enough for all the tests.
         NumBytes::from(10 * 1024 * 1024),
+        SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
     )
 }
 
@@ -7113,15 +7114,20 @@ fn uninstall_clears_wasm_chunk_store() {
 #[test]
 fn upload_chunk_fails_when_freeze_threshold_triggered() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
 
     let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
     let canister_id = test.create_canister(CYCLES);
     let initial_subnet_available_memory = test.subnet_available_memory();
 
-    // Make balance just a bit higher than freezing threshold so upload_chunk
-    // fails.
+    // Make balance just a bit higher than freezing threshold plus the charge
+    // for one upload so upload_chunk fails.
     let threshold = test.freezing_threshold(canister_id);
-    let new_balance = threshold + Cycles::from(1_000_u128);
+    let new_balance = threshold
+        + test
+            .cycles_account_manager()
+            .execution_cost(instructions, test.subnet_size())
+        + Cycles::from(1_000_u128);
     let to_remove = test.canister_state(canister_id).system_state.balance() - new_balance;
     test.canister_state_mut(canister_id)
         .system_state
@@ -7137,9 +7143,13 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         .unwrap_err();
 
     assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
-    assert!(error
-        .description()
-        .contains("additional cycles are required"));
+    assert!(
+        error
+            .description()
+            .contains("additional cycles are required"),
+        "Unexpected error: {}",
+        error.description()
+    );
 
     assert_eq!(
         test.subnet_available_memory(),
@@ -7452,5 +7462,63 @@ fn upload_chunk_increases_subnet_heap_delta() {
     assert_eq!(
         test.state().metadata.heap_delta_estimate,
         wasm_chunk_store::chunk_size()
+    );
+}
+
+#[test]
+fn upload_chunk_charges_canister_cycles() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let canister_id = test.create_canister(CYCLES);
+    let initial_balance = test.canister_state(canister_id).system_state.balance();
+
+    // Uploading one chunk will decrease balance by the cycles corresponding to
+    // the instructions for uploading.
+    let payload = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    }
+    .encode();
+    let expected_charge = test
+        .cycles_account_manager()
+        .execution_cost(instructions, test.subnet_size());
+    let _hash = test.subnet_message("upload_chunk", payload).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge,
+    );
+}
+
+#[test]
+fn upload_chunk_charges_if_failing() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store()
+        .with_subnet_memory_reservation(0)
+        .with_subnet_execution_memory(10)
+        .build();
+    let canister_id = test.create_canister(CYCLES);
+    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    // Expected charge is the same as if the upload succeeds.
+    let expected_charge = test
+        .cycles_account_manager()
+        .execution_cost(instructions, test.subnet_size());
+
+    let payload = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    }
+    .encode();
+    // Upload will fail because subnet does not have space.
+    let _err = test.subnet_message("upload_chunk", payload).unwrap_err();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge,
     );
 }

@@ -840,6 +840,7 @@ impl SchedulerTestBuilder {
             self.scheduler_config.scheduler_cores,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             self.scheduler_config.heap_delta_rate_limit,
+            self.scheduler_config.upload_wasm_chunk_instructions,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
