@@ -15,7 +15,7 @@ fn ensure_equality_of_signed_bytes_of_catch_up_package_wrappers() {
     let protobuf = pb::CatchUpPackage::from(&cup);
 
     assert_eq!(
-        CatchUpContentProtobufBytes(protobuf.content.clone()).as_signed_bytes(),
+        CatchUpContentProtobufBytes::from(&protobuf).as_signed_bytes(),
         cup.content.as_signed_bytes()
     );
     let from_proto = CatchUpPackage::try_from(&protobuf).unwrap();

@@ -157,7 +157,7 @@ impl Upgrade {
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necessary.
-        let (_, latest_cup) = self
+        let latest_cup = self
             .cup_provider
             .get_latest_cup(local_cup_proto, subnet_id)
             .await?;
@@ -179,13 +179,15 @@ impl Upgrade {
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
         // recovery scenario. Check if we're in an NNS subnet recovery case and download
         // the new registry if needed.
-        if latest_cup.is_unsigned() {
+        if !latest_cup.is_signed() {
             info!(
                 self.logger,
-                "The latest CUP (registry version={}, height={}) is unsigned: a subnet genesis/recovery is in progress",
+                "The latest CUP (registry version={}, height={}) is unsigned: \
+                a subnet genesis/recovery is in progress",
                 latest_cup.content.registry_version(),
                 latest_cup.height(),
             );
+
             self.download_registry_and_restart_if_nns_subnet_recovery(
                 subnet_id,
                 latest_registry_version,
@@ -360,7 +362,7 @@ impl Upgrade {
         old_cup_height: Option<Height>,
     ) {
         let new_height = cup.content.height();
-        if cup.is_unsigned() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
+        if !cup.is_signed() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
             info!(
                 self.logger,
                 "Found higher unsigned CUP, restarting replica for subnet recovery..."
