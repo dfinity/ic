@@ -29,7 +29,7 @@ enum Commands {
         version: String,
         /// Initialize a testnet
         #[arg(long)]
-        init_nns: bool,
+        init: bool,
         /// Use a zero version within testnet
         #[arg(long)]
         use_zero_version: bool,
@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
         Some(Commands::Create {
             name,
             version,
-            init_nns,
+            init,
             use_zero_version,
             nns,
             app,
@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
             let mut tnet = TNet::new(name)?
                 .version(version)
                 .use_zero_version(*use_zero_version)
-                .init_nns(*init_nns)
+                .init(*init)
                 .topology(*nns, *app);
             if let Some(ttl) = ttl {
                 tnet = tnet.ttl(*ttl)?;

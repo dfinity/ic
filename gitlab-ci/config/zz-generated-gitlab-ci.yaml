@@ -5303,14 +5303,14 @@ tnet-test:
         ./$TNETCTL create \
             --version "$CI_COMMIT_SHA" \
             --use-zero-version \
-            --init-nns \
+            --init \
             --nns 2 \
             --app 1 \
             -n "$NAME"
       else
         ./$TNETCTL create \
             --version "$CI_COMMIT_SHA" \
-            --init-nns \
+            --init \
             --nns 2 \
             --app 1 \
             -n "$NAME"

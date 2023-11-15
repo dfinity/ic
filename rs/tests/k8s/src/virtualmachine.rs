@@ -20,7 +20,7 @@ metadata:
     kubevirt.io/vm: {name}
   name: {name}
 spec:
-  running: true
+  running: {running}
   template:
     metadata:
       annotations:
@@ -293,11 +293,13 @@ pub async fn create_vm(
     api: &Api<DynamicObject>,
     name: &str,
     ipv6: &str,
+    running: bool,
     owner: OwnerReference,
 ) -> Result<()> {
     info!("Creating virtual machine {}", name);
     let yaml = VM_PVC_TEMPLATE
         .replace("{name}", name)
+        .replace("{running}", &running.to_string())
         .replace("{ipv6}", ipv6);
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
     data.metadata.owner_references = vec![owner].into();
