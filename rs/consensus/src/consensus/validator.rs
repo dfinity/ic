@@ -43,10 +43,10 @@ use ic_types::{
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
-    Height, NodeId, NodeIndex, RegistryVersion,
+    Height, NodeId, RegistryVersion,
 };
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -1133,17 +1133,6 @@ impl Validator {
         let last_beacon = pool_reader.get_random_beacon_tip();
         let last_hash: CryptoHashOf<RandomBeacon> = ic_types::crypto::crypto_hash(&last_beacon);
         let next_height = last_beacon.content.height().increment();
-        // we need the current threshold to determine how many validations we should make
-        let threshold = active_low_threshold_transcript(
-            pool_reader.as_cache(),
-            pool_reader.get_catch_up_height(),
-        )
-        .map_or(NodeIndex::MAX, |transcript| {
-            transcript.threshold.get().get()
-        });
-        // number of shares during this iteration
-        let mut existing_shares =
-            pool_reader.get_random_beacon_shares(next_height).count() as NodeIndex;
 
         // Since the parent beacon is required to be already validated, only a single
         // height is checked.
@@ -1158,20 +1147,14 @@ impl Validator {
                         beacon.into_message(),
                         "The parent hash of the beacon was not correct".to_string(),
                     ))
-                } else if existing_shares < threshold {
+                } else {
                     self.metrics.validation_random_beacon_shares_count.add(1);
                     let verification = self.verify_artifact(pool_reader, &beacon);
-                    let ret = self.compute_action_from_artifact_verification(
+                    self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
                         beacon.into_message(),
-                    );
-                    if let Some(&ChangeAction::MoveToValidated(_)) = ret.as_ref() {
-                        existing_shares += 1;
-                    }
-                    ret
-                } else {
-                    None
+                    )
                 }
             })
             .collect();
@@ -1253,15 +1236,6 @@ impl Validator {
             expected_height,
             max_height.min(finalized_height.increment()),
         );
-        // we need the current threshold to determine how many validations we should make
-        let threshold = active_low_threshold_transcript(
-            pool_reader.as_cache(),
-            pool_reader.get_catch_up_height(),
-        )
-        .map_or(NodeIndex::MAX, |transcript| {
-            transcript.threshold.get().get()
-        });
-        let mut height_share_map = HashMap::<Height, u32>::with_capacity(64);
 
         let change_set: ChangeSet = pool_reader
             .pool()
@@ -1280,27 +1254,13 @@ impl Validator {
                     // Remove if we already have a validated tape at this height
                     Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
                 } else {
-                    let existing_shares = *height_share_map.entry(height).or_insert_with(|| {
-                        pool_reader.get_random_tape_shares(height, height).count() as NodeIndex
-                    });
-                    // if # of existing shares + shares validated in this loop exceeds
-                    // the threshold, then we don't need to continue validating anymore.
-                    if existing_shares < threshold {
-                        self.metrics.validation_random_tape_shares_count.add(1);
-                        let verification = self.verify_artifact(pool_reader, &tape);
-                        let ret = self.compute_action_from_artifact_verification(
-                            pool_reader,
-                            verification,
-                            tape.into_message(),
-                        );
-                        // increment counter of validated shares
-                        if let Some(&ChangeAction::MoveToValidated(_)) = ret.as_ref() {
-                            height_share_map.insert(height, existing_shares + 1);
-                        }
-                        ret
-                    } else {
-                        None
-                    }
+                    self.metrics.validation_random_tape_shares_count.add(1);
+                    let verification = self.verify_artifact(pool_reader, &tape);
+                    self.compute_action_from_artifact_verification(
+                        pool_reader,
+                        verification,
+                        tape.into_message(),
+                    )
                 }
             })
             .collect();
