@@ -17,9 +17,8 @@ use crate::{
         create_service_nervous_system::LedgerParameters,
         get_neurons_fund_audit_info_response,
         governance::{
-            migration::{self, MigrationStatus},
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            GovernanceCachedMetrics, MakingSnsProposal, Migration, NeuronInFlightCommand,
+            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
         },
         governance_error::ErrorType,
         manage_neuron,
@@ -214,21 +213,6 @@ pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
 const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
-
-// TODO(NNS1-2551): Measure how much resources this consumes, and adjust BATCH_SIZE accordingly.
-const COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN: usize = if cfg!(test) {
-    // 1 would be degenerately small. A larger value, like 10 would make it very tedious to craft
-    // test data, because test data needs to have cardinality greater than this in order to
-    // distinguish between a finite batch len and "infinity" batch len. 2 would also fit the bill,
-    // but is also suspiciously small. 4 is reaching unbearablility. 5 is really starting to get
-    // into self-flagilation territory.
-    3
-} else {
-    // Experiments in StateMachine-based tests indicate that the break point is around 10_000. Other
-    // analysis suggests that 5 is the most we can afford to do in a single heartbeat. Please, ask
-    // jason.zhu@dfinity.org for the details of that analysis.
-    5
-};
 
 // Constant set of deprecated but not yet deleted topics. These topics should
 // not be allowed to be followed on. They are represented as a constant array
@@ -6563,129 +6547,10 @@ impl Governance {
             self.spawn_neurons().await;
         }
 
-        // It might make sense for this to be part of the previous if/else chain, but joining the
-        // chain seems to block us indefinitely.
-        if self.should_copy_next_batch_of_inactive_neurons_to_stable_memory() {
-            self.copy_next_batch_of_inactive_neurons_to_stable_memory();
-        }
-
         self.unstake_maturity_of_dissolved_neurons();
         self.maybe_gc();
         self.maybe_run_migrations();
         self.maybe_run_validations();
-    }
-
-    fn should_copy_next_batch_of_inactive_neurons_to_stable_memory(&self) -> bool {
-        // Get the status of the migration.
-        let status = self
-            .heap_data
-            .migrations
-            .clone()
-            .unwrap_or_default()
-            .copy_inactive_neurons_to_stable_memory_migration
-            .unwrap_or_default()
-            .status
-            .unwrap_or_default();
-        let status = MigrationStatus::from_i32(status)
-            // If there is no status yet, default to InProgress.
-            .unwrap_or(MigrationStatus::InProgress);
-
-        match status {
-            MigrationStatus::Unspecified | MigrationStatus::InProgress => true,
-            MigrationStatus::Succeeded | MigrationStatus::Failed => false,
-        }
-    }
-
-    fn copy_next_batch_of_inactive_neurons_to_stable_memory(&mut self) {
-        // Pick up from where we left off last time.
-        let mut migrations = self.heap_data.migrations.clone().unwrap_or_default();
-        let progress = migrations
-            .copy_inactive_neurons_to_stable_memory_migration
-            .unwrap_or_default()
-            .progress;
-        let next_neuron_id = match progress {
-            Some(migration::Progress::LastNeuronId(NeuronId { id })) => NeuronId { id: id + 1 },
-            None => NeuronId { id: 1 },
-        };
-
-        // Generate a batch of neurons to work on.
-        const BATCH_LEN: usize = COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN;
-        // TODO(NNS1-2586): pass is_neuron_inactive to
-        // batch_add_inactive_neurons_to_stable_memory. That way, it can construct batch itself,
-        // instead of requiring the caller (i.e. us) to do it.
-        let now = self.env.now();
-        let batch = self
-            .neuron_store
-            .range_heap_neurons(next_neuron_id..)
-            .take(BATCH_LEN)
-            // Append auxiliary data; to wit, whether the neuron is inactive.
-            .map(|neuron| {
-                let is_inactive = neuron.is_inactive(now);
-                (neuron, is_inactive)
-            })
-            .collect::<Vec<_>>();
-        let batch_len = batch.len(); // Because batch gets consumed, but we want len later.
-        if !batch.is_empty() {
-            println!(
-                "{}copy_next_batch_of_inactive_neurons_to_stable_memory: Working on Neurons from \
-                 {:?} to {:?} (batch size = {})",
-                LOG_PREFIX,
-                batch[0].0.id.unwrap(),
-                batch[batch.len() - 1].0.id.unwrap(),
-                batch_len,
-            );
-        }
-
-        // Execute the batch.
-        let add_result = self
-            .neuron_store
-            .batch_add_inactive_neurons_to_stable_memory(batch);
-
-        // Update status (so that next time, we can pick up from where we just left off).
-        migrations.copy_inactive_neurons_to_stable_memory_migration = Some(match add_result {
-            Err(message) => Migration {
-                status: Some(MigrationStatus::Failed as i32),
-                failure_reason: Some(message),
-                progress: None,
-            },
-
-            Ok(processed_last_neuron_id) => {
-                // Distinguish between full batch, or partial in order to decide
-                // whether we need to keep going, or we are done.
-                if batch_len < BATCH_LEN {
-                    // This is usually what happens at the end (once).
-                    Migration {
-                        status: Some(MigrationStatus::Succeeded as i32),
-                        failure_reason: None,
-                        progress: None,
-                    }
-                } else {
-                    match processed_last_neuron_id {
-                        None => {
-                            // This code is unreachable.
-                            // pf: processed_last_neuron_id.is_none() means that batch_len == 0.
-                            // That means, we should have gotten into the earlier case, yet here
-                            // we are.
-                            Migration {
-                                status: Some(MigrationStatus::Failed as i32),
-                                failure_reason: Some(
-                                    "Code that should not be reachable was reached.".to_string(),
-                                ),
-                                progress: None,
-                            }
-                        }
-
-                        // This is usually what happens.
-                        Some(last_neuron_id) => Migration {
-                            status: Some(MigrationStatus::InProgress as i32),
-                            failure_reason: None,
-                            progress: Some(migration::Progress::LastNeuronId(last_neuron_id)),
-                        },
-                    }
-                }
-            }
-        });
-        self.heap_data.migrations = Some(migrations);
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
