@@ -618,9 +618,8 @@ mod tests {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities::types::ids::{subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3};
-    use ic_test_utilities::MockTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::*;
     use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
@@ -736,7 +735,6 @@ mod tests {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
 
                 ecdsa_pool.apply_changes(
-                    &MockTimeSource::new(),
                     shares
                         .iter()
                         .map(|s| EcdsaChangeAction::AddToValidated(s.clone()))
@@ -771,7 +769,6 @@ mod tests {
                 );
 
                 ecdsa_pool.apply_changes(
-                    &MockTimeSource::new(),
                     shares
                         .iter()
                         .map(|s| EcdsaChangeAction::AddToValidated(s.clone()))
@@ -988,7 +985,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
                 let share = create_signature_share(NODE_2, id_2);
@@ -1141,7 +1138,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Share 2: height <= current_height, !in_progress (purged)
                 let share = create_signature_share(NODE_2, id_2);
@@ -1149,14 +1146,14 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Share 3: height > current_height (not purged)
                 let share = create_signature_share(NODE_2, id_3);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let change_set = signer.purge_artifacts(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
@@ -1277,7 +1274,7 @@ mod tests {
                         EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share))
                     })
                     .collect::<Vec<_>>();
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let sig_builder = EcdsaSignatureBuilderImpl::new(
                     &block_reader,

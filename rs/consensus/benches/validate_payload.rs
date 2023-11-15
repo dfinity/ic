@@ -21,12 +21,13 @@ use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_pool::MutablePool,
     consensus::{PayloadBuilder, PayloadValidationError},
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool},
+    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    p2p::consensus::MutablePool,
     time_source::TimeSource,
     validation::ValidationResult,
 };
+use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
@@ -35,7 +36,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis, MockConsensusTime},
+    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis},
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -53,6 +54,7 @@ use ic_types::{
     crypto::Signed,
     ingress::{IngressState, IngressStatus},
     signature::*,
+    time::UNIX_EPOCH,
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
 };
 use std::sync::{Arc, RwLock};
@@ -274,11 +276,12 @@ fn add_past_blocks(
 
         parent = block.clone();
         let proposal = BlockProposal::fake(block, node_test_id(i));
-        changeset.push(ChangeAction::AddToValidated(proposal.into_message()));
+        changeset.push(ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+            msg: proposal.into_message(),
+            timestamp: UNIX_EPOCH,
+        }));
     }
-    let time_source = FastForwardTimeSource::new();
-    consensus_pool.apply_changes(time_source.as_ref(), changeset);
-
+    consensus_pool.apply_changes(changeset);
     parent
 }
 

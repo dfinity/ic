@@ -274,6 +274,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^4.0.0",
                 features = [
                     "derive",
+                    "string",
                 ],
             ),
             "cloudflare": crate.spec(
@@ -667,15 +668,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 ],
             ),
             "mockall": crate.spec(
-                version = "^0.11.1",
-            ),
-            "mockall-0_7_2": crate.spec(
-                package = "mockall",
-                version = "^0.7.2",
-            ),
-            "mockall-0_8_3": crate.spec(
-                package = "mockall",
-                version = "^0.8.3",
+                version = "^0.11.4",
             ),
             "moka": crate.spec(
                 version = "^0.12",
@@ -791,6 +784,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "pin-project-lite": crate.spec(
                 version = "^0.2",
+            ),
+            "ping": crate.spec(
+                version = "^0.5.0",
             ),
             "pkcs8": crate.spec(
                 version = "^0.10.2",
@@ -909,6 +905,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 features = [
                     "zeroize",
                 ],
+            ),
+            "rgb": crate.spec(
+                version = "^0.8.37",
             ),
             "regex": crate.spec(
                 version = "^1.3.9",
@@ -1153,6 +1152,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "tester": crate.spec(
                 version = "^0.7.0",
             ),
+            "textplots": crate.spec(
+                version = "^0.8",
+            ),
             "thiserror": crate.spec(
                 version = "^1.0",
             ),
@@ -1315,7 +1317,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "wasm-smith": crate.spec(
                 git = "https://github.com/dfinity/wasm-tools",
-                rev = "a4b464728f1202a7e3b8903cf4c09b067fc9986e",
+                rev = "4d402ea9ff1d17cfe3d2ef4654428ac326c94475",
             ),
             "wasmparser": crate.spec(
                 version = "^0.109.0",
@@ -1324,7 +1326,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^13.0.1",
+                version = "^14.0.4",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1332,10 +1334,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^13.0.1",
+                version = "^14.0.4",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^13.0.1",
+                version = "^14.0.4",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",

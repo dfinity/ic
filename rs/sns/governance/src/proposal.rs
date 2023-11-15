@@ -868,7 +868,7 @@ impl ProposalData {
     /// Returns the proposal's reward status. See [ProposalRewardStatus] in the SNS's
     /// proto for more information.
     pub fn reward_status(&self, now_seconds: u64) -> ProposalRewardStatus {
-        if self.reward_event_end_timestamp_seconds.is_some() {
+        if self.has_been_rewarded() {
             debug_assert!(
                 self.is_eligible_for_rewards,
                 "Invalid ProposalData: {:#?}",
@@ -886,6 +886,23 @@ impl ProposalData {
         } else {
             ProposalRewardStatus::Settled
         }
+    }
+
+    /// Returns true if this proposal has been rewarded.
+    ///
+    /// This is deduced based on two fields:
+    ///
+    ///   1. The old field: reward_event_round.
+    ///   2. The new field: reward_event_end_timestamp_seconds.
+    ///
+    /// The second field was added later to support being able to change round duration. We still
+    /// need to consult the old field though, because there are some old proposals that used it
+    /// before we came up with the new field.
+    ///
+    /// It is feasible that we backfill old data (that is, populate the new field in old proposals).
+    /// Then, we could remove the old field. Whether backfilling is worthwhile is debatable.
+    pub fn has_been_rewarded(&self) -> bool {
+        self.reward_event_end_timestamp_seconds.is_some() || self.reward_event_round > 0
     }
 
     /// Returns the proposal's current voting period deadline in seconds from the Unix epoch.
@@ -1202,7 +1219,9 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            governance, governance::Version, Empty, Governance as GovernanceProto, Subaccount,
+            governance::{self, Version},
+            Empty, Governance as GovernanceProto, NeuronId, Proposal, ProposalId, Subaccount,
+            WaitForQuietState,
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -1222,7 +1241,7 @@ mod tests {
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_test_utilities::types::ids::canister_test_id;
     use lazy_static::lazy_static;
-    use maplit::hashset;
+    use maplit::{btreemap, hashset};
     use std::convert::TryFrom;
 
     pub const FORBIDDEN_CANISTER: CanisterId = CanisterId::ic_00();
@@ -2634,5 +2653,108 @@ Version {
                 "error message \"{rendered_err}\" contains a line that starts with whitespace"
             );
         }
+    }
+
+    lazy_static! {
+        // This test data is transcribed from a list_proposals response from the SNS governance
+        // canister of Dragginz (previously known as SNS-1) where the request specified that only
+        // ReadyToSettle proposals should be returned, and this (with the bug) was mistakenly
+        // returned. I have confirmed that without the bug fix, this is considered ReadyToSettle
+        // instead of Settled.
+        static ref SNS_1_PROPOSAL_5: ProposalData = ProposalData {
+            // These are the relevant fields. Both should be considered. The bug is that only the
+            // first one is considered.
+            reward_event_end_timestamp_seconds: None,
+            reward_event_round: 21,
+
+            // The remaining fields should have no impact on this test, but are included for
+            // realism.
+            id: Some(ProposalId { id: 5 }),
+            payload_text_rendering: Some(
+                "# Motion Proposal: ## Motion Text: hold token SNS be the main key to \
+                 enter the next project"
+                .to_string()
+            ),
+            action: 1,
+            failure_reason: None,
+            ballots: btreemap!{},
+            minimum_yes_proportion_of_total: None,
+            failed_timestamp_seconds: 0,
+            proposal_creation_timestamp_seconds: 1670488610, // 2022-12-08T08:36:50Z (Thu)
+            initial_voting_period_seconds: 345_600, // 4 days
+            reject_cost_e8s: 10_000_000,
+            latest_tally: Some(Tally {
+                no: 37561606004,
+                yes: 2999861572,
+                total: 266762154361,
+                timestamp_seconds: 1670822893, // 2022-12-12T05:28:13Z (Mon)
+            }),
+            wait_for_quiet_deadline_increase_seconds: 86_400, // 1 day
+            decided_timestamp_seconds: 1670834210, // 2022-12-12T08:36:50Z (Mon)
+            proposal: Some(Proposal {
+                url: "".to_string(),
+                title: "SNS Token".to_string(),
+                action: Some(Action::Motion(Motion {
+                    motion_text: "hold token SNS be the main key to enter the next project".to_string(),
+                })),
+                summary: "".to_string()
+            }),
+            proposer: Some(NeuronId {
+                // This was derived the hex representation using the Python interpretter:
+                // >>> s = "e9e50b664c7d97fcf5811df56cf53cc09066190a247519063b6ab09e159c7691"
+                // >>> [int(s[i:i+2], 16) for i in range(0, len(s), 2)]
+                id: vec![
+                    233, 229, 11, 102, 76, 125, 151, 252, 245, 129, 29, 245, 108, 245, 60, 192,
+                    144, 102, 25, 10, 36, 117, 25, 6, 59, 106, 176, 158, 21, 156, 118, 145,
+                ],
+            }),
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: 1670834210, // 2022-12-12T08:36:50Z (Mon)
+            }),
+            // Rewards were considered "enabled" at the time of proposal creation.
+            is_eligible_for_rewards: true,
+            // This is because the proposal was rejected (see the latest_tally field).
+            executed_timestamp_seconds: 0,
+        };
+    }
+
+    // This is a regression test. I have confirmed that without the fix (see has_been_rewarded),
+    // this fails, and with the fix, it passes.
+    #[test]
+    fn test_old_proposal_has_reward_status_settled() {
+        let now = 1699645996; // 2023-11-10T19:53:16Z (Fri)
+        assert_eq!(
+            SNS_1_PROPOSAL_5.reward_status(now),
+            ProposalRewardStatus::Settled
+        );
+    }
+
+    #[test]
+    fn test_new_proposal_has_reward_status_settled() {
+        let now = 1699645996; // 2023-11-10T19:53:16Z (Fri)
+        let proposal = ProposalData {
+            reward_event_end_timestamp_seconds: Some(now),
+            reward_event_round: 0,
+
+            ..SNS_1_PROPOSAL_5.clone()
+        };
+
+        assert_eq!(proposal.reward_status(now), ProposalRewardStatus::Settled);
+    }
+
+    #[test]
+    fn test_new_proposal_has_reward_status_ready_to_be_settled() {
+        let now = 1699645996; // 2023-11-10T19:53:16Z (Fri)
+        let proposal = ProposalData {
+            reward_event_end_timestamp_seconds: None,
+            reward_event_round: 0,
+
+            ..SNS_1_PROPOSAL_5.clone()
+        };
+
+        assert_eq!(
+            proposal.reward_status(now),
+            ProposalRewardStatus::ReadyToSettle
+        );
     }
 }

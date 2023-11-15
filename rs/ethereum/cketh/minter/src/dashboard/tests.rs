@@ -250,9 +250,10 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
         );
         apply_state_transition(
             &mut state,
-            &EventType::AcceptedEthWithdrawalRequest(withdrawal_request_with_index(
-                LedgerBurnIndex::new(16),
-            )),
+            &EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
+                created_at: Some(1699540751000000000),
+                ..withdrawal_request_with_index(LedgerBurnIndex::new(16))
+            }),
         );
         DashboardTemplate::from_state(&state)
     };
@@ -264,6 +265,7 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
                 "1_100_000_000_000_000",
+                "2023-11-09T14:39:11+00:00",
             ],
         )
         .has_withdrawal_requests(
@@ -272,6 +274,7 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
                 "1_100_000_000_000_000",
+                "N/A",
             ],
         );
 }
@@ -516,6 +519,7 @@ fn should_display_reimbursed_requests() {
                 apply_state_transition(
                     &mut state,
                     &EventType::ReimbursedEthWithdrawal(Reimbursed {
+                        transaction_hash: Some(receipt.transaction_hash),
                         withdrawal_id: id,
                         reimbursed_in_block,
                         reimbursed_amount,
@@ -617,6 +621,7 @@ fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithd
         withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
         from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        created_at: None,
     }
 }
 

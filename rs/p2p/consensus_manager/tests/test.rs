@@ -3,7 +3,8 @@ use std::{sync::Arc, time::Duration};
 use ic_p2p_test_utils::{
     consensus::TestConsensus,
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, wait_for, waiter_fut, PeerManagerAction,
+        add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout, waiter_fut,
+        PeerManagerAction,
     },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -151,6 +152,82 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
         // Node 3 has received the advert
         wait_for(&mut sim, || processor_3.received_advert_once(1))
             .expect("NODE_3 did not receive the advert from NODE_1 after joining the subnet.");
+
+        exit_notify.notify_waiters();
+        sim.run().unwrap();
+    });
+}
+
+#[test]
+fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
+    with_test_replica_logger(|log| {
+        let mut sim = Builder::new()
+            .tick_duration(Duration::from_millis(100))
+            .simulation_duration(Duration::from_secs(20))
+            .build();
+
+        let exit_notify = Arc::new(Notify::new());
+        let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
+            add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
+        let processor_1 = TestConsensus::new(log.clone(), NODE_1);
+        let processor_2 = TestConsensus::new(log.clone(), NODE_2);
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            None,
+            None,
+            None,
+            None,
+            Some(processor_1.clone()),
+            waiter_fut(),
+        );
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_2,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            None,
+            None,
+            None,
+            None,
+            Some(processor_2.clone()),
+            waiter_fut(),
+        );
+
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
+            .unwrap();
+        registry_handle.registry_client.reload();
+        registry_handle.registry_client.update_to_latest_version();
+
+        // Node 1 sends the advert
+        processor_1.push_advert(1);
+
+        // Node 2 has received the advert
+        wait_for(&mut sim, || processor_2.received_advert_once(1)).unwrap();
+
+        // Disconnect nodes, and run simulation for 5s.
+        sim.partition(NODE_1.to_string(), NODE_2.to_string());
+        processor_1.push_advert(2);
+        wait_for_timeout(
+            &mut sim,
+            || processor_2.received_advert_once(2),
+            Duration::from_secs(5),
+        )
+        .unwrap();
+
+        sim.repair(NODE_1.to_string(), NODE_2.to_string());
+        wait_for(&mut sim, || processor_2.received_advert_once(2)).unwrap();
+
+        assert!(processor_2.received_advert_once(1));
 
         exit_notify.notify_waiters();
         sim.run().unwrap();

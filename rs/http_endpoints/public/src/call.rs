@@ -14,7 +14,7 @@ use crossbeam::channel::Sender;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
-use ic_interfaces::{artifact_pool::UnvalidatedArtifactEvent, ingress_pool::IngressPoolThrottler};
+use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
@@ -22,9 +22,10 @@ use ic_registry_client_helpers::{
     subnet::{IngressMessageSettings, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_types::{artifact_kind::IngressArtifact, messages::SignedIngressContent};
 use ic_types::{
-    messages::{SignedIngress, SignedRequestBytes},
+    artifact::UnvalidatedArtifactMutation,
+    artifact_kind::IngressArtifact,
+    messages::{SignedIngress, SignedIngressContent, SignedRequestBytes},
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
 use std::convert::{Infallible, TryInto};
@@ -46,7 +47,7 @@ pub(crate) struct CallService {
     validator_executor: ValidatorExecutor<SignedIngressContent>,
     ingress_filter: IngressFilterService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
 }
 
 impl CallService {
@@ -61,7 +62,7 @@ impl CallService {
         validator_executor: ValidatorExecutor<SignedIngressContent>,
         ingress_filter: IngressFilterService,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
+        ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
     ) -> EndpointService {
         BoxCloneService::new(
             ServiceBuilder::new()
@@ -246,7 +247,7 @@ impl Service<Request<Bytes>> for CallService {
 
             let is_overloaded = ingress_throttler.read().unwrap().exceeds_threshold()
                 || ingress_tx
-                    .try_send(UnvalidatedArtifactEvent::Insert((msg, node_id)))
+                    .try_send(UnvalidatedArtifactMutation::Insert((msg, node_id)))
                     .is_err();
 
             let response = if is_overloaded {

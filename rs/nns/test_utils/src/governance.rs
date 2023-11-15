@@ -15,7 +15,7 @@ use ic_nervous_system_clients::{
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance::{
@@ -417,16 +417,17 @@ async fn change_nns_canister_by_proposal(
     let old_module_hash = status.module_hash.unwrap();
     assert_ne!(old_module_hash.as_slice(), new_module_hash, "change_nns_canister_by_proposal: both module hashes prev, cur are the same {:?}, but they should be different for upgrade", old_module_hash);
 
-    let proposal = ChangeCanisterProposal::new(stop_before_installing, how, canister.canister_id())
-        .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-            canister.canister_id(),
-        ))
-        .with_wasm(wasm)
-        .with_arg(Encode!().unwrap());
-    let proposal = if let Some(arg) = arg {
-        proposal.with_arg(arg)
+    let change_canister_request =
+        ChangeCanisterRequest::new(stop_before_installing, how, canister.canister_id())
+            .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+                canister.canister_id(),
+            ))
+            .with_wasm(wasm)
+            .with_arg(Encode!().unwrap());
+    let change_canister_request = if let Some(arg) = arg {
+        change_canister_request.with_arg(arg)
     } else {
-        proposal
+        change_canister_request
     };
 
     // Submitting a proposal also implicitly records a vote from the proposer,
@@ -436,7 +437,7 @@ async fn change_nns_canister_by_proposal(
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
         NnsFunction::NnsCanisterUpgrade,
-        proposal,
+        change_canister_request,
         "Upgrade NNS Canister".to_string(),
         "<proposal created by change_nns_canister_by_proposal>".to_string(),
     )

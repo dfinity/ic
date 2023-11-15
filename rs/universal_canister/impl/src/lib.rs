@@ -106,5 +106,7 @@ try_from_u8!(
         OneWayCallNew = 76,
         IsController = 77,
         CyclesBurn128 = 78,
+        BlobLength = 79,
+        PushEqualBytes = 80,
     }
 );

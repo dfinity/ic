@@ -181,11 +181,11 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
             metrics_registry,
         );
-        driver.step(time.as_ref()); // this stops before notary timeout expires after making 1st block
+        driver.step(); // this stops before notary timeout expires after making 1st block
         time.advance_time(Duration::from_millis(2000));
-        driver.step(time.as_ref()); // this stops before notary timeout expires after making 2nd block
+        driver.step(); // this stops before notary timeout expires after making 2nd block
         time.advance_time(Duration::from_millis(2000));
-        driver.step(time.as_ref()); // this stops before notary timeout expires after making 3rd block
+        driver.step(); // this stops before notary timeout expires after making 3rd block
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
         assert_eq!(batches.len(), 2);

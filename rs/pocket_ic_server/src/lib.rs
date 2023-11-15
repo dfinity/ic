@@ -128,6 +128,7 @@ mod tests {
             canister_id: CanisterId::ic_00(),
             method: "provisional_create_canister_with_cycles".to_string(),
             payload: encode_args((CreateCanisterArgument { settings: None },)).unwrap(),
+            effective_principal: pocket_ic::EffectivePrincipal::None,
         });
 
         let timeout = Some(Duration::from_secs(30));

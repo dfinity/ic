@@ -25,7 +25,7 @@
 //!    expiry-instant. Note: This index may contain multiple downloads
 //!    expiring at a given expiry-instant.
 
-use ic_interfaces::artifact_manager::ArtifactManager;
+use ic_interfaces::p2p::artifact_manager::ArtifactManager;
 use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_types::{

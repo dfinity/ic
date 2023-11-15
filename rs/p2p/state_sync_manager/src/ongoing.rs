@@ -20,7 +20,7 @@ use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
 use ic_async_utils::JoinMap;
-use ic_interfaces::state_sync_client::StateSyncClient;
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
 use ic_types::{
@@ -323,7 +323,7 @@ impl OngoingStateSync {
         };
 
         let chunk_add_result = tokio::task::spawn_blocking(move || {
-            let chunk = parse_chunk_handler_response(response, chunk_id)?;
+            let chunk = parse_chunk_handler_response(response, chunk_id, metrics)?;
             Ok(tracker.lock().unwrap().add_chunk(chunk))
         })
         .await

@@ -987,3 +987,29 @@ fn test_approve_args() {
         index_balance_of(env, index_id, account(2, 0))
     );
 }
+
+#[test]
+fn test_post_upgrade_start_timer() {
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(
+        env,
+        vec![(
+            AccountIdentifier::from(account(1, 0)),
+            Tokens::from_e8s(10_000_000),
+        )]
+        .into_iter()
+        .collect(),
+        default_archive_options(),
+    );
+    let index_id = install_index(env, ledger_id);
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    env.upgrade_canister(index_id, index_wasm(), Encode!(&()).unwrap())
+        .unwrap();
+
+    // Check that the index syncs the new block (wait_until_sync_is_completed fails
+    // if the new block is not synced).
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+}

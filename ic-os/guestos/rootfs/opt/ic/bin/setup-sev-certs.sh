@@ -12,9 +12,10 @@ if [[ -e "/dev/sev-guest" ]]; then
             echo "/boot/config/ark.pem does not match /opt/ic/share/ark.pem"
         fi
         for f in ask.pem vcek.pem; do
-            cp "/boot/config/${f}" "/run/ic-node/config/${f}"
+            cp "/boot/config/${f}" "/var/lib/ic/data/${f}"
         done
     fi
+
     # Always use our hard coded ark.pem as the root of trust.
-    cp "/opt/ic/share/ark.pem" "/run/ic-node/config/ark.pem"
+    cp "/opt/ic/share/ark.pem" "/var/lib/ic/data/ark.pem"
 fi

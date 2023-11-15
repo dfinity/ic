@@ -31,6 +31,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::QueryExecutionError;
+use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -41,7 +42,6 @@ use ic_protobuf::registry::crypto::v1::{
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::{
-    consensus::MockConsensusCache,
     mock_time,
     state::ReplicatedStateBuilder,
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
@@ -94,7 +94,7 @@ fn test_healthy_behind() {
     // We use this atomic to make sure that the health transition is from healthy -> certified_state_behind
     let healthy = Arc::new(AtomicBool::new(false));
     let healthy_c = healthy.clone();
-    let mut mock_consensus_cache = MockConsensusCache::new();
+    let mut mock_consensus_cache = MockConsensusPoolCache::new();
     mock_consensus_cache
         .expect_finalized_block()
         .returning(move || {

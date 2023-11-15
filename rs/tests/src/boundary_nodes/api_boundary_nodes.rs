@@ -659,18 +659,6 @@ pub fn reboot_test(env: TestEnv) {
         api_boundary_node.block_on_ipv4().unwrap()
     );
 
-    info!(&logger, "Waiting for routes file");
-    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-    let cmd_output = api_boundary_node
-        .block_on_bash_script(&sleep_command)
-        .unwrap();
-    info!(
-        logger,
-        "{API_BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'",
-        cmd_output.trim(),
-    );
-
     info!(&logger, "Checking API BN health");
     api_boundary_node
         .await_status_is_healthy()

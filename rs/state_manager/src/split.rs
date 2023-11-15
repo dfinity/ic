@@ -73,7 +73,7 @@ pub fn split(
     let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
         Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 
-    let metrics = StateManagerMetrics::new(metrics_registry);
+    let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
     let (cp, state) = read_checkpoint(
         &state_layout,
         &mut thread_pool,

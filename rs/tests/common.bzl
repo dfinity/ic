@@ -373,8 +373,6 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
     "@idl2json",
     "@sns_quill//:sns-quill",
     "@candid//:didc",
-    # TODO: remove once the mainnet ic-recovery contains the commits we need.
-    "//rs/recovery:ic-recovery",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
 ]
 

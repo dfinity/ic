@@ -1,9 +1,9 @@
 //! The module contains implementations of the 'ArtifactClient' trait for all
 //! P2P clients that require consensus over their artifacts.
 
-use ic_interfaces::{
+use ic_interfaces::p2p::{
     artifact_manager::ArtifactClient,
-    artifact_pool::{PriorityFnAndFilterProducer, ValidatedPoolReader},
+    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
 };
 use ic_types::{
     artifact::*,

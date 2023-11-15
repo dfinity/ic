@@ -76,6 +76,7 @@ mod retrieve_eth_guard {
                         ledger_burn_index,
                         from: Principal::anonymous(),
                         from_subaccount: None,
+                        created_at: None,
                     })
             })
         }

@@ -15,6 +15,7 @@ const DEFAULT_WITHDRAWAL_AMOUNT: u128 = 1_100_000_000_000_000;
 const DEFAULT_PRINCIPAL: &str = "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
 const DEFAULT_SUBACCOUNT: [u8; 32] = [0x11; 32];
 const DEFAULT_RECIPIENT_ADDRESS: &str = "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34";
+const DEFAULT_CREATED_AT: u64 = 1699527697000000000;
 
 mod eth_transactions {
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
@@ -1228,6 +1229,7 @@ mod eth_transactions {
                     from_subaccount: Some(Subaccount(
                         crate::state::transactions::tests::DEFAULT_SUBACCOUNT
                     )),
+                    created_at: Some(crate::state::transactions::tests::DEFAULT_CREATED_AT),
                 }
             );
             assert!(!transactions.maybe_reimburse.is_empty());
@@ -1273,6 +1275,7 @@ mod eth_transactions {
                     from_subaccount: Some(Subaccount(
                         crate::state::transactions::tests::DEFAULT_SUBACCOUNT
                     )),
+                    created_at: Some(crate::state::transactions::tests::DEFAULT_CREATED_AT),
                 }
             );
 
@@ -1294,6 +1297,7 @@ mod eth_transactions {
             assert_eq!(
                 reimbursement_request,
                 &ReimbursementRequest {
+                    transaction_hash: Some(receipt.transaction_hash),
                     withdrawal_id: ledger_burn_index,
                     to: candid::Principal::from_str(
                         crate::state::transactions::tests::DEFAULT_PRINCIPAL,
@@ -1485,6 +1489,99 @@ mod eth_transactions {
     }
 }
 
+mod oldest_incomplete_withdrawal_timestamp {
+    use super::*;
+
+    #[test]
+    fn should_return_none_when_no_requests() {
+        let transactions = EthTransactions::new(TransactionNonce::ZERO);
+        assert_eq!(None, transactions.oldest_incomplete_withdrawal_timestamp());
+    }
+
+    #[test]
+    fn should_return_created_at_of_one_request() {
+        let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+        let withdrawal_request = withdrawal_request_with_index(LedgerBurnIndex::new(15));
+        transactions.record_withdrawal_request(withdrawal_request.clone());
+
+        assert_eq!(
+            transactions.oldest_incomplete_withdrawal_timestamp(),
+            withdrawal_request.created_at,
+        );
+    }
+
+    #[test]
+    fn should_return_the_min_of_two_requests() {
+        let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+        transactions.record_withdrawal_request(EthWithdrawalRequest {
+            created_at: Some(10),
+            ..withdrawal_request_with_index(LedgerBurnIndex::new(15))
+        });
+        transactions.record_withdrawal_request(EthWithdrawalRequest {
+            created_at: Some(20),
+            ..withdrawal_request_with_index(LedgerBurnIndex::new(16))
+        });
+
+        assert_eq!(
+            transactions.oldest_incomplete_withdrawal_timestamp(),
+            Some(10),
+        );
+    }
+
+    #[test]
+    fn should_work_for_requests_with_transactions() {
+        let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+        let withdrawal_request = withdrawal_request_with_index(LedgerBurnIndex::new(15));
+        transactions.record_withdrawal_request(withdrawal_request.clone());
+        create_and_record_transaction(&mut transactions, withdrawal_request, transaction_price());
+
+        assert_eq!(
+            transactions.oldest_incomplete_withdrawal_timestamp(),
+            Some(DEFAULT_CREATED_AT),
+        );
+    }
+
+    #[test]
+    fn should_return_the_min_of_requests_in_all_states() {
+        let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+        let first_request = EthWithdrawalRequest {
+            created_at: Some(10),
+            ..withdrawal_request_with_index(LedgerBurnIndex::new(15))
+        };
+        transactions.record_withdrawal_request(first_request.clone());
+        transactions.record_withdrawal_request(EthWithdrawalRequest {
+            created_at: Some(20),
+            ..withdrawal_request_with_index(LedgerBurnIndex::new(16))
+        });
+        create_and_record_transaction(&mut transactions, first_request, transaction_price());
+
+        assert_eq!(
+            transactions.oldest_incomplete_withdrawal_timestamp(),
+            Some(10),
+        );
+    }
+
+    #[test]
+    fn should_ignore_finalized_requests() {
+        let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+        let index = LedgerBurnIndex::new(15);
+        let withdrawal_request = withdrawal_request_with_index(index);
+        transactions.record_withdrawal_request(withdrawal_request.clone());
+        let created_tx = create_and_record_transaction(
+            &mut transactions,
+            withdrawal_request,
+            transaction_price(),
+        );
+        let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+        transactions.record_finalized_transaction(
+            index,
+            transaction_receipt(&signed_tx, TransactionStatus::Success),
+        );
+
+        assert_eq!(transactions.oldest_incomplete_withdrawal_timestamp(), None);
+    }
+}
+
 mod eth_withdrawal_request {
     use crate::numeric::LedgerBurnIndex;
     use crate::state::transactions::tests::withdrawal_request_with_index;
@@ -1672,15 +1769,24 @@ pub mod arbitrary {
             arb_u64_id(),
             arb_principal(),
             proptest::option::of(arb_subaccount()),
+            proptest::option::of(any::<u64>()),
         )
             .prop_map(
-                |(withdrawal_amount, destination, ledger_burn_index, from, from_subaccount)| {
+                |(
+                    withdrawal_amount,
+                    destination,
+                    ledger_burn_index,
+                    from,
+                    from_subaccount,
+                    created_at,
+                )| {
                     EthWithdrawalRequest {
                         withdrawal_amount,
                         destination,
                         ledger_burn_index,
                         from,
                         from_subaccount,
+                        created_at,
                     }
                 },
             )
@@ -1795,6 +1901,7 @@ fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithd
         withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
         from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        created_at: Some(DEFAULT_CREATED_AT),
     }
 }
 

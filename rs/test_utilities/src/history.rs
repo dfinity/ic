@@ -8,7 +8,7 @@ use mockall::*;
 mock! {
     pub IngressHistory {}
 
-    trait IngressHistoryWriter {
+    impl IngressHistoryWriter  for IngressHistory {
         type State = ReplicatedState;
 
         fn set_status(
@@ -19,7 +19,7 @@ mock! {
         );
     }
 
-    trait IngressHistoryReader {
+    impl IngressHistoryReader for  IngressHistory {
         fn get_latest_status(&self) -> Box<dyn Fn(&MessageId) -> IngressStatus>;
 
         #[allow(clippy::type_complexity)]

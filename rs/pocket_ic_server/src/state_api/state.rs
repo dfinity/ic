@@ -5,7 +5,7 @@
 use crate::InstanceId;
 use crate::{Computation, OpId, Operation};
 use base64;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, SubnetId};
 use ic_utils::thread::JoinOnDrop;
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
@@ -164,15 +164,15 @@ pub enum OpOut {
     CanisterId(CanisterId),
     Cycles(u128),
     Bytes(Vec<u8>),
-    Bool(bool),
-    // only stored in the graph, not returned to user
-    Checkpoint(String),
+    SubnetId(SubnetId),
     Error(PocketIcError),
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum PocketIcError {
     CanisterNotFound(CanisterId),
+    BadIngressMessage(String),
+    SubnetNotFound(candid::Principal),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -221,9 +221,14 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::CanisterNotFound(cid)) => {
                 write!(f, "CanisterNotFound({})", cid)
             }
+            OpOut::Error(PocketIcError::BadIngressMessage(msg)) => {
+                write!(f, "BadIngressMessage({})", msg)
+            }
+            OpOut::Error(PocketIcError::SubnetNotFound(sid)) => {
+                write!(f, "SubnetNotFound({})", sid)
+            }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
-            OpOut::Checkpoint(path) => write!(f, "Checkpoint({})", path),
-            OpOut::Bool(val) => write!(f, "BooleanResult({})", val),
+            OpOut::SubnetId(subnet_id) => write!(f, "SubnetId({})", subnet_id),
         }
     }
 }
@@ -429,12 +434,14 @@ where
                     let instance_id = computation.instance_id;
 
                     let bg_task = {
+                        let old_state_label = state_label.clone();
                         let op_id = op_id.clone();
                         let st = self.inner.clone();
                         move || {
                             trace!(
-                                "bg_task::start instance_id={} op_id={}",
+                                "bg_task::start instance_id={} state_label={:?} op_id={}",
                                 instance_id,
+                                old_state_label,
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);

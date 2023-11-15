@@ -28,18 +28,18 @@ this container provides all the necessary environment setup for building and run
 ### Via native Bazel commands
 Within the docker execute:
 ```
-devenv-container$ bazel test --config=systest //rs/tests:basic_health_test
+devenv-container$ bazel test --config=systest //rs/tests/testing_verification:basic_health_test
 ```
 You can provide additional [flags](https://bazel.build/reference/command-line-reference#test) to the Bazel [test](https://bazel.build/reference/command-line-reference#test) command. For example, *--test_tmpdir* would be useful, if you want to keep test artifacts (logs, ssh keys, etc.) after the test execution has finished.
 ### Via `ict` command line tool
 Within the same docker container there is also an [ict](https://github.com/dfinity/ic/tree/master/rs/tests/ict) CLI at your disposal. This tool simplifies your interaction with bazelified system tests and abstracts away the underlying Bazel machinery. In order to run the same `basic_health_test` with the `ict` execute:
 ```
-devenv-container$ ict test //rs/tests:basic_health_test
+devenv-container$ ict test //rs/tests/testing_verification:basic_health_test
 ```
 Upon this invocation `ict` launches the test and also displays the raw Bazel command, which is called under the hood:
 ```
 Raw Bazel command to be invoked: 
-$ bazel test //rs/tests:basic_health_test --config=systest --cache_test_results=no
+$ bazel test //rs/tests/testing_verification:basic_health_test --config=systest --cache_test_results=no
 ```
 You can explore the functionality of the continuously developed `ict` tool by:
 ```
@@ -49,8 +49,8 @@ For example, you can list all existing system test targets via:
 ```
 devenv-container$ ict test list
 The following 60 system_test targets were found:
-//rs/tests:backup_manager_test
-//rs/tests:basic_health_test
+//rs/tests/consensus:backup_manager_test
+//rs/tests/testing_verification:basic_health_test
 ...
 ```
 Had you misspelled the test target name, `ict` will help you with a fuzzy match proposal:
@@ -58,8 +58,8 @@ Had you misspelled the test target name, `ict` will help you with a fuzzy match 
 devenv-container$ ict test almost_basic_test
 There was an error while executing CLI: 'No test target `almost_basic_test` was found: 
 Did you mean any of:
-//rs/tests:basic_health_test
-//rs/tests:ckbtc_minter_basics_test
+//rs/tests/testing_verification:basic_health_test
+//rs/tests/financial_integrations/ckbtc:ckbtc_minter_basics_test
 ...
 ```
 ## Running a cargo-based (legacy) flavour of a system test

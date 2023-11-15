@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/registry",
     "//rs/types/types",
-    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:mockall",
     "@crate_index//:slog",
 ]
 

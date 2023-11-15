@@ -171,6 +171,11 @@ impl<C: HttpRequestEnvelopeContent, T> HttpRequestBuilderGeneric<C, T> {
         self.content.set_ingress_expiry(ingress_expiry_time);
         self
     }
+
+    pub fn with_nonce(mut self, nonce: Vec<u8>) -> Self {
+        self.content.set_nonce(nonce);
+        self
+    }
 }
 
 impl<T> HttpRequestBuilderGeneric<HttpReadState, T> {
@@ -216,6 +221,8 @@ pub trait HttpRequestEnvelopeContent {
 
     fn set_sender(&mut self, sender: Blob);
     fn set_ingress_expiry(&mut self, ingress_expiry: Time);
+
+    fn set_nonce(&mut self, nonce: Vec<u8>);
     fn id(&self) -> MessageId;
     fn into_request(
         self,
@@ -238,6 +245,10 @@ impl HttpRequestEnvelopeContent for HttpCanisterUpdate {
 
     fn set_ingress_expiry(&mut self, ingress_expiry: Time) {
         self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
+    }
+
+    fn set_nonce(&mut self, nonce: Vec<u8>) {
+        self.nonce = Some(Blob(nonce));
     }
 
     fn id(&self) -> MessageId {
@@ -277,6 +288,10 @@ impl HttpRequestEnvelopeContent for HttpUserQuery {
         self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
     }
 
+    fn set_nonce(&mut self, nonce: Vec<u8>) {
+        self.nonce = Some(Blob(nonce));
+    }
+
     fn id(&self) -> MessageId {
         MessageId::from(self.representation_independent_hash())
     }
@@ -312,6 +327,10 @@ impl HttpRequestEnvelopeContent for HttpReadState {
 
     fn set_ingress_expiry(&mut self, ingress_expiry: Time) {
         self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
+    }
+
+    fn set_nonce(&mut self, nonce: Vec<u8>) {
+        self.nonce = Some(Blob(nonce));
     }
 
     fn id(&self) -> MessageId {

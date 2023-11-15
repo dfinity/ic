@@ -21,8 +21,8 @@ RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${b
 
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
-    echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /" | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
+    curl -fsSL "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key" | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/devel_kubic_libcontainers_stable.gpg > /dev/null && \
+    echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     apt -yq update && \
     apt -yqq install --no-install-recommends docker-ce-cli podman buildah zip fuse-overlayfs
 
@@ -54,13 +54,19 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
     chmod 777 /usr/bin/bazel
 
 ARG nvm_version=v0.39.1
+ARG dependency_mgmt_agent_js_node_version=16
+ARG dependency_mgmt_nns_dapp_node_version=18
+ARG dependency_mgmt_default_node_version=19
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
 
 COPY typescript/service-worker/.nvmrc /tmp/sw.npmrc
 RUN . /opt/nvm/nvm.sh && \
-    nvm install $(cat /tmp/sw.npmrc)
+    nvm install $(cat /tmp/sw.npmrc) && \
+    nvm install ${dependency_mgmt_agent_js_node_version} && \
+    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
+    nvm install ${dependency_mgmt_default_node_version}
 
 RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 

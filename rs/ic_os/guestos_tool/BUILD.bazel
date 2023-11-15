@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 DEPENDENCIES = [
     "@crate_index//:anyhow",
@@ -22,5 +22,13 @@ rust_binary(
         "@platforms//os:linux",
     ],
     visibility = ["//visibility:public"],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test",
+    size = "small",
+    srcs = glob(["src/**/*.rs"]),
+    crate = ":guestos_tool",
     deps = DEPENDENCIES,
 )

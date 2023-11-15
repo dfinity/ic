@@ -14,7 +14,7 @@
 //! the download order.
 
 use crate::metrics::DownloadPrioritizerMetrics;
-use ic_interfaces::artifact_manager::ArtifactManager;
+use ic_interfaces::p2p::artifact_manager::ArtifactManager;
 use ic_types::{
     artifact::{ArtifactId, ArtifactPriorityFn, ArtifactTag, Priority},
     chunkable::ChunkId,

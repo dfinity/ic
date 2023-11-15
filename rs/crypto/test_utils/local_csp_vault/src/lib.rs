@@ -53,7 +53,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mock! {
     pub LocalCspVault {}
 
-    pub trait BasicSignatureCspVault {
+    impl BasicSignatureCspVault for LocalCspVault {
         fn sign(
             &self,
             algorithm_id: AlgorithmId,
@@ -64,7 +64,7 @@ mock! {
         fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
     }
 
-    pub trait MultiSignatureCspVault {
+    impl MultiSignatureCspVault for LocalCspVault {
         fn multi_sign(
             &self,
             algorithm_id: AlgorithmId,
@@ -77,7 +77,7 @@ mock! {
         ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
     }
 
-    pub trait ThresholdSignatureCspVault {
+    impl ThresholdSignatureCspVault for LocalCspVault{
         fn threshold_sign(
             &self,
             algorithm_id: AlgorithmId,
@@ -86,7 +86,7 @@ mock! {
         ) -> Result<CspSignature, CspThresholdSignError>;
     }
 
-    pub trait NiDkgCspVault {
+    impl NiDkgCspVault for LocalCspVault {
         fn gen_dealing_encryption_key_pair(
             &self,
             node_id: NodeId,
@@ -124,7 +124,7 @@ mock! {
         ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError>;
     }
 
-    pub trait IDkgProtocolCspVault {
+    impl IDkgProtocolCspVault for LocalCspVault{
         fn idkg_create_dealing(
             &self,
             algorithm_id: AlgorithmId,
@@ -182,7 +182,7 @@ mock! {
         ) -> Result<(), IDkgRetainKeysError>;
     }
 
-    pub trait ThresholdEcdsaSignerCspVault {
+    impl ThresholdEcdsaSignerCspVault for LocalCspVault {
         fn ecdsa_sign_share(
             &self,
             derivation_path: &ExtendedDerivationPath,
@@ -197,11 +197,11 @@ mock! {
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
     }
 
-    pub trait SecretKeyStoreCspVault {
+    impl SecretKeyStoreCspVault for LocalCspVault{
         fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
     }
 
-    pub trait PublicAndSecretKeyStoreCspVault {
+    impl PublicAndSecretKeyStoreCspVault for LocalCspVault{
         fn pks_and_sks_contains(
             &self,
             external_public_keys: ExternalPublicKeys,
@@ -210,7 +210,7 @@ mock! {
         fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError>;
     }
 
-    pub trait TlsHandshakeCspVault: Send + Sync {
+    impl TlsHandshakeCspVault for LocalCspVault {
         fn gen_tls_key_pair(
             &self,
             node: NodeId,
@@ -220,11 +220,11 @@ mock! {
         fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;
     }
 
-    pub trait PublicRandomSeedGenerator {
+    impl PublicRandomSeedGenerator for LocalCspVault {
         fn new_public_seed(&self) -> Result<Seed, PublicRandomSeedGeneratorError>;
     }
 
-    pub trait PublicKeyStoreCspVault {
+    impl PublicKeyStoreCspVault for LocalCspVault {
         fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
         fn current_node_public_keys_with_timestamps(

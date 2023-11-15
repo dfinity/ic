@@ -18,7 +18,6 @@ use wasmtime::{
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::embedders::MeteringType;
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
@@ -455,7 +454,6 @@ impl WasmtimeEmbedder {
             write_barrier: self.config.feature_flags.write_barrier,
             wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
             modification_tracking,
-            metering_type: self.config.metering_type,
             dirty_page_overhead: self.config.dirty_page_overhead,
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: self.config.stable_memory_dirty_page_limit,
@@ -700,7 +698,6 @@ pub struct WasmtimeInstance {
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
     modification_tracking: ModificationTracking,
-    metering_type: MeteringType,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]
     stable_memory_dirty_page_limit: ic_types::NumPages,
@@ -882,15 +879,13 @@ impl WasmtimeInstance {
         self.instance_stats.mprotect_count += access.mprotect_count;
         self.instance_stats.copy_page_count += access.copy_page_count;
 
-        if let MeteringType::New = self.metering_type {
-            // charge for dirty heap pages
-            let x = self.instruction_counter().saturating_sub_unsigned(
-                self.dirty_page_overhead
-                    .get()
-                    .saturating_mul(access.dirty_pages.len() as u64),
-            );
-            self.set_instruction_counter(x);
-        }
+        // charge for dirty heap pages
+        let x = self.instruction_counter().saturating_sub_unsigned(
+            self.dirty_page_overhead
+                .get()
+                .saturating_mul(access.dirty_pages.len() as u64),
+        );
+        self.set_instruction_counter(x);
 
         let stable_memory_dirty_pages: Vec<_> = match self.wasm_native_stable_memory {
             FlagStatus::Enabled => {

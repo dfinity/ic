@@ -7,7 +7,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    artifact_pool::ChangeSetProducer, canister_http::*, consensus_pool::ConsensusPoolCache,
+    canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::ChangeSetProducer,
 };
 use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
@@ -399,13 +399,12 @@ pub mod test {
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_consensus_utils::crypto::SignVerify;
-    use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
-    use ic_test_utilities::MockTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{
         crypto::{CryptoHash, CryptoHashOf},
@@ -420,7 +419,7 @@ pub mod test {
         pub NonBlockingChannel<Request: 'static> {
         }
 
-        pub trait NonBlockingChannel<Request> {
+        impl<Request> NonBlockingChannel<Request> for NonBlockingChannel<Request> {
             type Response = CanisterHttpResponse;
 
             fn send(&self, request: Request) -> Result<(), SendError<Request>>;
@@ -515,10 +514,9 @@ pub mod test {
 
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                canister_http_pool.apply_changes(
-                    &MockTimeSource::new(),
-                    vec![CanisterHttpChangeAction::AddToValidated(share, content)],
-                );
+                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+                    share, content,
+                )]);
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
                     shim,
@@ -694,10 +692,9 @@ pub mod test {
                     signature,
                 };
 
-                canister_http_pool.apply_changes(
-                    &MockTimeSource::new(),
-                    vec![CanisterHttpChangeAction::AddToValidated(share, content)],
-                );
+                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+                    share, content,
+                )]);
 
                 // Now that there are shares in the pool, we should be able to
                 // call generate_change_set again without send being called.

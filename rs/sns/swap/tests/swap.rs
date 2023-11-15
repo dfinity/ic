@@ -4283,7 +4283,6 @@ fn test_derived_state() {
             has_created_neuron_recipes: Some(false),
         },
     };
-
     swap.update_derived_fields();
     let final_nf_participation_icp_e8s = nf_matching_fn
         .apply_and_rescale_to_icp_e8s(final_direct_participation_icp_e8s)

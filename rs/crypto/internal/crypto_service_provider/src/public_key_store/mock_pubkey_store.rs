@@ -13,7 +13,7 @@ mock! {
     /// Mock PublicKeyStore object for testing interactions
     pub PublicKeyStore {}
 
-    pub trait PublicKeyStore {
+    impl PublicKeyStore for PublicKeyStore {
         fn set_once_node_signing_pubkey(
             &mut self,
             key: PublicKey,

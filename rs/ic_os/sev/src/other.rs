@@ -28,7 +28,7 @@ where
     }
 }
 
-/// For non linux version of guest, return None as
+/// For non linux version of guest, return None
 pub fn get_chip_id() -> Result<Vec<u8>, SnpError> {
     Err(SnpError::SnpNotEnabled {
         description: "Sev-snp is only available on linux".into(),

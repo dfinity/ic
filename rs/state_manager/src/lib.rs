@@ -91,6 +91,11 @@ const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_c
 const CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS: &str =
     "state_sync_chunk_id_usage_nearing_limits";
 
+/// Critical error tracking broken soft invariants encountered upon checkpoint loading.
+/// See note [Replicated State Invariants].
+pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
+    "state_manager_checkpoint_soft_invariant_broken";
+
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
@@ -160,16 +165,18 @@ pub struct StateSyncMetrics {
 
 #[derive(Clone)]
 pub struct CheckpointMetrics {
+    log: ReplicaLogger,
     make_checkpoint_step_duration: HistogramVec,
     load_checkpoint_step_duration: HistogramVec,
     load_canister_step_duration: HistogramVec,
+    load_checkpoint_soft_invariant_broken: IntCounter,
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
     page_map_flush_skips: IntCounter,
 }
 
 impl CheckpointMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, replica_logger: ReplicaLogger) -> Self {
         let make_checkpoint_step_duration = metrics_registry.histogram_vec(
             "state_manager_checkpoint_steps_duration_seconds",
             "Duration of make_checkpoint steps in seconds.",
@@ -193,6 +200,9 @@ impl CheckpointMetrics {
             &["step"],
         );
 
+        let load_checkpoint_soft_invariant_broken =
+            metrics_registry.error_counter(CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN);
+
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
             "Duration to execute requests to Tip handling thread in seconds.",
@@ -211,9 +221,11 @@ impl CheckpointMetrics {
         );
 
         Self {
+            log: replica_logger,
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
             load_canister_step_duration,
+            load_checkpoint_soft_invariant_broken,
             tip_handler_request_duration,
             page_map_flushes,
             page_map_flush_skips,
@@ -237,7 +249,7 @@ impl CheckpointMetrics {
 // very first metric update should be visible to Prometheus.
 
 impl StateManagerMetrics {
-    fn new(metrics_registry: &MetricsRegistry) -> Self {
+    fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
         let checkpoint_op_duration = metrics_registry.histogram_vec(
             "state_manager_checkpoint_op_duration_seconds",
             "Duration of checkpoint operations in seconds.",
@@ -358,7 +370,7 @@ impl StateManagerMetrics {
             state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
             states_metadata_pbuf_size,
-            checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
+            checkpoint_metrics: CheckpointMetrics::new(metrics_registry, log),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
             tip_handler_queue_length,
             decode_slice_status,
@@ -1327,7 +1339,7 @@ impl StateManagerImpl {
         starting_height: Option<Height>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
-        let metrics = StateManagerMetrics::new(metrics_registry);
+        let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
         info!(
             log,
             "Using path '{}' to manage local state",

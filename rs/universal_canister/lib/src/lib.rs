@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("1bda36e3e50308a2762f4ede8a3de9b9f7444efd6b21762820195d68776d0971");
+    hex!("93c8bebd7e74cd67f60bb9ffebc7a82eaea8d60053ec967a7f5a225e54144a95");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -107,6 +107,11 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn blob_length(mut self) -> Self {
+        self.0.push(Ops::BlobLength as u8);
+        self
+    }
+
     pub fn reply(mut self) -> Self {
         self.0.push(Ops::Reply as u8);
         self
@@ -126,6 +131,18 @@ impl PayloadBuilder {
         self.0.push(Ops::PushBytes as u8);
         self.0.extend_from_slice(&(data.len() as u32).to_le_bytes());
         self.0.extend_from_slice(data);
+        self
+    }
+
+    pub fn push_equal_bytes(mut self, byte: u32, length: u32) -> Self {
+        self = self.push_int(byte);
+        self = self.push_int(length);
+        self.0.push(Ops::PushEqualBytes as u8);
+        self
+    }
+
+    pub fn concat(mut self) -> Self {
+        self.0.push(Ops::Concat as u8);
         self
     }
 
@@ -277,7 +294,7 @@ impl PayloadBuilder {
         self = self.push_bytes(call_args.on_reply.as_slice());
         self = self.push_bytes(call_args.on_reject.as_slice());
         self.0.push(Ops::CallNew as u8);
-        self = self.push_bytes(call_args.other_side.as_slice());
+        self.0.extend_from_slice(call_args.other_side.as_slice());
         self.0.push(Ops::CallDataAppend as u8);
         if let Some(on_cleanup) = call_args.on_cleanup {
             self = self.push_bytes(on_cleanup.as_slice());
@@ -354,6 +371,21 @@ impl PayloadBuilder {
     pub fn set_global_data_from_stack(mut self) -> Self {
         self.0.push(Ops::SetGlobal as u8);
         self
+    }
+
+    /// Succintly encode the following code:
+    /// `self.push_bytes(&wasm().push_bytes(&vec![42; length as usize]).blob_length().reply_int().build())`
+    /// The code pushes a payload to be executed by a callee onto the caller's stack.
+    /// The payload pushes a blob of a provided length onto the callee's stack and replies with its length to the caller.
+    /// Such a payload is useful in tests exercising inter-canister call size limits
+    /// since its encoding passed to the caller is succinct, but when interpreted by the caller,
+    /// it expands to an inter-canister call argument for the callee of an arbitrary size.
+    pub fn push_bytes_wasm_push_bytes_and_reply(mut self, length: u32) -> Self {
+        self = self.push_bytes(&[Ops::PushBytes as u8]);
+        self = self.push_bytes(&length.to_le_bytes()).concat();
+        self = self.push_equal_bytes(42, length).concat();
+        self.push_bytes(&wasm().blob_length().reply_int().build())
+            .concat()
     }
 
     /// Get data (stored in a global variable) from the heap.
@@ -586,7 +618,9 @@ pub trait CallInterface {
     where
         Self: std::marker::Sized,
     {
-        self.call().args.other_side = payload.into();
+        self.call().args.other_side = PayloadBuilder::default()
+            .push_bytes(&payload.into())
+            .build();
         self
     }
 
@@ -636,10 +670,14 @@ impl From<PayloadBuilder> for Vec<u8> {
 /// Arguments to be passed into `call_new`.
 #[derive(Clone)]
 pub struct CallArgs {
-    pub on_reply: Vec<u8>,
-    pub on_reject: Vec<u8>,
-    pub other_side: Vec<u8>,
-    pub on_cleanup: Option<Vec<u8>>,
+    /// Instructions to be exected by the caller upon reply.
+    on_reply: Vec<u8>,
+    /// Instructions to be exected by the caller upon reject.
+    on_reject: Vec<u8>,
+    /// Instructions to be exected by the caller to produce the payload to be executed by the callee.
+    other_side: Vec<u8>,
+    /// Instructions to be exected by the caller upon cleanup.
+    on_cleanup: Option<Vec<u8>>,
 }
 
 impl Default for CallArgs {
@@ -669,13 +707,22 @@ impl CallArgs {
         self
     }
 
+    // Computes instructions to be exected by the caller to produce the provided payload to be executed by the callee.
     pub fn other_side<C: Into<Vec<u8>>>(mut self, callback: C) -> Self {
-        self.other_side = callback.into();
+        self.other_side = PayloadBuilder::default()
+            .push_bytes(&callback.into())
+            .build();
+        self
+    }
+
+    // Stores provided instructions to be exected by the caller to produce the payload to be executed by the callee.
+    pub fn eval_other_side<C: Into<Vec<u8>>>(mut self, ops_bytes: C) -> Self {
+        self.other_side = ops_bytes.into();
         self
     }
 
     // The default on_reply callback.
-    // Replies to the caller with whatever arguments passed to it.
+    // Replies to the caller of the caller with whatever arguments passed to it.
     fn default_on_reply() -> Vec<u8> {
         PayloadBuilder::default()
             .message_payload()
@@ -685,7 +732,7 @@ impl CallArgs {
     }
 
     // The default on_reject callback.
-    // Replies to the caller with the reject code.
+    // Replies to the caller of the caller with the reject code.
     fn default_on_reject() -> Vec<u8> {
         PayloadBuilder::default()
             .reject_code()
@@ -694,10 +741,10 @@ impl CallArgs {
             .build()
     }
 
-    // The default payload to be executed by the callee.
-    // Replies with a message stating who the callee and the caller is.
+    // Computes instructions to be executed by the caller to produce the default payload to be executed by the callee.
+    // The default payload is to reply with a message stating who the callee and the caller is.
     fn default_other_side() -> Vec<u8> {
-        PayloadBuilder::default()
+        let callback = PayloadBuilder::default()
             .push_bytes(b"Hello ")
             .reply_data_append()
             .caller()
@@ -707,7 +754,8 @@ impl CallArgs {
             .self_()
             .reply_data_append()
             .reply()
-            .build()
+            .build();
+        PayloadBuilder::default().push_bytes(&callback).build()
     }
 }
 

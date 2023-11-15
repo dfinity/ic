@@ -9,7 +9,7 @@ use mockall::*;
 mock! {
     pub SecretKeyStore {}
 
-    pub trait SecretKeyStore {
+    impl SecretKeyStore for SecretKeyStore {
         fn insert(&mut self, id: KeyId, key: CspSecretKey, scope: Option<Scope>) -> Result<(), SecretKeyStoreInsertionError>;
         fn insert_or_replace(&mut self, id: KeyId, key: CspSecretKey, scope: Option<Scope>) -> Result<(), SecretKeyStoreWriteError>;
         fn get(&self, id: &KeyId) -> Option<CspSecretKey>;

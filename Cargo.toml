@@ -125,12 +125,17 @@ members = [
   "rs/http_endpoints/metrics",
   "rs/http_utils",
   "rs/ic_os/deterministic_ips",
+  "rs/ic_os/config",
   "rs/ic_os/guestos_tool",
+  "rs/ic_os/hostos_tool",
   "rs/ic_os/launch-single-vm",
+  "rs/ic_os/network",
   "rs/ic_os/setupos-inject-configuration",
   "rs/ic_os/partition_tools",
   "rs/ic_os/setupos-disable-checks",
+  "rs/ic_os/setupos_tool",
   "rs/ic_os/sev",
+  "rs/ic_os/utils",
   "rs/ic_os/snptool",
   "rs/ic_os/vsock/guest",
   "rs/ic_os/vsock/host",
@@ -143,6 +148,7 @@ members = [
   "rs/interfaces/adapter_client",
   "rs/interfaces/certified_stream_store",
   "rs/interfaces/certified_stream_store/mocks",
+  "rs/interfaces/mocks",
   "rs/interfaces/registry",
   "rs/interfaces/registry/mocks",
   "rs/interfaces/state_manager",
@@ -436,6 +442,7 @@ k256 = { version = "0.13", default_features = false, features = [
   "precomputed-tables",
   "std",
 ] }
+mockall = "0.11.4"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 nix = "0.24.3"
@@ -445,6 +452,7 @@ p256 = { version = "0.13", default_features = false, features = [
   "pem",
   "pkcs8",
 ] }
+ping = "0.5.0"
 pkcs8 = "0.10.2"
 pretty_assertions = "1.4.0"
 prometheus = { version = "0.13.3", features = ["process"] }
@@ -464,6 +472,7 @@ simple_asn1 = "0.6.2"
 strum = { version = "0.24.1", features = ["derive"] }
 strum_macros = "0.24.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.32.0", features = ["full"] }
 tonic = "0.9.2"
 tonic-build = "0.9.2"

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::DynamicObject;
 use kube::api::{Patch, PatchParams};
 use kube::Api;
@@ -74,7 +75,11 @@ impl DvInfo {
     }
 }
 
-pub async fn create_datavolume(api: &Api<DynamicObject>, dvinfo: &DvInfo) -> Result<()> {
+pub async fn create_datavolume(
+    api: &Api<DynamicObject>,
+    dvinfo: &DvInfo,
+    owner: OwnerReference,
+) -> Result<()> {
     let DvInfo {
         name,
         source,
@@ -94,7 +99,8 @@ pub async fn create_datavolume(api: &Api<DynamicObject>, dvinfo: &DvInfo) -> Res
         .replace("{type}", content_type)
         .replace("{quantity}", quantity);
 
-    let data: serde_json::Value = serde_yaml::from_str(&yaml)?;
+    let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
+    data.metadata.owner_references = vec![owner].into();
     let response = api
         .patch(name, &PatchParams::apply("tnet"), &Patch::Apply(data))
         .await?;

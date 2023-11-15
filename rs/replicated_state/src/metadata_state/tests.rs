@@ -31,6 +31,13 @@ use maplit::btreemap;
 use proptest::prelude::*;
 use std::{sync::Arc, time::Duration};
 
+struct DummyMetrics;
+impl CheckpointLoadingMetrics for DummyMetrics {
+    fn raise_critical_error(&self, _: String) {
+        // Do nothing.
+    }
+}
+
 lazy_static! {
     static ref LOCAL_CANISTER: CanisterId = CanisterId::from(0x34);
     static ref REMOTE_CANISTER: CanisterId = CanisterId::from(0x134);
@@ -228,7 +235,12 @@ fn streams_stats_after_deserialization() {
 
     let system_metadata_proto: ic_protobuf::state::system_metadata::v1::SystemMetadata =
         (&system_metadata).into();
-    let deserialized_system_metadata = system_metadata_proto.try_into().unwrap();
+    let deserialized_system_metadata = (
+        system_metadata_proto,
+        &DummyMetrics as &dyn CheckpointLoadingMetrics,
+    )
+        .try_into()
+        .unwrap();
 
     // Ensure that the deserialized `SystemMetadata` is equal to the original.
     assert_eq!(system_metadata, deserialized_system_metadata);
@@ -448,12 +460,22 @@ fn roundtrip_encoding() {
     // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
     let mut proto = pb::SystemMetadata::from(&system_metadata);
     proto.canister_allocation_ranges = None;
-    assert_eq!(system_metadata, proto.try_into().unwrap());
+    assert_eq!(
+        system_metadata,
+        (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
+            .try_into()
+            .unwrap()
+    );
 
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
-        assert_eq!(*system_metadata, proto.try_into().unwrap());
+        assert_eq!(
+            *system_metadata,
+            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
+                .try_into()
+                .unwrap()
+        );
     }
 
     // Set `canister_allocation_ranges`, but not `last_generated_canister_id`.
@@ -1450,6 +1472,15 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     );
 }
 
+impl From<(u64, u64)> for BlockmakerStats {
+    fn from(item: (u64, u64)) -> Self {
+        Self {
+            blocks_proposed_total: item.0,
+            blocks_not_proposed_total: item.1,
+        }
+    }
+}
+
 #[test]
 fn blockmaker_metrics_time_series_check_observe_works() {
     let mut metrics = BlockmakerMetricsTimeSeries::default();
@@ -1468,16 +1499,8 @@ fn blockmaker_metrics_time_series_check_observe_works() {
         },
     );
     let snapshot_1 = BlockmakerStatsMap {
-        node_stats: btreemap! {
-            test_id_1 => BlockmakerStats {
-                blocks_proposed_total: 1,
-                blocks_not_proposed_total: 0,
-            }
-        },
-        subnet_stats: BlockmakerStats {
-            blocks_proposed_total: 1,
-            blocks_not_proposed_total: 0,
-        },
+        node_stats: btreemap! { test_id_1 => (1, 0).into() },
+        subnet_stats: (1, 0).into(),
     };
     assert_eq!(
         metrics.metrics_since(batch_time).collect::<Vec<_>>(),
@@ -1495,19 +1518,10 @@ fn blockmaker_metrics_time_series_check_observe_works() {
     );
     let snapshot_2 = BlockmakerStatsMap {
         node_stats: btreemap! {
-            test_id_1 => BlockmakerStats {
-                blocks_proposed_total: 2,
-                blocks_not_proposed_total: 0,
-            },
-            test_id_2 => BlockmakerStats {
-                blocks_proposed_total: 0,
-                blocks_not_proposed_total: 1,
-            }
+            test_id_1 => (2, 0).into(),
+            test_id_2 => (0, 1).into(),
         },
-        subnet_stats: BlockmakerStats {
-            blocks_proposed_total: 2,
-            blocks_not_proposed_total: 1,
-        },
+        subnet_stats: (2, 1).into(),
     };
     assert_eq!(
         metrics.metrics_since(batch_time).collect::<Vec<_>>(),
@@ -1526,23 +1540,11 @@ fn blockmaker_metrics_time_series_check_observe_works() {
     );
     let snapshot_3 = BlockmakerStatsMap {
         node_stats: btreemap! {
-            test_id_1 => BlockmakerStats {
-                blocks_proposed_total: 2,
-                blocks_not_proposed_total: 0,
-            },
-            test_id_2 => BlockmakerStats {
-                blocks_proposed_total: 1,
-                blocks_not_proposed_total: 1,
-            },
-            test_id_3 => BlockmakerStats {
-                blocks_proposed_total: 0,
-                blocks_not_proposed_total: 1,
-            }
+            test_id_1 => (2, 0).into(),
+            test_id_2 => (1, 1).into(),
+            test_id_3 => (0, 1).into(),
         },
-        subnet_stats: BlockmakerStats {
-            blocks_proposed_total: 3,
-            blocks_not_proposed_total: 2,
-        },
+        subnet_stats: (3, 2).into(),
     };
     assert_eq!(
         metrics.metrics_since(batch_time).collect::<Vec<_>>(),
@@ -1556,6 +1558,16 @@ fn blockmaker_metrics_time_series_check_observe_works() {
             .metrics_since(even_later_batch_time)
             .collect::<Vec<_>>(),
         vec![(&even_later_batch_time, &snapshot_3)],
+    );
+
+    // Check `metrics_since()` returns the whole map when used with the time of
+    // the first observation.
+    assert_eq!(
+        metrics.0,
+        metrics
+            .metrics_since(batch_time)
+            .map(|(time, stats)| (*time, stats.clone()))
+            .collect::<BTreeMap<_, _>>()
     );
 
     // Check `metrics_since()` returns the same (all) snapshots for a UNIX_EPOCH,
@@ -1587,12 +1599,13 @@ fn blockmaker_metrics_time_series_check_observe_works() {
 }
 
 #[test]
-fn blockmaker_metrics_time_series_observe_prunes_when_queue_reaches_full_length() {
+fn blockmaker_metrics_time_series_observe_prunes() {
     let mut metrics = BlockmakerMetricsTimeSeries::default();
-    let mut batch_time = Time::from_nanos_since_unix_epoch(0);
+    let batch_time = Time::from_nanos_since_unix_epoch(0);
 
     let test_id_1 = node_test_id(0);
     let test_id_2 = node_test_id(1);
+    let test_id_3 = node_test_id(2);
 
     // Observe `test_id_1` as blockmaker.
     metrics.observe(
@@ -1603,45 +1616,74 @@ fn blockmaker_metrics_time_series_observe_prunes_when_queue_reaches_full_length(
         },
     );
 
-    // Observe only `test_id_2` on new days until capacity is exceeded. During the last
-    // observation, the metrics are at capacity and pruning of 'dead' node IDs will be
-    // triggered.
-    for _ in metrics.0.len()..=BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
-        batch_time += Duration::from_secs(3600 * 24);
-        metrics.observe(
-            batch_time,
-            &BlockmakerMetrics {
-                blockmaker: test_id_2,
-                failed_blockmakers: vec![],
-            },
-        );
-    }
-
-    // `test_id_1` should not be present in the latest snapshot.
-    assert!(!metrics
-        .metrics_since(batch_time)
-        .next()
-        .map(|(_, stats)| stats)
-        .unwrap()
-        .node_stats
-        .contains_key(&test_id_1));
-
-    // Observe `test_id_2` `BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS` times on new days
-    // to purge `test_id_1` from the metrics.
-    for _ in 0..BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
-        batch_time += Duration::from_secs(3600 * 24);
-        metrics.observe(
-            batch_time,
-            &BlockmakerMetrics {
-                blockmaker: test_id_2,
-                failed_blockmakers: vec![],
-            },
-        );
-    }
-
-    // Observe `test_id_1` again. It should be added as a new node with new stats.
+    // Observe `test_id_2` as blockmaker 24 hours later.
+    let later_batch_time_1 = batch_time + Duration::from_secs(3600 * 24);
     metrics.observe(
-        batch_time,
+        later_batch_time_1,
+        &BlockmakerMetrics {
+            blockmaker: test_id_2,
+            failed_blockmakers: vec![],
+        },
+    );
+
+    assert_eq!(
+        metrics
+            .metrics_since(batch_time)
+            .map(|(_, stats)| stats)
+            .collect::<Vec<_>>(),
+        vec![
+            &BlockmakerStatsMap {
+                node_stats: btreemap! { test_id_1 => (1, 0).into() },
+                subnet_stats: (1, 0).into(),
+            },
+            &BlockmakerStatsMap {
+                node_stats: btreemap! {
+                    test_id_1 => (1, 0).into(),
+                    test_id_2 => (1, 0).into(),
+                },
+                subnet_stats: (2, 0).into(),
+            }
+        ]
+    );
+
+    // There are now observations spanning more than 24 hours. If we observe `test_id_3`
+    // another 24 hourse later, `test_id_1` should get pruned.
+    let later_batch_time_2 = later_batch_time_1 + Duration::from_secs(3600 * 24);
+    metrics.observe(
+        later_batch_time_2,
+        &BlockmakerMetrics {
+            blockmaker: test_id_3,
+            failed_blockmakers: vec![],
+        },
+    );
+
+    assert_eq!(
+        metrics
+            .metrics_since(batch_time)
+            .map(|(_, stats)| stats)
+            .collect::<Vec<_>>(),
+        vec![
+            &BlockmakerStatsMap {
+                node_stats: btreemap! { test_id_1 => (1, 0).into() },
+                subnet_stats: (1, 0).into(),
+            },
+            &BlockmakerStatsMap {
+                node_stats: btreemap! { test_id_2 => (1, 0).into() },
+                subnet_stats: (2, 0).into(),
+            },
+            &BlockmakerStatsMap {
+                node_stats: btreemap! {
+                    test_id_2 => (1, 0).into(),
+                    test_id_3 => (1, 0).into(),
+                },
+                subnet_stats: (3, 0).into(),
+            }
+        ]
+    );
+
+    // If we observe `test_id_1`, it should be reintroduced with its stats restarted.
+    metrics.observe(
+        later_batch_time_2,
         &BlockmakerMetrics {
             blockmaker: test_id_1,
             failed_blockmakers: vec![],
@@ -1650,41 +1692,215 @@ fn blockmaker_metrics_time_series_observe_prunes_when_queue_reaches_full_length(
     assert_eq!(
         metrics
             .metrics_since(batch_time)
-            .next()
             .map(|(_, stats)| stats)
-            .unwrap()
-            .node_stats
-            .get(&test_id_1),
-        Some(&BlockmakerStats {
-            blocks_proposed_total: 1,
-            blocks_not_proposed_total: 0,
-        })
+            .collect::<Vec<_>>(),
+        vec![
+            &BlockmakerStatsMap {
+                node_stats: btreemap! { test_id_1 => (1, 0).into() },
+                subnet_stats: (1, 0).into(),
+            },
+            &BlockmakerStatsMap {
+                node_stats: btreemap! { test_id_2 => (1, 0).into() },
+                subnet_stats: (2, 0).into(),
+            },
+            &BlockmakerStatsMap {
+                node_stats: btreemap! {
+                    test_id_1 => (1, 0).into(),
+                    test_id_2 => (1, 0).into(),
+                    test_id_3 => (1, 0).into(),
+                },
+                subnet_stats: (4, 0).into(),
+            }
+        ]
     );
 
-    // Observe `test_id_1` on a new day. This will trigger pruning of 'dead' node IDs.
-    // Node IDs that are found in the last snapshot, but not the first one should be
-    // retained. Therefore `test_id_1` should still be here and updated accordingly.
-    batch_time += Duration::from_secs(3600 * 24);
+    // The presence of `test_id_1` before its pruning should not influence the restarted stats.
+    // So if we observe it another 24 hours later, it should still there with the new observations
+    // aggregated.
+    let later_batch_time_3 = later_batch_time_2 + Duration::from_secs(3600 * 24);
     metrics.observe(
-        batch_time,
+        later_batch_time_3,
         &BlockmakerMetrics {
             blockmaker: test_id_1,
             failed_blockmakers: vec![],
         },
     );
+    // The final check includes the timestamps.
     assert_eq!(
-        metrics
-            .metrics_since(batch_time)
-            .next()
-            .map(|(_, stats)| stats)
-            .unwrap()
-            .node_stats
-            .get(&test_id_1),
-        Some(&BlockmakerStats {
-            blocks_proposed_total: 2,
-            blocks_not_proposed_total: 0,
-        })
+        metrics.metrics_since(batch_time).collect::<Vec<_>>(),
+        vec![
+            (
+                &batch_time,
+                &BlockmakerStatsMap {
+                    node_stats: btreemap! { test_id_1 => (1, 0).into() },
+                    subnet_stats: (1, 0).into(),
+                },
+            ),
+            (
+                &later_batch_time_1,
+                &BlockmakerStatsMap {
+                    node_stats: btreemap! { test_id_2 => (1, 0).into() },
+                    subnet_stats: (2, 0).into(),
+                },
+            ),
+            (
+                &later_batch_time_2,
+                &BlockmakerStatsMap {
+                    node_stats: btreemap! {
+                        test_id_1 => (1, 0).into(),
+                        test_id_3 => (1, 0).into(),
+                    },
+                    subnet_stats: (4, 0).into(),
+                },
+            ),
+            (
+                &later_batch_time_3,
+                &BlockmakerStatsMap {
+                    node_stats: btreemap! {
+                        test_id_1 => (2, 0).into(),
+                        test_id_3 => (1, 0).into(),
+                    },
+                    subnet_stats: (5, 0).into(),
+                },
+            )
+        ]
     );
+}
+
+struct BlockmakerMetricsFixture;
+impl BlockmakerMetricsFixture {
+    fn blockmaker_stats_map() -> BlockmakerStatsMap {
+        BlockmakerStatsMap {
+            node_stats: btreemap! {
+                node_test_id(0) => (1, 0).into(),
+                node_test_id(1) => (1, 0).into(),
+            },
+            subnet_stats: (2, 0).into(),
+        }
+    }
+
+    fn new_with_multiple_samples_per_day() -> BlockmakerMetricsTimeSeries {
+        let mut metrics = BlockmakerMetricsTimeSeries::default();
+        let batch_time = Time::from_nanos_since_unix_epoch(0);
+
+        // Insert two observations within 10 minutes violating the invariant.
+        metrics.0.insert(batch_time, Self::blockmaker_stats_map());
+        metrics.0.insert(
+            batch_time + Duration::from_secs(10),
+            Self::blockmaker_stats_map(),
+        );
+        metrics
+    }
+
+    fn new_with_too_many_observations() -> BlockmakerMetricsTimeSeries {
+        let mut metrics = BlockmakerMetricsTimeSeries::default();
+        let batch_time = Time::from_nanos_since_unix_epoch(0);
+
+        for i in 0..BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS + 1 {
+            metrics.0.insert(
+                batch_time + Duration::from_secs(i as u64 * 24 * 3600),
+                Self::blockmaker_stats_map(),
+            );
+        }
+        metrics
+    }
+
+    fn new_with_multiple_samples_per_day_and_max_num_samples() -> BlockmakerMetricsTimeSeries {
+        let mut metrics = BlockmakerMetricsFixture::new_with_multiple_samples_per_day();
+        let batch_time = Time::from_nanos_since_unix_epoch(0);
+
+        for i in 1..BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS - 1 {
+            metrics.0.insert(
+                batch_time + Duration::from_secs(i as u64 * 24 * 3600),
+                Self::blockmaker_stats_map(),
+            );
+        }
+
+        assert_eq!(
+            metrics.0.len(),
+            BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS
+        );
+
+        metrics
+    }
+}
+
+fn check_invariant_self_heals(mut metrics: BlockmakerMetricsTimeSeries, error: &str) {
+    let batch_time = Time::from_nanos_since_unix_epoch(0);
+
+    // Make sure the invariant is broken
+    assert_matches!(metrics.check_soft_invariants(), Err(err) if err.contains(error));
+
+    // The next observation should restore the soft invariant.
+    metrics.observe(
+        batch_time + Duration::from_secs(u64::MAX / 2),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(0),
+            failed_blockmakers: vec![],
+        },
+    );
+
+    assert!(metrics.check_soft_invariants().is_ok());
+}
+
+#[test]
+fn blockmaker_metrics_soft_invariant_multiple_samples_self_heals() {
+    check_invariant_self_heals(
+        BlockmakerMetricsFixture::new_with_multiple_samples_per_day_and_max_num_samples(),
+        "Found two timestamps",
+    );
+}
+
+#[test]
+fn blockmaker_metrics_soft_invariant_size_limit_self_heals() {
+    check_invariant_self_heals(
+        BlockmakerMetricsFixture::new_with_too_many_observations(),
+        "exceeds limit",
+    );
+}
+
+fn do_roundtrip_and_check_error(metrics: &BlockmakerMetricsTimeSeries, expected_error: &str) {
+    use std::sync::Mutex;
+
+    struct TestMetrics(Arc<Mutex<String>>);
+    impl CheckpointLoadingMetrics for TestMetrics {
+        fn raise_critical_error(&self, error: String) {
+            *self.0.lock().unwrap() = error;
+        }
+    }
+
+    let test_metrics = TestMetrics(Arc::new(Mutex::new("".to_string())));
+
+    // Currently the String stored in `TestMetrics` is still empty
+    assert!(test_metrics.0.lock().unwrap().len() == 0);
+
+    let pb_stats = pb_metadata::BlockmakerMetricsTimeSeries::from(metrics);
+    let deserialized_stats = BlockmakerMetricsTimeSeries::try_from((
+        pb_stats,
+        &test_metrics as &dyn CheckpointLoadingMetrics,
+    ))
+    .unwrap();
+
+    // But the invariant check done in deserialization will set the error message.
+    assert!(test_metrics.0.lock().unwrap().contains(expected_error));
+
+    // Assert the the (de)serialization roundtrip works as expected despite
+    // the invariant violation.
+    assert_eq!(metrics, &deserialized_stats);
+}
+
+#[test]
+fn blockmaker_metrics_soft_invariant_multiple_samples_bumps_critical_error_counter() {
+    let metrics = BlockmakerMetricsFixture::new_with_multiple_samples_per_day();
+    assert_matches!(metrics.check_soft_invariants(), Err(err) if err.contains("Found two timestamps"));
+    do_roundtrip_and_check_error(&metrics, "Found two timestamps");
+}
+
+#[test]
+fn blockmaker_metrics_soft_invariant_size_limit_bumps_critical_error_counter() {
+    let metrics = BlockmakerMetricsFixture::new_with_too_many_observations();
+    assert_matches!(metrics.check_soft_invariants(), Err(err) if err.contains("exceeds limit"));
+    do_roundtrip_and_check_error(&metrics, "exceeds limit");
 }
 
 // The compiler doesn't see the use of these constants inside the `proptest!` macro.
@@ -1696,14 +1912,14 @@ const MAX_NUM_DAYS_NANOS: u64 = MAX_NUM_DAYS as u64 * 24 * 3600 * 1_000_000_000;
 const MAX_NODE_ID: u64 = 20;
 
 proptest! {
-    /// Checks `check_runtime_invariants()` does not panic when observing random node IDs
-    /// at random mostly sorted and slightly permuted timestamps.
+    /// Checks that `check_soft_invariants()` does not return an error when observing random
+    /// node IDs at random mostly sorted and slightly permuted timestamps.
     /// Such invariants are checked indirectly at the bottom of `observe()` where
-    /// `check_runtime_invariants()` is called. There is an additional call to
-    /// `check_runtime_invariants()` at the end of the test to ensure the test doesn't
+    /// `check_soft_invariants()` is called. There is an additional call to
+    /// `check_soft_invariants()` at the end of the test to ensure the test doesn't
     /// silently pass when the production code is changed.
     #[test]
-    fn blockmaker_metrics_check_runtime_invariants(
+    fn blockmaker_metrics_check_soft_invariants(
         (mut time_u64, node_ids_u64) in (0..MAX_NUM_DAYS)
         .prop_flat_map(|num_elements| {
             (
@@ -1751,6 +1967,6 @@ proptest! {
             );
         }
 
-        prop_assert!(metrics.check_runtime_invariants());
+        prop_assert!(metrics.check_soft_invariants().is_ok());
     }
 }

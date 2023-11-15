@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize, Int, Nat};
 use num_traits::ToPrimitive;
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -10,7 +11,7 @@ const INT128_BUF_SIZE: usize = 19;
 pub type Map = BTreeMap<String, Value>;
 pub type Hash = [u8; 32];
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     Blob(ByteBuf),
     Text(String),

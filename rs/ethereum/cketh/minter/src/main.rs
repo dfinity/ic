@@ -2,7 +2,7 @@ use candid::{candid_method, Nat};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
-use ic_cketh_minter::address::{validate_address_as_destination, Address};
+use ic_cketh_minter::address::{validate_address_as_destination, Address, AddressValidationError};
 use ic_cketh_minter::deposit::scrap_eth_logs;
 use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
@@ -132,7 +132,8 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
         &eth_fee_history()
             .await
             .expect("ERROR: failed to retrieve fee history"),
-    );
+    )
+    .expect("ERROR: failed to estimate transaction price");
     Eip1559TransactionPrice::from(transaction_price)
 }
 
@@ -149,15 +150,14 @@ async fn withdraw_eth(
         ))
     });
 
-    let destination = Address::from_str(&recipient)
-        .and_then(|a| validate_address_as_destination(a).map_err(|e| e.to_string()))
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
-
-    if ic_cketh_minter::blocklist::is_blocked(destination) {
-        return Err(WithdrawalError::RecipientAddressBlocked {
-            address: destination.to_string(),
-        });
-    }
+    let destination = validate_address_as_destination(&recipient).map_err(|e| match e {
+        AddressValidationError::Invalid { .. } | AddressValidationError::NotSupported(_) => {
+            ic_cdk::trap(&e.to_string())
+        }
+        AddressValidationError::Blocked(address) => WithdrawalError::RecipientAddressBlocked {
+            address: address.to_string(),
+        },
+    })?;
 
     let amount = Wei::try_from(amount).expect("failed to convert Nat to u256");
 
@@ -174,6 +174,8 @@ async fn withdraw_eth(
         ledger_canister_id,
     };
 
+    let now = ic_cdk::api::time();
+
     log!(INFO, "[withdraw]: burning {:?}", amount);
     match client
         .transfer_from(TransferFromArgs {
@@ -182,8 +184,9 @@ async fn withdraw_eth(
             to: ic_cdk::id().into(),
             amount: Nat::from(amount),
             fee: None,
-            memo: None,
-            created_at_time: None,
+            memo: Some(destination.into()),
+            created_at_time: None, // We don't set this field to disable transaction deduplication
+                                   // which is unnecessary in canister-to-canister calls.
         })
         .await
     {
@@ -196,6 +199,7 @@ async fn withdraw_eth(
                 ledger_burn_index,
                 from: caller,
                 from_subaccount: None,
+                created_at: Some(now),
             };
 
             log!(
@@ -371,12 +375,14 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     ledger_burn_index,
                     from,
                     from_subaccount,
+                    created_at,
                 }) => EP::AcceptedEthWithdrawalRequest {
                     withdrawal_amount: withdrawal_amount.into(),
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),
                     from,
                     from_subaccount: from_subaccount.map(|s| s.0),
+                    created_at,
                 },
                 EventType::CreatedTransaction {
                     withdrawal_id,
@@ -410,10 +416,12 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id,
                     reimbursed_in_block,
                     reimbursed_amount,
+                    transaction_hash,
                 }) => EP::ReimbursedEthWithdrawal {
                     withdrawal_id: withdrawal_id.get().into(),
                     reimbursed_in_block: reimbursed_in_block.get().into(),
                     reimbursed_amount: reimbursed_amount.into(),
+                    transaction_hash: transaction_hash.map(|h| h.to_string()),
                 },
             },
         }
@@ -473,6 +481,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .value(&[("status", "rejected")], s.invalid_events.len() as f64)?;
 
                 w.encode_gauge(
+                    "cketh_event_count",
+                    storage::total_event_count() as f64,
+                    "Total number of events in the event log.",
+                )?;
+                w.encode_gauge(
                     "cketh_minter_eth_balance",
                     s.eth_balance.eth_balance().as_f64(),
                     "Known amount of ETH on the minter's address",
@@ -487,6 +500,20 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     s.eth_balance.total_unspent_tx_fees().as_f64(),
                     "Total amount of unspent fees across all finalized transaction ckETH -> ETH",
                 )?;
+
+                let now_nanos = ic_cdk::api::time();
+                let age_nanos = now_nanos.saturating_sub(
+                    s.eth_transactions
+                        .oldest_incomplete_withdrawal_timestamp()
+                        .unwrap_or(now_nanos),
+                );
+                w.encode_gauge(
+                    "cketh_oldest_incomplete_eth_withdrawal_request_age_seconds",
+                    (age_nanos / 1_000_000_000) as f64,
+                    "The age of the oldest incomplete ETH withdrawal request in seconds.",
+                )?;
+
+                ic_cketh_minter::eth_rpc::encode_metrics(w)?;
 
                 Ok(())
             })

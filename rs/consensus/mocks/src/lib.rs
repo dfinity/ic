@@ -33,7 +33,7 @@ use std::sync::{Arc, RwLock};
 mock! {
     pub PayloadBuilder {}
 
-    pub trait PayloadBuilder {
+    impl PayloadBuilder for PayloadBuilder {
         fn get_payload<'a>(
             &self,
             height: Height,

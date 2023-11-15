@@ -2,7 +2,7 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Principal};
-use clap::Parser;
+use clap::{Args, Parser};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
     UpdateSubnetTypeArgs,
@@ -14,7 +14,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
-use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
+use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
 use ic_ic00_types::{CanisterInstallMode, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
 use ic_nervous_system_clients::{
@@ -30,7 +30,7 @@ use ic_nervous_system_humanize::{
 };
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nervous_system_root::change_canister::{
-    AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
+    AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -69,7 +69,6 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
-    hostos_version::v1::HostosVersionRecord,
     node::v1::NodeRecord,
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
@@ -82,7 +81,7 @@ use ic_protobuf::registry::{
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
-    subnet::SubnetRegistry,
+    hostos_version::HostosRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
@@ -93,8 +92,8 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -887,9 +886,9 @@ impl ProposalTitle for StartCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<StopOrStartCanisterProposal> for StartCanisterCmd {
-    async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
-        StopOrStartCanisterProposal {
+impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
+    async fn payload(&self, _: Url) -> StopOrStartCanisterRequest {
+        StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Start,
         }
@@ -914,9 +913,9 @@ impl ProposalTitle for StopCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
-    async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
-        StopOrStartCanisterProposal {
+impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
+    async fn payload(&self, _: Url) -> StopOrStartCanisterRequest {
+        StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Stop,
         }
@@ -1914,8 +1913,8 @@ impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> ChangeCanisterProposal {
+impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
+    async fn payload(&self, _: Url) -> ChangeCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1926,7 +1925,7 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             .arg
             .as_ref()
             .map_or(vec![], |path| read_file_fully(path));
-        ChangeCanisterProposal {
+        ChangeCanisterRequest {
             stop_before_installing: !self.skip_stopping_before_installing,
             mode: self.mode,
             canister_id: self.canister_id,
@@ -1934,7 +1933,6 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             arg,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            authz_changes: vec![],
             query_allocation: None,
         }
     }
@@ -2065,8 +2063,8 @@ impl ProposalTitle for ProposeToAddNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> AddCanisterProposal {
+impl ProposalPayload<AddCanisterRequest> for ProposeToAddNnsCanisterCmd {
+    async fn payload(&self, _: Url) -> AddCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -2078,7 +2076,7 @@ impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
             .clone()
             .map_or(vec![], |path| read_file_fully(&path));
 
-        AddCanisterProposal {
+        AddCanisterRequest {
             name: self.name.clone(),
             wasm_module,
             arg,
@@ -2087,7 +2085,6 @@ impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
             initial_cycles: 1,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            authz_changes: vec![],
             query_allocation: None,
         }
     }
@@ -3659,10 +3656,10 @@ struct ProposeToCreateServiceNervousSystemCmd {
     swap_minimum_participants: u64,
 
     #[clap(long, value_parser=parse_tokens)]
-    swap_minimum_icp: nervous_system_pb::Tokens,
+    swap_minimum_direct_participation_icp: nervous_system_pb::Tokens,
 
     #[clap(long, value_parser=parse_tokens)]
-    swap_maximum_icp: nervous_system_pb::Tokens,
+    swap_maximum_direct_participation_icp: nervous_system_pb::Tokens,
 
     #[clap(long, value_parser=parse_tokens)]
     swap_minimum_participant_icp: nervous_system_pb::Tokens,
@@ -3688,11 +3685,8 @@ struct ProposeToCreateServiceNervousSystemCmd {
     #[clap(long, value_parser=parse_duration)]
     swap_duration: nervous_system_pb::Duration,
 
-    #[clap(long, value_parser=parse_tokens)]
-    neurons_fund_investment_icp: nervous_system_pb::Tokens,
-
-    #[clap(long)]
-    neurons_fund_participation: Option<bool>,
+    #[clap(long, action)]
+    neurons_fund_participation: bool, // defaults to false if unset (due to `action`)
 
     // Ledger
     // ------
@@ -3774,8 +3768,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             swap_amount,
 
             swap_minimum_participants,
-            swap_minimum_icp,
-            swap_maximum_icp,
+            swap_minimum_direct_participation_icp,
+            swap_maximum_direct_participation_icp,
             swap_minimum_participant_icp,
             swap_maximum_participant_icp,
             swap_neuron_count,
@@ -3785,7 +3779,6 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             restrict_swap_in_country: restricted_countries,
             swap_start_time,
             swap_duration,
-            neurons_fund_investment_icp,
             neurons_fund_participation,
 
             transaction_fee,
@@ -3897,17 +3890,14 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
         let swap_parameters = {
             let minimum_participants = Some(swap_minimum_participants);
-            let minimum_direct_participation_icp =
-                swap_minimum_icp.checked_sub(&neurons_fund_investment_icp);
-            let maximum_direct_participation_icp =
-                swap_maximum_icp.checked_sub(&neurons_fund_investment_icp);
-            let minimum_icp = Some(swap_minimum_icp);
-            let maximum_icp = Some(swap_maximum_icp);
+            let minimum_direct_participation_icp = Some(swap_minimum_direct_participation_icp);
+            let maximum_direct_participation_icp = Some(swap_maximum_direct_participation_icp);
+            let neurons_fund_participation = Some(neurons_fund_participation);
+
             let minimum_participant_icp = Some(swap_minimum_participant_icp);
             let maximum_participant_icp = Some(swap_maximum_participant_icp);
             let start_time = swap_start_time;
             let duration = Some(swap_duration);
-            let neurons_fund_investment_icp = Some(neurons_fund_investment_icp);
 
             let neuron_basket_construction_parameters = {
                 let count = Some(swap_neuron_count);
@@ -3921,6 +3911,11 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
             let restricted_countries =
                 restricted_countries.map(|iso_codes| nervous_system_pb::Countries { iso_codes });
+
+            // Deprecated fields
+            let minimum_icp = None;
+            let maximum_icp = None;
+            let neurons_fund_investment_icp = None;
 
             Some(SwapParameters {
                 minimum_participants,
@@ -4129,17 +4124,40 @@ struct ProposeToUpdateNodesHostosVersionCmd {
     #[clap(name = "NODE_ID", multiple_values(true), required = true)]
     pub node_ids: Vec<PrincipalId>,
 
+    #[clap(flatten)]
+    pub hostos_version_flag: HostosVersionFlag,
+}
+
+#[derive(Args)]
+struct HostosVersionFlag {
     /// Version ID. This should correspond to a HostOS version previously added
     /// to the registry.
     #[clap(long)]
     pub hostos_version_id: Option<String>,
+    /// When this flag is passed, remove the HostOS version from this set of
+    /// Nodes. This will take the same action as excluding the version id flag.
+    #[clap(long)]
+    pub clear_hostos_version: bool,
+}
+
+impl HostosVersionFlag {
+    // TODO: If we upgrade clap, this can be replaced with `group` attributes.
+    fn simplify(&self) -> &Option<String> {
+        if self.hostos_version_id.is_some() && self.clear_hostos_version {
+            panic!("Only one of --hostos-version-id or --clear-hostos-version can be specified at once.");
+        }
+
+        // When `--clear-hostos-version` is set, `--hostos-version-id` must be
+        // unset and `None`, so we can always return it directly.
+        &self.hostos_version_id
+    }
 }
 
 impl ProposalTitle for ProposeToUpdateNodesHostosVersionCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => match &self.hostos_version_id {
+            None => match &self.hostos_version_flag.simplify() {
                 Some(hostos_version_id) => format!(
                     "Set HostOS version: '{}' on nodes: '{}'",
                     hostos_version_id,
@@ -4166,7 +4184,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToUpdateNodesHo
 
         UpdateNodesHostosVersionPayload {
             node_ids,
-            hostos_version_id: self.hostos_version_id.clone(),
+            hostos_version_id: self.hostos_version_flag.simplify().clone(),
         }
     }
 }
@@ -4659,13 +4677,19 @@ async fn main() {
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
             let file_downloader = FileDownloader::new(None).follow_redirects();
-            if version.release_package_urls.iter().all(|url| {
-                tokio::runtime::Handle::current()
-                    .block_on(file_downloader.download_file(url, &tmp_file, None))
-                    .is_err()
-            }) {
-                panic!("Download of release package failed.");
+
+            let mut result = Err(anyhow!("Download of release package failed."));
+            for url in version.release_package_urls.iter() {
+                result = file_downloader
+                    .download_file(url, &tmp_file, None)
+                    .await
+                    .map_err(|v| v.into());
+
+                if result.is_ok() {
+                    break;
+                }
             }
+            result.unwrap();
 
             println!("OK   Download success");
 
@@ -4678,40 +4702,6 @@ async fn main() {
                     success = false;
                 }
             };
-
-            // Check version number.
-            eprintln!("Extracting .. ");
-            match extract_tar_gz_into_dir(&tmp_file, &tmp_dir) {
-                Ok(()) => {
-                    println!("OK   extracting tar gz archive");
-                    let mut version_file = tmp_dir.clone();
-                    version_file.push("VERSION.TXT");
-
-                    if !version_file.exists() {
-                        // Older versions of the IC-OS had version.txt as a file name
-                        version_file = tmp_dir.clone();
-                        version_file.push("version.txt");
-                    }
-
-                    let archive_version = read_to_string(version_file)
-                        .expect("Could not read version in extracted version file");
-                    let archive_version = archive_version.trim();
-
-                    if archive_version == get_replica_version_cmd.replica_version_id {
-                        println!("OK   correct version number in archived version file");
-                    } else {
-                        println!(
-                            "FAIL incorrect version number in archived version file ({} vs {})",
-                            archive_version, get_replica_version_cmd.replica_version_id
-                        );
-                        success = false;
-                    }
-                }
-                Err(e) => {
-                    println!("FAIL extracting tar gz archive: {:?}", e);
-                    success = false;
-                }
-            }
 
             if !success {
                 exit(1);
@@ -4910,7 +4900,7 @@ async fn main() {
                 .await;
             } else {
                 propose_external_proposal_from_command::<
-                    ChangeCanisterProposal,
+                    ChangeCanisterRequest,
                     ProposeToChangeNnsCanisterCmd,
                 >(
                     cmd,
@@ -5642,21 +5632,14 @@ async fn main() {
                 .try_polling_latest_version(usize::MAX)
                 .unwrap();
 
-            let keys = registry_client
-                .get_key_family(
-                    HOSTOS_VERSION_KEY_PREFIX,
-                    registry_client.get_latest_version(),
-                )
+            let hostos_versions = registry_client
+                .get_hostos_versions(registry_client.get_latest_version())
                 .unwrap();
 
-            for key in keys {
-                let bytes = registry_client
-                    .get_value(&key, registry_client.get_latest_version())
-                    .unwrap()
-                    .unwrap();
-                let hostos_version_record = HostosVersionRecord::decode(&bytes[..])
-                    .expect("Error decoding HostosVersionRecord from registry");
-                println!("{}", hostos_version_record.hostos_version_id);
+            if let Some(hostos_versions) = hostos_versions {
+                for version in hostos_versions {
+                    println!("{}", version.hostos_version_id);
+                }
             }
         }
         SubCommand::ProposeToAddApiBoundaryNode(cmd) => {
@@ -6976,8 +6959,8 @@ impl RootCanisterClient {
             &cmd.wasm_module_sha256,
         )
         .await;
-        let root_proposal =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
                 .with_wasm(wasm_module);
 
@@ -7004,7 +6987,7 @@ impl RootCanisterClient {
             hex::encode(&module_hash)
         );
 
-        let serialized = Encode!(&module_hash, &root_proposal)
+        let serialized = Encode!(&module_hash, &change_canister_request)
             .expect("Error candid-serializing root proposal to upgrade governance canister.");
         let response = self
             .0

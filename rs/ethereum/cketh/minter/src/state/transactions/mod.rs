@@ -21,16 +21,24 @@ use std::fmt;
 /// Ethereum withdrawal request issued by the user.
 #[derive(Clone, Eq, PartialEq, Encode, Decode)]
 pub struct EthWithdrawalRequest {
+    /// The ETH amount that the receiver will get, not accounting for the Ethereum transaction fees.
     #[n(0)]
     pub withdrawal_amount: Wei,
+    /// The address to which the minter will send ETH.
     #[n(1)]
     pub destination: Address,
+    /// The transaction ID of the ckETH burn operation.
     #[cbor(n(2), with = "crate::cbor::id")]
     pub ledger_burn_index: LedgerBurnIndex,
+    /// The owner of the account from which the minter burned ckETH.
     #[cbor(n(3), with = "crate::cbor::principal")]
     pub from: Principal,
+    /// The subaccount from which the minter burned ckETH.
     #[n(4)]
     pub from_subaccount: Option<Subaccount>,
+    /// The IC time at which the withdrawal request arrived.
+    #[n(5)]
+    pub created_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
@@ -43,6 +51,11 @@ pub struct ReimbursementRequest {
     pub to: Principal,
     #[n(3)]
     pub to_subaccount: Option<Subaccount>,
+    #[n(4)]
+    /// Transaction hash of the failed ETH transaction.
+    /// We use this hash to link the mint reimbursement transaction
+    /// on the ledger with the failed ETH transaction.
+    pub transaction_hash: Option<Hash>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
@@ -53,6 +66,8 @@ pub struct Reimbursed {
     pub withdrawal_id: LedgerBurnIndex,
     #[n(2)]
     pub reimbursed_amount: Wei,
+    #[n(3)]
+    pub transaction_hash: Option<Hash>,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode)]
@@ -100,7 +115,6 @@ impl fmt::Debug for EthWithdrawalRequest {
 /// 6. If a given transaction fails the minter will reimburse the user who requested the
 ///    withdrawal with the corresponding amount minus fees.
 #[derive(Clone, Debug, Eq, PartialEq)]
-// TODO FI-948: limit number of withdrawal_requests and pending transactions nonces
 pub struct EthTransactions {
     pub(in crate::state) withdrawal_requests: VecDeque<EthWithdrawalRequest>,
     pub(in crate::state) created_tx:
@@ -407,6 +421,7 @@ impl EthTransactions {
                         .withdrawal_amount
                         .checked_sub(finalized_tx.effective_transaction_fee())
                         .expect("the fee paid should never be greater than the withdrawn amount"),
+                    transaction_hash: Some(receipt.transaction_hash),
                 },
             );
         }
@@ -428,6 +443,7 @@ impl EthTransactions {
                     withdrawal_id,
                     reimbursed_in_block,
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
+                    transaction_hash: reimbursement_request.transaction_hash,
                 },
             ),
             None
@@ -637,6 +653,14 @@ impl EthTransactions {
         ensure_eq!(self.reimbursed, other.reimbursed);
 
         Ok(())
+    }
+
+    pub fn oldest_incomplete_withdrawal_timestamp(&self) -> Option<u64> {
+        self.withdrawal_requests
+            .iter()
+            .chain(self.maybe_reimburse.values())
+            .flat_map(|req| req.created_at.into_iter())
+            .min()
     }
 }
 

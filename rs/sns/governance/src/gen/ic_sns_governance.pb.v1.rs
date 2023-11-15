@@ -826,7 +826,11 @@ pub struct ProposalData {
     /// If not specified, the proposal has not (yet) failed to execute.
     #[prost(message, optional, tag = "12")]
     pub failure_reason: ::core::option::Option<GovernanceError>,
-    /// OBSOLETE: Superseded by reward_event_end_timestamp_seconds
+    /// OBSOLETE: Superseded by reward_event_end_timestamp_seconds. However, old
+    /// proposals use this (old) field, not the new one, since they predate the new
+    /// field. Therefore, to correctly detect whether a proposal has been rewarded,
+    /// both fields must be consulted. That is what the has_been_rewarded method
+    /// does, so use that.
     ///
     /// The reward event round at which rewards for votes on this proposal
     /// were distributed.

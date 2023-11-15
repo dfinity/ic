@@ -3,9 +3,8 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     dkg::{ChangeAction, ChangeSet, DkgPool},
-    time_source::TimeSource,
+    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -100,11 +99,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
     /// It panics if we pass a hash for an artifact to be moved into the
     /// validated section, but it cannot be found in the unvalidated
     /// section.
-    fn apply_changes(
-        &mut self,
-        _time_source: &dyn TimeSource,
-        change_set: ChangeSet,
-    ) -> ChangeResult<DkgArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<DkgArtifact> {
         let changed = !change_set.is_empty();
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
@@ -189,7 +184,6 @@ mod test {
         consensus::fake::FakeSigner,
         mock_time,
         types::ids::{node_test_id, subnet_test_id},
-        MockTimeSource,
     };
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -237,7 +231,6 @@ mod test {
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         // add two validated messages, one for every DKG instance
         let result = pool.apply_changes(
-            &MockTimeSource::new(),
             [
                 make_message(current_dkg_id_start_height, node_test_id(0)),
                 make_message(last_dkg_id_start_height, node_test_id(0)),
@@ -267,10 +260,7 @@ mod test {
 
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
-        let result = pool.apply_changes(
-            &MockTimeSource::new(),
-            vec![ChangeAction::Purge(current_dkg_id_start_height)],
-        );
+        let result = pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
         assert_eq!(result.purged.len(), 1);
         assert!(result.adverts.is_empty());
         assert!(result.poll_immediately);
@@ -278,10 +268,9 @@ mod test {
         assert_eq!(pool.get_unvalidated().count(), 1);
 
         // purge the highest height and make sure everything is gone
-        let result = pool.apply_changes(
-            &MockTimeSource::new(),
-            vec![ChangeAction::Purge(current_dkg_id_start_height.increment())],
-        );
+        let result = pool.apply_changes(vec![ChangeAction::Purge(
+            current_dkg_id_start_height.increment(),
+        )]);
         assert_eq!(result.purged.len(), 1);
         assert!(result.adverts.is_empty());
         assert!(result.poll_immediately);

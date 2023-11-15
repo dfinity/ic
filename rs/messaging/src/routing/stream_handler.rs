@@ -231,7 +231,7 @@ impl StreamHandler for StreamHandlerImpl {
                 });
         }
 
-        // A lower bound running estimate of the subnet's avaliable message memory. It
+        // A lower bound running estimate of the subnet's available message memory. It
         // accurately reflects all memory allocated by inducted and rejected messages
         // and released by inducting responses; but not the changes to
         //`Streams::responses_size_bytes` (the size of responses already routed to

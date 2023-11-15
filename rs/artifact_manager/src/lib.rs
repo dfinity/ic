@@ -100,10 +100,12 @@ pub mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
-    artifact_pool::{
-        ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
-        UnvalidatedArtifactEvent, ValidatedPoolReader,
+    p2p::{
+        artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
+        consensus::{
+            ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
+            ValidatedPoolReader,
+        },
     },
     time_source::SysTimeSource,
 };
@@ -117,7 +119,7 @@ use std::sync::{
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use std::time::Duration;
 
-type ArtifactEventSender<Artifact> = Sender<UnvalidatedArtifactEvent<Artifact>>;
+type ArtifactEventSender<Artifact> = Sender<UnvalidatedArtifactMutation<Artifact>>;
 
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
@@ -266,7 +268,7 @@ fn process_messages<
     time_source: Arc<SysTimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Box<S>,
-    receiver: Receiver<UnvalidatedArtifactEvent<Artifact>>,
+    receiver: Receiver<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -316,7 +318,7 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 /// The struct contains all relevant interfaces for P2P to operate.
 pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
     /// To send the process requests
-    pub sender: Sender<UnvalidatedArtifactEvent<Artifact>>,
+    pub sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
     /// Reference to the artifact client.
     /// TODO: long term we can remove the 'ArtifactClient' and directly use
     /// 'ValidatedPoolReader' and ' PriorityFnAndFilterProducer' traits.

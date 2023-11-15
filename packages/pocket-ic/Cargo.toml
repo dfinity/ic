@@ -31,3 +31,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 flate2 = "1.0.27"
+ic-universal-canister = { path = "../../rs/universal_canister/lib" }
+ic-base-types = { path = "../../rs/types/base_types" }
+icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }

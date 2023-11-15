@@ -4,12 +4,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
-        UnvalidatedArtifact, ValidatedPoolReader,
-    },
-    time_source::TimeSource,
+use ic_interfaces::p2p::consensus::{
+    ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+    ValidatedPoolReader,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{
@@ -79,11 +76,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         self.pool.lock().unwrap().remove(id);
     }
 
-    fn apply_changes(
-        &mut self,
-        _time_source: &dyn TimeSource,
-        change_set: Self::ChangeSet,
-    ) -> ChangeResult<U64Artifact> {
+    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
         let mut pool = self.pool.lock().unwrap();
         let mut poll_immediately = false;
         for add in &change_set.0 {

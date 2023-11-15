@@ -42,13 +42,13 @@ use ic_consensus_utils::{
     membership::Membership, pool_reader::PoolReader, RoundRobin,
 };
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     batch_payload::BatchPayloadBuilder,
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool},
+    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     dkg::DkgPool,
     ecdsa::EcdsaPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -459,39 +459,49 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
             self.dkgs_available(&pool_reader)
         );
 
+        let time_now = self.time_source.get_relative_time();
         let finalize = || {
             self.call_with_metrics(ConsensusSubcomponent::Finalizer, || {
-                add_all_to_validated(self.finalizer.on_state_change(&pool_reader))
+                add_all_to_validated(time_now, self.finalizer.on_state_change(&pool_reader))
             })
         };
         let make_catch_up_package = || {
             self.call_with_metrics(ConsensusSubcomponent::CatchUpPackageMaker, || {
-                add_to_validated(self.catch_up_package_maker.on_state_change(&pool_reader))
+                add_to_validated(
+                    time_now,
+                    self.catch_up_package_maker.on_state_change(&pool_reader),
+                )
             })
         };
         let aggregate = || {
             self.call_with_metrics(ConsensusSubcomponent::Aggregator, || {
-                add_all_to_validated(self.aggregator.on_state_change(&pool_reader))
+                add_all_to_validated(time_now, self.aggregator.on_state_change(&pool_reader))
             })
         };
         let notarize = || {
             self.call_with_metrics(ConsensusSubcomponent::Notary, || {
-                add_all_to_validated(self.notary.on_state_change(&pool_reader))
+                add_all_to_validated(time_now, self.notary.on_state_change(&pool_reader))
             })
         };
         let make_random_beacon = || {
             self.call_with_metrics(ConsensusSubcomponent::RandomBeaconMaker, || {
-                add_to_validated(self.random_beacon_maker.on_state_change(&pool_reader))
+                add_to_validated(
+                    time_now,
+                    self.random_beacon_maker.on_state_change(&pool_reader),
+                )
             })
         };
         let make_random_tape = || {
             self.call_with_metrics(ConsensusSubcomponent::RandomTapeMaker, || {
-                add_all_to_validated(self.random_tape_maker.on_state_change(&pool_reader))
+                add_all_to_validated(
+                    time_now,
+                    self.random_tape_maker.on_state_change(&pool_reader),
+                )
             })
         };
         let make_block = || {
             self.call_with_metrics(ConsensusSubcomponent::BlockMaker, || {
-                add_to_validated(self.block_maker.on_state_change(&pool_reader))
+                add_to_validated(time_now, self.block_maker.on_state_change(&pool_reader))
             })
         };
         let validate = || {
@@ -562,6 +572,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
                 &self.finalizer,
                 &self.notary,
                 &self.log,
+                self.time_source.get_relative_time(),
             )
         } else {
             changeset
@@ -572,16 +583,30 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     }
 }
 
-pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(messages: Vec<T>) -> ChangeSet {
+pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(
+    timestamp: Time,
+    messages: Vec<T>,
+) -> ChangeSet {
     messages
         .into_iter()
-        .map(|msg| ChangeAction::AddToValidated(msg.into_message()))
+        .map(|msg| {
+            ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                msg: msg.into_message(),
+                timestamp,
+            })
+        })
         .collect()
 }
 
-fn add_to_validated<T: ConsensusMessageHashable>(msg: Option<T>) -> ChangeSet {
-    msg.map(|msg| ChangeAction::AddToValidated(msg.into_message()).into())
-        .unwrap_or_default()
+fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>) -> ChangeSet {
+    msg.map(|msg| {
+        ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+            msg: msg.into_message(),
+            timestamp,
+        })
+        .into()
+    })
+    .unwrap_or_default()
 }
 
 /// Implement Consensus Gossip interface.

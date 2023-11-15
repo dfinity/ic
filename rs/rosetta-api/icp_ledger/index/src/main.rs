@@ -1,7 +1,7 @@
 use candid::{candid_method, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, query};
+use ic_cdk_macros::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
@@ -40,8 +40,8 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNTIDENTIFIER_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNTIDENTIFIER_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(60);
-const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(10);
+const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
+const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
@@ -236,6 +236,11 @@ fn init(init_arg: InitArg) {
     });
 
     // set the first build_index to be called after init
+    set_build_index_timer(Duration::from_secs(1));
+}
+
+#[post_upgrade]
+fn post_upgrade() {
     set_build_index_timer(Duration::from_secs(1));
 }
 

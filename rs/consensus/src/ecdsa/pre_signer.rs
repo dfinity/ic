@@ -1437,9 +1437,8 @@ mod tests {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_test_utilities::MockTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::{EcdsaObject, EcdsaStatsNoOp};
     use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash};
@@ -1533,7 +1532,7 @@ mod tests {
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing_2)),
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing_3)),
                 ];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Set up the transcript creation request
                 // The block requests transcripts 1, 4, 5
@@ -1836,7 +1835,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
                 let dealing = create_dealing(id_2, NODE_2);
@@ -1963,7 +1962,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
                 let t = create_transcript_param(id, &[NODE_2], &[NODE_1]);
 
                 let block_reader =
@@ -1975,7 +1974,7 @@ mod tests {
                     &id,
                     &NODE_2,
                 ));
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Since we already issued support for the dealing, it should not produce any
                 // more support.
@@ -2003,7 +2002,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
                 // create a transcript with unknown future registry version
                 let rv = RegistryVersion::from(1);
                 let t = create_transcript_param_with_registry_version(id, &[NODE_2], &[NODE_1], rv);
@@ -2038,7 +2037,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing.clone()),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
                 let t = create_transcript_param(id, &[NODE_2], &[NODE_1]);
 
                 let block_reader =
@@ -2068,7 +2067,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
                 let t = create_transcript_param(id, &[NODE_2], &[NODE_3]);
 
                 let block_reader =
@@ -2092,7 +2091,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let block_reader =
                     TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![]);
@@ -2216,7 +2215,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing.clone()),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
                 let change_set = pre_signer.validate_dealing_support(&ecdsa_pool, &block_reader);
@@ -2244,7 +2243,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing.clone()),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
@@ -2267,7 +2266,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing.clone()),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
                 let block_reader = block_reader
@@ -2299,12 +2298,12 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaDealingSupport(support.clone()),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: duplicate of the same support share
                 let msg_id = support.message_id();
@@ -2372,7 +2371,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 support.dealer_id = NODE_3;
                 let msg_id = support.message_id();
@@ -2410,7 +2409,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
                 let msg_id = support.message_id();
@@ -2448,7 +2447,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(dealing),
                 )];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
                 support.dealer_id = NODE_4;
@@ -2552,7 +2551,7 @@ mod tests {
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing_3)),
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing_4)),
                 ];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
                 let t4 = create_transcript_param(id_4, &[NODE_2], &[NODE_4]);
@@ -2642,7 +2641,7 @@ mod tests {
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support_2)),
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support_3)),
                 ];
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let t = create_transcript_param(id_1, &[NODE_2], &[NODE_4]);
                 let block_reader =
@@ -2705,7 +2704,7 @@ mod tests {
                         ))
                     })
                     .collect();
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 {
                     let b = EcdsaTranscriptBuilderImpl::new(
@@ -2734,7 +2733,7 @@ mod tests {
                         ))
                     })
                     .collect();
-                ecdsa_pool.apply_changes(&MockTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let b = EcdsaTranscriptBuilderImpl::new(
                     &block_reader,

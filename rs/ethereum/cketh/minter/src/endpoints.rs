@@ -256,6 +256,7 @@ pub mod events {
             ledger_burn_index: Nat,
             from: Principal,
             from_subaccount: Option<[u8; 32]>,
+            created_at: Option<u64>,
         },
         CreatedTransaction {
             withdrawal_id: Nat,
@@ -277,6 +278,7 @@ pub mod events {
             reimbursed_in_block: Nat,
             withdrawal_id: Nat,
             reimbursed_amount: Nat,
+            transaction_hash: Option<String>,
         },
     }
 }

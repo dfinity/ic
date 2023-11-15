@@ -160,20 +160,25 @@ struct WireRequest<'a> {
 }
 
 /// Axum middleware to collect metrics
-pub(crate) async fn collect_metrics<B>(
+pub(crate) async fn collect_metrics<B: HttpBody>(
     State(state): State<QuicTransportMetrics>,
     request: Request<B>,
     next: Next<B>,
 ) -> axum::response::Response {
     state
-        .request_handle_total
+        .request_handle_bytes_received_total
         .with_label_values(&[request.uri().path()])
-        .inc();
+        .inc_by(request.body().size_hint().lower());
     let _timer = state
-        .request_handle_duration
+        .request_handle_duration_seconds
         .with_label_values(&[request.uri().path()])
         .start_timer();
-    next.run(request).await
+    let out_counter = state
+        .request_handle_bytes_sent_total
+        .with_label_values(&[request.uri().path()]);
+    let response = next.run(request).await;
+    out_counter.inc_by(response.body().size_hint().lower());
+    response
 }
 
 // Copied from hyper. Used to transform `BoxBodyBytes` to `Bytes`.

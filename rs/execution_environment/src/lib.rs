@@ -143,6 +143,7 @@ impl ExecutionServices {
             scheduler_config.scheduler_cores,
             Arc::clone(&fd_factory),
             scheduler_config.heap_delta_rate_limit,
+            scheduler_config.upload_wasm_chunk_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),

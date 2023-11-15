@@ -61,7 +61,7 @@ canister_history_tests ecid =
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 3 [(2, ChangeFromUser (EntityId defaultUser), CodeDeployment Reinstall (sha256 trivialWasmModule))]
 
-                  ic_install ic00 (enum #upgrade) cid universal_wasm (run no_heartbeat)
+                  ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run no_heartbeat)
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 4 [(3, ChangeFromUser (EntityId defaultUser), CodeDeployment Upgrade (sha256 universal_wasm))]
 
@@ -139,7 +139,7 @@ canister_history_tests ecid =
                   info .! #controllers @?= (Vec.fromList [Principal defaultUser])
                   info .! #module_hash @?= (Just $ sha256 universal_wasm)
 
-                  ic_install ic00 (enum #upgrade) cid trivialWasmModule ""
+                  ic_install ic00 (enumNothing #upgrade) cid trivialWasmModule ""
 
                   info <- get_canister_info unican cid Nothing
                   info .! #controllers @?= (Vec.fromList [Principal defaultUser])

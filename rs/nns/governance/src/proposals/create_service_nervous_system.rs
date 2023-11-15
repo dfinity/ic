@@ -502,12 +502,8 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             );
 
         // TODO NNS1-2687: move this check to sns/init
-        if IS_MATCHED_FUNDING_ENABLED {
-            if swap_parameters.neurons_fund_participation.is_none() {
-                defects.push("Error: neurons_fund_participation must be specified.".to_string());
-            }
-        } else if swap_parameters.neurons_fund_participation.is_some() {
-            defects.push("Error: neurons_fund_participation must not be specified until Matched Funding is enabled.".to_string());
+        if IS_MATCHED_FUNDING_ENABLED && swap_parameters.neurons_fund_participation.is_none() {
+            defects.push("Error: neurons_fund_participation must be specified.".to_string());
         }
 
         if !defects.is_empty() {

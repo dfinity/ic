@@ -6,7 +6,7 @@ use ic_nervous_system_clients::{
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nervous_system_root::change_canister::AddCanisterProposal;
+use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
@@ -33,10 +33,7 @@ fn add_nns_canister_via_governance_proposal() {
 
         let name = "add_nns_canister_via_governance_proposal".to_string();
 
-        // Test adding a new canister to the NNS, and changing the authz of the
-        // registry and governance canisters to add the new canister, i.e. so that
-        // the new canister can submit proposals and write to the registry.
-        let proposal = AddCanisterProposal {
+        let add_canister_request = AddCanisterRequest {
             name: name.clone(),
             wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
             arg: vec![],
@@ -44,7 +41,6 @@ fn add_nns_canister_via_governance_proposal() {
             memory_allocation: Some(Nat::from(12345678)),
             compute_allocation: Some(Nat::from(12)),
             initial_cycles: 1 << 45,
-            authz_changes: Vec::new(),
         };
 
         // Submitting a proposal also implicitly records a vote from the proposer,
@@ -54,7 +50,7 @@ fn add_nns_canister_via_governance_proposal() {
             Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             NeuronId(TEST_NEURON_1_ID),
             NnsFunction::NnsCanisterInstall,
-            proposal,
+            add_canister_request,
             "<proposal created by add_nns_canister_via_governance_proposal>".to_string(),
             "".to_string(),
         )

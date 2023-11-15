@@ -11,8 +11,8 @@ const PEER_ID_LABEL: &str = "peer";
 const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
 const STREAM_TYPE_LABEL: &str = "stream";
 const HANDLER_LABEL: &str = "handler";
-const REQUEST_TYPE_LABEL: &str = "request";
 const ERROR_TYPE_LABEL: &str = "error";
+const REQUEST_TYPE_LABEL: &str = "request";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
 pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
@@ -43,10 +43,13 @@ pub struct QuicTransportMetrics {
     // Request handler
     pub request_task_monitor: TaskMonitor,
     pub request_handle_errors_total: IntCounterVec,
-    pub request_handle_total: IntCounterVec,
-    pub request_handle_duration: HistogramVec,
+    pub request_handle_bytes_received_total: IntCounterVec,
+    pub request_handle_bytes_sent_total: IntCounterVec,
+    pub request_handle_duration_seconds: HistogramVec,
     // Connection handle
-    pub connection_handle_requests_total: IntCounterVec,
+    pub connection_handle_bytes_received_total: IntCounterVec,
+    pub connection_handle_bytes_sent_total: IntCounterVec,
+    pub connection_handle_duration_seconds: HistogramVec,
     pub connection_handle_errors_total: IntCounterVec,
     // Quinn
     quinn_path_rtt_duration: GaugeVec,
@@ -111,22 +114,38 @@ impl QuicTransportMetrics {
                 "Request handler errors by stream type and error type.",
                 &[STREAM_TYPE_LABEL, ERROR_TYPE_LABEL],
             ),
-            request_handle_total: metrics_registry.int_counter_vec(
-                "quic_transport_request_handle_total",
+            request_handle_bytes_received_total: metrics_registry.int_counter_vec(
+                "quic_transport_request_handle_bytes_received_total",
                 "Request handler requests total by handler.",
                 &[HANDLER_LABEL],
             ),
-            request_handle_duration: metrics_registry.histogram_vec(
-                "quic_transport_handle_requests_duration",
+            request_handle_bytes_sent_total: metrics_registry.int_counter_vec(
+                "quic_transport_request_handle_bytes_sent_total",
+                "Request handler requests total by handler.",
+                &[HANDLER_LABEL],
+            ),
+            request_handle_duration_seconds: metrics_registry.histogram_vec(
+                "quic_transport_request_handle_requests_duration_seconds",
                 "Request handler request execution duration by handler.",
                 decimal_buckets(-2, 0),
                 &[HANDLER_LABEL],
             ),
             // Connection handler
-            connection_handle_requests_total: metrics_registry.int_counter_vec(
-                "quic_transport_connection_handle_requests_total",
-                "Request handler errors by stream type and error type.",
-                &[REQUEST_TYPE_LABEL],
+            connection_handle_bytes_received_total: metrics_registry.int_counter_vec(
+                "quic_transport_connection_handle_bytes_received_total",
+                "Request handler requests total by handler.",
+                &[HANDLER_LABEL],
+            ),
+            connection_handle_bytes_sent_total: metrics_registry.int_counter_vec(
+                "quic_transport_connection_handle_bytes_sent_total",
+                "Request handler requests total by handler.",
+                &[HANDLER_LABEL],
+            ),
+            connection_handle_duration_seconds: metrics_registry.histogram_vec(
+                "quic_transport_connection_handle_duration_seconds",
+                "Request handler request execution duration by handler.",
+                decimal_buckets(-2, 0),
+                &[HANDLER_LABEL],
             ),
             connection_handle_errors_total: metrics_registry.int_counter_vec(
                 "quic_transport_connection_handle_errors_total",

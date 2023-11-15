@@ -145,6 +145,10 @@ const ACCUMULATED_PRIORITY_RESET_INTERVAL: ExecutionRound = ExecutionRound::new(
 /// canister doesn't have it set in the settings.
 const DEFAULT_RESERVED_BALANCE_LIMIT: Cycles = Cycles::new(5 * T);
 
+/// Instructions used to upload a chunk (1MiB) to the wasm chunk store. This is
+/// 1/10th of a round.
+pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::new(200_000_000);
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
 pub struct SchedulerConfig {
@@ -235,6 +239,9 @@ pub struct SchedulerConfig {
 
     /// Accumulated priority reset interval, rounds.
     pub accumulated_priority_reset_interval: ExecutionRound,
+
+    /// Number of instructions to count when uploading a chunk to the wasm store.
+    pub upload_wasm_chunk_instructions: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -260,6 +267,7 @@ impl SchedulerConfig {
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
+            upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
         }
     }
 
@@ -295,6 +303,7 @@ impl SchedulerConfig {
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
             dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
+            upload_wasm_chunk_instructions: NumInstructions::from(0),
         }
     }
 
@@ -323,6 +332,7 @@ impl SchedulerConfig {
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
+            upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
         }
     }
 

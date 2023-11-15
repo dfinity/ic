@@ -54,7 +54,7 @@ use std::sync::Arc;
 mock! {
     pub AllCryptoServiceProvider {}
 
-    pub trait CspSigner {
+    impl CspSigner for AllCryptoServiceProvider {
         fn sign(
             &self,
             algorithm_id: AlgorithmId,
@@ -92,7 +92,7 @@ mock! {
         ) -> CryptoResult<()>;
     }
 
-    pub trait CspSigVerifier{
+    impl CspSigVerifier for AllCryptoServiceProvider {
         fn verify_batch(
             &self,
             key_signature_pairs: &[(CspPublicKey, CspSignature)],
@@ -101,7 +101,7 @@ mock! {
         ) -> CryptoResult<()>;
     }
 
-    pub trait CspKeyGenerator {
+    impl CspKeyGenerator for AllCryptoServiceProvider {
         fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
 
         fn gen_committee_signing_key_pair(
@@ -115,8 +115,7 @@ mock! {
         ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
     }
 
-    pub trait ThresholdSignatureCspClient {
-
+    impl ThresholdSignatureCspClient for AllCryptoServiceProvider {
         fn threshold_sign(
             &self,
             _algorithm_id: AlgorithmId,
@@ -155,7 +154,7 @@ mock! {
         ) -> CryptoResult<()>;
     }
 
-    pub trait NiDkgCspClient {
+    impl NiDkgCspClient for AllCryptoServiceProvider {
         fn gen_dealing_encryption_key_pair(
             &self,
             _node_id: NodeId,
@@ -248,7 +247,7 @@ mock! {
         fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch);
     }
 
-    pub trait CspPublicAndSecretKeyStoreChecker {
+    impl CspPublicAndSecretKeyStoreChecker for AllCryptoServiceProvider {
         fn pks_and_sks_contains(
             &self,
             registry_public_keys: ExternalPublicKeys,
@@ -257,17 +256,17 @@ mock! {
         fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError>;
     }
 
-    pub trait CspPublicKeyStore {
+    impl CspPublicKeyStore for AllCryptoServiceProvider {
         fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
         fn current_node_public_keys_with_timestamps(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
         fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError>;
     }
 
-    pub trait CspTlsHandshakeSignerProvider: Send + Sync {
+    impl CspTlsHandshakeSignerProvider for AllCryptoServiceProvider {
         fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspVault>;
     }
 
-    pub trait CspIDkgProtocol {
+    impl CspIDkgProtocol for AllCryptoServiceProvider {
         fn idkg_create_dealing(
             &self,
             algorithm_id: AlgorithmId,
@@ -375,14 +374,14 @@ mock! {
         );
     }
 
-    pub trait CspThresholdEcdsaSigner {
+    impl CspThresholdEcdsaSigner for AllCryptoServiceProvider {
         fn ecdsa_sign_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
     }
 
-    pub trait CspThresholdEcdsaSigVerifier {
+    impl CspThresholdEcdsaSigVerifier for AllCryptoServiceProvider {
         fn ecdsa_combine_sig_shares(
             &self,
             derivation_path: &ExtendedDerivationPath,

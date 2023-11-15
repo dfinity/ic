@@ -15,6 +15,21 @@ use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
+mod filters {
+    pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
+        let input = timestamp.to_string();
+        let ts: i128 = input
+            .parse()
+            .map_err(|e| askama::Error::Custom(Box::new(e)))?;
+        let dt_offset = time::OffsetDateTime::from_unix_timestamp_nanos(ts).unwrap();
+        // 2020-12-09T17:25:40+00:00
+        let format =
+            time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
+                .unwrap();
+        Ok(dt_offset.format(&format).unwrap())
+    }
+}
+
 pub struct DashboardPendingTransaction {
     pub ledger_burn_index: LedgerBurnIndex,
     pub destination: Address,

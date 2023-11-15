@@ -2,7 +2,8 @@ use std::{
     borrow::Cow,
     collections::{btree_map, BTreeMap, BTreeSet},
     fmt::Display,
-    io::Write,
+    fs::File,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -12,6 +13,7 @@ use self::overrides::NameOverride;
 use askama::Template;
 use clap::Parser;
 use serde::Deserialize;
+use toml::Value;
 
 mod deps;
 mod overrides;
@@ -29,6 +31,9 @@ struct Options {
     gen_tests: bool,
     /// Cargo.toml file to convert
     cargo_file: String,
+    /// Workspace root file
+    #[clap(short = 'w', long = "workspace")]
+    workspace: Option<String>,
 }
 
 type Deps = BTreeSet<String>;
@@ -94,8 +99,26 @@ struct BinSectionOut {
 #[derive(Deserialize, Debug)]
 struct Package {
     name: String,
-    version: String,
-    edition: String,
+    version: PackageProperty,
+    edition: PackageProperty,
+}
+
+#[derive(Debug)]
+enum PackageProperty {
+    Simple(String),
+    Complex(Value),
+}
+
+impl<'de> Deserialize<'de> for PackageProperty {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(match Value::deserialize(deserializer)? {
+            Value::String(s) => Self::Simple(s),
+            v => Self::Complex(v),
+        })
+    }
 }
 
 #[derive(Template, Default)]
@@ -152,6 +175,7 @@ struct Bazelifier {
     manifest_dir_abs: PathBuf,
     manifest_dir: PathBuf,
     pkg: Crate,
+    workspace_manifest: toml::Value,
 }
 
 impl Bazelifier {
@@ -173,6 +197,14 @@ impl Bazelifier {
         let contents = std::fs::read_to_string(&abs)?;
         let pkg = toml::from_str::<Crate>(&contents)?;
         let manifest_dir_relative = pathdiff::diff_paths(manifest_dir, &rs_dir).unwrap();
+        let workspace_manifest = match opts.workspace.clone() {
+            Some(val) => Path::new(&val).canonicalize()?,
+            None => Path::new(&git_dir).join("Cargo.toml"),
+        };
+
+        let mut toml_string = String::new();
+        File::open(workspace_manifest)?.read_to_string(&mut toml_string)?;
+        let workspace_manifest = toml::de::from_str(&toml_string)?;
 
         Ok(Self {
             opts,
@@ -180,6 +212,7 @@ impl Bazelifier {
             manifest_dir: manifest_dir_relative,
             rs_dir,
             pkg,
+            workspace_manifest,
         })
     }
 
@@ -219,6 +252,14 @@ impl Bazelifier {
                     .unwrap()
                     .display()
                 ),
+                Dep::Workspace(val) => {
+                    if !val.workspace {
+                        eprintln!("Only workspace = true is supported");
+                        std::process::exit(1)
+                    }
+
+                    format!("@{repo}//:{dep_name}")
+                }
             };
             if let Some(ref mut mdeps) = macro_deps {
                 if MACRO_CRATES.contains(&&*dep_name) {
@@ -326,8 +367,36 @@ impl Bazelifier {
             bins.push(bout);
         }
         let mut bf = BuildFile {
-            edition: &self.pkg.package.edition,
-            crate_version: &self.pkg.package.version,
+            edition: match &self.pkg.package.edition {
+                PackageProperty::Simple(s) => s,
+                PackageProperty::Complex(v) => {
+                    match v.get("workspace").unwrap_or(&Value::Boolean(false)) {
+                        Value::Boolean(true) => self.workspace_manifest["workspace"]["package"]
+                            ["edition"]
+                            .as_str()
+                            .unwrap(),
+                        _ => {
+                            eprintln!("Only edition.workspace = true and edition = \"<edition>\" are supported");
+                            std::process::exit(1)
+                        }
+                    }
+                }
+            },
+            crate_version: match &self.pkg.package.version {
+                PackageProperty::Simple(s) => s,
+                PackageProperty::Complex(v) => {
+                    match v.get("workspace").unwrap_or(&Value::Boolean(false)) {
+                        Value::Boolean(true) => self.workspace_manifest["workspace"]["package"]
+                            ["version"]
+                            .as_str()
+                            .unwrap(),
+                        _ => {
+                            eprintln!("Only package.workspace = true and package = \"<package>\" are supported");
+                            std::process::exit(1)
+                        }
+                    }
+                }
+            },
             build_type: lib_build_type,
             target_name: self.manifest_dir_abs.file_name().unwrap().to_string_lossy(),
             crate_name: self

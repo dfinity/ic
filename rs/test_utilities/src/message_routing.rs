@@ -2,19 +2,11 @@
 // internal expansion.  Should be removed when DFN-860 is resolved.
 // Specifically relevant to the Vec<> parameter.
 #![allow(clippy::ptr_arg)]
-
-use ic_interfaces::messaging::{
-    MessageRouting, MessageRoutingError, XNetPayloadBuilder, XNetPayloadValidationError,
-};
+use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    batch::{Batch, ValidationContext, XNetPayload},
-    Height, NumBytes,
-};
+use ic_types::{batch::Batch, Height};
 use std::sync::{Arc, RwLock};
-
-use mockall::*;
 
 pub struct FakeMessageRouting {
     pub batches: RwLock<Vec<Batch>>,
@@ -78,34 +70,5 @@ impl MessageRouting for FakeMessageRouting {
     }
     fn expected_batch_height(&self) -> Height {
         *self.next_batch_height.read().unwrap()
-    }
-}
-
-mock! {
-    pub MessageRouting {}
-
-    trait MessageRouting {
-        fn deliver_batch(& self, b: Batch) -> Result<(), MessageRoutingError>;
-        fn expected_batch_height(&self) -> Height;
-    }
-}
-
-mock! {
-    pub XNetPayloadBuilder {}
-
-    trait XNetPayloadBuilder{
-        fn get_xnet_payload<'a>(
-            &self,
-            validation_context: &ValidationContext,
-            past_payloads: &[&'a XNetPayload],
-            byte_limit : NumBytes,
-        ) -> (XNetPayload, NumBytes);
-
-        fn validate_xnet_payload<'a>(
-            &self,
-            payload: &XNetPayload,
-            validation_context: &ValidationContext,
-            past_payloads: &[&'a XNetPayload]
-        ) -> Result<NumBytes, XNetPayloadValidationError>;
     }
 }

@@ -1,6 +1,6 @@
 //! The consensus pool public interface.
 
-use crate::artifact_pool::UnvalidatedArtifact;
+use crate::p2p::consensus::UnvalidatedArtifact;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -23,7 +23,7 @@ use std::sync::Arc;
 pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
 
 /// Validated artifact
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct ValidatedArtifact<T> {
     pub msg: T,
     pub timestamp: Time,
@@ -41,7 +41,7 @@ pub type ChangeSet = Vec<ChangeAction>;
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ChangeAction {
-    AddToValidated(ConsensusMessage),
+    AddToValidated(ValidatedConsensusArtifact),
     MoveToValidated(ConsensusMessage),
     RemoveFromUnvalidated(ConsensusMessage),
     HandleInvalid(ConsensusMessage, String),
@@ -88,7 +88,9 @@ impl ChangeSetOperation for ChangeSet {
 impl ContentEq for ChangeAction {
     fn content_eq(&self, other: &ChangeAction) -> bool {
         match (self, other) {
-            (ChangeAction::AddToValidated(x), ChangeAction::AddToValidated(y)) => x.content_eq(y),
+            (ChangeAction::AddToValidated(x), ChangeAction::AddToValidated(y)) => {
+                x.msg.content_eq(&y.msg)
+            }
             (ChangeAction::MoveToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
             (ChangeAction::RemoveFromUnvalidated(x), ChangeAction::RemoveFromUnvalidated(y)) => {
                 x.content_eq(y)
@@ -97,8 +99,12 @@ impl ContentEq for ChangeAction {
                 x.content_eq(y)
             }
             // Also compare between MoveToValidated and AddToValidated to help remove duplicates
-            (ChangeAction::AddToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
-            (ChangeAction::MoveToValidated(x), ChangeAction::AddToValidated(y)) => x.content_eq(y),
+            (ChangeAction::AddToValidated(x), ChangeAction::MoveToValidated(y)) => {
+                x.msg.content_eq(y)
+            }
+            (ChangeAction::MoveToValidated(x), ChangeAction::AddToValidated(y)) => {
+                x.content_eq(&y.msg)
+            }
             (ChangeAction::PurgeValidatedBelow(x), ChangeAction::PurgeValidatedBelow(y)) => x == y,
             (
                 ChangeAction::PurgeValidatedSharesBelow(x),

@@ -1,12 +1,11 @@
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
-    artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact},
     ingress_pool::{
         ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect, IngressPoolThrottler,
         PoolSection, SelectResult, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
-    time_source::TimeSource,
+    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact},
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -59,12 +58,8 @@ impl MutablePool<IngressArtifact> for TestIngressPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(
-        &mut self,
-        time_source: &dyn TimeSource,
-        change_set: ChangeSet,
-    ) -> ChangeResult<IngressArtifact> {
-        self.pool.apply_changes(time_source, change_set)
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<IngressArtifact> {
+        self.pool.apply_changes(change_set)
     }
 }
 

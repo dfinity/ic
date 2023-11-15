@@ -46,11 +46,25 @@ pub struct Config {
     /// Specifies which unix domain socket should be used for serving incoming requests.
     #[serde(default)]
     pub incoming_source: IncomingSource,
+    /// Specifies the address limits used by the `AddressBook`.
+    #[serde(default)]
+    pub address_limits: (usize, usize),
 }
 
 /// Set the default idle seconds to one hour.
 fn default_idle_seconds() -> u64 {
     3600
+}
+
+/// This function is used to get the address limits for the `AddressBook`
+/// based on the provided `Network`.
+pub(crate) fn address_limits(network: Network) -> (usize, usize) {
+    match network {
+        Network::Bitcoin => (500, 2000),
+        Network::Testnet => (100, 1000),
+        Network::Signet => (1, 1),
+        Network::Regtest => (1, 1),
+    }
 }
 
 impl Config {
@@ -75,6 +89,7 @@ impl Default for Config {
             ipv6_only: false,
             logger: LoggerConfig::default(),
             incoming_source: Default::default(),
+            address_limits: address_limits(Network::Bitcoin), // Address limits used for Bitcoin mainnet
         }
     }
 }
@@ -108,6 +123,7 @@ pub mod test {
 
         pub fn with_network(mut self, network: Network) -> Self {
             self.config.network = network;
+            self.config.address_limits = address_limits(network);
             self
         }
 

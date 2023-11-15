@@ -7,7 +7,7 @@ dependencies-check:
     # commit in the master branch. This would cause the job to
     # fail even if it has successfully passed.
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
   rules :
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
   needs: []  # don't wait on other jobs
@@ -25,7 +25,7 @@ dependencies-check:
 
 dependency-scan-nightly:
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"'
   needs: []  # don't wait on other jobs
@@ -53,7 +53,7 @@ dependency-scan-nightly:
 
 dependency-scan-release-cut:
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
   needs: []
   rules :
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'

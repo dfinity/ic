@@ -41,7 +41,7 @@ use lazy_static::lazy_static;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(10_000_000_000);
+pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles()`
 pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 pub const REMOTE_CANISTER_ID: u64 = 1;
@@ -284,6 +284,9 @@ where
         SchedulerConfig::application_subnet().scheduler_cores,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         subnet_configs.scheduler_config.heap_delta_rate_limit,
+        subnet_configs
+            .scheduler_config
+            .upload_wasm_chunk_instructions,
     );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(

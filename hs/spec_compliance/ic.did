@@ -46,6 +46,8 @@ type change = record {
   details : change_details;
 };
 
+type chunk_hash = blob;
+
 type http_header = record { name: text; value: text };
 
 type http_response = record {
@@ -55,6 +57,61 @@ type http_response = record {
 };
 
 type ecdsa_curve = variant { secp256k1; };
+
+type satoshi = nat64;
+
+type bitcoin_network = variant {
+  mainnet;
+  testnet;
+};
+
+type bitcoin_address = text;
+
+type block_hash = blob;
+
+type outpoint = record {
+  txid : blob;
+  vout : nat32
+};
+
+type utxo = record {
+  outpoint: outpoint;
+  value: satoshi;
+  height: nat32;
+};
+
+type get_utxos_request = record {
+  address : bitcoin_address;
+  network: bitcoin_network;
+  filter: opt variant {
+    min_confirmations: nat32;
+    page: blob;
+  };
+};
+
+type get_current_fee_percentiles_request = record {
+  network: bitcoin_network;
+};
+
+type get_utxos_response = record {
+  utxos: vec utxo;
+  tip_block_hash: block_hash;
+  tip_height: nat32;
+  next_page: opt blob;
+};
+
+type get_balance_request = record {
+  address : bitcoin_address;
+  network: bitcoin_network;
+  min_confirmations: opt nat32;
+};
+
+type send_transaction_request = record {
+  transaction: blob;
+  network: bitcoin_network;
+};
+
+type millisatoshi_per_byte = nat64;
 
 service ic : {
   create_canister : (record {
@@ -66,10 +123,37 @@ service ic : {
     settings : canister_settings;
     sender_canister_version : opt nat64;
   }) -> ();
+  upload_chunk : (record {
+    canister_id : principal;
+    chunk : blob;
+  }) -> (chunk_hash);
+  clear_chunk_store: (record {canister_id : canister_id}) -> ();
+  stored_chunks: (record {canister_id : canister_id}) -> (vec chunk_hash);
   install_code : (record {
-    mode : variant {install; reinstall; upgrade};
+    mode : variant {
+      install;
+      reinstall;
+      upgrade : opt record {
+        skip_pre_upgrade: opt bool;
+      }
+    };
     canister_id : canister_id;
     wasm_module : wasm_module;
+    arg : blob;
+    sender_canister_version : opt nat64;
+  }) -> ();
+  install_chunked_code: (record {
+    mode : variant {
+      install;
+      reinstall;
+      upgrade : opt record {
+        skip_pre_upgrade: opt bool;
+      };
+    };
+    target_canister: canister_id;
+    storage_canister: opt canister_id;
+    chunk_hashes_list: vec chunk_hash;
+    wasm_module_hash: blob;
     arg : blob;
     sender_canister_version : opt nat64;
   }) -> ();
@@ -122,6 +206,14 @@ service ic : {
     derivation_path : vec blob;
     key_id : record { curve: ecdsa_curve; name: text };
   }) -> (record { signature : blob });
+
+  // bitcoin interface
+  bitcoin_get_balance: (get_balance_request) -> (satoshi);
+  bitcoin_get_balance_query: (get_balance_request) -> (satoshi) query;
+  bitcoin_get_utxos: (get_utxos_request) -> (get_utxos_response);
+  bitcoin_get_utxos_query: (get_utxos_request) -> (get_utxos_response) query;
+  bitcoin_send_transaction: (send_transaction_request) -> ();
+  bitcoin_get_current_fee_percentiles: (get_current_fee_percentiles_request) -> (vec millisatoshi_per_byte);
 
   // provisional interfaces for the pre-ledger world
   provisional_create_canister_with_cycles : (record {

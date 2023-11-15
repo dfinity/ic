@@ -4,17 +4,13 @@
 /// body. This has to be canonicalized into a PocketIc Operation before we can
 /// deterministically update the PocketIc state machine.
 ///
-use super::state::{InstanceState, OpOut, PocketIcApiState, UpdateReply};
+use super::state::{InstanceState, OpOut, PocketIcApiState, PocketIcError, UpdateReply};
+use crate::pocket_ic::GetSubnet;
 use crate::pocket_ic::{
-    AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, Query, RootKey,
+    AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, PubKey, Query,
     SetStableMemory, SetTime, Tick,
 };
-use crate::pocket_ic::{CanisterExists, Checkpoint};
-use crate::{
-    copy_dir,
-    pocket_ic::{create_state_machine, PocketIc},
-    BindOperation, BlobStore, InstanceId, Operation,
-};
+use crate::{pocket_ic::PocketIc, BindOperation, BlobStore, InstanceId, Operation};
 use axum::body::HttpBody;
 use axum::routing::MethodRouter;
 use axum::{
@@ -24,35 +20,26 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
-use ic_state_machine_tests::StateMachine;
 use ic_types::CanisterId;
+use pocket_ic::common::rest::RawSubnetId;
 use pocket_ic::common::rest::{
     self, ApiResponse, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
-    RawSetStableMemory, RawStableMemory, RawTime, RawWasmResult,
+    RawSetStableMemory, RawStableMemory, RawTime, RawWasmResult, SubnetConfig,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
-use std::sync::atomic::AtomicU64;
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tempfile::TempDir;
+use std::{sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 
 /// Name of a header that allows clients to specify for how long their are willing to wait for a
 /// response on a open http request.
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
 
-pub type InstanceMap = Arc<RwLock<HashMap<InstanceId, RwLock<StateMachine>>>>;
-
 pub type ApiState = PocketIcApiState<PocketIc>;
 
 #[derive(Clone)]
 pub struct AppState {
-    // temporary
-    pub instance_map: InstanceMap,
-    pub instances_sequence_counter: Arc<AtomicU64>,
-    //
     pub api_state: ApiState,
-    pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
     pub min_alive_until: Arc<RwLock<Instant>>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
@@ -64,13 +51,12 @@ where
     AppState: extract::FromRef<S>,
 {
     Router::new()
-        // .route("root_key", get(handler_root_key))
         .directory_route("/query", post(handler_query))
         .directory_route("/get_time", get(handler_get_time))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
-        .directory_route("/canister_exists", post(handler_canister_exists))
-        .directory_route("/root_key", post(handler_root_key))
+        .directory_route("/get_subnet", post(handler_get_subnet))
+        .directory_route("/pub_key", post(handler_pub_key))
 }
 
 pub fn instance_update_routes<S>() -> Router<S>
@@ -86,7 +72,6 @@ where
         .directory_route("/set_time", post(handler_set_time))
         .directory_route("/add_cycles", post(handler_add_cycles))
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
-        .directory_route("/create_checkpoint", post(handler_create_checkpoint))
         .directory_route("/tick", post(handler_tick))
 }
 
@@ -100,9 +85,8 @@ where
         // List all IC instances.
         .route("/", get(list_instances))
         //
-        // Create a new IC instance. Returns an InstanceId.
-        // If the body contains an existing checkpoint name, the instance is restored from that,
-        // otherwise a new instance is created.
+        // Create a new IC instance. Takes a SubnetConfig which must contain at least one subnet.
+        // Returns an InstanceId.
         .route("/", post(create_instance))
         //
         // Deletes an instance.
@@ -129,7 +113,6 @@ where
         .await
     {
         Err(e) => (
-            // TODO: what StatusCode should we use here?
             StatusCode::BAD_REQUEST,
             ApiResponse::Error {
                 message: format!("{:?}", e),
@@ -180,7 +163,6 @@ impl From<OpOut> for (StatusCode, ApiResponse<()>) {
     fn from(value: OpOut) -> Self {
         match value {
             OpOut::NoOutput => (StatusCode::OK, ApiResponse::Success(())),
-            OpOut::Checkpoint(_) => (StatusCode::OK, ApiResponse::Success(())),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiResponse::Error {
@@ -239,6 +221,12 @@ impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterResult>) {
                 };
                 (StatusCode::OK, ApiResponse::Success(inner))
             }
+            OpOut::Error(e) => (
+                StatusCode::BAD_REQUEST,
+                ApiResponse::Error {
+                    message: format!("Canister call returned an error: {:?}", e),
+                },
+            ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiResponse::Error {
@@ -268,10 +256,18 @@ impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterId>) {
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<bool>) {
+impl From<OpOut> for (StatusCode, ApiResponse<Option<RawSubnetId>>) {
     fn from(value: OpOut) -> Self {
         match value {
-            OpOut::Bool(res) => (StatusCode::OK, ApiResponse::Success(res)),
+            OpOut::SubnetId(subnet_id) => (
+                StatusCode::OK,
+                ApiResponse::Success(Some(RawSubnetId {
+                    subnet_id: subnet_id.get().to_vec(),
+                })),
+            ),
+            OpOut::Error(PocketIcError::CanisterNotFound(_)) => {
+                (StatusCode::OK, ApiResponse::Success(None))
+            }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiResponse::Error {
@@ -286,6 +282,12 @@ impl From<OpOut> for (StatusCode, ApiResponse<Vec<u8>>) {
     fn from(value: OpOut) -> Self {
         match value {
             OpOut::Bytes(bytes) => (StatusCode::OK, ApiResponse::Success(bytes)),
+            OpOut::Error(e) => (
+                StatusCode::BAD_REQUEST,
+                ApiResponse::Error {
+                    message: format!("Call returned an error: {:?}", e),
+                },
+            ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiResponse::Error {
@@ -378,16 +380,16 @@ pub async fn handler_get_stable_memory(
     }
 }
 
-pub async fn handler_canister_exists(
+pub async fn handler_get_subnet(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
     axum::extract::Json(raw_canister_id): axum::extract::Json<RawCanisterId>,
-) -> (StatusCode, Json<ApiResponse<bool>>) {
+) -> (StatusCode, Json<ApiResponse<Option<RawSubnetId>>>) {
     let timeout = timeout_or_default(headers);
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
-            let op = CanisterExists { canister_id };
+            let op = GetSubnet { canister_id };
             let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
             (code, Json(res))
         }
@@ -400,13 +402,17 @@ pub async fn handler_canister_exists(
     }
 }
 
-pub async fn handler_root_key(
+pub async fn handler_pub_key(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
+    extract::Json(RawSubnetId { subnet_id }): extract::Json<RawSubnetId>,
 ) -> (StatusCode, Json<ApiResponse<Vec<u8>>>) {
     let timeout = timeout_or_default(headers);
-    let op = RootKey;
+    let subnet_id = ic_types::SubnetId::new(ic_types::PrincipalId(candid::Principal::from_slice(
+        &subnet_id,
+    )));
+    let op = PubKey { subnet_id };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
@@ -473,10 +479,7 @@ pub async fn handler_add_cycles(
 
 pub async fn handler_set_stable_memory(
     State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
         api_state,
-        checkpoints: _,
         min_alive_until: _,
         runtime: _,
         blob_store,
@@ -500,20 +503,6 @@ pub async fn handler_set_stable_memory(
     }
 }
 
-// Only creates a checkpoint and stores the checkpoint dir in the graph;
-// does not name it or return anything
-pub async fn handler_create_checkpoint(
-    State(AppState { api_state, .. }): State<AppState>,
-    Path(instance_id): Path<InstanceId>,
-    headers: HeaderMap,
-) -> (StatusCode, Json<ApiResponse<()>>) {
-    let timeout = timeout_or_default(headers);
-    println!("creating checkpoint");
-    let op = Checkpoint;
-    let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
-    (code, Json(res))
-}
-
 pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
@@ -532,50 +521,37 @@ pub async fn status() -> StatusCode {
     StatusCode::OK
 }
 
-/// Create a new empty IC instance or restore from checkpoint
-/// The new InstanceId will be returned
+/// Create a new empty IC instance from a given subnet configuration.
+/// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
         api_state,
-        checkpoints,
         min_alive_until: _,
         runtime,
         blob_store: _,
     }): State<AppState>,
-    body: Option<extract::Json<rest::RawCheckpoint>>,
+    extract::Json(subnet_configs): extract::Json<Vec<SubnetConfig>>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
-    let sm = match body {
-        None => tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
-            .await
-            .expect("Failed to launch a state machine"),
-        Some(body) => {
-            let checkpoints = checkpoints.read().await;
-            if !checkpoints.contains_key(&body.checkpoint_name) {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(rest::CreateInstanceResponse::Error {
-                        message: format!("Checkpoint '{}' does not exist.", body.checkpoint_name),
-                    }),
-                );
-            }
-            let proto_dir = checkpoints.get(&body.checkpoint_name).unwrap();
-            let new_instance_dir = TempDir::new().expect("Failed to create tempdir");
-            copy_dir(proto_dir.path(), new_instance_dir.path())
-                .expect("Failed to copy state directory");
-            drop(checkpoints);
-            // create instance
-            tokio::task::spawn_blocking(|| create_state_machine(Some(new_instance_dir), runtime))
-                .await
-                .expect("Failed to launch a state machine")
-        }
-    };
-    let pocket_ic = PocketIc::new(sm);
+    if subnet_configs.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error {
+                message: "PocketIC needs at least one subnet".to_owned(),
+            }),
+        );
+    }
+    let pocket_ic = tokio::task::spawn_blocking(|| PocketIc::new(runtime, subnet_configs))
+        .await
+        .expect("Failed to launch PocketIC");
+
+    let topology = pocket_ic.topology.clone();
     let instance_id = api_state.add_instance(pocket_ic).await;
     (
         StatusCode::CREATED,
-        Json(rest::CreateInstanceResponse::Created { instance_id }),
+        Json(rest::CreateInstanceResponse::Created {
+            instance_id,
+            topology,
+        }),
     )
 }
 

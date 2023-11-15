@@ -30,8 +30,8 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, SubnetSnapshot,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            NnsInstallationBuilder, RetrieveIpv4Addr, SubnetSnapshot, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     util::{
@@ -40,9 +40,9 @@ use crate::{
     },
 };
 
-use std::{io::Read, time::Duration};
+use std::time::Duration;
 
-use anyhow::{bail, Context, Error};
+use anyhow::{bail, Context};
 use ic_agent::Agent;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -63,18 +63,6 @@ const MAX_CANISTER_READ_RETRIES: u32 = 4;
 const CANISTER_READ_RETRY_WAIT: Duration = Duration::from_secs(10);
 // Parameters related to workload creation.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
-
-fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
-    let mut channel = vm.block_on_ssh_session()?.channel_session()?;
-
-    channel.exec(command)?;
-
-    let mut output = String::new();
-    channel.read_to_string(&mut output)?;
-    channel.wait_close()?;
-
-    Ok((output, channel.exit_status()?))
-}
 
 // Create an IC with two subnets, with variable number of nodes and boundary nodes
 // Install NNS canister on system subnet
@@ -168,20 +156,6 @@ pub fn config(
             "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?} and IPv6 {:?}",
             boundary_node_vm.block_on_ipv4().unwrap(),
             boundary_node_vm.ipv6()
-        );
-
-        info!(&logger, "Waiting for routes file");
-        let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-        let sleep_command =
-            format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-
-        let (cmd_output, exit_status) =
-            exec_ssh_command(&boundary_node_vm, &sleep_command).unwrap();
-
-        info!(
-            logger,
-            "{BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",
-            cmd_output.trim(),
         );
 
         info!(&logger, "Checking BN health");

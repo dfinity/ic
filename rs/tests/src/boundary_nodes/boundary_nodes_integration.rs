@@ -1110,7 +1110,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
         let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
         let client_builder = client_builder
             .danger_accept_invalid_certs(true)
-            .resolve("raw.{host}", bn_addr.into());
+            .resolve(&format!("raw.{host}"), bn_addr.into());
         (client_builder, host.to_string())
     };
     let client = client_builder.build().unwrap();
@@ -2242,16 +2242,6 @@ pub fn reboot_test(env: TestEnv) {
         &logger,
         "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}",
         boundary_node.block_on_ipv4().unwrap()
-    );
-
-    info!(&logger, "Waiting for routes file");
-    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-    let cmd_output = boundary_node.block_on_bash_script(&sleep_command).unwrap();
-    info!(
-        logger,
-        "{BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'",
-        cmd_output.trim(),
     );
 
     info!(&logger, "Checking BN health");

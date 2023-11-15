@@ -15,7 +15,8 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
     change_canister::{
-        change_canister, AddCanisterProposal, ChangeCanisterProposal, StopOrStartCanisterProposal,
+        change_canister, AddCanisterRequest, CanisterAction, ChangeCanisterRequest,
+        StopOrStartCanisterRequest,
     },
     LOG_PREFIX,
 };
@@ -82,7 +83,7 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
 fn submit_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(expected_governance_wasm_sha, proposal): (Vec<u8>, ChangeCanisterProposal)| {
+        |(expected_governance_wasm_sha, proposal): (Vec<u8>, ChangeCanisterRequest)| {
             ic_nns_handler_root::root_proposals::submit_root_proposal_to_upgrade_governance_canister(
                 caller(),
                 expected_governance_wasm_sha,
@@ -118,7 +119,11 @@ fn get_pending_root_proposals_to_upgrade_governance_canister() {
 #[export_name = "canister_update change_nns_canister"]
 fn change_nns_canister() {
     check_caller_is_governance();
+    over(candid_one, change_nns_canister_);
+}
 
+#[candid_method(update, rename = "change_nns_canister")]
+fn change_nns_canister_(request: ChangeCanisterRequest) {
     // We want to reply first, so that in the case that we want to upgrade the
     // governance canister, the root canister no longer holds a pending callback
     // to it -- and therefore does not prevent the governance canister from being
@@ -128,48 +133,53 @@ fn change_nns_canister() {
     //
     // This will effectively reply synchronously with the first call to the
     // management canister in change_canister.
-    over(candid, |(proposal,): (ChangeCanisterProposal,)| {
-        // Because change_canister is async, and because we can't directly use
-        // `await`, we need to use the `spawn` trick.
-        let future = change_canister::<DfnRuntime>(proposal);
 
-        // Starts the proposal execution, which will continue after this function has
-        // returned.
-        dfn_core::api::futures::spawn(future);
-    });
+    // Because change_canister is async, and because we can't directly use
+    // `await`, we need to use the `spawn` trick.
+    let future = change_canister::<DfnRuntime>(request);
+
+    // Starts the proposal execution, which will continue after this function has
+    // returned.
+    dfn_core::api::futures::spawn(future);
 }
 
 #[export_name = "canister_update add_nns_canister"]
 fn add_nns_canister() {
     check_caller_is_governance();
-    over_async(candid, |(proposal,): (AddCanisterProposal,)| async move {
-        canister_management::do_add_nns_canister(proposal).await;
-    });
+    over_async(candid_one, add_nns_canister_)
+}
+
+#[candid_method(update, rename = "add_nns_canister")]
+async fn add_nns_canister_(request: AddCanisterRequest) {
+    canister_management::do_add_nns_canister(request).await;
 }
 
 // Executes a proposal to stop/start an nns canister.
 #[export_name = "canister_update stop_or_start_nns_canister"]
 fn stop_or_start_nns_canister() {
     check_caller_is_governance();
-    over_async(
-        candid,
-        |(proposal,): (StopOrStartCanisterProposal,)| async move {
-            // Can't stop/start the governance canister since that would mean
-            // we couldn't submit any more proposals.
-            // Since this canister is the only possible caller, it's then safe
-            // to call stop/start inline.
-            if proposal.canister_id == GOVERNANCE_CANISTER_ID
-                || proposal.canister_id == ROOT_CANISTER_ID
-                || proposal.canister_id == LIFELINE_CANISTER_ID
-            {
-                panic!("The governance, root and lifeline canisters can't be stopped or started.")
-            }
-            // Unwrap here to not change the signature of the function.
-            canister_management::stop_or_start_nns_canister(proposal)
-                .await
-                .unwrap()
-        },
-    );
+    over_async(candid_one, stop_or_start_nns_canister_)
+}
+
+#[candid_method(update, rename = "stop_or_start_nns_canister")]
+async fn stop_or_start_nns_canister_(request: StopOrStartCanisterRequest) {
+    // It is a mistake to stop the root or governance canister, because if either of them is
+    // stopped, there is no way to restore them to the running state. That would require executing a
+    // proposal, but executing such proposals requires both of those canisters. Lifelife plays a
+    // similar critical role in NNS, so we disallow stopping that too.
+    let is_canister_disallowed_to_stop = [
+        GOVERNANCE_CANISTER_ID,
+        ROOT_CANISTER_ID,
+        LIFELINE_CANISTER_ID,
+    ]
+    .contains(&request.canister_id);
+    if request.action == CanisterAction::Stop && is_canister_disallowed_to_stop {
+        panic!("Stopping the governance, root, or lifeline canister is not allowed.");
+    }
+
+    canister_management::stop_or_start_nns_canister(request)
+        .await
+        .unwrap() // For compatibility.
 }
 
 #[export_name = "canister_update call_canister"]

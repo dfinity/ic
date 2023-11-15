@@ -471,30 +471,6 @@ fn setup_boundary_node(
         .get_snapshot()
         .unwrap();
 
-    info!(
-        logger,
-        "Waiting until the ic-registry-replicator on {BOUNDARY_NODE_NAME} has finished local store initialization ..."
-    );
-    retry(
-        logger.clone(),
-        Duration::from_secs(500),
-        Duration::from_secs(5),
-        || {
-            boundary_node.block_on_bash_script(
-                r#"
-                    set -e
-                    until journalctl -u ic-registry-replicator -g "Finished local store initialization"; do
-                        sleep 1
-                    done
-                    sudo systemctl restart control-plane.service
-                "#
-            )
-        },
-    )
-    .unwrap_or_else(|e| {
-        panic!("The ic-registry-replicator on {BOUNDARY_NODE_NAME} didn't finish local store initialization in time. Error: {e:?}")
-    });
-
     let recovered_nns_node_id = recovered_nns_node.node_id;
     boundary_node.block_on_bash_script(&format!(r#"
         set -e
@@ -814,11 +790,7 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    // TODO: replace the next code line with the following commented line
-    // once the mainnet ic-recovery contains the commits we need.
-    // let ic_recovery_path = env.get_path(IC_RECOVERY);
-    let ic_recovery_path = env.get_dependency_path("rs/recovery/ic-recovery");
-
+    let ic_recovery_path = env.get_path(IC_RECOVERY);
     let mut cmd = Command::new(ic_recovery_path);
     cmd.arg("--skip-prompts")
         .arg("--dir")

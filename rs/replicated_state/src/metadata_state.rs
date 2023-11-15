@@ -2,9 +2,9 @@ pub mod subnet_call_context_manager;
 #[cfg(test)]
 mod tests;
 
-use crate::canister_state::system_state::CyclesUseCase;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use crate::CanisterQueues;
+use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
 use ic_base_types::CanisterId;
 use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
@@ -577,10 +577,12 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
     }
 }
 
-impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
+impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for SystemMetadata {
     type Error = ProxyDecodeError;
 
-    fn try_from(item: pb_metadata::SystemMetadata) -> Result<Self, Self::Error> {
+    fn try_from(
+        (item, metrics): (pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics),
+    ) -> Result<Self, Self::Error> {
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
             streams.insert(
@@ -681,7 +683,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series: match item.blockmaker_metrics_time_series {
-                Some(metrics) => metrics.try_into()?,
+                Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
                 None => BlockmakerMetricsTimeSeries::default(),
             },
         })
@@ -1927,12 +1929,13 @@ pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
 /// For each day metrics were aggregated since the first observation, there is exactly one
 /// snapshot in the series (including 'today').
 ///
-/// Once the maximum number of days has been reached:
-/// - The oldest entry is discarded to keep the dataset at a constant length.
-/// - The first observation of a new day induces a pruning process where a node with
-///   unchanged stats for the oldest and the newest snapshot is pruned from this and the
-///   following days. If a previously pruned node reappears, it will be added like any
-///   other new node and counting restarts from 0.
+/// The number of snapshots is capped at `BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS` by
+/// discarding the oldest snapshot(s) once this limit is exceeded.
+///
+/// To ensure the roster of node IDs does not grow indefinitely, Node IDs whose stats are
+/// equal in two consecutive snapshots, are pruned from the metrics such that they are missing
+/// from that point on. If such a node reappears later on, it will be added as a new node with
+/// restarted stats.
 ///
 /// There is a runtime invariant (excluding checks at deserialization):
 /// - There are at most `BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS` snapshots.
@@ -1984,59 +1987,56 @@ impl BlockmakerStatsMap {
 impl BlockmakerMetricsTimeSeries {
     /// Observes blockmaker metrics corresponding to a certain batch time.
     pub fn observe(&mut self, batch_time: Time, metrics: &BlockmakerMetrics) {
-        match self.0.pop_last() {
+        let running_stats = match self.0.pop_last() {
             Some((time, running_stats)) if time > batch_time => {
                 // Outdated metrics are ignored.
                 self.0.insert(time, running_stats);
                 return;
             }
-            Some((time, mut running_stats))
-                if days_since_unix_epoch(time) < days_since_unix_epoch(batch_time) =>
-            {
-                // A new day has started, insert a new snapshot.
-                self.0.insert(time, running_stats.clone());
-                // If at capacity, prune node IDs from `running_stats`.
-                if self.0.len() == BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
-                    running_stats.node_stats.retain(|node_id, stats| {
-                        match self
-                            .0
-                            .first_key_value()
-                            .and_then(|(_, val)| val.node_stats.get(node_id))
-                        {
-                            // Retain node IDs that are not present in the first key value;
-                            // and node IDs that are present, but have unequal stats.
-                            None => true,
-                            Some(first_stats) => first_stats != stats,
-                        }
-                    });
+            Some((time, mut running_stats)) => {
+                if days_since_unix_epoch(time) < days_since_unix_epoch(batch_time) {
+                    // Prune stale node IDs from `running_stats` by comparing its stats with
+                    // those of the previous day.
+                    if let Some(last_snapshot) =
+                        self.0.last_key_value().map(|(_, val)| &val.node_stats)
+                    {
+                        running_stats.node_stats.retain(|node_id, stats| {
+                            match last_snapshot.get(node_id) {
+                                // Retain node IDs that are not present in the last snapshot;
+                                // and node IDs that are present, but have unequal stats.
+                                None => true,
+                                Some(last_stats) => last_stats != stats,
+                            }
+                        });
+                    }
+
+                    // A new day has started, insert a new snapshot.
+                    self.0.insert(time, running_stats.clone());
                 }
-                // Observe the new metrics and insert `running_stats`.
-                self.0
-                    .insert(batch_time, running_stats.and_observe(metrics));
+
+                running_stats
             }
-            Some((_, running_stats)) => {
-                self.0
-                    .insert(batch_time, running_stats.and_observe(metrics));
-            }
-            None => {
-                self.0.insert(
-                    batch_time,
-                    BlockmakerStatsMap::default().and_observe(metrics),
-                );
-            }
-        }
+            None => BlockmakerStatsMap::default(),
+        };
+
+        // Observe the new metrics and replace `running_stats`.
+        self.0
+            .insert(batch_time, running_stats.and_observe(metrics));
 
         // Ensure the time series is capped in length.
         while self.0.len() > BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
             self.0.pop_first();
         }
 
-        debug_assert!(self.check_runtime_invariants());
+        debug_assert!(self.check_soft_invariants().is_ok());
     }
 
-    /// Invariant check that returns an error if any invariant (including checks at
-    /// deserialization) does not hold.
-    fn check_invariants(&self) -> Result<(), String> {
+    /// Check if any soft invariant is violated. We use soft invariants to refer
+    /// to any invariants that the code maintains at all times, but the correctness
+    /// of the code is not influenced if they break.
+    ///
+    /// Also see note [Replicated State Invariants].
+    fn check_soft_invariants(&self) -> Result<(), String> {
         if self
             .0
             .iter()
@@ -2047,15 +2047,15 @@ impl BlockmakerMetricsTimeSeries {
         {
             return Err("Found two timestamps on the same day.".into());
         }
-        Ok(())
-    }
 
-    /// Invariant check that panics if any runtime invariant (excluding checks at deserialization)
-    /// does not hold. Intended to be called from within a `debug_assert!()` in production code.
-    fn check_runtime_invariants(&self) -> bool {
-        assert!(self.0.len() <= BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS);
-        assert!(self.check_invariants().is_ok());
-        true
+        if self.0.len() > BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
+            return Err(format!(
+                "Current metrics len ({}) exceeds limit ({}).",
+                self.0.len(),
+                BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS,
+            ));
+        }
+        Ok(())
     }
 
     /// Returns an iterator pointing at the first element of a chronologically sorted time series
@@ -2124,10 +2124,20 @@ impl TryFrom<pb_metadata::BlockmakerStatsMap> for BlockmakerStatsMap {
     }
 }
 
-impl TryFrom<pb_metadata::BlockmakerMetricsTimeSeries> for BlockmakerMetricsTimeSeries {
+impl
+    TryFrom<(
+        pb_metadata::BlockmakerMetricsTimeSeries,
+        &dyn CheckpointLoadingMetrics,
+    )> for BlockmakerMetricsTimeSeries
+{
     type Error = ProxyDecodeError;
 
-    fn try_from(item: pb_metadata::BlockmakerMetricsTimeSeries) -> Result<Self, Self::Error> {
+    fn try_from(
+        (item, metrics): (
+            pb_metadata::BlockmakerMetricsTimeSeries,
+            &dyn CheckpointLoadingMetrics,
+        ),
+    ) -> Result<Self, Self::Error> {
         let time_series = Self(
             item.time_stamp_map
                 .into_iter()
@@ -2140,9 +2150,9 @@ impl TryFrom<pb_metadata::BlockmakerMetricsTimeSeries> for BlockmakerMetricsTime
                 .collect::<Result<BTreeMap<_, _>, Self::Error>>()?,
         );
 
-        time_series
-            .check_invariants()
-            .map_err(|err| Self::Error::Other(err))?;
+        if let Err(err) = time_series.check_soft_invariants() {
+            metrics.raise_critical_error(err);
+        }
 
         Ok(time_series)
     }

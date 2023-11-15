@@ -183,10 +183,10 @@ use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     ecdsa::{EcdsaChangeSet, EcdsaPool},
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

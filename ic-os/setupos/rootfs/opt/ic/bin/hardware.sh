@@ -5,7 +5,6 @@ set -o pipefail
 
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
-CONFIG="${CONFIG:=/var/ic/config/config.ini}"
 
 GENERATION=
 
@@ -30,16 +29,6 @@ GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 # Dell 10 3.2TB and SuperMicro has 5 7.4 TB drives = 32TB
 GEN1_MINIMUM_DISK_SIZE=3200000000000
 GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
-
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "development_mode") development_mode="${value}" ;;
-        esac
-    done <"${CONFIG}"
-}
 
 function check_generation() {
     echo "* Checking Generation..."
@@ -258,15 +247,10 @@ function verify_disks() {
 main() {
     source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
-    read_variables
-    if [ "${development_mode:-}" != "on" ]; then
-        check_generation
-        verify_cpu
-        verify_memory
-        verify_disks
-    else
-        echo "* DEVELOPMENT MODE: hardware NOT verified"
-    fi
+    check_generation
+    verify_cpu
+    verify_memory
+    verify_disks
     log_end "$(basename $0)"
 }
 
