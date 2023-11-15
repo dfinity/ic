@@ -2,7 +2,6 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    is_copy_inactive_neurons_to_stable_memory_enabled,
     neuron::neuron_id_range_to_u64_range,
     pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
     storage::{
@@ -362,9 +361,7 @@ impl NeuronStore {
 
         self.add_neuron_to_indexes(&neuron);
 
-        if is_copy_inactive_neurons_to_stable_memory_enabled() {
-            maybe_add_to_stable_neuron_store(neuron.clone(), self.clock.now());
-        }
+        maybe_add_to_stable_neuron_store(neuron.clone(), self.clock.now());
 
         self.heap_neurons.insert(neuron_id.id, neuron);
 
@@ -397,9 +394,7 @@ impl NeuronStore {
     pub fn remove_neuron(&mut self, neuron_id: &NeuronId) {
         let removed_neuron = self.heap_neurons.remove(&neuron_id.id);
 
-        if is_copy_inactive_neurons_to_stable_memory_enabled() {
-            delete_from_stable_neuron_store(*neuron_id);
-        }
+        delete_from_stable_neuron_store(*neuron_id);
 
         let removed_neuron = match removed_neuron {
             Some(removed_neuron) => removed_neuron,
@@ -580,11 +575,7 @@ impl NeuronStore {
 
         let result = Ok(f(&mut new_neuron));
 
-        // Update stable_neuron_store. For now, this functionality is disabled by default. It is
-        // enabled when building tests, and when feature = "test" is enabled.
-        if is_copy_inactive_neurons_to_stable_memory_enabled() {
-            write_through_to_stable_neuron_store(&new_neuron, now);
-        }
+        write_through_to_stable_neuron_store(&new_neuron, now);
 
         self.update_neuron_indexes(&old_neuron, &new_neuron);
 

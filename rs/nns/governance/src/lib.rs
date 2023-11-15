@@ -529,8 +529,3 @@ pub fn encode_metrics(
 
     Ok(())
 }
-
-/// Whether we should start to copy inactive neurons into stable memory.
-fn is_copy_inactive_neurons_to_stable_memory_enabled() -> bool {
-    true
-}
