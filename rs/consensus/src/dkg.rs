@@ -20,7 +20,6 @@ use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
-use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::{
     crypto::{initial_ni_dkg_transcript_from_registry_record, DkgTranscripts},
     subnet::SubnetRegistry,
@@ -1429,10 +1428,8 @@ fn get_dkg_summary_from_cup_contents(
 pub fn make_registry_cup(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
-    logger: Option<&ReplicaLogger>,
-) -> Option<pb::CatchUpPackage> {
-    let no_op_logger = ic_logger::replica_logger::no_op_logger();
-    let logger = logger.unwrap_or(&no_op_logger);
+    logger: &ReplicaLogger,
+) -> Option<CatchUpPackage> {
     let versioned_record = match registry.get_cup_contents(subnet_id, registry.get_latest_version())
     {
         Ok(versioned_record) => versioned_record,
@@ -1463,7 +1460,7 @@ pub fn make_registry_cup_from_cup_contents(
     cup_contents: CatchUpPackageContents,
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
-) -> Option<pb::CatchUpPackage> {
+) -> Option<CatchUpPackage> {
     let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
         err => {
@@ -1536,20 +1533,18 @@ pub fn make_registry_cup_from_cup_contents(
             signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
         },
     };
-    Some(
-        CatchUpPackage {
-            content: CatchUpContent::new(
-                HashedBlock::new(crypto_hash, block),
-                HashedRandomBeacon::new(crypto_hash, random_beacon),
-                Id::from(CryptoHash(cup_contents.state_hash)),
-            ),
-            signature: ThresholdSignature {
-                signer: high_dkg_id,
-                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-            },
-        }
-        .into(),
-    )
+
+    Some(CatchUpPackage {
+        content: CatchUpContent::new(
+            HashedBlock::new(crypto_hash, block),
+            HashedRandomBeacon::new(crypto_hash, random_beacon),
+            Id::from(CryptoHash(cup_contents.state_hash)),
+        ),
+        signature: ThresholdSignature {
+            signer: high_dkg_id,
+            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+        },
+    })
 }
 
 fn bootstrap_ecdsa_summary_from_cup_contents(
@@ -3936,11 +3931,8 @@ mod tests {
                 None
             }
         });
-        let result: CatchUpPackage = make_registry_cup(&registry_client, subnet_test_id(0), None)
-            .as_ref()
-            .unwrap()
-            .try_into()
-            .unwrap();
+        let result =
+            make_registry_cup(&registry_client, subnet_test_id(0), &no_op_logger()).unwrap();
 
         assert_eq!(
             result.content.state_hash.get_ref(),

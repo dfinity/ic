@@ -174,6 +174,14 @@ impl Player {
         let pool = ConsensusPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
+            // Note: it's important to pass the original proto which came from the command line (as
+            // opposed to, for example, a proto which was first deserialized and then serialized
+            // again). Since the proto file could have been produced and signed by nodes running a
+            // different replica version, there is a possibility that the format of
+            // `pb::CatchUpContent` has changed across the versions, in which case deserializing and
+            // serializing the proto could result in a different value of
+            // `pb::CatchUpPackage::content` which will make it impossible to validate the signature
+            // of the proto.
             initial_cup_proto,
             artifact_pool_config,
             MetricsRegistry::new(),
@@ -1071,8 +1079,8 @@ impl Player {
 
         // Verify the CUP signature.
         if let Err(err) = self.crypto.verify_combined_threshold_sig_by_public_key(
-            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
-            &CatchUpContentProtobufBytes(protobuf.content),
+            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
+            &CatchUpContentProtobufBytes::from(&protobuf),
             self.subnet_id,
             last_cup.content.block.get_value().context.registry_version,
         ) {

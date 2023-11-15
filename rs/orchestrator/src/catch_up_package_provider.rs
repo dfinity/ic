@@ -192,10 +192,11 @@ impl CatchUpPackageProvider {
                 )
             })
             .ok()?;
+
         self.crypto
             .verify_combined_threshold_sig_by_public_key(
                 &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
-                &CatchUpContentProtobufBytes(protobuf.content.clone()),
+                &CatchUpContentProtobufBytes::from(&protobuf),
                 subnet_id,
                 cup.content.block.get_value().context.registry_version,
             )
@@ -206,6 +207,7 @@ impl CatchUpPackageProvider {
                 )
             })
             .ok()?;
+
         Some((protobuf, cup))
     }
 
@@ -234,10 +236,7 @@ impl CatchUpPackageProvider {
     /// discovered.
     ///
     /// Follows guidelines for DFINITY thread-safe I/O.
-    pub(crate) fn persist_cup(
-        &self,
-        cup_proto: &pb::CatchUpPackage,
-    ) -> OrchestratorResult<PathBuf> {
+    fn persist_cup(&self, cup_proto: &pb::CatchUpPackage) -> OrchestratorResult<PathBuf> {
         let cup_file_path = self.get_cup_path();
         let cup = CatchUpPackage::try_from(cup_proto).map_err(|e| {
             OrchestratorError::IoError(
@@ -265,7 +264,7 @@ impl CatchUpPackageProvider {
     /// The path that should be used to save the CUP for the assigned subnet.
     /// Includes the specific type encoded in the file for future-proofing and
     /// ease of debugging.
-    pub fn get_cup_path(&self) -> PathBuf {
+    pub(crate) fn get_cup_path(&self) -> PathBuf {
         self.cup_dir.join("cup.types.v1.CatchUpPackage.pb")
     }
 
@@ -278,13 +277,14 @@ impl CatchUpPackageProvider {
         &self,
         local_cup: Option<pb::CatchUpPackage>,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<(pb::CatchUpPackage, CatchUpPackage)> {
+    ) -> OrchestratorResult<CatchUpPackage> {
         let registry_version = self.registry.get_latest_version();
         let local_cup_height = local_cup
             .as_ref()
             .map(CatchUpPackage::try_from)
-            .and_then(|r| r.ok())
-            .map(|c| c.content.height());
+            .and_then(Result::ok)
+            .as_ref()
+            .map(HasHeight::height);
 
         let subnet_cup = self
             .get_peer_cup(subnet_id, registry_version, local_cup.as_ref())
@@ -293,24 +293,25 @@ impl CatchUpPackageProvider {
         let registry_cup = self
             .registry
             .get_registry_cup(registry_version, subnet_id)
+            .map(pb::CatchUpPackage::from)
             .ok();
 
-        let (latest_cup, latest_cup_proto) = vec![local_cup, registry_cup, subnet_cup]
+        let latest_cup_proto = vec![local_cup, registry_cup, subnet_cup]
             .into_iter()
             .flatten()
-            .map(|proto| {
-                (
-                    CatchUpPackage::try_from(&proto).expect("deserializing CUP failed"),
-                    proto,
-                )
+            .max_by_key(|proto| {
+                CatchUpPackage::try_from(proto)
+                    .expect("deserializing CUP failed")
+                    .height()
             })
-            .max_by_key(|(cup, _)| cup.content.height())
             .ok_or(OrchestratorError::MakeRegistryCupError(
                 subnet_id,
                 registry_version,
             ))?;
+        let latest_cup =
+            CatchUpPackage::try_from(&latest_cup_proto).expect("Deserialzing CUP failed");
 
-        let height = Some(latest_cup.content.height());
+        let height = Some(latest_cup.height());
         // We recreate the local registry CUP everytime to avoid incompatibility issues. Without
         // this recreation, we might run into the following problem: assume the orchestrator of
         // version A creates a local unsigned CUP from the registry contents, persists it, then
@@ -322,14 +323,15 @@ impl CatchUpPackageProvider {
         //
         // By re-creating the unsigned CUP every time we realize it's the newest one, we instead
         // recreate the CUP on all orchestrators of the version B before starting the replica.
-        if height > local_cup_height || height == local_cup_height && latest_cup.is_unsigned() {
+        if height > local_cup_height || height == local_cup_height && !latest_cup.is_signed() {
             self.persist_cup(&latest_cup_proto)?;
         }
-        Ok((latest_cup_proto, latest_cup))
+
+        Ok(latest_cup)
     }
 
     // Returns the locally persisted CUP in deserialized form
-    pub fn get_local_cup(&self) -> Option<CatchUpPackage> {
+    pub(crate) fn get_local_cup(&self) -> Option<CatchUpPackage> {
         match self.get_local_cup_proto() {
             None => None,
             Some(cup_proto) => (&cup_proto)
@@ -340,7 +342,7 @@ impl CatchUpPackageProvider {
     }
 
     /// Returns the locally persisted CUP in protobuf form
-    pub fn get_local_cup_proto(&self) -> Option<pb::CatchUpPackage> {
+    pub(crate) fn get_local_cup_proto(&self) -> Option<pb::CatchUpPackage> {
         let path = self.get_cup_path();
         if !path.exists() {
             return None;
