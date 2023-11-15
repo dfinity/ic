@@ -128,9 +128,9 @@
     when: always
   dependencies: []
   extends:
-    - ".build-k8s-legacy"
+    - ".build-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -162,9 +162,9 @@
     when: always
   dependencies: []
   extends:
-    - ".build-k8s-legacy"
+    - ".build-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -1688,7 +1688,7 @@ benchmark-response-payload:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -1738,7 +1738,7 @@ benchmark-xnet:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -3432,7 +3432,7 @@ delegated-identity-bench:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -3586,7 +3586,7 @@ heavy-memory-update-performance-test-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -3695,7 +3695,7 @@ large-response-downloading-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4017,7 +4017,7 @@ maximum-capacity-boundary-nodes-queries:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4067,7 +4067,7 @@ maximum-capacity-canister-http:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4134,7 +4134,7 @@ maximum-capacity-large-memory-query:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4184,7 +4184,7 @@ maximum-capacity-large-memory-update:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4234,7 +4234,7 @@ maximum-capacity-mixed-counter-memory:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4287,7 +4287,7 @@ maximum-capacity-mixed-workloads:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4337,7 +4337,7 @@ maximum-capacity-multiple-large-memory-update:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4387,7 +4387,7 @@ maximum-capacity-qr:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4437,7 +4437,7 @@ maximum-capacity-sha256:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4487,7 +4487,7 @@ maximum-capacity-system-baseline-query:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4552,7 +4552,7 @@ maximum-capacity-system-baseline-update:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -4967,7 +4967,7 @@ statesync-experiment:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -5017,7 +5017,7 @@ system-baseline-query-performance-test-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -5074,7 +5074,7 @@ system-baseline-update-performance-test-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -5131,7 +5131,7 @@ tecdsa:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -5349,7 +5349,7 @@ xnet-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd0ee9eb2614477a7873ea20b09ae8698499b7a3efd7868755cbaa4f8793a71b
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
