@@ -8,6 +8,7 @@ pub enum Dep {
     VersionExtra(NormalDep),
     Local(LocalDep),
     Git(GitDep),
+    Workspace(Workspace),
 }
 
 impl Dep {
@@ -36,4 +37,9 @@ pub struct LocalDep {
 pub struct GitDep {
     #[serde(rename = "git")]
     pub _git: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Workspace {
+    pub workspace: bool,
 }
