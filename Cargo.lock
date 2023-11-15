@@ -8751,6 +8751,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "mockall",
+ "num-traits",
  "on_wire",
  "pretty_assertions",
  "proptest",

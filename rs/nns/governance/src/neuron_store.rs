@@ -674,6 +674,42 @@ impl NeuronStore {
         })
     }
 
+    /// Validates a batch of neurons in stable neuron store are all inactive.
+    ///
+    /// The batch is defined as the `next_neuron_id` to start and the `batch_size` for the upper
+    /// bound of the number of neurons to validate.
+    ///
+    /// Returns the neuron id the next batch will start with (the neuron id last validated + 1). If
+    /// no neuron is validated in this batch, returns None.
+    pub fn batch_validate_neurons_in_stable_store_are_inactive(
+        &self,
+        next_neuron_id: NeuronId,
+        batch_size: usize,
+    ) -> (Vec<NeuronId>, Option<NeuronId>) {
+        let mut neuron_id_for_next_batch = None;
+        let active_neurons_in_stable_store = with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store
+                .range_neurons(next_neuron_id..)
+                .take(batch_size)
+                .flat_map(|neuron| {
+                    let current_neuron_id = neuron.id.unwrap();
+                    neuron_id_for_next_batch = current_neuron_id.next();
+
+                    let is_neuron_inactive = neuron.is_inactive(self.now());
+
+                    if is_neuron_inactive {
+                        None
+                    } else {
+                        // An active neuron in stable neuron store is invalid.
+                        Some(current_neuron_id)
+                    }
+                })
+                .collect()
+        });
+
+        (active_neurons_in_stable_store, neuron_id_for_next_batch)
+    }
+
     // Census
 
     pub fn stable_neuron_store_len(&self) -> u64 {
