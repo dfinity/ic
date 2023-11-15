@@ -306,7 +306,7 @@ where
                 move |id: &'_ artifact::ArtifactId, attribute: &'_ artifact::ArtifactAttribute| {
                     match (id.try_into(), attribute.try_into()) {
                         (Ok(idd), Ok(attr)) => func(idd, attr),
-                        _ => panic!("Priority function called on wrong id or attribute!"),
+                        _ => crate::Priority::Drop,
                     }
                 },
             )
