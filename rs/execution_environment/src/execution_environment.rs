@@ -320,6 +320,7 @@ impl ExecutionEnvironment {
         resource_saturation_scaling: usize,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         heap_delta_rate_limit: NumBytes,
+        upload_wasm_chunk_instructions: NumInstructions,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
@@ -340,6 +341,7 @@ impl ExecutionEnvironment {
             config.wasm_chunk_store,
             config.rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
+            upload_wasm_chunk_instructions,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -1036,7 +1038,7 @@ impl ExecutionEnvironment {
                         *msg.sender(),
                         &mut state,
                         args,
-                        &mut round_limits.subnet_available_memory,
+                        round_limits,
                         registry_settings.subnet_size,
                         &resource_saturation,
                     ),
@@ -1544,7 +1546,7 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: UploadChunkArgs,
-        subnet_available_memory: &mut SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
@@ -1554,7 +1556,7 @@ impl ExecutionEnvironment {
                 sender,
                 canister,
                 &args.chunk,
-                subnet_available_memory,
+                round_limits,
                 subnet_size,
                 resource_saturation,
             )
