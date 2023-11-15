@@ -85,17 +85,18 @@ async fn mint_cketh() {
 
 /// Scraps Ethereum logs between `from` and `min(from + MAX_BLOCK_SPREAD, to)` since certain RPC providers
 /// require that the number of blocks queried is no greater than MAX_BLOCK_SPREAD.
-/// Returns the last block number that was scraped (which is `min(from + MAX_BLOCK_SPREAD, to)`).
+/// Returns the last block number that was scraped (which is `min(from + MAX_BLOCK_SPREAD, to)`) if there
+/// was no error when querying the providers, otherwise returns `None`.
 async fn scrap_eth_logs_range_inclusive(
     contract_address: Address,
     from: BlockNumber,
     to: BlockNumber,
-) -> BlockNumber {
+) -> Option<BlockNumber> {
     /// The maximum block spread is introduced by Cloudflare limits.
     /// https://developers.cloudflare.com/web3/ethereum-gateway/
     const MAX_BLOCK_SPREAD: u16 = 800;
     match from.cmp(&to) {
-        Ordering::Less => {
+        Ordering::Less | Ordering::Equal => {
             let max_to = from
                 .checked_add(BlockNumber::from(MAX_BLOCK_SPREAD))
                 .unwrap_or(BlockNumber::MAX);
@@ -120,7 +121,7 @@ async fn scrap_eth_logs_range_inclusive(
                         INFO,
                         "Failed to get ETH logs from block {from} to block {last_scraped_block_number}: {e:?}",
                     );
-                    return from;
+                    return None;
                 }
             };
             let has_new_events = !transaction_events.is_empty();
@@ -172,14 +173,7 @@ async fn scrap_eth_logs_range_inclusive(
                 report_transaction_error(error);
             }
             mutate_state(|s| s.last_scraped_block_number = last_scraped_block_number);
-            last_scraped_block_number
-        }
-        Ordering::Equal => {
-            log!(
-                DEBUG,
-                "[scrap_eth_logs] Skipping scrapping ETH logs: no new blocks",
-            );
-            to
+            Some(last_scraped_block_number)
         }
         Ordering::Greater => {
             ic_cdk::trap(&format!(
@@ -221,12 +215,18 @@ pub async fn scrap_eth_logs() {
         let next_block_to_query = last_scraped_block_number
             .checked_increment()
             .unwrap_or(BlockNumber::MAX);
-        last_scraped_block_number = scrap_eth_logs_range_inclusive(
+        last_scraped_block_number = match scrap_eth_logs_range_inclusive(
             contract_address,
             next_block_to_query,
             last_block_number,
         )
-        .await;
+        .await
+        {
+            Some(last_scraped_block_number) => last_scraped_block_number,
+            None => {
+                return;
+            }
+        };
     }
 }
 

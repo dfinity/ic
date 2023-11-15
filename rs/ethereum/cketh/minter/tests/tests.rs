@@ -12,8 +12,8 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::RetrieveEthStatus::Pending;
 use ic_cketh_minter::endpoints::{
-    EthTransaction, RetrieveEthRequest, RetrieveEthStatus, TxFinalizedStatus, WithdrawalArg,
-    WithdrawalError,
+    CandidBlockTag, EthTransaction, RetrieveEthRequest, RetrieveEthStatus, TxFinalizedStatus,
+    WithdrawalArg, WithdrawalError,
 };
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_cketh_minter::logs::Log;
@@ -45,6 +45,8 @@ const DEFAULT_DEPOSIT_TRANSACTION_HASH: &str =
 const DEFAULT_DEPOSIT_LOG_INDEX: u64 = 0x24;
 const DEFAULT_BLOCK_HASH: &str =
     "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4";
+
+const LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL: u64 = 3_956_206;
 const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec;
 const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000;
 const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
@@ -627,8 +629,7 @@ fn should_not_overlap_when_scrapping_logs() {
         .build()
         .expect_rpc_calls(&cketh);
 
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
-    let first_from_block = BlockNumber::from(3_956_207_u64);
+    let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
         .checked_add(BlockNumber::from(800_u64))
         .unwrap();
@@ -659,6 +660,129 @@ fn should_not_overlap_when_scrapping_logs() {
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
+
+    cketh
+        .check_audit_logs_and_upgrade()
+        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+            block_number: second_to_block.into(),
+        }]);
+}
+
+#[test]
+fn should_retry_from_same_block_when_scrapping_fails() {
+    let cketh = CkEthSetup::new();
+
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
+        .build()
+        .expect_rpc_calls(&cketh);
+    let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let to_block = from_block.checked_add(BlockNumber::from(800_u64)).unwrap();
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
+            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .respond_with(JsonRpcProvider::BlockPi, json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    let cketh = cketh
+        .check_audit_logs_and_upgrade()
+        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+            block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
+        }]);
+
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
+        .build()
+        .expect_rpc_calls(&cketh);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
+            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh
+        .check_audit_logs_and_upgrade()
+        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+            block_number: Nat::from(to_block),
+        }]);
+}
+
+#[test]
+fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
+    let cketh = CkEthSetup::new();
+
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1))
+        .build()
+        .expect_rpc_calls(&cketh);
+    let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": from_block,
+            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
+            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+}
+
+#[test]
+fn should_panic_when_last_finalized_block_in_the_past() {
+    let cketh = CkEthSetup::new();
+
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL - 1))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    let cketh = cketh
+        .check_audit_logs_and_upgrade()
+        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+            block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
+        }]);
+
+    let last_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 10;
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(last_finalized_block))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let first_to_block = BlockNumber::from(last_finalized_block);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
+            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh
+        .check_audit_logs_and_upgrade()
+        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+            block_number: last_finalized_block.into(),
+        }]);
 }
 
 fn assert_contains_unique_event(events: &[Event], payload: EventPayload) {
@@ -706,10 +830,10 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
         ethereum_network: EthereumNetwork::Mainnet,
         ledger_id: ledger_id.get().0,
         next_transaction_nonce: 0.into(),
-        ethereum_block_height: Default::default(),
+        ethereum_block_height: CandidBlockTag::Finalized,
         ethereum_contract_address: Some("0x907b6EFc1a398fD88A8161b3cA02eEc8Eaf72ca1".to_string()),
         minimum_withdrawal_amount: CKETH_TRANSFER_FEE.into(),
-        last_scraped_block_number: 3_956_206.into(),
+        last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
     };
     let minter_arg = MinterArg::InitArg(args);
     env.install_existing_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -1193,6 +1317,13 @@ impl CkEthSetup {
                 Encode!(&MinterArg::UpgradeArg(Default::default())).unwrap(),
             )
             .unwrap();
+    }
+
+    fn check_audit_logs_and_upgrade(self) -> Self {
+        self.check_audit_log();
+        self.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
+        self.upgrade_minter();
+        self
     }
 }
 
@@ -1687,10 +1818,8 @@ impl TransactionReceiptProcessWithdrawal {
         self
     }
 
-    fn check_audit_logs_and_upgrade(self) -> Self {
-        self.setup.check_audit_log();
-        self.setup.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
-        self.setup.upgrade_minter();
+    fn check_audit_logs_and_upgrade(mut self) -> Self {
+        self.setup = self.setup.check_audit_logs_and_upgrade();
         self
     }
 
