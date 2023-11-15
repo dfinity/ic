@@ -934,6 +934,8 @@ pub trait HasIcDependencies {
     fn get_api_boundary_node_img_sha256(&self) -> Result<String>;
     fn get_canister_http_test_ca_cert(&self) -> Result<String>;
     fn get_canister_http_test_ca_key(&self) -> Result<String>;
+    fn get_hostos_update_img_test_url(&self) -> Result<Url>;
+    fn get_hostos_update_img_test_sha256(&self) -> Result<String>;
 }
 
 impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
@@ -1104,6 +1106,21 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     fn get_canister_http_test_ca_key(&self) -> Result<String> {
         let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.key";
         self.read_dependency_to_string(dep_rel_path)
+    }
+
+    fn get_hostos_update_img_test_url(&self) -> Result<Url> {
+        let url = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL",
+        )?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_hostos_update_img_test_sha256(&self) -> Result<String> {
+        let sha256 = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256",
+        )?;
+        bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
+        Ok(sha256)
     }
 }
 

@@ -17337,6 +17337,7 @@ dependencies = [
  "crossbeam-channel",
  "crossbeam-utils",
  "cycles-minting-canister",
+ "deterministic_ips",
  "dfn_candid",
  "dfn_core",
  "dfn_json",

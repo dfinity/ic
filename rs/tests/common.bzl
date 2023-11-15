@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "//rs/http_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
+    "//rs/ic_os/deterministic_ips",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/proto",
