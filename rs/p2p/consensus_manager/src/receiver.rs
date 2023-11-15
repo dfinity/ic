@@ -37,10 +37,11 @@ use tokio::{
         watch,
     },
     task::JoinSet,
-    time::{self, MissedTickBehavior},
+    time::{self, sleep_until, timeout_at, Instant, MissedTickBehavior},
 };
 
-const PRIORITY_FUNCTION_UPDATE_FREQUENCY_SECONDS: u64 = 3;
+const ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
+const PRIORITY_FUNCTION_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 type ReceivedAdvertSender<A> = Sender<(AdvertUpdate<A>, NodeId, ConnId)>;
@@ -192,9 +193,7 @@ where
     }
 
     async fn start_event_loop(mut self) {
-        let mut priority_fn_interval = time::interval(Duration::from_secs(
-            PRIORITY_FUNCTION_UPDATE_FREQUENCY_SECONDS,
-        ));
+        let mut priority_fn_interval = time::interval(PRIORITY_FUNCTION_UPDATE_INTERVAL);
         priority_fn_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             select! {
@@ -405,48 +404,28 @@ where
                 } {
                     let request = build_rpc_handler_request(Artifact::TAG.into(), &id);
 
-                    let peer_deleted_the_artifact = async {
-                        peer_rx.changed().await?;
-                        while peer_rx.borrow().contains(&peer) {
-                            peer_rx.changed().await?;
-                        }
-                        Ok::<_, watch::error::RecvError>(())
-                    };
-
-                    let priority_is_drop = async {
-                        priority_fn_watcher.changed().await?;
-                        while Priority::Drop != priority_fn_watcher.borrow()(id, attr) {
-                            priority_fn_watcher.changed().await?;
-                        }
-                        Ok::<_, watch::error::RecvError>(())
-                    };
-
-                    select! {
-                        _ = time::sleep(Duration::from_secs(5)) => {}
-
-                        res = peer_deleted_the_artifact => {
-                            if res.is_err() {
-                                result =  DownloadResult::AllPeersDeletedTheArtifact;
+                    let next_request_at = Instant::now() + ARTIFACT_RPC_TIMEOUT;
+                    match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
+                        Ok(Ok(response)) if response.status() == StatusCode::OK => {
+                            if let Ok(message) =
+                                bincode::deserialize::<Artifact::Message>(response.body())
+                            {
+                                result = DownloadResult::Completed(message, peer);
                                 break;
                             }
                         }
-
-                        Ok(_)  = priority_is_drop => {
-                            result = DownloadResult::PriorityIsDrop;
-                            break;
-                        }
-
-                        Ok(response) = transport.rpc(&peer, request) => {
-                            if let StatusCode::OK = response.status() {
-                                if let Ok(message) =
-                                    bincode::deserialize::<Artifact::Message>(response.body())
-                                {
-                                    result = DownloadResult::Completed(message, peer);
-                                    break;
-                                }
-                            }
+                        _ => {
                             metrics.download_task_artifact_download_errors_total.inc();
                         }
+                    }
+
+                    // Wait before checking the priority so we might be able to avoid an unnecessary download.
+                    sleep_until(next_request_at).await;
+                    if priority_fn_watcher.has_changed().is_ok()
+                        && priority_fn_watcher.borrow_and_update()(id, attr) == Priority::Drop
+                    {
+                        result = DownloadResult::PriorityIsDrop;
+                        break;
                     }
                 }
 
