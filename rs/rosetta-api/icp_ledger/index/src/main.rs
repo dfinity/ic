@@ -1,7 +1,7 @@
 use candid::{candid_method, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, query};
+use ic_cdk_macros::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
@@ -236,6 +236,11 @@ fn init(init_arg: InitArg) {
     });
 
     // set the first build_index to be called after init
+    set_build_index_timer(Duration::from_secs(1));
+}
+
+#[post_upgrade]
+fn post_upgrade() {
     set_build_index_timer(Duration::from_secs(1));
 }
 
