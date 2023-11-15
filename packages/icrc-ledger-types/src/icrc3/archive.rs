@@ -5,16 +5,17 @@ use super::{
     transactions::{GetTransactionsRequest, TransactionRange},
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
+use serde::Serialize;
 use std::marker::PhantomData;
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchivedRange<Callback> {
     pub start: Nat,
     pub length: Nat,
     pub callback: Callback,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "candid::types::reference::Func")]
 pub struct QueryArchiveFn<Input: CandidType, Output: CandidType> {
     pub canister_id: Principal,
@@ -83,7 +84,7 @@ impl<Input: CandidType, Output: CandidType> CandidType for QueryArchiveFn<Input,
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchiveInfo {
     pub canister_id: Principal,
     pub block_range_start: BlockIndex,
