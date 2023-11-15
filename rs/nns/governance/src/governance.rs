@@ -5,7 +5,6 @@ use crate::{
     heap_governance_data::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData,
     },
-    is_copy_inactive_neurons_to_stable_memory_enabled,
     migrations::maybe_run_migrations,
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::NeuronStore,
@@ -1574,15 +1573,6 @@ impl Governance {
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
-        println!(
-            "Copying inactive neurons to stable memory is {}.",
-            if is_copy_inactive_neurons_to_stable_memory_enabled() {
-                "ENABLED"
-            } else {
-                "DISABLED"
-            }
-        );
-
         // Step 1: Populate some fields governance_proto if they are blank.
 
         // Step 1.1: genesis_timestamp_seconds. 0 indicates it hasn't been set already.
@@ -6598,9 +6588,7 @@ impl Governance {
 
         // It might make sense for this to be part of the previous if/else chain, but joining the
         // chain seems to block us indefinitely.
-        if is_copy_inactive_neurons_to_stable_memory_enabled()
-            && self.should_copy_next_batch_of_inactive_neurons_to_stable_memory()
-        {
+        if self.should_copy_next_batch_of_inactive_neurons_to_stable_memory() {
             self.copy_next_batch_of_inactive_neurons_to_stable_memory();
         }
 
