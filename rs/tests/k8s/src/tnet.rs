@@ -16,6 +16,7 @@ use k8s_openapi::chrono::Duration;
 use k8s_openapi::chrono::Utc;
 use kube::api::{ListParams, PostParams};
 use kube::core::ObjectMeta;
+use kube::Error;
 use kube::ResourceExt;
 use kube::{
     api::{Api, DynamicObject, GroupVersionKind},
@@ -187,6 +188,59 @@ impl TNet {
                 )
             })
             .collect::<Vec<(String, String)>>())
+    }
+
+    async fn vm_action(name: &str, action: &str) -> kube::Result<String> {
+        let client = Client::try_default().await?;
+        client
+            .request_text(
+                http::Request::builder()
+                    .method("PUT")
+                    .uri(format!(
+                        "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
+                        *NAMESPACE, name, action,
+                    ))
+                    .body("{}".as_bytes().to_vec())
+                    .unwrap(),
+            )
+            .await
+            .or_else(|e| match e {
+                Error::Api(error_response) if error_response.reason == "Conflict" => {
+                    kube::Result::Ok(Default::default())
+                }
+                _ => kube::Result::Err(e),
+            })
+    }
+
+    async fn vms_action(index: u32, action: &str) -> Result<()> {
+        let tnet = Self::owner_config_map_name(index);
+        let client = Client::try_default().await?;
+
+        let gvk = GroupVersionKind::gvk("kubevirt.io", "v1", "VirtualMachine");
+        let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
+        let api_vm = Api::<DynamicObject>::namespaced_with(client.clone(), &NAMESPACE, &ar);
+        let vms = api_vm
+            .list(&ListParams {
+                label_selector: format!("{}={}", TNET_NAME_LABEL, tnet).into(),
+                ..Default::default()
+            })
+            .await?;
+
+        futures::future::try_join_all(vms.into_iter().map(|vm| {
+            let name = vm.name_any();
+            async move { Self::vm_action(&name, action).await }
+        }))
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn start(index: u32) -> Result<()> {
+        Self::vms_action(index, "start").await
+    }
+
+    pub async fn stop(index: u32) -> Result<()> {
+        Self::vms_action(index, "stop").await
     }
 
     pub fn version(mut self, version: &str) -> Self {

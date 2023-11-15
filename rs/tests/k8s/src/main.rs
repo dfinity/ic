@@ -52,6 +52,16 @@ enum Commands {
     },
     /// List all testnets
     List {},
+    /// Start the testnet
+    Start {
+        #[arg(short, long)]
+        index: u32,
+    },
+    /// Stop the testnet
+    Stop {
+        #[arg(short, long)]
+        index: u32,
+    },
 }
 
 #[tokio::main]
@@ -94,6 +104,12 @@ async fn main() -> Result<()> {
                     println!(" {:>10}  ⎈  {}", id, name);
                 }
             }
+        }
+        Some(Commands::Start { index }) => {
+            TNet::start(*index).await?;
+        }
+        Some(Commands::Stop { index }) => {
+            TNet::stop(*index).await?;
         }
         None => {}
     }

@@ -3790,6 +3790,7 @@ dependencies = [
  "cidr",
  "clap 4.3.19",
  "futures",
+ "http",
  "ic-prep",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
