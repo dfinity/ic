@@ -9,6 +9,7 @@ use crate::{
 };
 use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger};
 use maplit::{btreemap, hashmap, hashset};
+use num_traits::bounds::LowerBounded;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn simple_neuron(id: u64) -> Neuron {
@@ -410,4 +411,72 @@ fn test_neuron_store_new_then_restore() {
             neuron
         );
     }
+}
+
+#[test]
+fn test_batch_validate_neurons_in_stable_store_are_inactive() {
+    // Create a neuron store with 80 neurons.
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    for i in 1..=80 {
+        // The dissolve state timestamp is chosen so that it meets the inactive neuron criteria.
+        neuron_store
+            .add_neuron(Neuron {
+                cached_neuron_stake_e8s: 0,
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
+                ..simple_neuron(i)
+            })
+            .unwrap();
+    }
+
+    // Validate 8 batches with 10 each batch.
+    let mut next_neuron_id = NeuronId::min_value();
+    for _ in 0..8 {
+        let (invalid_neuron_ids, neuron_id_for_next_batch) =
+            neuron_store.batch_validate_neurons_in_stable_store_are_inactive(next_neuron_id, 10);
+
+        // No invalid neuron ids should be found.
+        assert_eq!(invalid_neuron_ids, vec![]);
+
+        // There should always be the next neuron id.
+        next_neuron_id = neuron_id_for_next_batch.unwrap();
+    }
+
+    // Validate one more time and there shouldn't be any validation done for this round.
+    let (invalid_neuron_ids, neuron_id_for_next_batch) =
+        neuron_store.batch_validate_neurons_in_stable_store_are_inactive(next_neuron_id, 10);
+    assert_eq!(invalid_neuron_ids, vec![]);
+    assert_eq!(neuron_id_for_next_batch, None);
+}
+
+#[test]
+fn test_batch_validate_neurons_in_stable_store_are_inactive_invalid() {
+    // Step 1.1: set up 1 inactive neuron.
+    let neuron = Neuron {
+        cached_neuron_stake_e8s: 0,
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
+        ..simple_neuron(1)
+    };
+
+    // Step 1.2: create neuron store with no neurons.
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+
+    // Step 1.3: add the inactive neuron into neuron store.
+    neuron_store.add_neuron(neuron.clone()).unwrap();
+
+    // Step 1.4: modify the inactive in stable neuron store to make it actually active.
+    with_stable_neuron_store_mut(|stable_neuron_store| {
+        stable_neuron_store
+            .update(Neuron {
+                cached_neuron_stake_e8s: 1,
+                ..neuron
+            })
+            .unwrap()
+    });
+
+    // Step 2: calls `batch_validate_neurons_in_stable_store_are_inactive` to validate.
+    let (invalid_neuron_ids, _) =
+        neuron_store.batch_validate_neurons_in_stable_store_are_inactive(NeuronId::min_value(), 10);
+
+    // Step 3: verifies the results - the active neuron in stable storage should be found as invalid.
+    assert_eq!(invalid_neuron_ids, vec![neuron.id.unwrap()]);
 }
