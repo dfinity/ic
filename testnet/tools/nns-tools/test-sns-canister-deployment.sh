@@ -161,7 +161,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
 
         echo "Participate in Swap to commit it (this spawns the archive canister) ..." | tee -a $LOG_FILE
-        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 30000
+        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
         if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
@@ -209,7 +209,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
 
         echo "Participate in Swap to commit it (this spawns the archive canister) ..." | tee -a $LOG_FILE
-        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 30000
+        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
         if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
