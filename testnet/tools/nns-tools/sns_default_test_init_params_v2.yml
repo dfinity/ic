@@ -69,13 +69,13 @@ Swap:
     minimum_participants: 1
 
     minimum_direct_participation_icp: 1000000000 e8s
-    maximum_direct_participation_icp: 3000000000000 e8s
+    maximum_direct_participation_icp: 30000000000000 e8s
 
     minimum_participant_icp: 1000000000 e8s
-    maximum_participant_icp: 3000000000000 e8s
+    maximum_participant_icp: 30000000000000 e8s
 
     VestingSchedule:
-        events: 30000
+        events: 30
         interval: 2 seconds
 
     duration: 7 days
