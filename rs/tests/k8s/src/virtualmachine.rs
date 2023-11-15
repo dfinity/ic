@@ -18,6 +18,7 @@ kind: VirtualMachine
 metadata:
   labels:
     kubevirt.io/vm: {name}
+    tnet.internetcomputer.org/name: {tnet}
   name: {name}
 spec:
   running: {running}
@@ -76,6 +77,7 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: {name}
+  tnet.internetcomputer.org/name: {tnet}
 spec:
   running: true
   template:
@@ -141,6 +143,7 @@ metadata:
   name: {vmi_name}
   labels:
     kubevirt.io/vm: {vm_name}
+    tnet.internetcomputer.org/name: {tnet}
 spec:
   terminationGracePeriodSeconds: 30
   domain:
@@ -299,6 +302,7 @@ pub async fn create_vm(
     info!("Creating virtual machine {}", name);
     let yaml = VM_PVC_TEMPLATE
         .replace("{name}", name)
+        .replace("{tnet}",&owner.name)
         .replace("{running}", &running.to_string())
         .replace("{ipv6}", ipv6);
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
