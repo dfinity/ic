@@ -1,6 +1,6 @@
 .benchmark-test:
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
       when: manual
@@ -423,7 +423,7 @@ statesync-experiment:
 
 .benchmark-spot-test:
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
       when: manual
