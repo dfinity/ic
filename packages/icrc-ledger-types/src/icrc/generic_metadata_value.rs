@@ -1,8 +1,9 @@
 use candid::{CandidType, Deserialize, Int, Nat};
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 
 /// Variant type for the `metadata` endpoint values.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum MetadataValue {
     Nat(Nat),
     Int(Int),
