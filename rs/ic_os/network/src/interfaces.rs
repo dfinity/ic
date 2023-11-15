@@ -232,8 +232,31 @@ fn get_interface_paths() -> Vec<PathBuf> {
 
 fn is_valid_network_interface(path: &&PathBuf) -> bool {
     let filename = path.file_name().unwrap().to_string_lossy();
-    let first3_chars = filename.chars().take(3).collect::<String>();
-    !filename.contains("virtual") && matches!(first3_chars.as_str(), "eno" | "enp" | "ens")
+    let first3_chars = filename.chars().take(3).collect::<String>().to_lowercase();
+    /*
+    Only target ethernet devices (not infiniband or wireless).
+    Ignore enx - these are known to be used for bmc connectivity
+
+        Ethernet Devices:
+            en: General prefix for Ethernet devices.
+                eno: Onboard Ethernet devices.
+                ens: Ethernet devices connected through hot-plug slots (e.g., PCIe, USB).
+                enp: Ethernet devices connected to the system's mainboard via PCI Express (PCIe) or PCI.
+                enx: Ethernet devices with a fixed hardware address (common for USB Ethernet adapters).
+
+        Wireless Devices:
+            wl: General prefix for Wireless LAN (WLAN) devices.
+                wlp: Wireless LAN devices connected through hot-plug slots (e.g., PCIe, USB).
+
+        WWAN Devices:
+            ww: General prefix for Wireless WAN devices.
+                wwp: Wireless WAN devices connected through hot-plug slots (e.g., mobile broadband modems).
+
+        InfiniBand Devices:
+            ib: General prefix for InfiniBand devices.
+                ibp: InfiniBand devices connected through hot-plug slots.
+    */
+    matches!(first3_chars.as_str(), "eno" | "enp" | "ens")
 }
 
 #[cfg(test)]
