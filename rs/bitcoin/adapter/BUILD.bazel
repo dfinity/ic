@@ -89,16 +89,34 @@ rust_test(
     deps = DEV_DEPENDENCIES,
 )
 
+genrule(
+    name = "decompress_mainnet_headers",
+    srcs = ["@bitcoin_adapter_mainnet_headers//file"],
+    outs = ["mainnet_headers_800k.json"],
+    cmd = "gunzip -c $< > $@",
+)
+
+genrule(
+    name = "decompress_mainnet_blocks",
+    srcs = ["@bitcoin_adapter_mainnet_blocks//file"],
+    outs = ["mainnet_blocks.json"],
+    cmd = "gunzip -c $< > $@",
+)
+
 rust_test_suite(
     name = "adapter_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     data = [
+        ":decompress_mainnet_blocks",
+        ":decompress_mainnet_headers",
         "@bitcoin-core//:bitcoin-core",
         "@bitcoin-core//:bitcoind",
     ],
     env = {
         "BITCOIN_CORE_PATH": "$(rootpath @bitcoin-core//:bitcoind)",
+        "HEADERS_DATA_PATH": "$(rootpath :decompress_mainnet_headers)",
+        "BLOCKS_DATA_PATH": "$(rootpath :decompress_mainnet_blocks)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["requires-network"],
