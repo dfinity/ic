@@ -432,7 +432,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -441,6 +441,205 @@
         "w": 12,
         "x": 0,
         "y": 18
+      },
+      "id": 52,
+      "interval": "10s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      },
+      "pluginVersion": "9.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "label_replace(\nlabel_replace(\n  state_sync_manager_chunk_size_decompressed_total{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"},\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)\n",
+          "interval": "",
+          "legendFormat": "{{ic_subnet}} {{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "total state delivered",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "id": 53,
+      "interval": "10s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      },
+      "pluginVersion": "9.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "label_replace(\nlabel_replace(\n  state_sync_manager_chunk_size_compressed_total{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"},\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)\n",
+          "interval": "",
+          "legendFormat": "{{ic_subnet}} {{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "total state received from p2p",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
       },
       "id": 43,
       "interval": "10s",
@@ -539,7 +738,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 26
       },
       "id": 44,
       "interval": "10s",
@@ -638,7 +837,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "id": 42,
       "interval": "10s",
@@ -737,7 +936,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 34
       },
       "id": 49,
       "interval": "10s",
@@ -836,7 +1035,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 42
       },
       "id": 45,
       "interval": "10s",
@@ -882,8 +1081,8 @@
       {
         "current": {
           "selected": false,
-          "text": "rejoin_test_large_state--1698399505443",
-          "value": "rejoin_test_large_state--1698399505443"
+          "text": "rejoin_test_large_state--1699863978386",
+          "value": "rejoin_test_large_state--1699863978386"
         },
         "datasource": {
           "type": "prometheus",

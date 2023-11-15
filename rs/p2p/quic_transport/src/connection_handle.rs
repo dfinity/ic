@@ -49,10 +49,19 @@ impl ConnectionHandle {
         &self,
         mut request: Request<Bytes>,
     ) -> Result<Response<Bytes>, SendError> {
+        let _timer = self
+            .metrics
+            .connection_handle_duration_seconds
+            .with_label_values(&[request.uri().path()])
+            .start_timer();
         self.metrics
-            .connection_handle_requests_total
-            .with_label_values(&[REQUEST_TYPE_RPC])
-            .inc();
+            .connection_handle_bytes_sent_total
+            .with_label_values(&[request.uri().path()])
+            .inc_by(request.body().len() as u64);
+        let in_counter = self
+            .metrics
+            .connection_handle_bytes_received_total
+            .with_label_values(&[request.uri().path()]);
 
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
@@ -71,14 +80,16 @@ impl ConnectionHandle {
             .map_err(|e| {
                 self.metrics
                     .connection_handle_errors_total
-                    .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE]);
+                    .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
+                    .inc();
                 SendError::SendRequestFailed { reason: e }
             })?;
 
         send_stream.finish().await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH]);
+                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH])
+                .inc();
             SendError::SendRequestFailed {
                 reason: e.to_string(),
             }
@@ -87,21 +98,28 @@ impl ConnectionHandle {
         let mut response = read_response(recv_stream).await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ]);
+                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
+                .inc();
             SendError::RecvResponseFailed { reason: e }
         })?;
 
         // Propagate PeerId from this request to upper layers.
         response.extensions_mut().insert(self.peer_id);
 
+        in_counter.inc_by(response.body().len() as u64);
         Ok(response)
     }
 
     pub(crate) async fn push(&self, mut request: Request<Bytes>) -> Result<(), SendError> {
+        let _timer = self
+            .metrics
+            .connection_handle_duration_seconds
+            .with_label_values(&[request.uri().path()])
+            .start_timer();
         self.metrics
-            .connection_handle_requests_total
-            .with_label_values(&[REQUEST_TYPE_PUSH])
-            .inc();
+            .connection_handle_bytes_sent_total
+            .with_label_values(&[request.uri().path()])
+            .inc_by(request.body().len() as u64);
 
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
@@ -120,14 +138,16 @@ impl ConnectionHandle {
             .map_err(|e| {
                 self.metrics
                     .connection_handle_errors_total
-                    .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE]);
+                    .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE])
+                    .inc();
                 SendError::SendRequestFailed { reason: e }
             })?;
 
         send_stream.finish().await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH]);
+                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH])
+                .inc();
             SendError::SendRequestFailed {
                 reason: e.to_string(),
             }
