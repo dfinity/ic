@@ -10052,9 +10052,11 @@ dependencies = [
  "clap 3.2.25",
  "dfn_candid",
  "dfn_protobuf",
+ "ed25519-consensus",
  "futures",
  "hex",
  "ic-agent",
+ "ic-base-types",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-constants",
@@ -10079,8 +10081,12 @@ dependencies = [
  "log4rs",
  "on_wire",
  "prometheus",
+ "proptest",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "reqwest",
+ "rustls",
+ "rustls-pemfile",
  "serde",
  "serde_cbor",
  "serde_derive",
@@ -15896,9 +15902,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pemfile"
-version = "1.0.2"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d194b56d58803a43635bdc398cd17e383d6f71f9182b9a192c127ca42494a59b"
+checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
 dependencies = [
  "base64 0.21.2",
 ]

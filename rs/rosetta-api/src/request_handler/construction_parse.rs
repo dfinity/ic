@@ -1,6 +1,8 @@
 use crate::convert::{self, from_arg, to_model_account_identifier};
 use crate::errors::ApiError;
-use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
+use crate::models::{
+    ConstructionParseRequest, ConstructionParseResponse, Object, ParsedTransaction,
+};
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
@@ -43,6 +45,7 @@ impl RosettaRequestHandler {
 
         let mut requests = vec![];
         let mut from_ai = vec![];
+        let mut metadata = serde_json::Map::new();
 
         for (request_type, HttpCanisterUpdate { arg, sender, .. }) in updates {
             let from = PrincipalId::try_from(sender.0)
@@ -53,7 +56,7 @@ impl RosettaRequestHandler {
             }
 
             match request_type {
-                RequestType::Send => send(&mut requests, arg, from)?,
+                RequestType::Send => send(&mut requests, &mut metadata, arg, from)?,
                 RequestType::Stake { neuron_index } => {
                     stake(&mut requests, arg, from, neuron_index)?
                 }
@@ -109,15 +112,25 @@ impl RosettaRequestHandler {
             operations: Request::requests_to_operations(&requests, self.ledger.token_symbol())?,
             signers: None,
             account_identifier_signers: Some(from_ai),
-            metadata: None,
+            metadata: Some(metadata),
         })
     }
 }
 
 /// Handle SEND.
-fn send(requests: &mut Vec<Request>, arg: Blob, from: AccountIdentifier) -> Result<(), ApiError> {
+fn send(
+    requests: &mut Vec<Request>,
+    metadata: &mut Object,
+    arg: Blob,
+    from: AccountIdentifier,
+) -> Result<(), ApiError> {
     let SendArgs {
-        amount, fee, to, ..
+        amount,
+        fee,
+        to,
+        memo,
+        created_at_time,
+        ..
     } = from_arg(arg.0)?;
     requests.push(Request::Transfer(Operation::Transfer {
         from,
@@ -126,6 +139,13 @@ fn send(requests: &mut Vec<Request>, arg: Blob, from: AccountIdentifier) -> Resu
         amount,
         fee,
     }));
+    metadata.insert("memo".into(), serde_json::to_value(memo).unwrap());
+    if let Some(created_at_time) = created_at_time {
+        metadata.insert(
+            "created_at_time".into(),
+            serde_json::to_value(created_at_time.as_nanos_since_unix_epoch()).unwrap(),
+        );
+    }
     Ok(())
 }
 
@@ -560,4 +580,263 @@ fn follow(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use ed25519_consensus::SigningKey;
+    use ic_base_types::CanisterId;
+    use proptest::prop_assert;
+    use proptest::test_runner::TestCaseError;
+    use proptest::{prop_assert_eq, proptest, strategy::Strategy};
+    use rand_chacha::rand_core::OsRng;
+    use std::str::FromStr;
+    use std::time::SystemTime;
+    use url::Url;
+
+    use crate::ledger_client::LedgerClient;
+    use crate::models::amount::Amount;
+    use crate::models::operation::{Operation, OperationIdentifier, OperationType};
+    use crate::models::{
+        ConstructionCombineRequest, ConstructionDeriveRequest, ConstructionParseRequest,
+        ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, Currency, CurveType,
+        Object, PublicKey, Signature, SignatureType,
+    };
+    use crate::request_handler::RosettaRequestHandler;
+
+    #[test]
+    fn test_payloads_parse_identity() {
+        let key = SigningKey::new(OsRng);
+        let ledger_client = futures::executor::block_on(LedgerClient::new(
+            Url::from_str("http://localhost:1234").unwrap(),
+            CanisterId::from_u64(1),
+            "TKN".into(),
+            CanisterId::from_u64(2),
+            None,
+            None,
+            true,
+            None,
+        ))
+        .unwrap();
+        let handler = RosettaRequestHandler::new("Internet Computer".into(), ledger_client.into());
+
+        // get the nextwork identifier
+        let network_identifier = handler.network_id();
+        let currency = Currency {
+            symbol: "TKN".into(),
+            decimals: 8,
+            metadata: None,
+        };
+
+        // get the account from the public key
+        let pub_key = crate::models::PublicKey {
+            hex_bytes: hex::encode(key.as_bytes()),
+            curve_type: CurveType::Edwards25519,
+        };
+        let account = handler
+            .construction_derive(ConstructionDeriveRequest {
+                network_identifier: network_identifier.clone(),
+                public_key: pub_key.clone(),
+                metadata: None,
+            })
+            .unwrap()
+            .account_identifier;
+
+        // create the unsigned transaction
+        let operations = vec![
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 0,
+                    network_index: None,
+                },
+                related_operations: None,
+                _type: OperationType::Transaction,
+                status: None,
+                account: account.clone(),
+                amount: Some(Amount {
+                    value: "-100000000".into(),
+                    currency: currency.clone(),
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 1,
+                    network_index: None,
+                },
+                related_operations: None,
+                _type: OperationType::Transaction,
+                status: None,
+                account: account.clone(),
+                amount: Some(Amount {
+                    value: "100000000".into(),
+                    currency: currency.clone(),
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 2,
+                    network_index: None,
+                },
+                related_operations: None,
+                _type: OperationType::Fee,
+                status: None,
+                account,
+                amount: Some(Amount {
+                    value: "-1000000".into(),
+                    currency,
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+        ];
+        let gen_opt_u64 = proptest::option::of(proptest::prelude::any::<u64>());
+        const ONE_HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get system time")
+            .as_nanos() as u64;
+        let gen_metadata = proptest::option::of(
+            (gen_opt_u64.clone(), gen_opt_u64.clone(), gen_opt_u64).prop_flat_map(
+                |(created_at_time, ingress_start, memo)| {
+                    proptest::option::of(1..ONE_HOUR_NANOS).prop_map(move |ingress_interval| {
+                        let ingress_end = ingress_interval.map(|ingress_interval| {
+                            ingress_start.unwrap_or(now) + ingress_interval
+                        });
+                        ConstructionPayloadsRequestMetadata {
+                            created_at_time,
+                            ingress_start,
+                            ingress_end,
+                            memo,
+                        }
+                    })
+                },
+            ),
+        );
+
+        fn check_metadata(
+            expected_metadata: Option<ConstructionPayloadsRequestMetadata>,
+            actual_metadata: Object,
+        ) -> std::result::Result<(), TestCaseError> {
+            match expected_metadata {
+                None => {
+                    // memo and created_at_time should always be set but the value is random
+                    prop_assert!(
+                        actual_metadata.contains_key("memo"),
+                        "Metadata should always contain a memo"
+                    );
+                    prop_assert!(
+                        actual_metadata.contains_key("created_at_time"),
+                        "Metadata should always contain a created_at_time"
+                    );
+                }
+                Some(expected_metadata) => {
+                    let expected_metadata = serde_json::to_value(expected_metadata).unwrap();
+                    let expected_metadata = expected_metadata.as_object().unwrap();
+                    if let Some(memo) = expected_metadata.get("memo") {
+                        prop_assert_eq!(Some(memo), actual_metadata.get("memo"));
+                    } else {
+                        prop_assert!(
+                            actual_metadata.contains_key("memo"),
+                            "Metadata should always contain a memo"
+                        );
+                    }
+                    if let Some(created_at_time) = expected_metadata.get("created_at_time") {
+                        prop_assert_eq!(
+                            Some(created_at_time),
+                            actual_metadata.get("created_at_time")
+                        );
+                    } else {
+                        prop_assert!(
+                            actual_metadata.contains_key("created_at_time"),
+                            "Metadata should always contain a created_at_time"
+                        );
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        // check parse unsigned transaction
+        proptest!(|(metadata in gen_metadata.clone())| {
+            let handler = handler.clone();
+            let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations: operations.clone(),
+                metadata: metadata.clone(),
+                public_keys: Some(vec![pub_key.clone()]),
+            }).unwrap();
+            let unsigned_transaction = construction_payloads_result.unsigned_transaction;
+
+            // parse the unsigned transaction and check the result
+            let parsed = handler.construction_parse(ConstructionParseRequest {
+                network_identifier: network_identifier.clone(),
+                signed: false,
+                transaction: unsigned_transaction,
+            }).unwrap();
+
+            prop_assert_eq!(operations.clone(), parsed.operations);
+
+            // metadata must always be present
+            prop_assert!(parsed.metadata.is_some(), "Metatada should always be returned");
+
+            check_metadata(metadata, parsed.metadata.unwrap()).unwrap()
+        });
+
+        // check parse signed transaction
+        // signing is slow => use less test cases
+        let conf = proptest::test_runner::Config {
+            cases: 32,
+            ..Default::default()
+        };
+        proptest!(conf, |(metadata in gen_metadata.clone())| {
+            let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations: operations.clone(),
+                metadata: metadata.clone(),
+                public_keys: Some(vec![pub_key.clone()]),
+            }).unwrap();
+            let unsigned_transaction = construction_payloads_result.unsigned_transaction;
+
+            // create the signed transaction
+            let mut signatures = vec![];
+            for payload in construction_payloads_result.payloads {
+                let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
+                let signature = key.sign(&bytes);
+                let signature = Signature {
+                    signing_payload: payload,
+                    public_key: PublicKey::new(hex::encode(key.as_bytes()), CurveType::Edwards25519),
+                    signature_type: SignatureType::Ed25519,
+                    hex_bytes: hex::encode(signature.to_bytes()),
+                };
+                signatures.push(signature);
+            }
+
+            let signed_transaction = handler.construction_combine(ConstructionCombineRequest {
+                network_identifier: network_identifier.clone(),
+                unsigned_transaction,
+                signatures,
+            }).unwrap().signed_transaction;
+
+            // parse the signed transaction and check the result
+            let parsed = handler.construction_parse(ConstructionParseRequest {
+                network_identifier: network_identifier.clone(),
+                signed: true,
+                transaction: signed_transaction,
+            }).unwrap();
+
+            prop_assert_eq!(operations.clone(), parsed.operations);
+
+            // metadata must always be present
+            prop_assert!(parsed.metadata.is_some(), "Metatada should always be returned");
+
+            check_metadata(metadata, parsed.metadata.unwrap()).unwrap()
+        });
+    }
 }
