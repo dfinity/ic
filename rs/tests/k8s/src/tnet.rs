@@ -93,24 +93,24 @@ impl K8sClient {
 
 #[derive(Default, Clone, Debug)]
 pub struct TNode {
-    pub(crate) name: Option<String>,
-    pub(crate) ipv6_addr: Option<Ipv6Addr>,
-    pub(crate) config_url: Option<String>,
+    pub name: Option<String>,
+    pub ipv6_addr: Option<Ipv6Addr>,
+    pub config_url: Option<String>,
 }
 
 #[derive(Default)]
 pub struct TNet {
     name: String,
     version: String,
-    init_nns: bool,
+    init: bool,
     use_zero_version: bool,
     pub(crate) image_url: String,
     ipv6_net: Option<Ipv6Cidr>,
     config_url: Option<String>,
     pub(crate) index: Option<u32>,
     pub(crate) namespace: String,
-    nns_nodes: Vec<TNode>,
-    app_nodes: Vec<TNode>,
+    pub nns_nodes: Vec<TNode>,
+    pub app_nodes: Vec<TNode>,
     k8s: Option<K8sClient>,
     owner: ConfigMap,
     terminate_time: DateTime<Utc>,
@@ -198,8 +198,13 @@ impl TNet {
         self
     }
 
-    pub fn init_nns(mut self, init_nns: bool) -> Self {
-        self.init_nns = init_nns;
+    pub fn image_url(mut self, url: &str) -> Self {
+        self.image_url = url.to_string();
+        self
+    }
+
+    pub fn init(mut self, init: bool) -> Self {
+        self.init = init;
 
         self
     }
@@ -384,27 +389,29 @@ impl TNet {
         create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
 
         // generate and upload node config images
-        generate_config(
-            &self.version,
-            self.use_zero_version,
-            &self.nns_nodes,
-            &self.app_nodes,
-        )?;
-        self.upload_config().await?;
-
-        // tnet-config-init for nns init
-        let config_url = format!("{}/init.tar", self.config_url.clone().unwrap());
-        let source = DvSource::url(config_url);
         let dv_info_name = format!("{}-config-init", self.owner.name_any());
-        let dvinfo = DvInfo::new(&dv_info_name, source, "archive", "128Mi");
-        create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
+        if self.init {
+            generate_config(
+                &self.version,
+                self.use_zero_version,
+                &self.nns_nodes,
+                &self.app_nodes,
+            )?;
+            self.upload_config().await?;
 
-        // nns-config and app-config images
-        for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-            let dvname = format!("{}-config", node.name.clone().unwrap());
-            let source = DvSource::url(node.config_url.clone().unwrap());
-            let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "12Mi");
+            // tnet-config-init for nns init
+            let config_url = format!("{}/init.tar", self.config_url.clone().unwrap());
+            let source = DvSource::url(config_url);
+            let dvinfo = DvInfo::new(&dv_info_name, source, "archive", "128Mi");
             create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
+
+            // nns-config and app-config images
+            for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
+                let dvname = format!("{}-config", node.name.clone().unwrap());
+                let source = DvSource::url(node.config_url.clone().unwrap());
+                let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "12Mi");
+                create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
+            }
         }
 
         wait_for_event(
@@ -449,6 +456,7 @@ impl TNet {
                 &self.k8s.as_ref().unwrap().api_vm,
                 &node.name.clone().unwrap(),
                 &node.ipv6_addr.unwrap().to_string(),
+                self.init,
                 self.owner_reference(),
             )
             .await?;
@@ -462,7 +470,7 @@ impl TNet {
             .join(" ");
 
         // initialize nns
-        if self.init_nns {
+        if self.init {
             create_pod(
                 &k8s_client.api_pod,
                 &format!("{}-operator", self.owner.name_any()),
@@ -520,13 +528,15 @@ impl TNet {
         let k8s_client = &self.k8s.as_ref().unwrap();
 
         // generate and upload node config images
-        generate_config(
-            &self.version,
-            self.use_zero_version,
-            &self.nns_nodes,
-            &self.app_nodes,
-        )?;
-        self.upload_config().await?;
+        if self.init {
+            generate_config(
+                &self.version,
+                self.use_zero_version,
+                &self.nns_nodes,
+                &self.app_nodes,
+            )?;
+            self.upload_config().await?;
+        }
 
         // create virtual machines
         for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
@@ -548,7 +558,7 @@ impl TNet {
         // initialize nns
         // TODO: save init state somehere (host-based pvc)
         // initialize nns
-        if self.init_nns {
+        if self.init {
             create_pod(
                 &k8s_client.api_pod,
                 "tnet-operator",
