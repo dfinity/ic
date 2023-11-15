@@ -62,6 +62,12 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/rosetta-api/test_utils",
+    "//rs/types/base_types",
+    "@crate_index//:ed25519-consensus",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:proptest",
+    "@crate_index//:rand_chacha_0_3_1",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
