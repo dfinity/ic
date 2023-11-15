@@ -1,12 +1,10 @@
 use by_address::ByAddress;
-use candid::{CandidType, Deserialize};
 use core::{
     cmp::Reverse,
     fmt::Debug,
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
-use dfn_core::api::{time_nanos, CanisterId};
-use ic_base_types::PrincipalId;
+use dfn_core::api::time_nanos;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
@@ -14,7 +12,6 @@ use ic_ledger_core::Tokens;
 use maplit::hashmap;
 use priority_queue::priority_queue::PriorityQueue;
 use rust_decimal::Decimal;
-use serde::Serialize;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -117,31 +114,6 @@ impl fmt::Debug for NervousSystemError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.error_message)
     }
-}
-
-/// Description of a change to the authz of a specific method on a specific
-/// canister that must happen for a given canister change/add/remove
-/// to be viable
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub struct MethodAuthzChange {
-    pub canister: CanisterId,
-    pub method_name: String,
-    pub principal: Option<PrincipalId>,
-    pub operation: AuthzChangeOp,
-}
-
-/// The operation to execute. Variable names in comments refer to the fields
-/// of AuthzChange.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub enum AuthzChangeOp {
-    /// 'canister' must add a principal to the authorized list of 'method_name'.
-    /// If 'add_self' is true, the canister_id to be authorized is the canister
-    /// being added/changed, if it's false, 'principal' is used instead, which
-    /// must be Some in that case..
-    Authorize { add_self: bool },
-    /// 'canister' must remove 'principal' from the authorized list of
-    /// 'method_name'. 'principal' must always be Some.
-    Deauthorize,
 }
 
 /// A more convenient (but explosive) way to do token math. Not suitable for

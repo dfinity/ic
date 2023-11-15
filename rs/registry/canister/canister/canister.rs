@@ -6,8 +6,6 @@ use dfn_core::{
 };
 use ic_base_types::NodeId;
 use ic_certified_map::{AsHashTree, HashTree};
-use ic_nervous_system_common::MethodAuthzChange;
-use ic_nns_common::{access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -120,9 +118,7 @@ fn check_caller_is_governance_and_log(method_name: &str) {
 ///
 /// The contract is simply that those `RegistryAtomicMutateRequest` are
 /// processed one at a time, in order, and if any fail, the canister
-/// initialization traps. The caller is always authorized to make these
-/// mutations, even if the `RegistryCanisterInitPayload::authz_info` field state
-/// otherwise.
+/// initialization traps.
 ///
 /// In other words, there is no difference in the result between using an init
 /// payload or starting with an empty content and having an authorized user
@@ -179,34 +175,6 @@ fn canister_post_upgrade() {
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
-
-#[export_name = "canister_update update_authz"]
-fn update_authz() {
-    check_caller_is_root();
-    over(candid_one, |_: Vec<MethodAuthzChange>| {
-        println!(
-            "{}update_authz was called. \
-                 This does not do anything, since the registry canister no longer has any \
-                 function whose access is controlled using this mechanism. \
-                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
-            LOG_PREFIX,
-        );
-    })
-}
-
-#[export_name = "canister_query current_authz"]
-fn current_authz() {
-    over(candid, |_: ()| {
-        println!(
-            "{}current_authz was called. \
-                 This always returns the default value, since the registry canister's state no \
-                 longer contains a CanisterAuthzInfo. \
-                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
-            LOG_PREFIX,
-        );
-        CanisterAuthzInfo::default()
-    })
-}
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {

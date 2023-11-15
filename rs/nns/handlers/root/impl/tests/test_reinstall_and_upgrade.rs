@@ -7,7 +7,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
@@ -64,8 +64,8 @@ async fn install_stable_memory_reader(
         .await
         .unwrap();
 
-    let proposal =
-        ChangeCanisterProposal::new(stop_before_installing, mode, universal.canister_id())
+    let change_canister_request =
+        ChangeCanisterRequest::new(stop_before_installing, mode, universal.canister_id())
             .with_wasm(STABLE_MEMORY_READER_WASM.clone());
 
     // The upgrade should work
@@ -74,7 +74,7 @@ async fn install_stable_memory_reader(
             &fake_governance_canister,
             &root,
             "change_nns_canister",
-            Encode!(&proposal).unwrap()
+            Encode!(&change_canister_request).unwrap()
         )
         .await
     );
@@ -175,9 +175,10 @@ fn test_init_payload_is_passed_through_upgrades() {
             .await
             .unwrap();
 
-        let proposal = ChangeCanisterProposal::new(false, Upgrade, universal.canister_id())
-            .with_wasm(test_wasm)
-            .with_arg(test_byte_array.to_vec());
+        let change_canister_request =
+            ChangeCanisterRequest::new(false, Upgrade, universal.canister_id())
+                .with_wasm(test_wasm)
+                .with_arg(test_byte_array.to_vec());
 
         // The upgrade should work
         assert!(
@@ -185,7 +186,7 @@ fn test_init_payload_is_passed_through_upgrades() {
                 &fake_governance_canister,
                 &root,
                 "change_nns_canister",
-                Encode!(&proposal).unwrap()
+                Encode!(&change_canister_request).unwrap()
             )
             .await
         );

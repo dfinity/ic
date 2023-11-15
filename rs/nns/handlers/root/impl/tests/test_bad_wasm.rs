@@ -8,7 +8,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
@@ -56,8 +56,8 @@ async fn install_invalid_wasm(
         .await
         .unwrap();
 
-    let proposal =
-        ChangeCanisterProposal::new(stop_before_installing, mode, universal.canister_id())
+    let change_canister_request =
+        ChangeCanisterRequest::new(stop_before_installing, mode, universal.canister_id())
             .with_wasm(b"This is not legal wasm binary.".to_vec());
 
     // Due to the self-call, the initial call succeeds
@@ -66,7 +66,7 @@ async fn install_invalid_wasm(
             &fake_governance_canister,
             &root,
             "change_nns_canister",
-            Encode!(&proposal).unwrap()
+            Encode!(&change_canister_request).unwrap()
         )
         .await
     );

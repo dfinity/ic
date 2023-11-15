@@ -1,7 +1,3 @@
-type AuthzChangeOp = variant {
-  Authorize : record { add_self : bool };
-  Deauthorize;
-};
 type CanisterCallError = record { code : opt int32; description : text };
 type CanisterIdRecord = record { canister_id : principal };
 type CanisterInstallMode = variant { reinstall; upgrade; install };
@@ -25,14 +21,13 @@ type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
 };
-type ChangeCanisterProposal = record {
+type ChangeCanisterRequest = record {
   arg : vec nat8;
   wasm_module : vec nat8;
   stop_before_installing : bool;
   mode : CanisterInstallMode;
   canister_id : principal;
   query_allocation : opt nat;
-  authz_changes : vec MethodAuthzChange;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };
@@ -66,12 +61,6 @@ type ListSnsCanistersResponse = record {
   dapps : vec principal;
   archives : vec principal;
 };
-type MethodAuthzChange = record {
-  "principal" : opt principal;
-  method_name : text;
-  canister : principal;
-  operation : AuthzChangeOp;
-};
 type RegisterDappCanisterRequest = record { canister_id : opt principal };
 type RegisterDappCanistersRequest = record { canister_ids : vec principal };
 type SetDappControllersRequest = record {
@@ -91,7 +80,7 @@ type SnsRootCanister = record {
 };
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
-  change_canister : (ChangeCanisterProposal) -> ();
+  change_canister : (ChangeCanisterRequest) -> ();
   get_build_metadata : () -> (text) query;
   get_sns_canisters_summary : (GetSnsCanistersSummaryRequest) -> (
       GetSnsCanistersSummaryResponse,

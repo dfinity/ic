@@ -1,4 +1,15 @@
+type AddCanisterRequest = record {
+  arg : vec nat8;
+  initial_cycles : nat64;
+  wasm_module : vec nat8;
+  name : text;
+  query_allocation : opt nat;
+  memory_allocation : opt nat;
+  compute_allocation : opt nat;
+};
+type CanisterAction = variant { Start; Stop };
 type CanisterIdRecord = record { canister_id : principal };
+type CanisterInstallMode = variant { reinstall; upgrade; install };
 type CanisterStatusResult = record {
   status : CanisterStatusType;
   memory_size : nat;
@@ -22,11 +33,28 @@ type ChangeCanisterControllersResult = variant {
   Ok;
   Err : ChangeCanisterControllersError;
 };
+type ChangeCanisterRequest = record {
+  arg : vec nat8;
+  wasm_module : vec nat8;
+  stop_before_installing : bool;
+  mode : CanisterInstallMode;
+  canister_id : principal;
+  query_allocation : opt nat;
+  memory_allocation : opt nat;
+  compute_allocation : opt nat;
+};
 type DefiniteCanisterSettings = record { controllers : vec principal };
+type StopOrStartCanisterRequest = record {
+  action : CanisterAction;
+  canister_id : principal;
+};
 service : {
+  add_nns_canister : (AddCanisterRequest) -> ();
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   change_canister_controllers : (ChangeCanisterControllersRequest) -> (
       ChangeCanisterControllersResponse,
     );
+  change_nns_canister : (ChangeCanisterRequest) -> ();
   get_build_metadata : () -> (text) query;
+  stop_or_start_nns_canister : (StopOrStartCanisterRequest) -> ();
 }
