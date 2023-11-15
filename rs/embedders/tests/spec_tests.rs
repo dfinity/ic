@@ -47,9 +47,9 @@ mod convert {
             WastArg::Core(WastArgCore::I64(i)) => Some(wasmtime::Val::I64(i)),
             WastArg::Core(WastArgCore::F32(f)) => Some(wasmtime::Val::F32(f.bits)),
             WastArg::Core(WastArgCore::F64(f)) => Some(wasmtime::Val::F64(f.bits)),
-            WastArg::Core(WastArgCore::V128(v)) => {
-                Some(wasmtime::Val::V128(u128::from_le_bytes(v.to_le_bytes())))
-            }
+            WastArg::Core(WastArgCore::V128(v)) => Some(wasmtime::Val::V128(
+                u128::from_le_bytes(v.to_le_bytes()).into(),
+            )),
             WastArg::Core(WastArgCore::RefNull(ty)) => Some(heap_type(ty)),
             WastArg::Core(WastArgCore::RefExtern(n)) => Some(wasmtime::ExternRef::new(n).into()),
             WastArg::Component(_) => {
@@ -196,7 +196,7 @@ mod convert {
             (V::I64(l), C(R::I64(r))) => l == r,
             (V::F32(l), C(R::F32(r))) => f32_equal(*l, r),
             (V::F64(l), C(R::F64(r))) => f64_equal(*l, r),
-            (V::V128(l), C(R::V128(r))) => v128_equal(*l, r),
+            (V::V128(l), C(R::V128(r))) => v128_equal(l.as_u128(), r),
             (V::ExternRef(None), C(R::RefExtern(_))) => false,
             // `WastArgCore::RefExtern` always stores a `u32`.
             (V::ExternRef(Some(l)), C(R::RefExtern(r))) => {
