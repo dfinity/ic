@@ -478,9 +478,10 @@ fn configure_setupos_image(
     let memory = "16";
     let cpu_mode = "qemu";
 
-    // TODO: Inject SSH keys
-    // let ssh_authorized_pub_keys_dir = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-    //     ssh_authorized_pub_keys_dir.join("admin"),
+    let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+    let admin_keys: Vec<_> = std::fs::read_to_string(ssh_authorized_pub_keys_dir.join("admin"))
+        .map(|v| v.lines().map(|v| v.to_owned()).collect())
+        .unwrap_or_default();
 
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
@@ -524,8 +525,8 @@ fn configure_setupos_image(
         bail!("could not disable checks on image");
     }
 
-    let output = Command::new(setupos_inject_configs)
-        .arg("--image-path")
+    let mut cmd = Command::new(setupos_inject_configs);
+    cmd.arg("--image-path")
         .arg(&uncompressed_image)
         .arg("--mgmt-mac")
         .arg(&mac)
@@ -541,8 +542,16 @@ fn configure_setupos_image(
         .arg(&nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
-        .env(path_key, &new_path)
-        .output()?;
+        .env(path_key, &new_path);
+
+    if !admin_keys.is_empty() {
+        cmd.arg("--public-keys");
+        for key in admin_keys {
+            cmd.arg(key);
+        }
+    }
+
+    let output = cmd.output()?;
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
     if !output.status.success() {

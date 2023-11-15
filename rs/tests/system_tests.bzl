@@ -98,6 +98,7 @@ def system_test(
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
         uses_setupos_dev = False,
+        uses_hostos_dev_test = False,
         env_inherit = [],
         **kwargs):
     """Declares a system-test.
@@ -125,6 +126,7 @@ def system_test(
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
+      uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
       env_inherit: specifies additional environment variables to inherit from the external environment when the test is executed by bazel test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
@@ -150,6 +152,7 @@ def system_test(
     _env_deps = {}
 
     _guestos = "//ic-os/guestos/envs/dev:"
+    _hostos = "//ic-os/hostos/envs/dev:"
     _setupos = "//ic-os/setupos/envs/dev:"
 
     # Always add version.txt for now as all test use it even that they don't declare they use dev image.
@@ -161,6 +164,10 @@ def system_test(
         _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256"
         _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256"
+
+    if uses_hostos_dev_test:
+        _env_deps[_hostos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
+        _env_deps[_hostos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256"
 
     if uses_setupos_dev:
         _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
