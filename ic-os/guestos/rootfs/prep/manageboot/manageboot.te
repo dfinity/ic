@@ -124,3 +124,6 @@ allow ic_manageboot_t ic_manageboot_t : unix_stream_socket { connect create geta
 # It is not perfectly clear what/why it is doing that, but it is harmless
 # enough. May to to forbid it and see if it still works.
 files_search_pids(ic_manageboot_t)
+
+# Allow reading /opt/ic/share/version.txt
+read_files_pattern(ic_manageboot_t, usr_t, usr_t)
