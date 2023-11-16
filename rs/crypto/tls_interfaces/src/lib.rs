@@ -93,7 +93,7 @@ impl Hash for TlsPublicKeyCert {
 
 impl PartialOrd for TlsPublicKeyCert {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.hash_cached.partial_cmp(&other.hash_cached)
+        Some(self.cmp(other))
     }
 }
 

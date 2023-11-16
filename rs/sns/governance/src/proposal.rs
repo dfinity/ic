@@ -30,6 +30,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
+    fmt::Write,
 };
 
 /// The maximum number of bytes in an SNS proposal's title.
@@ -724,11 +725,13 @@ fn validate_and_render_register_dapp_canisters(
         .collect();
 
     if error_canister_ids.is_empty() {
-        let canister_list = register_dapp_canisters
-            .canister_ids
-            .iter()
-            .map(|canister_id| format!("\n- {}", canister_id))
-            .collect::<String>();
+        let canister_list = register_dapp_canisters.canister_ids.iter().fold(
+            String::new(),
+            |mut out, canister_id| {
+                let _ = write!(out, "\n- {}", canister_id);
+                out
+            },
+        );
 
         let render = format!(
             "# Proposal to register {num_canisters_to_register} dapp canisters: \n\
@@ -736,10 +739,13 @@ fn validate_and_render_register_dapp_canisters(
         );
         Ok(render)
     } else {
-        let error_canister_list = error_canister_ids
-            .iter()
-            .map(|canister_id| format!("\n- {}", canister_id))
-            .collect::<String>();
+        let error_canister_list =
+            error_canister_ids
+                .iter()
+                .fold(String::new(), |mut out, canister_id| {
+                    let _ = write!(out, "\n- {}", canister_id);
+                    out
+                });
 
         let err_msg: String = format!(
             "Invalid RegisterDappCanisters Proposal: \n\
@@ -797,10 +803,13 @@ fn validate_and_render_deregister_dapp_canisters(
 
         Ok(rendered)
     } else {
-        let error_canister_list = error_canister_ids
-            .iter()
-            .map(|canister_id| format!("\n- {}", canister_id))
-            .collect::<String>();
+        let error_canister_list =
+            error_canister_ids
+                .iter()
+                .fold(String::new(), |mut out, canister_id| {
+                    let _ = write!(out, "\n- {}", canister_id);
+                    out
+                });
 
         let err_msg: String = format!(
             "Invalid DeregisterDappCanisters Proposal: \n\
@@ -1851,7 +1860,7 @@ mod tests {
         let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
         let ledger_canister_id = *SNS_LEDGER_CANISTER_ID;
         let swap_canister_id = canister_test_id(503);
-        let ledger_archive_ids = vec![canister_test_id(504)];
+        let ledger_archive_ids = [canister_test_id(504)];
         let index_canister_id = canister_test_id(505);
 
         let root_hash = Sha256::hash(&[1]).to_vec();

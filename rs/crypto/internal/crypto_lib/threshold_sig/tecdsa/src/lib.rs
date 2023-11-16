@@ -619,7 +619,7 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
         // less than 2^31 are compatible with BIP-32 non-hardened derivation path.
         Self::new(
             std::iter::once(extended_derivation_path.caller.to_vec())
-                .chain(extended_derivation_path.derivation_path.clone().into_iter())
+                .chain(extended_derivation_path.derivation_path.clone())
                 .map(key_derivation::DerivationIndex)
                 .collect::<Vec<_>>(),
         )

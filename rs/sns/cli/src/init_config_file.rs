@@ -597,7 +597,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
         ),
         (
             Regex::new(r"confirmation_text.*").unwrap(),
-            r##"#
+            r#"#
 #
 # SNS SWAP
 #
@@ -606,23 +606,23 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # with at least 1 and at most 1,000 characters.
 #
 # Example: "Please confirm that 2+2=4"
-#"##
+#"#
             .to_string(),
         ),
         (
             Regex::new(r"restricted_countries.*").unwrap(),
-            r##"#
+            r#"#
 #
 # An optional set of countries that should not participate in the swap. If the
 # field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
 #
 # Example: ["CH", "FR"]
-#"##
+#"#
             .to_string(),
         ),
         (
             Regex::new(r"initial_token_distribution.*").unwrap(),
-            r##"#
+            r#"#
 #
 # SNS INITIAL TOKEN DISTRIBUTION
 #
@@ -693,7 +693,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #           stake_e8s: 500000000
 #           memo: 0
 #           dissolve_delay_seconds: 15780000 # 6 months
-#"##
+#"#
             .to_string(),
         ),
         (

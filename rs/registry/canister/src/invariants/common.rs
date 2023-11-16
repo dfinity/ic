@@ -148,7 +148,7 @@ pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> Vec<S
                 .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
                 .collect()
         })
-        .unwrap_or_else(Vec::new)
+        .unwrap_or_default()
 }
 
 pub(crate) fn assert_sha256(s: &str) {

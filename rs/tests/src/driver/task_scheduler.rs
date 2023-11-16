@@ -47,22 +47,7 @@ impl TaskScheduler {
             for (node_index, (node, maybe_task_id)) in self.action_graph.task_iter().enumerate() {
                 // debug!(log, "ag: node_index {:?} node {:?} task_id {:?}", node_index, node, maybe_task_id);
                 match node {
-                    Node::Running { active, .. } if active > 0 => {
-                        if let Some(task_id) = maybe_task_id {
-                            if !self.running_tasks.contains_key(&task_id) {
-                                // debug!(log, "ag: Starting node: {:?}, task: {}", &node, &task_id);
-                                let task = self.scheduled_tasks.get(&task_id).unwrap();
-                                let tx = event_tx.clone();
-                                let cb = move |result: TaskResult| {
-                                    tx.send(result).expect("Failed to send message.")
-                                };
-                                let th = task.spawn(Box::new(cb));
-                                Self::record_time(&mut self.start_times, &task_id);
-                                self.running_tasks.insert(task_id, (th, node_index));
-                            }
-                        }
-                    }
-                    Node::Running { active, .. } if active == 0 => {
+                    Node::Running { active: 0, .. } => {
                         // stop this task if it is still running
                         if let Some(task_id) = maybe_task_id {
                             let (th, _node_handle) =
@@ -80,6 +65,21 @@ impl TaskScheduler {
                                 let event: log_events::LogEvent<_> = report.clone().into();
                                 event.emit_log(log);
                                 info!(log, "Report:\n{}", report.pretty_print());
+                            }
+                        }
+                    }
+                    Node::Running { .. } => {
+                        if let Some(task_id) = maybe_task_id {
+                            if !self.running_tasks.contains_key(&task_id) {
+                                // debug!(log, "ag: Starting node: {:?}, task: {}", &node, &task_id);
+                                let task = self.scheduled_tasks.get(&task_id).unwrap();
+                                let tx = event_tx.clone();
+                                let cb = move |result: TaskResult| {
+                                    tx.send(result).expect("Failed to send message.")
+                                };
+                                let th = task.spawn(Box::new(cb));
+                                Self::record_time(&mut self.start_times, &task_id);
+                                self.running_tasks.insert(task_id, (th, node_index));
                             }
                         }
                     }

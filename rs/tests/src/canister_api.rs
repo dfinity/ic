@@ -322,10 +322,7 @@ impl Request<RefreshBuyerTokensRes> for RefreshBuyerTokensRequest {
     }
     fn payload(&self) -> Vec<u8> {
         Encode!(&RefreshBuyerTokensReq {
-            buyer: self
-                .buyer
-                .map(|p| p.to_string())
-                .unwrap_or_else(|| "".to_string()),
+            buyer: self.buyer.map(|p| p.to_string()).unwrap_or_default(),
             confirmation_text: self.confirmation_text.clone(),
         })
         .unwrap()

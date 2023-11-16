@@ -100,7 +100,7 @@ pub fn prepare_registry_with_nodes(
                 http: Some(connection_endpoint_from_string(&format!(
                     "128.0.{effective_id}.1:4321"
                 ))),
-                p2p_flow_endpoints: vec![&format!("123,128.0.{effective_id}.1:10000")]
+                p2p_flow_endpoints: [&format!("123,128.0.{effective_id}.1:10000")]
                     .iter()
                     .map(|x| flow_endpoint_from_string(x))
                     .collect(),

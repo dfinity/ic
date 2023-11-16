@@ -303,7 +303,7 @@ impl CliArgs {
             if let Some(subnet_index) = subnet_index {
                 subnets
                     .entry(*subnet_index)
-                    .or_insert_with(BTreeMap::<_, _>::new)
+                    .or_default()
                     .insert(*node_index, config);
             } else {
                 unassigned_nodes.insert(*node_index, config);

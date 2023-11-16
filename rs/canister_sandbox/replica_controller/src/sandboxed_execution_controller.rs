@@ -1682,7 +1682,7 @@ fn get_sandbox_process_stats(
 pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
     match output.code() {
         // Do nothing when the Sandbox Launcher process terminates normally.
-        Some(code) if code == 0 => {}
+        Some(0) => {}
         Some(code) => panic!(
             "Error from launcher process, pid {} exited with status code: {}",
             pid, code

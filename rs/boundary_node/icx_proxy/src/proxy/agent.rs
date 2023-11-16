@@ -398,10 +398,10 @@ async fn process_request_inner(
     if should_validate {
         let validation = validator.validate(agent, &canister_id, &http_request, &http_response);
 
-        if validation.is_err() {
+        if let Err(e) = validation {
             return Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(validation.unwrap_err().into())
+                .body(e.into())
                 .unwrap());
         }
     }

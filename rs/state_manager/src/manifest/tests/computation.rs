@@ -604,11 +604,7 @@ fn test_diff_manifest_v1() {
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
-    let copy_files: HashMap<_, _> = indices
-        .clone()
-        .into_iter()
-        .zip(indices.into_iter())
-        .collect();
+    let copy_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
@@ -785,11 +781,7 @@ fn test_missing_simple_manifest() {
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
-    let copy_files: HashMap<_, _> = indices
-        .clone()
-        .into_iter()
-        .zip(indices.into_iter())
-        .collect();
+    let copy_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {

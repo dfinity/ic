@@ -504,7 +504,7 @@ mod tests {
             .unwrap();
 
             // Received two messages from NODE_1 because of reconnection.
-            let pushes = vec![
+            let pushes = [
                 push_rx.blocking_recv().unwrap(),
                 push_rx.blocking_recv().unwrap(),
                 push_rx.blocking_recv().unwrap(),

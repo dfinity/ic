@@ -67,7 +67,6 @@ fn validate_original_source_cup_and_extract_state_hash(
     subnet_public_key: &ThresholdSigPublicKey,
     logger: &Logger,
 ) -> RecoveryResult<String> {
-    let logger = logger;
     let cup = get_cup(cup_path)?;
 
     if let Some((_, transcript)) = cup

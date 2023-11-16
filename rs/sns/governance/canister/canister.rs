@@ -492,6 +492,7 @@ fn get_root_canister_status() {
 
 /// Internal method for calling get_root_canister_status.
 #[candid_method(update, rename = "get_root_canister_status")]
+#[allow(clippy::let_unit_value)] // clippy false positive
 async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
     panic!("This method is deprecated and should not be used. Please use the root canister's `get_sns_canisters_summary` method.")
 }

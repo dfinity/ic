@@ -466,14 +466,13 @@ impl BinomialFormula {
         self.members
             .iter()
             .enumerate()
-            .fold(Ok(Decimal::ZERO), |total, (i, member)| {
+            .try_fold(Decimal::ZERO, |total, (i, member)| {
                 let member = member.eval().map_err(|e| {
                     format!(
                         "Cannot evaluate binomial member #{} of {:?}: {}",
                         i, self, e
                     )
                 })?;
-                let total = total?;
                 total
                     .checked_add(member)
                     .ok_or_else(|| format!("Decimal overflow while computing {:?}.", self))

@@ -397,7 +397,6 @@ pub fn direct_to_replica_test(env: TestEnv) {
     futs.push(rt.spawn({
         let logger = logger.clone();
         let client = client;
-        let install_url = install_url;
         let name = "update random node";
         info!(&logger, "Starting subtest {}", name);
 

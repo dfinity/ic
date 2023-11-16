@@ -16,10 +16,7 @@ pub(crate) fn check_api_boundary_node_invariants(
     let mut domain_to_ids: HashMap<String, Vec<NodeId>> = HashMap::new();
 
     for (id, n) in &api_boundary_nodes {
-        domain_to_ids
-            .entry(n.domain.clone())
-            .or_insert(vec![])
-            .push(*id);
+        domain_to_ids.entry(n.domain.clone()).or_default().push(*id);
     }
 
     let errors: Vec<String> = domain_to_ids

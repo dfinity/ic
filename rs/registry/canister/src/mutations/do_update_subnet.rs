@@ -1244,7 +1244,7 @@ mod tests {
         registry.do_update_subnet(payload);
 
         // Make sure config contains both keys.
-        assert!(vec![first_key, second_key].iter().all(|k| registry
+        assert!([first_key, second_key].iter().all(|k| registry
             .get_subnet_or_panic(subnet_id)
             .ecdsa_config
             .unwrap()

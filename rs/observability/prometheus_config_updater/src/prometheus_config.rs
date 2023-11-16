@@ -35,7 +35,7 @@ impl Serialize for PrometheusFileSdConfig {
     where
         S: Serializer,
     {
-        serializer.collect_seq(self.configs.clone().into_iter())
+        serializer.collect_seq(self.configs.clone())
     }
 }
 

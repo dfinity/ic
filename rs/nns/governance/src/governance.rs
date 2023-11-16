@@ -1531,7 +1531,7 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
             (Err(proposal_id_defects), Err(proposal_type_defects)) => {
                 let defects = proposal_id_defects
                     .into_iter()
-                    .chain(proposal_type_defects.into_iter())
+                    .chain(proposal_type_defects)
                     .collect();
                 Err(defects)
             }
@@ -8246,7 +8246,7 @@ fn draw_funds_from_the_community_fund(
             // Create a record of this contribution.
             principal_id_to_cf_neurons
                 .entry(neuron.controller.expect("Neuron has no controller."))
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(
                     sns_swap_pb::CfNeuron::try_new(
                         neuron.id.as_ref().expect("Neuron lacks an id.").id,

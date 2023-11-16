@@ -272,7 +272,7 @@ impl Issues {
             let issue_group = self
                 .issue_groups_map
                 .entry(discriminant(&issue))
-                .or_insert(IssueGroup::default());
+                .or_default();
             issue_group.issues_count += 1;
             if issue_group.example_issues.len() < MAX_EXAMPLE_ISSUES_COUNT {
                 issue_group.example_issues.push(issue);

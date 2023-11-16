@@ -59,7 +59,7 @@ impl Scalar {
             return None;
         }
 
-        let mut extended = vec![0; 2 * Self::BYTES];
+        let mut extended = [0; 2 * Self::BYTES];
         let offset = extended.len() - bytes.len();
         extended[offset..].copy_from_slice(bytes); // zero pad
 

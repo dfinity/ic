@@ -773,7 +773,7 @@ impl WasmtimeInstance {
                         let dirty_pages = tracker.take_dirty_pages();
                         dirty_pages
                             .into_iter()
-                            .chain(speculatively_dirty_pages.into_iter())
+                            .chain(speculatively_dirty_pages)
                             .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
                             .collect::<Vec<PageIndex>>()
                     }

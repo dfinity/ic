@@ -229,7 +229,7 @@ fn download_golden_nns_state(destination: &Path) {
         .arg("-oStrictHostKeyChecking=no")
         .arg("-v")
         .arg(source.clone())
-        .arg(destination.clone())
+        .arg(destination)
         .output()
         .unwrap_or_else(|err| {
             panic!(
@@ -254,9 +254,9 @@ fn untar(source: &Path, destination: &Path) {
     // Actually untar.
     let tar_out = Command::new("tar")
         .arg("-xf")
-        .arg(source.clone())
+        .arg(source)
         .arg("-C")
-        .arg(destination.clone())
+        .arg(destination)
         .output()
         .unwrap_or_else(|err| panic!("Could not unpack {:?}: {}", source, err));
 

@@ -1843,7 +1843,7 @@ impl UpgradePath {
         match self
             .sns_specific_upgrade_path
             .entry(sns_governance_canister_id)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .entry(from)
         {
             Entry::Occupied(occupied) => {
@@ -4817,7 +4817,7 @@ mod test {
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
         canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
-        let dapp_ids = vec![
+        let dapp_ids = [
             canister_test_id(1000).get(),
             canister_test_id(1001).get(),
             canister_test_id(1002).get(),

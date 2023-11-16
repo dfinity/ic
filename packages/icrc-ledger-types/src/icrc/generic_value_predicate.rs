@@ -1,3 +1,4 @@
+#![allow(clippy::arc_with_non_send_sync)]
 #[cfg(test)]
 use assert_matches::assert_matches;
 #[cfg(test)]

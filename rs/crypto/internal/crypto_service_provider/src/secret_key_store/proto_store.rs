@@ -325,7 +325,7 @@ impl ProtoSecretKeyStore {
     }
 
     fn ensure_version_is_supported(version: u32) {
-        let supported_versions = vec![1, 2, CURRENT_SKS_VERSION];
+        let supported_versions = [1, 2, CURRENT_SKS_VERSION];
         if !supported_versions.contains(&version) {
             panic!("Unexpected SecretKeyStore-proto version: {}", version)
         }
