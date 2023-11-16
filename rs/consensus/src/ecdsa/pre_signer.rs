@@ -23,7 +23,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::CryptoHashOf;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::signature::BasicSignatureBatch;
-use ic_types::{Height, NodeId, SubnetId};
+use ic_types::{Height, NodeId};
 use std::cell::RefCell;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
@@ -47,19 +47,18 @@ pub(crate) trait EcdsaPreSigner: Send {
 
 pub(crate) struct EcdsaPreSignerImpl {
     node_id: NodeId,
-    subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
     metrics: EcdsaPreSignerMetrics,
     log: ReplicaLogger,
+    #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
     malicious_flags: MaliciousFlags,
 }
 
 impl EcdsaPreSignerImpl {
     pub(crate) fn new(
         node_id: NodeId,
-        subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
@@ -68,7 +67,6 @@ impl EcdsaPreSignerImpl {
     ) -> Self {
         Self {
             node_id,
-            subnet_id,
             consensus_block_cache,
             crypto,
             schedule: RoundRobin::default(),

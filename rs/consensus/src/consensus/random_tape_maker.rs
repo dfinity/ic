@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 //! Some canisters may want to use randomness, for example a lottery canister.
 //! Since a canister is executed on many replicas and we want the different
 //! replicas to have the same state, we must use agreed-upon pseudo-randomness.

@@ -168,8 +168,6 @@
 //!   signing request" is present) and available 4-tuples is not empty, remove
 //!   the first 4-tuple from the available 4 tuples and make an entry in ongoing
 //!   signatures with the signing request and the 4-tuple.
-// TODO: Remove after implementing functionality
-#![allow(dead_code)]
 
 use crate::consensus::metrics::{
     timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
@@ -228,7 +226,6 @@ pub const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 /// `EcdsaImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.
 pub struct EcdsaImpl {
-    subnet_id: SubnetId,
     pre_signer: Box<dyn EcdsaPreSigner>,
     signer: Box<dyn EcdsaSigner>,
     complaint_handler: Box<dyn EcdsaComplaintHandler>,
@@ -244,7 +241,6 @@ impl EcdsaImpl {
     /// Builds a new threshold ECDSA component
     pub fn new(
         node_id: NodeId,
-        subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
@@ -253,7 +249,6 @@ impl EcdsaImpl {
     ) -> Self {
         let pre_signer = Box::new(EcdsaPreSignerImpl::new(
             node_id,
-            subnet_id,
             consensus_block_cache.clone(),
             crypto.clone(),
             metrics_registry.clone(),
@@ -275,7 +270,6 @@ impl EcdsaImpl {
             logger.clone(),
         ));
         Self {
-            subnet_id,
             pre_signer,
             signer,
             complaint_handler,
