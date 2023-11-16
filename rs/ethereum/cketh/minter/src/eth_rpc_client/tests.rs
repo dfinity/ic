@@ -30,7 +30,7 @@ mod eth_rpc_client {
             &[
                 RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
                 RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
-                RpcNodeProvider::Ethereum(EthereumProvider::PublicNode)
+                RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare)
             ]
         );
     }
