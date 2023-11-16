@@ -3631,61 +3631,6 @@ heavy-memory-update-performance-test-nightly:
     TESTNET: cdrc02
     WG_TESTNET: cdrc02
     cd_target_env: BENCHMARK_NIGHTLY
-host-os-upgrade-test:
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - ic-os/hostos/test-out
-    when: always
-  extends:
-    - ".build-k8s"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:2d0ad1c79c5c7c482dcfa21a28a6652066fdd2ac2a48e1c5f4ff8209c2e5ed20
-  needs:
-    - artifacts: false
-      job: bazel-test-all
-  rules:
-    - changes:
-        - ic-os/**/*
-        - toolchains/sysimage/**/*
-        - testnet/**/*
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-    - if: $SCHEDULE_NAME == "run-all-master"
-    - if: "$CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/"
-  script:
-    - |
-      VERSION=$(git rev-parse HEAD)
-      export VERSION
-
-      mkdir -p ic-os/hostos/build-out/disk-img
-      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/disk-img.tar.gz" -o "ic-os/hostos/build-out/disk-img/disk-img.tar.gz"
-      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/disk-img.tar.zst" -o "ic-os/hostos/build-out/disk-img/disk-img.tar.zst"
-      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/SHA256SUMS" -o "ic-os/hostos/build-out/disk-img/SHA256SUMS"
-
-      mkdir -p ic-os/hostos/build-out/update-img
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img.tar.zst" -o "ic-os/hostos/build-out/update-img/update-img.tar.zst"
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img.tar.gz" -o "ic-os/hostos/build-out/update-img/update-img.tar.gz"
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img-test.tar.zst" -o "ic-os/hostos/build-out/update-img/update-img-test.tar.zst"
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img-test.tar.gz" -o "ic-os/hostos/build-out/update-img/update-img-test.tar.gz"
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/SHA256SUMS" -o "ic-os/hostos/build-out/update-img/SHA256SUMS"
-
-      pip3 install --ignore-installed -r requirements.txt
-      # shellcheck disable=SC2154
-      $SHELL_WRAPPER timeout -k 10 "${HOST_OS_TEST_TIMEOUT}" \
-          "$CI_PROJECT_DIR"/ic-os/hostos/tests/hostos-upgrade.sh "$CI_PROJECT_DIR"
-  tags:
-    - dfinity-ic
-  variables:
-    E2E_TEST_TIMEOUT: 480
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    HOST_OS_TEST_TIMEOUT: 2400
-    SHELL_WRAPPER: "/usr/bin/time"
 large-response-downloading-nightly:
   artifacts:
     expire_in: 3 days
