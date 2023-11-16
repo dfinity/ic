@@ -144,19 +144,12 @@ fn test_add_inactive_neuron() {
     });
     match active_neuron_read_result {
         Ok(_) => panic!("Active neuron appeared in stable neuron store"),
-        Err(error) => {
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = &error;
-
-            let error_type = ErrorType::from_i32(*error_type);
-            assert_eq!(error_type, Some(ErrorType::NotFound), "{:#?}", error);
-
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("unable"), "{:#?}", error);
-            assert!(error_message.contains("find"), "{:#?}", error);
-        }
+        Err(error) => match error {
+            NeuronStoreError::NeuronNotFound { neuron_id } => {
+                assert_eq!(neuron_id, active_neuron.id.unwrap());
+            }
+            _ => panic!("read returns error other than not found: {:?}", error),
+        },
     }
 
     // Step 3.2: verify that inactive neuron can be read from stable neuron store and it's equal to
@@ -201,19 +194,12 @@ fn test_remove_inactive_neuron() {
     });
     match inactive_neuron_read_result {
         Ok(_) => panic!("Inactive neuron failed to be removed from stable neuron store"),
-        Err(error) => {
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = &error;
-
-            let error_type = ErrorType::from_i32(*error_type);
-            assert_eq!(error_type, Some(ErrorType::NotFound), "{:#?}", error);
-
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("unable"), "{:#?}", error);
-            assert!(error_message.contains("find"), "{:#?}", error);
-        }
+        Err(error) => match error {
+            NeuronStoreError::NeuronNotFound { neuron_id } => {
+                assert_eq!(neuron_id, inactive_neuron.id.unwrap());
+            }
+            _ => panic!("read returns error other than not found: {:?}", error),
+        },
     }
 }
 
@@ -314,32 +300,19 @@ fn test_with_neuron_mut_inactive_neuron() {
     // copied to stable memory.
     let funded_neuron_read_result =
         with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.read(funded_neuron_id));
-    match &funded_neuron_read_result {
-        Ok(_ok) => {
+    match funded_neuron_read_result {
+        Ok(_) => {
             panic!(
                 "Seems that the funded neuron was copied to stable memory. Result:\n{:#?}",
                 funded_neuron_read_result,
             );
         }
-
-        Err(err) => {
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = err;
-
-            let error_type = ErrorType::from_i32(*error_type);
-            assert_eq!(error_type, Some(ErrorType::NotFound), "{:#?}", err);
-
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("unable"), "{:#?}", err);
-            assert!(error_message.contains("find"), "{:#?}", err);
-            assert!(
-                error_message.contains(&format!("{}", funded_neuron_id.id)),
-                "{:#?}",
-                err
-            );
-        }
+        Err(error) => match error {
+            NeuronStoreError::NeuronNotFound { neuron_id } => {
+                assert_eq!(neuron_id, funded_neuron_id);
+            }
+            _ => panic!("read returns error other than not found: {:?}", error),
+        },
     }
 }
 

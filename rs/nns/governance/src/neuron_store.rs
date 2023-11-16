@@ -29,7 +29,9 @@ use std::{
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
-    NeuronNotFound(NeuronNotFound),
+    NeuronNotFound {
+        neuron_id: NeuronId,
+    },
     CorruptedNeuronIndexes(CorruptedNeuronIndexes),
     NeuronIdIsNone,
     InvalidSubaccount {
@@ -45,13 +47,14 @@ pub enum NeuronStoreError {
         new_subaccount: Subaccount,
     },
     NeuronAlreadyExists(NeuronId),
+    InvalidData {
+        reason: String,
+    },
 }
 
 impl NeuronStoreError {
-    pub fn not_found(neuron_id: &NeuronId) -> Self {
-        NeuronStoreError::NeuronNotFound(NeuronNotFound {
-            neuron_id: *neuron_id,
-        })
+    pub fn not_found(neuron_id: NeuronId) -> Self {
+        NeuronStoreError::NeuronNotFound { neuron_id }
     }
 
     pub fn invalid_subaccount(neuron_id: NeuronId, subaccount_bytes: Vec<u8>) -> Self {
@@ -84,8 +87,8 @@ pub struct NeuronNotFound {
 impl Display for NeuronStoreError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            NeuronStoreError::NeuronNotFound(neuron_not_found) => {
-                write!(f, "Neuron not found: {:?}", neuron_not_found.neuron_id)
+            NeuronStoreError::NeuronNotFound { neuron_id } => {
+                write!(f, "Neuron not found: {:?}", neuron_id)
             }
             NeuronStoreError::CorruptedNeuronIndexes(corrupted_neuron_indexes) => {
                 write!(
@@ -126,6 +129,9 @@ impl Display for NeuronStoreError {
                     neuron_id
                 )
             }
+            NeuronStoreError::InvalidData { reason } => {
+                write!(f, "Failed to store neuron with invalid data: {:?}", reason)
+            }
         }
     }
 }
@@ -133,13 +139,14 @@ impl Display for NeuronStoreError {
 impl From<NeuronStoreError> for GovernanceError {
     fn from(value: NeuronStoreError) -> Self {
         let error_type = match &value {
-            NeuronStoreError::NeuronNotFound(_) => ErrorType::NotFound,
+            NeuronStoreError::NeuronNotFound { .. } => ErrorType::NotFound,
             NeuronStoreError::CorruptedNeuronIndexes(_) => ErrorType::PreconditionFailed,
             NeuronStoreError::NeuronIdIsNone => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidSubaccount { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NeuronIdModified { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::SubaccountModified { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NeuronAlreadyExists(_) => ErrorType::PreconditionFailed,
+            NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
@@ -565,7 +572,7 @@ impl NeuronStore {
             .heap_neurons
             .get(&neuron_id.id)
             .cloned()
-            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+            .ok_or_else(|| NeuronStoreError::not_found(*neuron_id))?;
 
         // Clone and call f() to possibly modify the neuron.
         let mut new_neuron = old_neuron.clone();
@@ -626,7 +633,7 @@ impl NeuronStore {
         let neuron = self
             .heap_neurons
             .get(&neuron_id.id)
-            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+            .ok_or_else(|| NeuronStoreError::not_found(*neuron_id))?;
         Ok(f(neuron))
     }
 
