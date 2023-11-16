@@ -46,7 +46,7 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
 }
 
 /// Pretty prints the `RustType` persisted at `path`, encoded as `ProtoType`.
-/// This is for types rust types which require `CheckpointLoadingMetrics` for
+/// This is for Rust types that require `CheckpointLoadingMetrics` for
 /// deserialization.
 fn display_proto_with_error_metric<'a, ProtoType, RustType>(
     path: PathBuf,

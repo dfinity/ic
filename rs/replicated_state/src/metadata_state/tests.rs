@@ -33,7 +33,7 @@ use std::{sync::Arc, time::Duration};
 
 struct DummyMetrics;
 impl CheckpointLoadingMetrics for DummyMetrics {
-    fn raise_critical_error(&self, _: String) {
+    fn observe_broken_soft_invariant(&self, _: String) {
         // Do nothing.
     }
 }
@@ -1864,7 +1864,7 @@ fn do_roundtrip_and_check_error(metrics: &BlockmakerMetricsTimeSeries, expected_
 
     struct TestMetrics(Arc<Mutex<String>>);
     impl CheckpointLoadingMetrics for TestMetrics {
-        fn raise_critical_error(&self, error: String) {
+        fn observe_broken_soft_invariant(&self, error: String) {
             *self.0.lock().unwrap() = error;
         }
     }

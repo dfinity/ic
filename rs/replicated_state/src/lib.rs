@@ -60,5 +60,5 @@ pub use replicated_state::{InputQueueType, NextInputQueue, ReplicatedState, Stat
 /// struct to deserialize to the deserialization logic so that there is a way
 /// to record metrics from there.
 pub trait CheckpointLoadingMetrics {
-    fn raise_critical_error(&self, msg: String);
+    fn observe_broken_soft_invariant(&self, msg: String);
 }
