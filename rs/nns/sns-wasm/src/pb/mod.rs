@@ -1,11 +1,12 @@
 use crate::{
     pb::v1::{
-        add_wasm_response, update_allowed_principals_response, AddWasmResponse,
-        GetNextSnsVersionResponse, InsertUpgradePathEntriesResponse, ListUpgradeStep,
-        PrettySnsVersion, SnsCanisterIds, SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade,
-        SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-        UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListResponse,
-        UpgradePath as StableUpgradePath,
+        add_wasm_response, get_deployed_sns_by_proposal_id_response,
+        update_allowed_principals_response, AddWasmResponse, DeployedSns,
+        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionResponse,
+        InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion, SnsCanisterIds,
+        SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
+        SnsWasmStableIndex, StableCanisterState, UpdateAllowedPrincipalsResponse,
+        UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
     },
     sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
     stable_memory::SnsWasmStableMemory,
@@ -72,6 +73,28 @@ impl UpdateSnsSubnetListResponse {
 
     pub fn ok() -> Self {
         Self { error: None }
+    }
+}
+
+impl GetDeployedSnsByProposalIdResponse {
+    pub fn error(message: String) -> Self {
+        Self {
+            get_deployed_sns_by_proposal_id_result: Some(
+                get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult::Error(
+                    SnsWasmError { message },
+                ),
+            ),
+        }
+    }
+
+    pub fn ok(deployed_sns: DeployedSns) -> Self {
+        Self {
+            get_deployed_sns_by_proposal_id_result: Some(
+                get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult::DeployedSns(
+                    deployed_sns
+                )
+            )
+        }
     }
 }
 
@@ -196,6 +219,7 @@ impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCan
             stable_memory: SnsWasmStableMemory::<M>::default(),
             access_controls_enabled: stable_canister_state.access_controls_enabled,
             allowed_principals: stable_canister_state.allowed_principals,
+            nns_proposal_to_deployed_sns: stable_canister_state.nns_proposal_to_deployed_sns,
         }
     }
 }
@@ -212,6 +236,7 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
         let upgrade_path = Some(state.upgrade_path.into());
         let access_controls_enabled = state.access_controls_enabled;
         let allowed_principals = state.allowed_principals;
+        let nns_proposal_to_deployed_sns = state.nns_proposal_to_deployed_sns;
 
         StableCanisterState {
             wasm_indexes,
@@ -220,6 +245,7 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
             upgrade_path,
             access_controls_enabled,
             allowed_principals,
+            nns_proposal_to_deployed_sns,
         }
     }
 }
