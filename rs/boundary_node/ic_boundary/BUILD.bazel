@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/orchestrator/registry_replicator",
     "//rs/registry/client",
@@ -74,7 +75,11 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "//rs/crypto/tree_hash",
+    "//rs/types/base_types",
+    "//rs/certification/test-utils",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 

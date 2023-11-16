@@ -28,6 +28,9 @@ use crate::{
     firewall::{FirewallGenerator, SystemdReloader},
 };
 
+// Some magical prefix that the public key should have
+const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
     pub id: Principal,
@@ -89,6 +92,8 @@ impl SnapshotPersister {
 #[derive(Debug, Clone)]
 pub struct RegistrySnapshot {
     pub registry_version: u64,
+    pub nns_subnet_id: Principal,
+    pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
     // Hash map for a faster lookup by DNS resolver
     pub nodes: HashMap<String, Node>,
@@ -133,6 +138,18 @@ impl Runner {
             .get_routing_table(version)
             .context("failed to get routing table")? // Result
             .context("routing table not available")?; // Option
+
+        let nns_subnet_id = self
+            .registry_client
+            .get_root_subnet_id(version)
+            .context("failed to get root subnet id")? // Result
+            .context("root subnet id not available")?; // Option
+
+        let nns_public_key = self
+            .registry_client
+            .get_threshold_signing_public_key_for_subnet(nns_subnet_id, version)
+            .context("failed to get NNS public key")? // Result
+            .context("NNS public is key not available")?; // Option
 
         // Generate a temporary hash table with subnet_id to canister ranges mapping for later reference
         let mut ranges_by_subnet = HashMap::new();
@@ -240,8 +257,13 @@ impl Runner {
             .collect::<Result<Vec<Subnet>, Error>>()
             .context("unable to get subnets")?;
 
+        let mut nns_key_with_prefix = DER_PREFIX.to_vec();
+        nns_key_with_prefix.extend_from_slice(&nns_public_key.into_bytes());
+
         Ok(RegistrySnapshot {
             registry_version: version.get(),
+            nns_subnet_id: nns_subnet_id.get().0,
+            nns_public_key: nns_key_with_prefix,
             subnets,
             nodes: nodes_map,
         })

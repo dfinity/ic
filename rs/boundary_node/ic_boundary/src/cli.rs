@@ -43,7 +43,7 @@ pub struct RegistryConfig {
 
     /// The path to the NNS public key file
     #[clap(long)]
-    pub nns_pub_key_pem: PathBuf,
+    pub nns_pub_key_pem: Option<PathBuf>,
 
     /// The delay between NNS polls in milliseconds
     #[clap(long, default_value = "5000")]
