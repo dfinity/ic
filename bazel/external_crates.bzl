@@ -1030,13 +1030,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.8.0",
             ),
             "sev": crate.spec(
-                version = "^1.2.1",
+                version = "^2.0.2",
                 features = [
-                    "openssl",
+                    "crypto_nossl",
                 ],
             ),
             "sha2": crate.spec(
-                version = "^0.10.2",
+                version = "^0.10.8",
             ),
             "sha2-0_9_1": crate.spec(
                 package = "sha2",

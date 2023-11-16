@@ -5,7 +5,7 @@ authors = ["DFINITY"]
 edition = "2021"
 description = "Utility for AMD SEV-SNP"
 keywords = ["amd", "sev", "snp"]
-exclude = [ ".gitignore", ".github/*" ]
+exclude = [".gitignore", ".github/*"]
 
 [[bin]]
 name = "snptool"
@@ -15,4 +15,4 @@ path = "src/main.rs"
 anyhow = "1.0.57"
 clap = { workspace = true }
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
-sev = { version = "1.2.1", features = ["openssl"] }
+sev = { version = "2.0.2" }
