@@ -501,6 +501,7 @@ fn start_consensus(
     ));
 
     let ingress_manager = Arc::new(IngressManager::new(
+        time_source.clone(),
         consensus_time,
         ingress_history_reader,
         artifact_pools.ingress_pool.clone(),
