@@ -571,7 +571,7 @@ where
             });
         }
         debug_assert!(
-            self.slot_table.len() < self.topology_watcher.borrow().iter().count(),
+            self.slot_table.len() <= self.topology_watcher.borrow().iter().count(),
             "Slot table contains more nodes than nodes in subnet after pruning"
         );
     }
@@ -590,7 +590,7 @@ enum DownloadResult<T> {
     PriorityIsDrop,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Debug)]
 struct SlotEntry<T> {
     conn_id: ConnId,
     commit_id: CommitId,
@@ -609,5 +609,817 @@ impl<T> SlotEntry<T> {
             return other.commit_id > self.commit_id;
         }
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::backtrace::Backtrace;
+
+    use axum::http::Response;
+    use ic_metrics::MetricsRegistry;
+    use ic_p2p_test_utils::{
+        consensus::U64Artifact,
+        mocks::{MockPriorityFnAndFilterProducer, MockTransport, MockValidatedPoolReader},
+    };
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::RegistryVersion;
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use mockall::Sequence;
+
+    use super::*;
+
+    fn create_receive_manager(
+        log: ReplicaLogger,
+        metrics: ConsensusManagerMetrics,
+        rt_handle: Handle,
+
+        // Adverts received from peers
+        adverts_received: Receiver<(AdvertUpdate<U64Artifact>, NodeId, ConnId)>,
+        raw_pool: Arc<RwLock<MockValidatedPoolReader>>,
+        priority_fn_producer: Arc<
+            dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader>,
+        >,
+        sender: CrossbeamSender<UnvalidatedArtifactMutation<U64Artifact>>,
+        transport: Arc<dyn Transport>,
+        topology_watcher: watch::Receiver<SubnetTopology>,
+    ) -> ConsensusManagerReceiver<
+        U64Artifact,
+        MockValidatedPoolReader,
+        (AdvertUpdate<U64Artifact>, NodeId, ConnId),
+    > {
+        let priority_fn = priority_fn_producer.get_priority_function(&raw_pool.read().unwrap());
+        let (current_priority_fn, _) = watch::channel(priority_fn);
+        ConsensusManagerReceiver {
+            log,
+            metrics,
+            rt_handle: rt_handle.clone(),
+            adverts_received,
+            pool_reader: raw_pool.clone() as Arc<_>,
+            raw_pool,
+            priority_fn_producer,
+            current_priority_fn,
+            sender,
+            transport,
+            active_downloads: HashMap::new(),
+            slot_table: HashMap::new(),
+            artifact_processor_tasks: JoinSet::new(),
+            topology_watcher,
+        }
+    }
+
+    /// Check that all variants of stale advers to not get added to the slot table.
+    #[test]
+    fn receiving_stale_advert_updates() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&SlotNumber::from(1))
+                    .unwrap(),
+                &SlotEntry {
+                    conn_id: ConnId::from(1),
+                    commit_id: CommitId::from(1),
+                    id: 0,
+                }
+            );
+            assert_eq!(mgr.slot_table.len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert_eq!(mgr.active_downloads.len(), 1);
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+            // Send stale advert with lower commit id.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(0),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Check that slot table did not get updated.
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&SlotNumber::from(1))
+                    .unwrap(),
+                &SlotEntry {
+                    conn_id: ConnId::from(1),
+                    commit_id: CommitId::from(1),
+                    id: 0,
+                }
+            );
+            // Send stale advert with lower conn id
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(0),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(0),
+            );
+            // Check that slot table did not get updated.
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&SlotNumber::from(1))
+                    .unwrap(),
+                &SlotEntry {
+                    conn_id: ConnId::from(1),
+                    commit_id: CommitId::from(1),
+                    id: 0,
+                }
+            );
+            // Send stale advert with lower conn id but higher commit id
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(10),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(0),
+            );
+            // Check that slot table did not get updated.
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&SlotNumber::from(1))
+                    .unwrap(),
+                &SlotEntry {
+                    conn_id: ConnId::from(1),
+                    commit_id: CommitId::from(1),
+                    id: 0,
+                }
+            );
+            // Send stale advert with lower conn id and lower commit id
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(0),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(0),
+            );
+            // Check that slot table did not get updated.
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&SlotNumber::from(1))
+                    .unwrap(),
+                &SlotEntry {
+                    conn_id: ConnId::from(1),
+                    commit_id: CommitId::from(1),
+                    id: 0,
+                }
+            );
+            assert_eq!(mgr.slot_table.len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert_eq!(mgr.active_downloads.len(), 1);
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        });
+    }
+
+    /// Check that adverts updates with higher connnection ids take precedence.
+    #[test]
+    fn overwrite_slot() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Verify that advert is correctly inserted into slot table.
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&SlotNumber::from(1))
+                    .unwrap(),
+                &SlotEntry {
+                    conn_id: ConnId::from(1),
+                    commit_id: CommitId::from(1),
+                    id: 0,
+                }
+            );
+            assert_eq!(mgr.slot_table.len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert_eq!(mgr.active_downloads.len(), 1);
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+            // Send advert with higher conn id.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(0),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(2),
+            );
+            // Verify that slot table now only contains newer entry.
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&SlotNumber::from(1))
+                    .unwrap(),
+                &SlotEntry {
+                    conn_id: ConnId::from(2),
+                    commit_id: CommitId::from(0),
+                    id: 0,
+                }
+            );
+            assert_eq!(mgr.slot_table.len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            // Check that download task for first advert closes.
+            assert_eq!(
+                rt.block_on(mgr.artifact_processor_tasks.join_next())
+                    .unwrap()
+                    .unwrap()
+                    .1,
+                0
+            );
+        });
+    }
+
+    /// Verify that if two peers advertise the same advert it will get added to the same download task.
+    #[test]
+    fn two_peers_advertise_same_advert() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Second advert for advert 0.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_2,
+                ConnId::from(1),
+            );
+            // Verify that we only have one download task.
+            assert_eq!(mgr.slot_table.len(), 2);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_2).unwrap().len(), 1);
+            assert_eq!(mgr.active_downloads.len(), 1);
+        });
+    }
+
+    /// Verify that a new download task is started if we receive a new update for an already finished download.
+    #[test]
+    fn new_advert_while_download_finished() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Overwrite advert to close the download task.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(2),
+                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Check that the download task is closed.
+            let (peer_rx, id, attr) = rt
+                .block_on(mgr.artifact_processor_tasks.join_next())
+                .unwrap()
+                .unwrap();
+            // Simulate that a new peer was added for this advert while closing.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(3),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_2,
+                ConnId::from(1),
+            );
+            assert_eq!(mgr.active_downloads.len(), 2);
+            // Verify that we reopened the download task for advert 0.
+            mgr.handle_artifact_processor_joined(peer_rx, id, attr);
+            assert_eq!(mgr.active_downloads.len(), 2);
+        });
+    }
+
+    /// Verify that advert that transitions from stash to drop is not downloaded.
+    #[test]
+    fn priority_from_stash_to_drop() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            let mut seq = Sequence::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .times(1)
+                .returning(|_| Box::new(|_, _| Priority::Stash))
+                .in_sequence(&mut seq);
+            mock_pfn
+                .expect_get_priority_function()
+                .times(1)
+                .returning(|_| Box::new(|_, _| Priority::Drop))
+                .in_sequence(&mut seq);
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            assert_eq!(mgr.slot_table.len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert_eq!(mgr.active_downloads.len(), 1);
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+            // Update priority fn to drop.
+            mgr.handle_pfn_timer_tick();
+            // Overwrite existing advert to finish download task.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(2),
+                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            assert_eq!(
+                rt.block_on(mgr.artifact_processor_tasks.join_next())
+                    .unwrap()
+                    .unwrap()
+                    .1,
+                0
+            );
+        });
+    }
+
+    /// Check that an advert for which the priority changes from stash to fetch is downloaded.
+    #[test]
+    fn priority_from_stash_to_fetch() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            let mut seq = Sequence::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .times(1)
+                .returning(|_| Box::new(|_, _| Priority::Stash))
+                .in_sequence(&mut seq);
+            mock_pfn
+                .expect_get_priority_function()
+                .times(1)
+                .returning(|_| Box::new(|_, _| Priority::Fetch))
+                .in_sequence(&mut seq);
+            let mut mock_transport = MockTransport::new();
+            mock_transport.expect_rpc().returning(|_, _| {
+                Ok(Response::builder()
+                    .body(Bytes::from(bincode::serialize(&0_u64).unwrap()))
+                    .unwrap())
+            });
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            assert_eq!(mgr.slot_table.len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert_eq!(mgr.active_downloads.len(), 1);
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+            // Update priority fn to fetch.
+            mgr.handle_pfn_timer_tick();
+            // Check that we received downloaded artifact.
+            assert_eq!(
+                cb_rx.recv().unwrap(),
+                UnvalidatedArtifactMutation::Insert((0, NODE_1))
+            );
+        });
+    }
+
+    /// Verify that slot table is pruned if node leaves subnet.
+    #[test]
+    fn topology_update() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_2,
+                ConnId::from(1),
+            );
+            let addr = "127.0.0.1:8080".parse().unwrap();
+            // Send current topology of two nodes.
+            pfn_tx
+                .send(SubnetTopology::new(
+                    vec![(NODE_1, addr), (NODE_2, addr)],
+                    RegistryVersion::from(1),
+                    RegistryVersion::from(1),
+                ))
+                .unwrap();
+            mgr.handle_topology_update();
+            assert_eq!(mgr.slot_table.len(), 2);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_2).unwrap().len(), 1);
+            // Remove one node from topology.
+            pfn_tx
+                .send(SubnetTopology::new(
+                    vec![(NODE_1, addr)],
+                    RegistryVersion::from(1),
+                    RegistryVersion::from(1),
+                ))
+                .unwrap();
+            mgr.handle_topology_update();
+            assert_eq!(mgr.slot_table.len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert!(mgr.slot_table.get(&NODE_2).is_none());
+            // Remove all nodes.
+            pfn_tx
+                .send(SubnetTopology::new(
+                    vec![],
+                    RegistryVersion::from(1),
+                    RegistryVersion::from(1),
+                ))
+                .unwrap();
+            mgr.handle_topology_update();
+            assert_eq!(mgr.slot_table.len(), 0);
+            assert!(mgr.slot_table.get(&NODE_1).is_none());
+            assert!(mgr.slot_table.get(&NODE_2).is_none());
+        });
+    }
+
+    /// Verify that if node leaves subnet all download tasks are informed.
+    #[test]
+    fn topology_update_finish_download() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            assert_eq!(mgr.active_downloads.len(), 1);
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+            // Remove node with active download from topology.
+            pfn_tx
+                .send(SubnetTopology::new(
+                    vec![],
+                    RegistryVersion::from(1),
+                    RegistryVersion::from(1),
+                ))
+                .unwrap();
+            mgr.handle_topology_update();
+            assert_eq!(
+                rt.block_on(mgr.artifact_processor_tasks.join_next())
+                    .unwrap()
+                    .unwrap()
+                    .1,
+                0
+            );
+        });
+    }
+
+    /// TODO: Is this correct?
+    #[test]
+    fn double_remove_from_download() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+            // Add 0, remove none -> spawn download task 0 with [NODE_1]
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Add 0, remove 0 -> Closes download task 0 and removes NODE_1 from peer set.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(2),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Add 1, remove 0 -> spawn download task for 1 and remove NODE_1 from download task 0 again.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(3),
+                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            assert_eq!(mgr.active_downloads.len(), 2);
+            assert_eq!(mgr.artifact_processor_tasks.len(), 2);
+            assert_eq!(
+                rt.block_on(mgr.artifact_processor_tasks.join_next())
+                    .unwrap()
+                    .unwrap()
+                    .1,
+                0
+            );
+        });
     }
 }

@@ -16,7 +16,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct U64Artifact;
 
 impl ArtifactKind for U64Artifact {

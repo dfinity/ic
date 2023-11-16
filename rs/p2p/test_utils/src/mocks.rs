@@ -2,9 +2,12 @@ use crate::consensus::U64Artifact;
 use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
-use ic_interfaces::p2p::{consensus::ValidatedPoolReader, state_sync::StateSyncClient};
+use ic_interfaces::p2p::{
+    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
+    state_sync::StateSyncClient,
+};
 use ic_quic_transport::{ConnId, SendError, Transport};
-use ic_types::chunkable::ArtifactChunk;
+use ic_types::{artifact::PriorityFn, chunkable::ArtifactChunk};
 use ic_types::{
     artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
     chunkable::ChunkId,
@@ -72,5 +75,17 @@ mock! {
             &self,
             filter: &(),
         ) -> Box<dyn Iterator<Item = u64>>;
+    }
+}
+
+mock! {
+    pub PriorityFnAndFilterProducer {}
+
+    impl PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader > for PriorityFnAndFilterProducer {
+        fn get_priority_function(&self, pool: &MockValidatedPoolReader) -> PriorityFn<u64, ()>;
+        fn get_filter(&self) -> () {
+            ()
+        }
+
     }
 }
