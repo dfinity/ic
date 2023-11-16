@@ -141,6 +141,7 @@ where
         );
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let ingress_manager = Arc::new(IngressManager::new(
+            time_source.clone(),
             Arc::new(MockConsensusTime::new()),
             Box::new(ingress_hist_reader),
             ingress_pool,

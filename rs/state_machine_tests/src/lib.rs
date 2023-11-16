@@ -72,6 +72,7 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
+use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
 };
@@ -1087,12 +1088,15 @@ impl StateMachine {
             },
         );
 
+        let time_source = FastForwardTimeSource::new();
+        time_source.set_time(time).unwrap();
         let consensus_time = Arc::new(PocketConsensusTime::new(time));
         let ingress_pool = Arc::new(RwLock::new(PocketIngressPool::new()));
         // We are not interested in ingress signature validation
         // and thus use `CryptoReturningOk`.
         let ingress_verifier = Arc::new(CryptoReturningOk::default());
         let ingress_manager = Arc::new(IngressManager::new(
+            time_source,
             consensus_time.clone(),
             Box::new(IngressHistoryReaderImpl::new(state_manager.clone())),
             ingress_pool.clone(),
