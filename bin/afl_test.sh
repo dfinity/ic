@@ -1,29 +1,16 @@
 #!/usr/bin/env bash
 
-# This is only meant to test if the afl binary built is working
-# by adding a dummy testcase. To get meaningful results, the input
-# directory must be a valid corpus.
+# Run AFL based target against a single input
 
 set -x
 
-# If you would like to include your own corpus,
-# export INPUT_DIR=/path/to/corpus
-if [[ -z "$INPUT_DIR" ]]; then
-    INPUT_DIR=$(mktemp -d)
-    echo "A dummy corpus file to make AFL work" >$INPUT_DIR/seed_corpus.txt
-fi
+# Usage
+# ./bin/afl_test.sh //rs/embedders/fuzz:execute_with_wasm_executor_afl /path/to/testcase
 
-# Output directory
-if [[ -z "$OUTPUT_DIR" ]]; then
-    OUTPUT_DIR=$(mktemp -d)
-fi
+AFL_BAZEL_TARGET=$1
+TEST_INPUT=$2
 
-cleanup() {
-    echo "Input directory ${INPUT_DIR}"
-    echo "Output directory ${OUTPUT_DIR}"
-}
-
-trap cleanup EXIT
+WORKSPACE=$(bazel info workspace --ui_event_filters=-WARNING,-INFO 2>/dev/null)
 
 # This allows us to skip false positive crashes for wasm runtime
 if [[ "$1" == *"wasmtime"* ]] || [[ "$1" == *"wasm_executor"* ]]; then
@@ -75,17 +62,6 @@ LSAN_OPTIONS="handle_abort=1:\
             symbolize=0:\
             use_sigaltstack=1"
 
-ASAN_OPTIONS=$ASAN_OPTIONS \
-    LSAN_OPTIONS=$LSAN_OPTIONS \
-    AFL_FORKSRV_INIT_TMOUT=100 \
-    AFL_FAST_CAL=1 \
-    AFL_BENCH_UNTIL_CRASH=1 \
-    AFL_SKIP_CPUFREQ=1 \
-    AFL_CMPLOG_ONLY_NEW=1 \
-    AFL_IGNORE_PROBLEMS=1 \
-    AFL_IGNORE_TIMEOUTS=1 \
-    AFL_KEEP_TIMEOUTS=1 \
-    AFL_EXPAND_HAVOC_NOW=1 \
-    AFL_DRIVER_DONT_DEFER=1 \
-    AFL_DISABLE_TRIM=1 \
-    /usr/local/bin/afl-fuzz -i $INPUT_DIR -o $OUTPUT_DIR ${@:2} -- $1
+bazel build --config=afl $AFL_BAZEL_TARGET
+AFL_BINARY="$WORKSPACE/$(bazel cquery --config=fuzzing --output=files $AFL_BAZEL_TARGET)"
+ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS $AFL_BINARY $TEST_INPUT
