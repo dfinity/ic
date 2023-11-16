@@ -577,6 +577,8 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
     }
 }
 
+/// Decodes a `SystemMetadata` proto. The metrics are provided as a side-channel
+/// for recording errors without being forced to return `Err(_)`.
 impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for SystemMetadata {
     type Error = ProxyDecodeError;
 
@@ -2124,6 +2126,9 @@ impl TryFrom<pb_metadata::BlockmakerStatsMap> for BlockmakerStatsMap {
     }
 }
 
+/// Decodes a `BlockmakerMetricsTimeSeries` proto. The metrics are provided as a
+/// side-channel for recording errors and stats without being forced to return
+/// `Err(_)`.
 impl
     TryFrom<(
         pb_metadata::BlockmakerMetricsTimeSeries,
@@ -2151,7 +2156,7 @@ impl
         );
 
         if let Err(err) = time_series.check_soft_invariants() {
-            metrics.raise_critical_error(err);
+            metrics.observe_broken_soft_invariant(err);
         }
 
         Ok(time_series)
