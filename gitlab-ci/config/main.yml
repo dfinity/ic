@@ -703,54 +703,6 @@ benchmarks:
       # IDX-2850
       #- TARGETS: "//... - //rs/crypto/... - //rs/execution_environment/..."
 
-host-os-upgrade-test:
-  # This test runs VMs on the CI runner, which can be unreliable and slow. This
-  # test is soon to be replaced with Farm tests: NODE-565
-  extends:
-    - .build-k8s
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - "ic-os/**/*"
-        - "toolchains/sysimage/**/*"
-        - "testnet/**/*"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-    - if: '$SCHEDULE_NAME == "run-all-master"'
-    - if: "$CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/"
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-  variables:
-    HOST_OS_TEST_TIMEOUT: 2400
-    # This var is needed as some shell scripts depend on it.
-    E2E_TEST_TIMEOUT: 480
-  artifacts:
-    paths:
-      - ic-os/hostos/test-out
-  script:
-    - |
-      VERSION=$(git rev-parse HEAD)
-      export VERSION
-
-      mkdir -p ic-os/hostos/build-out/disk-img
-      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/disk-img.tar.gz" -o "ic-os/hostos/build-out/disk-img/disk-img.tar.gz"
-      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/disk-img.tar.zst" -o "ic-os/hostos/build-out/disk-img/disk-img.tar.zst"
-      curl -fsSL  "https://download.dfinity.systems/ic/${VERSION}/host-os/disk-img/SHA256SUMS" -o "ic-os/hostos/build-out/disk-img/SHA256SUMS"
-
-      mkdir -p ic-os/hostos/build-out/update-img
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img.tar.zst" -o "ic-os/hostos/build-out/update-img/update-img.tar.zst"
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img.tar.gz" -o "ic-os/hostos/build-out/update-img/update-img.tar.gz"
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img-test.tar.zst" -o "ic-os/hostos/build-out/update-img/update-img-test.tar.zst"
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img-test.tar.gz" -o "ic-os/hostos/build-out/update-img/update-img-test.tar.gz"
-      curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/SHA256SUMS" -o "ic-os/hostos/build-out/update-img/SHA256SUMS"
-
-      pip3 install --ignore-installed -r requirements.txt
-      # shellcheck disable=SC2154
-      $SHELL_WRAPPER timeout -k 10 "${HOST_OS_TEST_TIMEOUT}" \
-          "$CI_PROJECT_DIR"/ic-os/hostos/tests/hostos-upgrade.sh "$CI_PROJECT_DIR"
-
 build-determinism:
   extends:
     - .build-k8s
