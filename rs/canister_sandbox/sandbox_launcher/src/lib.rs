@@ -99,7 +99,7 @@ impl LauncherServer {
                     _ => unreachable!("Launcher encountered error waiting on children: {}", err),
                 },
                 Ok(status) => match status {
-                    WaitStatus::Exited(pid, status) if status == 0 => {
+                    WaitStatus::Exited(pid, 0) => {
                         watcher_canister_id_map.lock().unwrap().remove(&pid);
                     }
                     WaitStatus::StillAlive => {}

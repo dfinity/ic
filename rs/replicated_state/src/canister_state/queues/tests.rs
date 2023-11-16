@@ -602,12 +602,12 @@ fn test_peek_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
-    let local_senders = vec![
+    let local_senders = [
         canister_test_id(1),
         canister_test_id(2),
         canister_test_id(1),
     ];
-    let remote_senders = vec![
+    let remote_senders = [
         canister_test_id(3),
         canister_test_id(3),
         canister_test_id(4),
@@ -684,7 +684,7 @@ fn test_skip_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
-    let local_senders = vec![
+    let local_senders = [
         canister_test_id(1),
         canister_test_id(2),
         canister_test_id(1),
@@ -756,7 +756,7 @@ fn test_output_into_iter() {
     let mut queues = CanisterQueues::default();
     assert_eq!(0, queues.output_message_count());
 
-    let destinations = vec![other_1, other_2, other_1, other_3, other_2, other_1];
+    let destinations = [other_1, other_2, other_1, other_3, other_2, other_1];
     for (i, id) in destinations.iter().enumerate() {
         queues
             .push_output_request(
@@ -771,7 +771,7 @@ fn test_output_into_iter() {
             .expect("could not push");
     }
 
-    let expected = vec![
+    let expected = [
         (&other_1, 0),
         (&other_2, 1),
         (&other_3, 3),
@@ -851,12 +851,12 @@ fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, reques
 #[test]
 fn test_peek_canister_input_does_not_affect_schedule() {
     let mut queues = CanisterQueues::default();
-    let local_senders = vec![
+    let local_senders = [
         canister_test_id(1),
         canister_test_id(2),
         canister_test_id(1),
     ];
-    let remote_senders = vec![canister_test_id(13), canister_test_id(14)];
+    let remote_senders = [canister_test_id(13), canister_test_id(14)];
 
     let local_requests = local_senders
         .iter()
@@ -904,12 +904,12 @@ fn test_peek_canister_input_does_not_affect_schedule() {
 #[test]
 fn test_skip_canister_input() {
     let mut queues = CanisterQueues::default();
-    let local_senders = vec![
+    let local_senders = [
         canister_test_id(1),
         canister_test_id(2),
         canister_test_id(1),
     ];
-    let remote_senders = vec![canister_test_id(13), canister_test_id(14)];
+    let remote_senders = [canister_test_id(13), canister_test_id(14)];
 
     let local_requests = local_senders
         .iter()

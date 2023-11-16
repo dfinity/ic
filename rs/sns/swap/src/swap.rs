@@ -203,7 +203,7 @@ impl NeuronBasketConstructionParameters {
         let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count)?;
         Ok(dissolve_delay_seconds_list
             .into_iter()
-            .zip(chunks_e8s.into_iter())
+            .zip(chunks_e8s)
             .map(
                 |(dissolve_delay_seconds, amount_e8s)| ScheduledVestingEvent {
                     dissolve_delay_seconds,

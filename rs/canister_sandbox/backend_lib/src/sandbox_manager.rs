@@ -14,6 +14,7 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{Debug, Formatter};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -154,7 +155,7 @@ impl Execution {
             &exec_input.globals,
             self.sandbox_manager.log.clone(),
             exec_input.wasm_reserved_pages,
-            Arc::new(out_of_instructions_handler),
+            Rc::new(out_of_instructions_handler),
         );
 
         match wasm_result {

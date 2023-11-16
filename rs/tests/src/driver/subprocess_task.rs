@@ -136,7 +136,7 @@ impl Task for SubprocessTask {
                                 // exit_code.code() should be Some, unless an external signal will fail the subprocess.
                                 // In that case, we should fail the parent process.
                                 Ok(exit_code) => match exit_code.code() {
-                                    Some(code) if code == 0 => notify(TaskResult::Report(
+                                    Some(0) => notify(TaskResult::Report(
                                         task_id.clone(),
                                         "Exited with code 0.".to_owned(),
                                     )),

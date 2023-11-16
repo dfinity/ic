@@ -2008,7 +2008,7 @@ fn composite_query_syscalls_from_reply_reject_callback() {
         ),
     ];
 
-    for (other_side, callback_type) in vec![(reply, "reply"), (reject, "reject")] {
+    for (other_side, callback_type) in [(reply, "reply"), (reject, "reject")] {
         for (syscall, label) in &syscalls {
             let canister_0 = wasm().composite_query(
                 canisters[1],

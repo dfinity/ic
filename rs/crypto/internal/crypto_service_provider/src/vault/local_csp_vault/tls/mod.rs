@@ -157,7 +157,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let secret_key: CspSecretKey =
             maybe_secret_key.ok_or(CspTlsSignError::SecretKeyNotFound { key_id: *key_id })?;
 
-        let result = match &secret_key {
+        match &secret_key {
             CspSecretKey::TlsEd25519(secret_key_der) => {
                 let secret_key_bytes =
                     ic_crypto_internal_basic_sig_ed25519::secret_key_from_pkcs8_v1_der(
@@ -180,8 +180,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 algorithm: AlgorithmId::Tls,
                 secret_key_variant: secret_key.enum_variant().to_string(),
             }),
-        };
-        result
+        }
     }
 }
 

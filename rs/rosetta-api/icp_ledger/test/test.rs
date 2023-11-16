@@ -469,10 +469,7 @@ fn archive_blocks_small_test() {
         assert_eq!(blocks_from_archive, blocks);
 
         // Fetch all blocks through the Motoko proxy canister.
-        let all_blocks: Vec<_> = blocks
-            .into_iter()
-            .chain(ledger_blocks.unwrap().into_iter())
-            .collect();
+        let all_blocks: Vec<_> = blocks.into_iter().chain(ledger_blocks.unwrap()).collect();
 
         let proxy = install_motoko_proxy(&r).await;
         let () = proxy

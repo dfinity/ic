@@ -595,7 +595,7 @@ mod test {
         assert!(matches!(next_multiple, Some(600)));
 
         let next_multiple = get_next_multiple_of(u64::MAX, REFRESH_RATE_INTERVAL_SECONDS);
-        assert!(matches!(next_multiple, None));
+        assert!(next_multiple.is_none());
     }
 
     #[test]
@@ -795,7 +795,7 @@ mod test {
         let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
             .unwrap();
-        assert!(matches!(result, Ok(_)));
+        assert!(result.is_ok());
         let update_state = read_state(&STATE, |state| {
             state
                 .update_exchange_rate_canister_state
@@ -812,7 +812,7 @@ mod test {
         let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
             .unwrap();
-        assert!(matches!(result, Ok(_)));
+        assert!(result.is_ok());
         assert!(xrc_client.calls.lock().unwrap().is_empty());
         let update_state = read_state(&STATE, |state| {
             state
@@ -952,7 +952,7 @@ mod test {
             state.average_icp_xdr_conversion_rate.clone()
         });
 
-        assert!(matches!(average_icp_xdr_conversion_rate, None));
+        assert!(average_icp_xdr_conversion_rate.is_none());
 
         let now_timestamp_seconds = (dfn_core::api::now()
             .duration_since(UNIX_EPOCH)
@@ -978,7 +978,7 @@ mod test {
             .now_or_never()
             .unwrap();
 
-        assert!(matches!(result, Ok(_)), "{:?}", result);
+        assert!(result.is_ok(), "{:?}", result);
         assert!(xrc_client.calls.lock().unwrap().is_empty());
         let icp_xdr_conversion_rate =
             read_state(&STATE, |state| state.icp_xdr_conversion_rate.clone());

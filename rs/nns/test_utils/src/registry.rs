@@ -576,7 +576,7 @@ pub fn prepare_registry_with_two_node_sets(
                 http: Some(connection_endpoint_from_string(&format!(
                     "{ip_addr_prefix}4321"
                 ))),
-                p2p_flow_endpoints: vec![&format!("123,{ip_addr_prefix}10000")]
+                p2p_flow_endpoints: [&format!("123,{ip_addr_prefix}10000")]
                     .iter()
                     .map(|x| flow_endpoint_from_string(x))
                     .collect(),

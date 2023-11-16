@@ -133,6 +133,8 @@ impl ThreadPort {
             let deferred = deferred.entry(src_node_id).or_default();
 
             // Stash
+            // https://github.com/rust-lang/rust-clippy/issues/4530
+            #[allow(clippy::unnecessary_unwrap)]
             if !deferred.started || event_handler.is_none() {
                 println!("Node {} is not registered", destination_node.id,);
                 deferred.stash.push(message);

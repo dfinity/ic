@@ -325,7 +325,7 @@ impl ConnectivityChecker {
 
     /// Every peer is connected to every other peer that is not in the except list.
     pub fn fully_connected_except(&self, except_list: Vec<NodeId>) -> bool {
-        let set: HashSet<NodeId> = HashSet::from_iter(except_list.into_iter());
+        let set: HashSet<NodeId> = HashSet::from_iter(except_list);
         let peers = self.peers.read().unwrap();
         for p1 in peers.keys() {
             for p2 in peers.keys() {

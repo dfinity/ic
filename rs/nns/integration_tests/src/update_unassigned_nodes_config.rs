@@ -26,14 +26,14 @@ fn test_submit_update_unassigned_nodes_config_proposal() {
             .build();
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
-        let ssh_keys = Some(vec!["key0".to_string(), "key1".to_string()]);
+        let ssh_keys = vec!["key0".to_string(), "key1".to_string()];
         // A registry invariant guards against exceeding the max number of keys.
         let ssh_keys_invalid = Some(vec!["key_invalid".to_string(); MAX_NUM_SSH_KEYS + 1]);
-        let replica_version = Some(ReplicaVersion::default().into());
+        let replica_version = ReplicaVersion::default().to_string();
 
         let payload = UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: ssh_keys.clone(),
-            replica_version: replica_version.clone(),
+            ssh_readonly_access: Some(ssh_keys.clone()),
+            replica_version: Some(replica_version.clone()),
         };
 
         let proposal_id: ProposalId = submit_external_update_proposal(
@@ -65,14 +65,8 @@ fn test_submit_update_unassigned_nodes_config_proposal() {
         )
         .await;
 
-        assert_eq!(
-            &unassigned_nodes_config.ssh_readonly_access,
-            ssh_keys.as_ref().unwrap()
-        );
-        assert_eq!(
-            &unassigned_nodes_config.replica_version,
-            replica_version.as_ref().unwrap()
-        );
+        assert_eq!(unassigned_nodes_config.ssh_readonly_access, ssh_keys);
+        assert_eq!(unassigned_nodes_config.replica_version, replica_version);
 
         let payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: ssh_keys_invalid.clone(),
@@ -132,14 +126,8 @@ fn test_submit_update_unassigned_nodes_config_proposal() {
         )
         .await;
 
-        assert_eq!(
-            unassigned_nodes_config.ssh_readonly_access,
-            ssh_keys.unwrap()
-        );
-        assert_eq!(
-            unassigned_nodes_config.replica_version,
-            replica_version.unwrap()
-        );
+        assert_eq!(unassigned_nodes_config.ssh_readonly_access, ssh_keys);
+        assert_eq!(unassigned_nodes_config.replica_version, replica_version);
 
         Ok(())
     })

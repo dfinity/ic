@@ -160,7 +160,7 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
 
     check
         .expect_check()
-        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
         .times(10) // called 4 times for big table and 2 times for small one and 4 again
         .returning(|_| Ok(check_result(1000, 0)));
 
@@ -216,21 +216,21 @@ async fn test_check_min_ok() -> Result<(), Error> {
 
     check
         .expect_check()
-        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
         .times(4)
         .returning(|_| Ok(check_result(1000, 0)))
         .in_sequence(&mut seq1);
 
     check
         .expect_check()
-        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
         .times(4)
         .returning(|_| Err(CheckError::Health))
         .in_sequence(&mut seq1);
 
     check
         .expect_check()
-        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
         .times(20)
         .returning(|_| Ok(check_result(1000, 0)))
         .in_sequence(&mut seq1);
@@ -272,21 +272,21 @@ async fn test_check_node_upgrade() -> Result<(), Error> {
 
     check
         .expect_check()
-        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
         .times(4)
         .returning(|_| Ok(check_result_ver(1000, 0, "ver1")))
         .in_sequence(&mut seq1);
 
     check
         .expect_check()
-        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
         .times(4)
         .returning(|_| Err(CheckError::Health))
         .in_sequence(&mut seq1);
 
     check
         .expect_check()
-        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
         .times(4)
         .returning(|_| Ok(check_result_ver(1000, 0, "ver2")))
         .in_sequence(&mut seq1);

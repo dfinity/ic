@@ -291,9 +291,8 @@ fn all_canisters_have_all_required_controllers(
         .iter()
         .filter(|canister_id| {
             let canister_id = PrincipalId::from(**canister_id);
-            let controllers = HashSet::from_iter(
-                fetch_canister_controllers_or_exit(network, canister_id).into_iter(),
-            );
+            let controllers =
+                HashSet::from_iter(fetch_canister_controllers_or_exit(network, canister_id));
             let ok = controllers.is_superset(&required_controllers);
             !ok
         })

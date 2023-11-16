@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
     convert::{From, TryFrom},
-    sync::Arc,
+    rc::Rc,
 };
 
 const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
@@ -822,7 +822,7 @@ pub struct SystemApiImpl {
 
     /// A handler that is invoked when the instruction counter becomes negative
     /// (exceeds the current slice instruction limit).
-    out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
+    out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
 
     /// The instruction limit of the currently executing slice. It is
     /// initialized to `execution_parameters.instruction_limits.slice()` and
@@ -847,7 +847,7 @@ impl SystemApiImpl {
         wasm_native_stable_memory: FlagStatus,
         max_sum_exported_function_name_lengths: usize,
         stable_memory: Memory,
-        out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
+        out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
         let memory_usage = MemoryUsage::new(

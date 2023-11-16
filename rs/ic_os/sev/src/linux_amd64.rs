@@ -150,8 +150,7 @@ where
                 description: "unable to convert serialized length".into(),
             }
         })?);
-        let mut buffer: Vec<u8> = Vec::new();
-        buffer.resize(len as usize, 0);
+        let mut buffer: Vec<u8> = vec![0; len as usize];
         read_into_buffer(&mut stream, &mut buffer).await?;
         let peer_package: AttestationPackage =
             serde_cbor::from_slice(buffer.as_slice()).map_err(|_| {

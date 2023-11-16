@@ -27,7 +27,7 @@ impl<T: Eq + Clone> HeightIndex<T> {
     /// Inserts `value` at `height`. Returns `true` if `value` was inserted,
     /// `false` if already present.
     pub fn insert(&mut self, height: Height, value: &T) -> bool {
-        let values = self.buckets.entry(height).or_insert_with(Vec::new);
+        let values = self.buckets.entry(height).or_default();
         if !values.contains(value) {
             values.push(value.clone());
             return true;

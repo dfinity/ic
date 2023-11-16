@@ -204,9 +204,9 @@ where
     ) -> bool {
         self.category_to_followee_to_followers
             .entry(category)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .entry(followee_neuron_id.clone())
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(follower_neuron_id.clone())
     }
 

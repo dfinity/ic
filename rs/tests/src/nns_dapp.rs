@@ -125,7 +125,7 @@ pub fn install_ii_and_nns_dapp(
             ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
             ("OWN_CANISTER_URL".to_string(), format!("https://{}.{}", nns_dapp_canister_id, farm_url)),
             ("ROBOTS".to_string(), "<meta name=\"robots\" content=\"noindex, nofollow\" />".to_string()),
-            ("SNS_AGGREGATOR_URL".to_string(), sns_aggregator_canister_id.map(|s| format!("https://{}.{}", s, farm_url)).unwrap_or_else(|| "".to_string())),
+            ("SNS_AGGREGATOR_URL".to_string(), sns_aggregator_canister_id.map(|s| format!("https://{}.{}", s, farm_url)).unwrap_or_default()),
             ("STATIC_HOST".to_string(), https_farm_url),
             ("WASM_CANISTER_ID".to_string(), "qaa6y-5yaaa-aaaaa-aaafa-cai".to_string())
         ];

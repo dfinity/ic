@@ -188,7 +188,7 @@ mod tests {
             out,
             r#"define ipv6_system_replica_ips = {
   ::1, # subnet-1 / node-1
-  ::0.0.0.3, # subnet-3 / node-3
+  ::3, # subnet-3 / node-3
 }"#
         );
 

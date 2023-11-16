@@ -70,7 +70,7 @@ async fn test_verify_tls_certificate() -> Result<(), Error> {
 
         // Check with different cert -> should fail
         let r = check_certificate_verification(&helper, node_name.as_str(), test_certificate());
-        assert!(matches!(r, Err(_)));
+        assert!(r.is_err());
     }
 
     Ok(())

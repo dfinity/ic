@@ -95,7 +95,6 @@ impl Registry {
         let mut mutations = make_add_node_registry_mutations(node_id, node_record, valid_pks);
 
         // Update the Node Operator record
-        let mut node_operator_record = node_operator_record;
         node_operator_record.node_allowance -= 1;
 
         let update_node_operator_record =

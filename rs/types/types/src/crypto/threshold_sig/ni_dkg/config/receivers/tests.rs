@@ -37,7 +37,7 @@ fn should_return_correct_receivers() {
 
 #[test]
 fn should_return_correct_receivers_iter() {
-    let mut receivers = vec![node_id(NODE_1), node_id(NODE_2)];
+    let mut receivers = [node_id(NODE_1), node_id(NODE_2)];
 
     // The indices should correspond to the natural ordering of the elements:
     receivers.sort();

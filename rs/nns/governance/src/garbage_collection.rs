@@ -46,7 +46,7 @@ impl Governance {
             for (id, prop) in self.heap_data.proposals.iter() {
                 let topic = prop.topic();
                 if !TOPICS_EXEMPT_FROM_GARBAGE_COLLECTION.contains(&topic) {
-                    tmp.entry(topic).or_insert_with(Vec::new).push(*id);
+                    tmp.entry(topic).or_default().push(*id);
                 }
             }
             tmp

@@ -212,8 +212,8 @@ pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
 
 /// Checks whether the input string as the form [hostname:port{,hostname:port}]
 pub fn parse_elasticsearch_hosts(s: Option<String>) -> Result<Vec<String>> {
-    const HOST_START: &str = r#"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*"#;
-    const HOST_STOP: &str = r#"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])"#;
+    const HOST_START: &str = r"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*";
+    const HOST_STOP: &str = r"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])";
     const PORT: &str = r#":[[:digit:]]{2,5}$"#;
     let s = match s {
         Some(s) => s,
@@ -236,7 +236,7 @@ pub fn parse_replica_log_debug_overrides(s: Option<String>) -> Result<Vec<String
         Some(s) => s,
         None => return Ok(vec![]),
     };
-    let rgx = r#"^([\w]+::)+[\w]+$"#.to_string();
+    let rgx = r"^([\w]+::)+[\w]+$".to_string();
     let rgx = Regex::new(&rgx).unwrap();
     let mut res = vec![];
     for target in s.trim().split(',') {

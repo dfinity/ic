@@ -92,7 +92,7 @@ impl Ord for Input {
 /// We reverse the order so that Queue<Input> is a min heap.
 impl PartialOrd for Input {
     fn partial_cmp(&self, other: &Input) -> Option<Ordering> {
-        Some(self.timestamp().cmp(&other.timestamp()).reverse())
+        Some(self.cmp(other))
     }
 }
 
@@ -123,7 +123,7 @@ impl Ord for Message {
 /// We reverse the order so that Queue<Message> is a min-heap.
 impl PartialOrd for Message {
     fn partial_cmp(&self, other: &Message) -> Option<Ordering> {
-        Some(self.timestamp.cmp(&other.timestamp).reverse())
+        Some(self.cmp(other))
     }
 }
 

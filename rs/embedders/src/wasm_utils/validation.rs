@@ -828,7 +828,7 @@ fn validate_export_section(
 
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
-        let valid_system_functions = vec![
+        let valid_system_functions = [
             "canister_init",
             "canister_pre_upgrade",
             "canister_post_upgrade",

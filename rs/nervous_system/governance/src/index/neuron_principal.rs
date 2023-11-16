@@ -91,7 +91,7 @@ where
     fn add_neuron_id_principal_id(&mut self, neuron_id: &NeuronId, principal: PrincipalId) -> bool {
         self.principal_to_neuron_id_set
             .entry(principal)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(neuron_id.clone())
     }
 

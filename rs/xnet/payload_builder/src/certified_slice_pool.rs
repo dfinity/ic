@@ -237,7 +237,7 @@ mod messages {
             self.messages = FlatMap::from_key_values(
                 std::mem::take(&mut self.messages)
                     .into_iter()
-                    .chain(suffix.messages.into_iter())
+                    .chain(suffix.messages)
                     .collect(),
             );
             self.count_bytes += suffix_byte_size;

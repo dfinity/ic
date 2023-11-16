@@ -83,7 +83,7 @@ impl StateToolHelper {
                 ])
                 .args(
                     once("--migrated-ranges".to_string())
-                        .chain(canister_id_ranges_to_strings(canister_id_ranges).into_iter()),
+                        .chain(canister_id_ranges_to_strings(canister_id_ranges)),
                 )
         })
     }

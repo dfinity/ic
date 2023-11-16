@@ -217,7 +217,7 @@ impl Summary {
     pub fn into_transcripts(self) -> Vec<NiDkgTranscript> {
         self.current_transcripts
             .into_iter()
-            .chain(self.next_transcripts.into_iter())
+            .chain(self.next_transcripts)
             .map(|(_, t)| t)
             .collect()
     }

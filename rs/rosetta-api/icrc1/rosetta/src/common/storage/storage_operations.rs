@@ -259,10 +259,7 @@ pub fn get_blockchain_gaps(
 
     // Both block vectors are ordered and since a gap always has a upper and lower end, both vectors will have the same length.
     // If U is the vector of upper limits and L of lower limits then the first gap in the blockchain is (L[0],U[0]) the second gap is (L[1],U[1]) ...
-    Ok(lower_gap_limits
-        .into_iter()
-        .zip(upper_gap_limits.into_iter())
-        .collect())
+    Ok(lower_gap_limits.into_iter().zip(upper_gap_limits).collect())
 }
 
 // Returns a icrc1 Transaction if the block index exists in the database, else returns None.

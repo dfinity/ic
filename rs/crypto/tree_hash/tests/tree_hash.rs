@@ -1719,9 +1719,7 @@ fn sparse_labeled_tree_many_paths_max_depth() {
     let mut paths = Vec::with_capacity(TREE_WIDTH);
     for i in 0..TREE_WIDTH {
         paths.push(Path::from_iter(
-            vec![Label::from("a".repeat(i))]
-                .iter()
-                .chain(subpath.iter()),
+            [Label::from("a".repeat(i))].iter().chain(subpath.iter()),
         ));
     }
     let result = sparse_labeled_tree_from_paths(&paths[..]);
@@ -1774,7 +1772,7 @@ fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
         } else {
             ok_subpath.clone()
         };
-        let path: Vec<_> = vec![Label::from("a".repeat(i))]
+        let path: Vec<_> = [Label::from("a".repeat(i))]
             .iter()
             .chain(path.iter())
             .cloned()
@@ -1810,9 +1808,7 @@ fn sparse_labeled_tree_many_paths_max_depth_does_not_panic_on_drop() {
     let mut paths = Vec::with_capacity(TREE_WIDTH);
     for i in 0..TREE_WIDTH {
         paths.push(Path::from_iter(
-            vec![Label::from("a".repeat(i))]
-                .iter()
-                .chain(subpath.iter()),
+            [Label::from("a".repeat(i))].iter().chain(subpath.iter()),
         ));
     }
 

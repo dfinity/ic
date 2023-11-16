@@ -184,7 +184,7 @@ async fn test_routing_table() -> Result<(), Error> {
     assert_eq!(rt.registry_version, 1);
     assert_eq!(rt.subnets.len(), 4);
 
-    let subnets = vec![
+    let subnets = [
         (
             "yndj2-3ybaa-aaaaa-aaaap-yai",
             ("rwlgt-iiaaa-aaaaa-aaaaa-cai", "chwmy-2yaaa-aaaaa-pii7q-cai"),

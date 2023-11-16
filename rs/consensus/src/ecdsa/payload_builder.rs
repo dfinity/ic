@@ -1741,7 +1741,7 @@ mod tests {
 
             let all_nodes: Nodes = subnet_nodes
                 .into_iter()
-                .chain(target_subnet_nodes.into_iter())
+                .chain(target_subnet_nodes)
                 .collect();
             all_nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),

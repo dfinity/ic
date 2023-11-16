@@ -206,7 +206,7 @@ impl<Unit> fmt::UpperHex for CheckedAmountOf<Unit> {
 
 impl<Unit> Clone for CheckedAmountOf<Unit> {
     fn clone(&self) -> Self {
-        CheckedAmountOf(self.0, PhantomData)
+        *self
     }
 }
 
@@ -222,7 +222,7 @@ impl<Unit> Eq for CheckedAmountOf<Unit> {}
 
 impl<Unit> PartialOrd for CheckedAmountOf<Unit> {
     fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
-        self.0.partial_cmp(&rhs.0)
+        Some(self.cmp(rhs))
     }
 }
 

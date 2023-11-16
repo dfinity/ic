@@ -2096,7 +2096,7 @@ impl StateManagerImpl {
                 *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
             })
             .chain(std::iter::once(latest_certified_height))
-            .chain(latest_manifest_height.into_iter())
+            .chain(latest_manifest_height)
             .collect();
 
         // Send object to deallocation thread if it has capacity.

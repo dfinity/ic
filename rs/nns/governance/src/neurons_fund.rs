@@ -363,7 +363,7 @@ impl NeuronsFundSnapshotPb {
                 })
             })
             .collect::<Result<BTreeSet<_>, _>>()?;
-        Ok(NeuronsFundSnapshot::new(neurons_fund.into_iter()))
+        Ok(NeuronsFundSnapshot::new(neurons_fund))
     }
 
     /// Returns a clone of `self` without sensitive data, specifically, `nns_neuron_id`.

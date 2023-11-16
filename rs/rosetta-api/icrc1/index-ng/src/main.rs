@@ -486,7 +486,10 @@ fn index_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) {
             s.fee_collectors
                 .entry(fee_collector)
                 .and_modify(|blocks_ranges| push_block(blocks_ranges, block_index))
-                .or_insert_with(|| vec![block_index..block_index + 1]);
+                .or_insert(vec![Range {
+                    start: block_index,
+                    end: block_index + 1,
+                }]);
         });
     }
 }

@@ -18,14 +18,14 @@ pub fn config(env: TestEnv) {
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
-    let activate_script = r#"#!/bin/sh
+    let activate_script = r"#!/bin/sh
 cp /config/bitcoin.conf /tmp/bitcoin.conf
 docker run  --name=bitcoind-node -d \
   -p 8332:8332 \
   -p 18444:18444 \
   -v /tmp:/bitcoin/.bitcoin \
   registry.gitlab.com/dfinity-lab/open/public-docker-registry/kylemanna/bitcoind
-"#;
+";
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
         .unwrap();

@@ -379,9 +379,13 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                 } else {
                     let error =
                         MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
-                            first.1.into_iter().chain(second.1.into_iter()).map(
-                                |(provider, result)| (provider, Ok(JsonRpcResult::Result(result))),
-                            ),
+                            first
+                                .1
+                                .into_iter()
+                                .chain(second.1)
+                                .map(|(provider, result)| {
+                                    (provider, Ok(JsonRpcResult::Result(result)))
+                                }),
                         ));
                     log!(
                         INFO,

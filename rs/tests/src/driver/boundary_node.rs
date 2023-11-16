@@ -355,16 +355,14 @@ impl BoundaryNode {
         self.is_sev = true;
         self.with_required_host_features(vec![HostFeature::AmdSevSnp])
             .with_qemu_cli_args(
-                vec![
-            "-cpu",
+                ["-cpu",
             "EPYC-v4",
             "-machine",
             "memory-encryption=sev0,vmport=off",
             "-object",
             "sev-snp-guest,id=sev0,cbitpos=51,reduced-phys-bits=1",
             "-append",
-            "root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable swiotlb=2621"
-        ]
+            "root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable swiotlb=2621"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
