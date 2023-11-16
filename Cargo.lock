@@ -965,7 +965,7 @@ dependencies = [
  "pbkdf2",
  "rand_core 0.6.4",
  "ripemd",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "subtle",
  "zeroize",
 ]
@@ -1295,7 +1295,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5353f36341f7451062466f0b755b96ac3a9547e4d7f6b70d603fc721a7d7896"
 dependencies = [
- "sha2 0.10.6",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -1548,7 +1548,7 @@ dependencies = [
  "pretty 0.12.1",
  "serde",
  "serde_bytes",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "stacker",
  "thiserror",
 ]
@@ -1717,7 +1717,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "thiserror",
  "tokio",
  "tower",
@@ -1774,7 +1774,7 @@ dependencies = [
  "publicsuffix",
  "serde",
  "serde_cbor",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "thiserror",
 ]
 
@@ -2800,7 +2800,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef552e6f588e446098f6ba40d89ac146c8c7b64aade83c051ee00bb5d2bc18d"
 dependencies = [
- "uuid 1.3.0",
+ "uuid 1.5.0",
 ]
 
 [[package]]
@@ -2824,7 +2824,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_json",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "tar",
  "tempfile",
  "tokio",
@@ -3245,7 +3245,7 @@ dependencies = [
  "slog",
  "slog-json",
  "slog_derive",
- "uuid 1.3.0",
+ "uuid 1.5.0",
 ]
 
 [[package]]
@@ -3260,6 +3260,7 @@ dependencies = [
  "ff 0.13.0",
  "generic-array",
  "group 0.13.0",
+ "hkdf",
  "pem-rfc7468",
  "pkcs8",
  "rand_core 0.6.4",
@@ -4260,6 +4261,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
+name = "hkdf"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "791a029f6b9fc27657f6f188ec6e5e43f6911f6f878e0dc5501396e09809d437"
+dependencies = [
+ "hmac 0.12.1",
+]
+
+[[package]]
 name = "hmac"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4767,7 +4777,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_repr",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "simple_asn1",
  "thiserror",
  "time 0.3.22",
@@ -5568,7 +5578,7 @@ dependencies = [
  "hex",
  "serde",
  "serde_bytes",
- "sha2 0.10.6",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -5578,7 +5588,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a59dc342d11b2067e19d0f146bdec3674de921303ffc762f114d201ebbe0e68a"
 dependencies = [
  "hex",
- "sha2 0.10.6",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -5613,7 +5623,7 @@ checksum = "6adc65afeffc619a7cd19553c66c79820908c12f42191af90cfb39e2e93c4431"
 dependencies = [
  "serde",
  "serde_bytes",
- "sha2 0.10.6",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -6008,7 +6018,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_bytes",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "simple_asn1",
  "slog",
  "strum 0.24.1",
@@ -6254,7 +6264,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_json",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "simple_asn1",
  "wycheproof",
 ]
@@ -6485,7 +6495,7 @@ dependencies = [
 name = "ic-crypto-internal-sha2"
 version = "0.9.0"
 dependencies = [
- "sha2 0.10.6",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -7531,7 +7541,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
- "uuid 1.3.0",
+ "uuid 1.5.0",
  "warp",
 ]
 
@@ -7633,11 +7643,10 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-types",
- "openssl",
  "serde",
  "serde_cbor",
  "sev",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "tempfile",
  "thiserror",
  "tokio",
@@ -10011,7 +10020,7 @@ dependencies = [
  "slog",
  "static_assertions 0.3.4",
  "tempfile",
- "uuid 1.3.0",
+ "uuid 1.5.0",
 ]
 
 [[package]]
@@ -10021,7 +10030,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "410e3ccb16b86e8c4bca7270981370f6961492f1921f29f5dd1de621efb869ea"
 dependencies = [
  "leb128",
- "sha2 0.10.6",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -10042,7 +10051,7 @@ dependencies = [
  "leb128",
  "log",
  "nom",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "thiserror",
  "urlencoding",
 ]
@@ -10752,7 +10761,7 @@ dependencies = [
  "strum 0.24.1",
  "tempfile",
  "tree-deserializer",
- "uuid 1.3.0",
+ "uuid 1.5.0",
 ]
 
 [[package]]
@@ -11716,7 +11725,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_bytes",
- "sha2 0.10.6",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -11775,7 +11784,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "thiserror",
  "tokio",
  "tokio-test",
@@ -12180,7 +12189,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "once_cell",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "signature",
 ]
 
@@ -12205,27 +12214,7 @@ dependencies = [
  "ic-certified-map",
  "serde",
  "serde_cbor",
- "sha2 0.10.6",
-]
-
-[[package]]
-name = "kvm-bindings"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efe70e65a5b092161d17f5005b66e5eefe7a94a70c332e755036fc4af78c4e79"
-dependencies = [
- "vmm-sys-util",
-]
-
-[[package]]
-name = "kvm-ioctls"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8f8dc9c1896e5f144ec5d07169bc29f39a047686d29585a91f30489abfaeb6b"
-dependencies = [
- "kvm-bindings",
- "libc",
- "vmm-sys-util",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -13127,7 +13116,7 @@ dependencies = [
  "tagptr",
  "thiserror",
  "triomphe",
- "uuid 1.3.0",
+ "uuid 1.5.0",
 ]
 
 [[package]]
@@ -13248,7 +13237,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "utils",
 ]
 
@@ -13596,11 +13585,11 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.55"
+version = "0.10.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "345df152bc43501c5eb9e4654ff05f794effb78d4efe3d53abc158baddc0703d"
+checksum = "bac25ee399abb46215765b1cb35bc0212377e58a061560d8b29b024fd0430e7c"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.4.0",
  "cfg-if 1.0.0",
  "foreign-types 0.3.2",
  "libc",
@@ -13628,9 +13617,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.90"
+version = "0.9.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "374533b0e45f3a7ced10fcaeccca020e66656bc03dac384f852e4e5a7a8104a6"
+checksum = "db4d56a4c0478783083cfafcc42493dd4a981d41669da64b4572a2a089b51b1d"
 dependencies = [
  "cc",
  "libc",
@@ -13879,7 +13868,19 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "primeorder",
- "sha2 0.10.6",
+ "sha2 0.10.8",
+]
+
+[[package]]
+name = "p384"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70786f51bcc69f6a4c0360e063a4cac5419ef7c5cd5b3c99ad70f3be5ba79209"
+dependencies = [
+ "ecdsa",
+ "elliptic-curve",
+ "primeorder",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -14119,7 +14120,7 @@ checksum = "5e3b284b1f13a20dc5ebc90aff59a51b8d7137c221131b52a7260c08cbc1cc80"
 dependencies = [
  "once_cell",
  "pest",
- "sha2 0.10.6",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -14446,7 +14447,7 @@ dependencies = [
  "prost",
  "prost-build",
  "prost-derive",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "smallvec",
  "symbolic-demangle",
  "tempfile",
@@ -15705,7 +15706,7 @@ dependencies = [
  "pkcs1",
  "pkcs8",
  "rand_core 0.6.4",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "signature",
  "spki",
  "subtle",
@@ -16459,9 +16460,9 @@ dependencies = [
 
 [[package]]
 name = "sev"
-version = "1.2.1"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fd749a01c88a51ac718b59fe571177b31e478dfe059267977042477a0531224"
+checksum = "77e9de97c6e3c65e4e67997d48ad506d258da10edc10894277093da679441f23"
 dependencies = [
  "bincode",
  "bitfield",
@@ -16470,13 +16471,17 @@ dependencies = [
  "dirs 5.0.1",
  "hex",
  "iocuddle",
- "kvm-ioctls",
- "openssl",
+ "lazy_static",
+ "libc",
+ "p384",
+ "rsa",
  "serde",
  "serde-big-array",
  "serde_bytes",
+ "sha2 0.10.8",
  "static_assertions 1.1.0",
- "uuid 1.3.0",
+ "uuid 1.5.0",
+ "x509-cert",
 ]
 
 [[package]]
@@ -16505,9 +16510,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.10.6"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82e6b795fe2e3b1e845bafcb27aa35405c4d47cdfc92af5fc8d3002f76cebdc0"
+checksum = "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
 dependencies = [
  "cfg-if 1.0.0",
  "cpufeatures",
@@ -17057,7 +17062,7 @@ dependencies = [
  "debugid",
  "memmap2",
  "stable_deref_trait",
- "uuid 1.3.0",
+ "uuid 1.5.0",
 ]
 
 [[package]]
@@ -17919,7 +17924,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
- "uuid 1.3.0",
+ "uuid 1.5.0",
 ]
 
 [[package]]
@@ -18442,9 +18447,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.3.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1674845326ee10d37ca60470760d4288a6f80f304007d92e5c53bab78c9cfd79"
+checksum = "88ad59a7560b41a70d191093a945f0b87bc1deeda46fb237479708a1d6b6cdfc"
 dependencies = [
  "getrandom 0.2.8",
  "serde",
@@ -18500,16 +18505,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
-name = "vmm-sys-util"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd64fe09d8e880e600c324e7d664760a17f56e9672b7495a86381b49e4f72f46"
-dependencies = [
- "bitflags 1.3.2",
- "libc",
-]
-
-[[package]]
 name = "vsock"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18544,7 +18539,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "sha2 0.10.6",
+ "sha2 0.10.8",
  "tempfile",
  "vsock",
 ]
