@@ -484,7 +484,7 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
         }
     }
     module.types.push(SubType {
-        is_final: false,
+        is_final: true,
         supertype_idx: None,
         structural_type: StructuralType::Func(ty),
     });
