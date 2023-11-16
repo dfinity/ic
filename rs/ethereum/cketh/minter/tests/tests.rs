@@ -166,7 +166,7 @@ fn should_not_mint_when_logs_inconsistent() {
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
                 .respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
-                .respond_with(JsonRpcProvider::PublicNode, ankr_logs.clone())
+                .respond_with(JsonRpcProvider::Cloudflare, ankr_logs.clone())
         }))
         .expect_no_mint();
 }
@@ -322,7 +322,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
                 },
             )
             .modify_response(
-                JsonRpcProvider::PublicNode,
+                JsonRpcProvider::Cloudflare,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740744_u64.into()
                 },
@@ -1898,7 +1898,7 @@ mod mock {
         //order is top-to-bottom and must match order used in production
         Ankr,
         BlockPi,
-        PublicNode,
+        Cloudflare,
     }
 
     impl JsonRpcProvider {
@@ -1906,7 +1906,7 @@ mod mock {
             match self {
                 JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
                 JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
-                JsonRpcProvider::PublicNode => "https://ethereum.publicnode.com",
+                JsonRpcProvider::Cloudflare => "https://cloudflare-eth.com",
             }
         }
     }
