@@ -2,8 +2,8 @@ use candid::{Decode, Encode, Principal};
 use colored::{ColoredString, Colorize};
 use ic_agent::Agent;
 use ic_neurons_fund::{
-    rescale_to_icp, rescale_to_icp_e8s, u64_to_dec, MatchedParticipationFunction,
-    NonDecreasingFunction, PolynomialNeuronsFundParticipation,
+    rescale_to_icp, rescale_to_icp_e8s, u64_to_dec, InvertibleFunction,
+    MatchedParticipationFunction, NonDecreasingFunction, PolynomialNeuronsFundParticipation,
 };
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_governance::pb::v1::GetNeuronsFundAuditInfoResponse;
