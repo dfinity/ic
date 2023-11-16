@@ -778,7 +778,6 @@ fn start_consensus(
             send_advert,
             ecdsa::EcdsaImpl::new(
                 node_id,
-                subnet_id,
                 Arc::clone(&consensus_block_cache),
                 Arc::clone(&consensus_crypto),
                 metrics_registry.clone(),

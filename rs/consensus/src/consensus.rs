@@ -139,7 +139,7 @@ pub struct ConsensusImpl {
     last_invoked: RefCell<BTreeMap<ConsensusSubcomponent, Time>>,
     schedule: RoundRobin,
     replica_config: ReplicaConfig,
-    #[allow(dead_code)]
+    #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
     malicious_flags: MaliciousFlags,
     /// Logger
     pub log: ReplicaLogger,
