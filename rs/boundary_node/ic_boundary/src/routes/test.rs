@@ -71,8 +71,8 @@ impl Lookup for ProxyRouter {
 
 #[async_trait]
 impl RootKey for ProxyRouter {
-    async fn root_key(&self) -> Vec<u8> {
-        self.root_key.clone()
+    async fn root_key(&self) -> Option<Vec<u8>> {
+        Some(self.root_key.clone())
     }
 }
 
