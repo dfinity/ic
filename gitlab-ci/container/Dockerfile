@@ -115,7 +115,8 @@ ARG rust_version=1.71.1
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
-    rustup target add wasm32-unknown-unknown
+    rustup target add wasm32-unknown-unknown && \
+    rustup component add clippy
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
