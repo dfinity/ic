@@ -6,13 +6,13 @@ use crate::{
             add_wasm_response, update_allowed_principals_response,
             update_allowed_principals_response::AllowedPrincipals, AddWasmRequest, AddWasmResponse,
             DappCanistersTransferResult, DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
-            GetAllowedPrincipalsResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse,
-            InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-            ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
-            ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterIds, SnsCanisterType,
-            SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-            UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
+            GetAllowedPrincipalsResponse, GetDeployedSnsByProposalIdRequest,
+            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse,
+            GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
+            InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
+            ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterIds,
+            SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex,
+            StableCanisterState, UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
             UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
         },
     },
@@ -21,6 +21,7 @@ use crate::{
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -41,9 +42,9 @@ use std::{
     thread::LocalKey,
 };
 
+use crate::pb::v1::GetDeployedSnsByProposalIdResponse;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
@@ -102,6 +103,8 @@ where
     pub access_controls_enabled: bool,
     /// List of principals that are allowed to deploy an SNS
     pub allowed_principals: Vec<PrincipalId>,
+    /// Map of nns proposal id to index in the `deployed_sns_list`.
+    pub nns_proposal_to_deployed_sns: BTreeMap<u64, u64>,
 }
 
 /// Internal implementation to give the wasms we explicitly handle a name (instead of Vec<u8>) for
@@ -805,7 +808,19 @@ where
             sns_canister
                 .borrow_mut()
                 .deployed_sns_list
-                .push(DeployedSns::from(sns_canisters))
+                .push(DeployedSns::from(sns_canisters));
+
+            // Get the index of the DeployedSns we just pushed
+            let latest_deployed_sns_index = sns_canister.borrow().deployed_sns_list.len() - 1;
+
+            // Record the index in `nns_proposal_to_deployed_sns`
+            sns_canister
+                .borrow_mut()
+                .nns_proposal_to_deployed_sns
+                .insert(
+                    sns_init_payload.nns_proposal_id(),
+                    latest_deployed_sns_index as u64,
+                );
         });
 
         // We combine the errors of the last two steps because at this point they should both be done
@@ -1701,6 +1716,46 @@ where
                 .map(|id| id.get())
                 .collect(),
         }
+    }
+
+    /// Returns the DeployedSns structure that maps from the proposal_id in the
+    /// GetDeployedSnsByProposalIdRequest request. Return an error if the
+    /// proposal_id is not tracked, or maps to missing data.
+    pub fn get_deployed_sns_by_proposal_id(
+        &self,
+        request: GetDeployedSnsByProposalIdRequest,
+    ) -> GetDeployedSnsByProposalIdResponse {
+        match self.do_get_deployed_sns_by_proposal_id(request) {
+            Ok(deployed_sns) => GetDeployedSnsByProposalIdResponse::ok(deployed_sns),
+            Err(message) => GetDeployedSnsByProposalIdResponse::error(message),
+        }
+    }
+
+    /// Returns the DeployedSns structure that maps from the proposal_id in the
+    /// GetDeployedSnsByProposalIdRequest request. Return an error if the
+    /// proposal_id is not tracked, or maps to missing data.
+    pub fn do_get_deployed_sns_by_proposal_id(
+        &self,
+        request: GetDeployedSnsByProposalIdRequest,
+    ) -> Result<DeployedSns, String> {
+        let deployed_sns_index = self
+            .nns_proposal_to_deployed_sns
+            .get(&request.proposal_id)
+            .ok_or_else(|| {
+                format!(
+                    "No DeployedSns matches provided proposal_id({})",
+                    request.proposal_id
+                )
+            })?;
+        self.deployed_sns_list
+            .get(*deployed_sns_index as usize)
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "Missing DeployedSns for provided proposal_id({})",
+                    request.proposal_id
+                )
+            })
     }
 }
 
