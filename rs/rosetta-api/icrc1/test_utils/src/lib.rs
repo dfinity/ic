@@ -25,7 +25,7 @@ pub fn principal_strategy() -> impl Strategy<Value = Principal> {
     bytes_strategy.prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
 }
 
-fn small_token_amount<Tokens: TokensType>(n: u64) -> Tokens {
+fn token_amount<Tokens: TokensType>(n: u64) -> Tokens {
     Tokens::try_from(candid::Nat::from(n))
         .unwrap_or_else(|e| panic!("failed to convert {n} to tokens: {e}"))
 }
@@ -40,7 +40,11 @@ pub fn account_strategy() -> impl Strategy<Value = Account> {
 }
 
 pub fn arb_small_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
-    any::<u16>().prop_map(|v| small_token_amount(v as u64))
+    any::<u16>().prop_map(|v| token_amount(v as u64))
+}
+
+pub fn arb_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
+    any::<u64>().prop_map(|v| token_amount(v))
 }
 
 fn arb_memo() -> impl Strategy<Value = Option<Memo>> {
@@ -63,7 +67,7 @@ fn operation_strategy<Tokens: TokensType>(
             (
                 account_strategy(),
                 account_strategy(),
-                prop::option::of(Just(small_token_amount(DEFAULT_TRANSFER_FEE)))
+                prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE)))
             )
                 .prop_map(move |(to, from, fee)| Operation::Transfer {
                     from,
@@ -75,7 +79,7 @@ fn operation_strategy<Tokens: TokensType>(
             (
                 account_strategy(),
                 account_strategy(),
-                prop::option::of(Just(small_token_amount(DEFAULT_TRANSFER_FEE))),
+                prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE))),
                 prop::option::of(Just({
                     (SystemTime::now()
                         + Duration::from_secs(rand::thread_rng().gen_range(0..=u32::MAX as u64)))
@@ -188,7 +192,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
 pub fn valid_blockchain_strategy<Tokens: TokensType>(
     size: usize,
 ) -> impl Strategy<Value = Vec<Block<Tokens>>> {
-    let blocks = prop::collection::vec(blocks_strategy(arb_small_amount()), 0..size);
+    let blocks = prop::collection::vec(blocks_strategy(arb_amount()), 0..size);
     blocks.prop_map(|mut blocks| {
         let mut parent_hash = None;
         for block in blocks.iter_mut() {
