@@ -3591,6 +3591,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fees-and-limits"
+version = "0.1.0"
+dependencies = [
+ "ic-config",
+ "ic-embedders",
+ "ic-replicated-state",
+ "ic-system-api",
+ "ic-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ff"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

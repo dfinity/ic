@@ -39,7 +39,7 @@ use std::{
     sync::Arc,
 };
 
-const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
+pub const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
 const CERTIFIED_DATA_MAX_LENGTH: u32 = 32;
 
