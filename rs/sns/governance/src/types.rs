@@ -363,9 +363,15 @@ impl NervousSystemParameters {
     /// that is required for the proposal to be adopted. For example, if this field
     /// is 300bp, then the proposal can only be adopted if the number of "yes
     /// votes" is greater than or equal to 3% of the total voting power.
-    pub const MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER: Percentage = Percentage {
-        basis_points: Some(300),
-    };
+    pub const MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER: Percentage =
+        Percentage::from_basis_points(300); // 3%
+
+    /// The proportion of "yes votes" as basis points of the exercised voting power
+    /// that is required for the proposal to be adopted. For example, if this field
+    /// is 5000bp, then the proposal can only be adopted if the number of "yes
+    /// votes" is greater than or equal to 50% of the exercised voting power.
+    pub const MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER: Percentage =
+        Percentage::from_basis_points(5_000); // 50%
 
     pub fn with_default_values() -> Self {
         Self {
@@ -947,6 +953,14 @@ impl Vote {
             Vote::Unspecified => false,
             Vote::Yes => true,
             Vote::No => true,
+        }
+    }
+
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::Yes => Self::No,
+            Self::No => Self::Yes,
+            Self::Unspecified => Self::Unspecified,
         }
     }
 }
