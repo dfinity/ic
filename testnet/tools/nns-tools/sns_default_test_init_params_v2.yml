@@ -83,4 +83,4 @@ Swap:
 
     duration: 7 days
 
-    neurons_fund_investment_icp: 0 tokens
+    neurons_fund_participation: true
