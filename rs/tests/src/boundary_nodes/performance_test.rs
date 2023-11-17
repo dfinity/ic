@@ -1,5 +1,5 @@
-use std::net::Ipv6Addr;
-use std::time::Duration;
+use std::net::{Ipv6Addr, SocketAddrV6};
+use std::time::{Duration, Instant};
 
 use crate::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
 use crate::canister_agent::CanisterAgent;
@@ -7,6 +7,7 @@ use crate::driver::farm::HostFeature;
 use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::LoadTestMetrics;
+use crate::generic_workload_engine::metrics::RequestOutcome;
 use crate::util::{block_on, create_agent_mapping};
 use crate::{
     canister_api::{CallMode, GenericRequest},
@@ -22,6 +23,7 @@ use crate::{
     },
     util::spawn_round_robin_workload_engine,
 };
+use anyhow::anyhow;
 use anyhow::Context;
 use candid::Principal;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -30,6 +32,12 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use prost::Message;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
+use rand::Rng;
+use rand::RngCore;
+use rand::SeedableRng;
 use slog::info;
 use tokio::runtime::{Builder, Runtime};
 
@@ -333,6 +341,171 @@ pub fn mainnet_query_calls_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
             }
             Err(err) => {
                 info!(&log, "Workload execution failed with err={:?}", err);
+            }
+        }
+    }
+}
+
+pub fn mainnet_query_calls_icx_proxy_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
+    const ROOT_HOST: &str = "icp0.io";
+    const MAINNET_STREAMING_CANISTER_ID: &str = "4evdk-jqaaa-aaaan-qel6q-cai";
+    const MAINNET_COUNTER_CANISTER_ID: &str = "3muos-6yaaa-aaaaa-qaaua-cai";
+    let streaming_canister_host = format!("{MAINNET_STREAMING_CANISTER_ID}.{ROOT_HOST}");
+
+    const RPS_MIN: usize = 600;
+    const RPS_MAX: usize = 1400;
+    const RPS_STEP: usize = 200;
+    const WORKLOAD_PER_STEP_DURATION: Duration = Duration::from_secs(60 * 5);
+
+    const NUM_AGENTS: usize = 100;
+
+    // The amount of traffic that will be directed to ICX Proxy, the remaining traffic will be direct canister query calls.
+    const ICX_PROXY_TRAFFIC_PERCENTAGE: f64 = 20.0;
+    // ICX Proxy traffic will be distributed among these requests according to their weights.
+    let weighted_http_requests = [
+        (format!("https://{streaming_canister_host}/1mb.json"), 25),
+        (format!("https://{streaming_canister_host}/2mb.json"), 30),
+        (format!("https://{streaming_canister_host}/4mb.json"), 30),
+        (format!("https://{streaming_canister_host}/8mb.json"), 15),
+    ];
+
+    // Reuse this runtime for all async executions.
+    let rt: Runtime = Builder::new_multi_thread()
+        .worker_threads(MAX_RUNTIME_THREADS)
+        .max_blocking_threads(MAX_RUNTIME_BLOCKING_THREADS)
+        .enable_all()
+        .build()
+        .unwrap();
+    let logger = env.logger();
+
+    let bn_addr = SocketAddrV6::new(bn_ipv6, 443, 0, 0).into();
+
+    let mut http_clients = vec![];
+    for _ in 0..NUM_AGENTS {
+        let http_client_builder = reqwest::ClientBuilder::new();
+        let http_client_builder = http_client_builder
+            .danger_accept_invalid_certs(true)
+            .resolve(&streaming_canister_host, bn_addr);
+        let http_client = http_client_builder.build().unwrap();
+
+        http_clients.push(http_client);
+    }
+
+    let counter_canister_principal = Principal::from_text(MAINNET_COUNTER_CANISTER_ID).unwrap();
+
+    let canister_agents = block_on(async {
+        let mut canister_agents = vec![];
+        for _ in 0..NUM_AGENTS {
+            canister_agents.push(CanisterAgent::from(
+                create_agent_mapping(&format!("https://{ROOT_HOST}"), bn_ipv6.into())
+                    .await
+                    .expect("failed to create an agent"),
+            ));
+        }
+        canister_agents
+    });
+
+    let mut rng = thread_rng();
+    let http_requests = weighted_http_requests
+        .choose_multiple_weighted(&mut rng, 100, |item| item.1)
+        .unwrap()
+        .map(|item| item.0.clone())
+        .collect::<Vec<String>>();
+
+    for rps in (RPS_MIN..=RPS_MAX).step_by(RPS_STEP) {
+        let (http_requests, http_clients, canister_agents) = (
+            http_requests.clone(),
+            http_clients.clone(),
+            canister_agents.clone(),
+        );
+
+        info!(
+            &logger,
+            "Starting workload with rps={rps} for {} sec",
+            WORKLOAD_PER_STEP_DURATION.as_secs()
+        );
+
+        let generator = move |idx: usize| {
+            // Round Robin distribution over both requests and agents.
+            let http_request = http_requests[idx % http_requests.len()].clone();
+            let http_client = http_clients[idx % http_clients.len()].clone();
+            let canister_agent = canister_agents[idx % canister_agents.len()].clone();
+
+            async move {
+                let mut rng = StdRng::from_entropy();
+                let prob = rng.gen::<f64>() * 100.0;
+
+                let mut payload = [0u8; 8];
+                rng.fill_bytes(&mut payload);
+                let canister_request = GenericRequest::new(
+                    counter_canister_principal,
+                    "read".to_string(),
+                    payload.to_vec(),
+                    CallMode::Query,
+                );
+
+                if prob < ICX_PROXY_TRAFFIC_PERCENTAGE {
+                    let start_time = Instant::now();
+
+                    let result = http_client
+                        .get(&http_request)
+                        .send()
+                        .await
+                        .map_err(|err| anyhow!("HTTP request failed with err: {:?}", err))
+                        .and_then(|response| {
+                            if response.status().is_success()
+                                || response.status().is_informational()
+                            {
+                                Ok(())
+                            } else {
+                                Err(anyhow!(
+                                    "HTTP request failed with status code {}",
+                                    response.status().as_str()
+                                ))
+                            }
+                        });
+
+                    RequestOutcome::new(
+                        result,
+                        format!("GET@{}", http_request),
+                        start_time.elapsed(),
+                        1,
+                    )
+                    .into_test_outcome()
+                } else {
+                    canister_agent
+                        .call(&canister_request)
+                        .await
+                        .map(|_| ())
+                        .into_test_outcome()
+                }
+            }
+        };
+
+        // Don't log intermediate metrics during workload execution.
+        let log_null = slog::Logger::root(slog::Discard, slog::o!());
+        let aggregator = LoadTestMetrics::new(log_null);
+        let engine = Engine::new(
+            logger.clone(),
+            generator,
+            rps as f64,
+            WORKLOAD_PER_STEP_DURATION,
+        )
+        .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+        let metrics_result =
+            rt.block_on(engine.execute(aggregator, LoadTestMetrics::aggregator_fn));
+        match metrics_result {
+            Ok(metrics) => {
+                info!(&logger, "Workload metrics for rps={rps}: {metrics}");
+                info!(
+                    &logger,
+                    "Failed/successful requests count {}/{}",
+                    metrics.failure_calls(),
+                    metrics.success_calls()
+                );
+            }
+            Err(err) => {
+                info!(&logger, "Workload execution failed with err={:?}", err);
             }
         }
     }
