@@ -90,6 +90,7 @@ impl Identity for NnsNfNeuron {
         Ok(Signature {
             signature: Some(signature.as_ref().to_vec()),
             public_key: self.public_key(),
+            delegations: None,
         })
     }
 }

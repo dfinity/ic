@@ -33,7 +33,8 @@ use crate::orchestrator::utils::rw_message::{
     can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use crate::orchestrator::utils::subnet_recovery::set_sandbox_env_vars;
-use crate::util::block_on;
+use crate::util::{block_on, MessageCanister};
+use ic_agent::Agent;
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
 };
@@ -275,12 +276,23 @@ pub fn test(env: TestEnv) {
     );
 
     info!(logger, "Ensure the old message is still readable");
-    assert!(can_read_msg(
-        &logger,
-        &upload_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
+    // To verify query response signatures from the root subnet, the agent requires the root subnet_id.
+    // This is needed to retrieve the public keys of nodes within the root subnet.
+    // Typically, the agent derives the root subnet_id from the root key.
+    // However, in the restored root subnet, the root key is different from the original one, but the subnet_id is reused.
+    // So we create a new agent that does not verify the query response signatures for the time being.
+    // A long-term solution involves modifying the agent to fetch the root subnet_id from the HTTP status endpoint.
+    let agent_bypass_signature = Agent::builder()
+        .with_url(upload_node.get_public_url())
+        .with_verify_query_signatures(false)
+        .build()
+        .expect("failed to create agent");
+    let canister_msg = block_on(
+        MessageCanister::from_canister_id(&agent_bypass_signature, app_can_id).try_read_msg(),
+    )
+    .expect("failed to read message")
+    .expect("message should exist");
+    assert_eq!(canister_msg, msg);
 
     let new_msg = "subnet recovery still works!";
     info!(
@@ -300,12 +312,12 @@ pub fn test(env: TestEnv) {
         new_msg,
         &logger,
     );
-    assert!(can_read_msg(
-        &logger,
-        &upload_node.get_public_url(),
-        new_app_can_id,
-        new_msg
-    ));
+    let canister_msg_new = block_on(
+        MessageCanister::from_canister_id(&agent_bypass_signature, new_app_can_id).try_read_msg(),
+    )
+    .expect("failed to read message")
+    .expect("message should exist");
+    assert_eq!(canister_msg_new, new_msg);
 }
 
 fn setup_file_server(env: &TestEnv, file_path: &std::path::PathBuf) -> String {

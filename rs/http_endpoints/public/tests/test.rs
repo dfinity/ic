@@ -6,12 +6,13 @@ pub mod common;
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
     create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    dummy_timestamp, get_free_localhost_socket_addr, start_http_endpoint, wait_for_status_healthy,
+    get_free_localhost_socket_addr, start_http_endpoint, wait_for_status_healthy,
 };
 use hyper::{body::to_bytes, Body, Client, Method, Request, StatusCode};
 use ic_agent::{
     agent::{
-        http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, RejectResponse, UpdateBuilder,
+        http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, QueryBuilder,
+        RejectResponse, UpdateBuilder,
     },
     agent_error::HttpErrorPayload,
     export::Principal,
@@ -61,6 +62,7 @@ use ic_types::{
     },
     messages::{Blob, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply},
     signature::ThresholdSignature,
+    time::current_time,
     CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
 };
 use prost::Message;
@@ -262,6 +264,7 @@ fn test_unauthorized_query() {
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_verify_query_signatures(false)
         .build()
         .unwrap();
 
@@ -278,7 +281,7 @@ fn test_unauthorized_query() {
                         arg: Blob("success".into()),
                     },
                 },
-                dummy_timestamp(),
+                current_time(),
             )))
         }
     });
@@ -490,6 +493,7 @@ fn test_request_timeout() {
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_verify_query_signatures(false)
         .build()
         .unwrap();
 
@@ -510,7 +514,7 @@ fn test_request_timeout() {
                         arg: Blob("success".into()),
                     },
                 },
-                dummy_timestamp(),
+                current_time(),
             )))
         }
     });

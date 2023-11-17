@@ -39,7 +39,10 @@ use std::{net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
-use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
+use ic_agent::{
+    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, export::Principal,
+    Agent,
+};
 
 use serde::Deserialize;
 use slog::{error, info, Logger};

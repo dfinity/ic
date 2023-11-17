@@ -8,7 +8,8 @@ use clap::{Parser, ValueEnum};
 use endpoints::{block, health, network_list, network_options, network_status};
 use http::Request;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::AnonymousIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
+    identity::AnonymousIdentity, Agent,
 };
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{

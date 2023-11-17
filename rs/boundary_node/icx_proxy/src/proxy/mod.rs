@@ -3,7 +3,7 @@ use std::{fs, net::SocketAddr, path::PathBuf, sync::Arc};
 use anyhow::{Context, Error};
 use axum::{handler::Handler, middleware, Router};
 use hyper::{self, Response, StatusCode, Uri};
-use ic_agent::{agent::http_transport::HyperReplicaV2Transport, Agent};
+use ic_agent::agent::{http_transport::hyper_transport::HyperReplicaV2Transport, Agent};
 use opentelemetry::metrics::Meter;
 use tracing::{error, info};
 
@@ -99,7 +99,7 @@ pub fn setup<C: HyperService<Body> + 'static>(
         .iter()
         .map(|v| {
             let transport =
-                HyperReplicaV2Transport::create_with_service(v.domain.clone(), client.clone())
+                HyperReplicaV2Transport::create_with_service(v.domain.to_string(), client.clone())
                     .context("failed to create transport")?
                     .with_max_response_body_size(RESPONSE_BODY_SIZE_LIMIT);
 
