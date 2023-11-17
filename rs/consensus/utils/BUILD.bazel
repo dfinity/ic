@@ -14,7 +14,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/types/types",
     "@crate_index//:hex",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:slog",
 ]
 

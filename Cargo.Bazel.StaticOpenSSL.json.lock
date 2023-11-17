@@ -1,5 +1,5 @@
 {
-  "checksum": "47c32f0c2a51a67f522472ffabbdf0704ea829f1c50675ecb1baa72cbd9e9cb7",
+  "checksum": "4b14bbf414bc8586c533b89663bcddf50cf2fb7fe6355f75cda171210531e68c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13708,8 +13708,7 @@
             },
             {
               "id": "opentelemetry 0.20.0",
-              "target": "opentelemetry",
-              "alias": "opentelemetry_0_20_0_metrics"
+              "target": "opentelemetry"
             },
             {
               "id": "opentelemetry-prometheus 0.11.0",
@@ -13718,8 +13717,7 @@
             },
             {
               "id": "opentelemetry-prometheus 0.13.0",
-              "target": "opentelemetry_prometheus",
-              "alias": "opentelemetry_prometheus_0_13_0"
+              "target": "opentelemetry_prometheus"
             },
             {
               "id": "p256 0.13.2",
@@ -13839,18 +13837,15 @@
             },
             {
               "id": "rand 0.8.5",
-              "target": "rand",
-              "alias": "rand_0_8_4"
+              "target": "rand"
             },
             {
               "id": "rand_chacha 0.3.1",
-              "target": "rand_chacha",
-              "alias": "rand_chacha_0_3_1"
+              "target": "rand_chacha"
             },
             {
               "id": "rand_distr 0.4.3",
-              "target": "rand_distr",
-              "alias": "rand_distr_0_4"
+              "target": "rand_distr"
             },
             {
               "id": "rand_pcg 0.3.1",
@@ -13865,13 +13860,8 @@
               "target": "rayon"
             },
             {
-              "id": "rcgen 0.10.0",
-              "target": "rcgen"
-            },
-            {
               "id": "rcgen 0.11.1",
-              "target": "rcgen",
-              "alias": "rcgen_0_11"
+              "target": "rcgen"
             },
             {
               "id": "regex 1.9.1",
@@ -40396,64 +40386,6 @@
           "**"
         ],
         "links": "rayon-core"
-      },
-      "license": "MIT OR Apache-2.0"
-    },
-    "rcgen 0.10.0": {
-      "name": "rcgen",
-      "version": "0.10.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rcgen/0.10.0/download",
-          "sha256": "ffbe84efe2f38dea12e9bfc1f65377fdf03e53a18cb3b995faedf7934c7e785b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rcgen",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "rcgen",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "pem"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "pem 1.1.1",
-              "target": "pem"
-            },
-            {
-              "id": "ring 0.16.20",
-              "target": "ring"
-            },
-            {
-              "id": "time 0.3.23",
-              "target": "time"
-            },
-            {
-              "id": "yasna 0.5.2",
-              "target": "yasna"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.10.0"
       },
       "license": "MIT OR Apache-2.0"
     },

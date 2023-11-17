@@ -14,7 +14,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:chrono",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:url",
 ]

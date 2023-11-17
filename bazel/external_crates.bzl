@@ -565,7 +565,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^2.1.0",
             ),
             "indicatif": crate.spec(
-                package = "indicatif",
                 version = "^0.17.3",
             ),
             "indoc": crate.spec(
@@ -736,8 +735,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 package = "opentelemetry",
                 version = "^0.18.0",
             ),
-            "opentelemetry_0_20_0_metrics": crate.spec(
-                package = "opentelemetry",
+            "opentelemetry": crate.spec(
                 version = "^0.20.0",
                 features = [
                     "metrics",
@@ -747,8 +745,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 package = "opentelemetry-prometheus",
                 version = "^0.11.0",
             ),
-            "opentelemetry_prometheus_0_13_0": crate.spec(
-                package = "opentelemetry-prometheus",
+            "opentelemetry-prometheus": crate.spec(
                 version = "^0.13.0",
             ),
             "p256": crate.spec(
@@ -872,19 +869,16 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "quote": crate.spec(
                 version = "^1.0",
             ),
-            "rand-0_8_4": crate.spec(
-                package = "rand",
+            "rand": crate.spec(
                 version = "^0.8.4",
                 features = [
                     "small_rng",
                 ],
             ),
-            "rand_chacha-0_3_1": crate.spec(
-                package = "rand_chacha",
+            "rand_chacha": crate.spec(
                 version = "^0.3.1",
             ),
-            "rand_distr-0_4": crate.spec(
-                package = "rand_distr",
+            "rand_distr": crate.spec(
                 version = "^0.4",
             ),
             "rand_pcg": crate.spec(
@@ -897,10 +891,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^1.5.1",
             ),
             "rcgen": crate.spec(
-                version = "^0.10.0",
-            ),
-            "rcgen-0_11": crate.spec(
-                package = "rcgen",
                 version = "^0.11.1",
                 features = [
                     "zeroize",
