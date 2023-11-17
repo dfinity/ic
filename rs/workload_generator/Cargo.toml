@@ -11,6 +11,7 @@ backoff = "0.3.0"
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
