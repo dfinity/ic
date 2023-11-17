@@ -36,7 +36,14 @@ pub struct Image {
     pub base64_encoding: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
-    Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize, Copy,
+    Eq,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    serde::Serialize,
+    Copy,
+    PartialOrd,
+    Ord,
 )]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
