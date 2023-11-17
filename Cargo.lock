@@ -11516,6 +11516,7 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-config",
+ "ic-crypto-sha2",
  "ic-http-endpoints-metrics",
  "ic-ic00-types",
  "ic-metrics",
