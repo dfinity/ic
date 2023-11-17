@@ -14,6 +14,7 @@ ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../types/error_types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-ic00-types = { path = "../types/ic00_types" }

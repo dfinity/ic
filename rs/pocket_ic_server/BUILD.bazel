@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_DEPENDENCIES = [
     "//rs/config",
-    "//rs/crypto",
     "//rs/crypto/iccsa",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/registry/subnet_type",

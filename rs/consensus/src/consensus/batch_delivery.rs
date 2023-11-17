@@ -365,7 +365,10 @@ fn generate_dkg_response_payload(
             let threshold_sig_pk = high_threshold_transcript.public_key();
             let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
             let key_der: Vec<u8> =
-                ic_crypto::threshold_sig_public_key_to_der(threshold_sig_pk).unwrap();
+                ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der(
+                    threshold_sig_pk,
+                )
+                .unwrap();
             let fresh_subnet_id =
                 SubnetId::new(PrincipalId::new_self_authenticating(key_der.as_slice()));
 

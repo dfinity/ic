@@ -6,8 +6,8 @@ use ic_certification_test_utils::serialize_to_cbor;
 use ic_certification_test_utils::CertificateData::CustomTree;
 use ic_certification_test_utils::{CertificateBuilder, CertificateData::CanisterData};
 use ic_certified_map::{labeled_hash, AsHashTree, Hash, HashTree, RbTree};
-use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_tree_hash::{flatmap, Digest, Label, LabeledTree};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use serde::{Deserialize, Serialize};
 
 type AssetTree = RbTree<&'static str, Hash>;

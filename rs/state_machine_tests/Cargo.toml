@@ -16,7 +16,6 @@ hex = "0.4.2"
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-constants = { path = "../constants" }
-ic-crypto = { path = "../crypto" }
 ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
 ic-crypto-extended-bip32 = { path = "../crypto/extended_bip32" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }

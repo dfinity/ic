@@ -17,7 +17,6 @@ mod keygen;
 mod sign;
 mod tls;
 
-pub use sign::utils::{threshold_sig_public_key_from_der, threshold_sig_public_key_to_der};
 pub use sign::{
     get_tecdsa_master_public_key, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
 };
