@@ -2766,8 +2766,7 @@ dependencies = [
  "rand_pcg 0.3.1",
  "randomkit",
  "rayon",
- "rcgen 0.10.0",
- "rcgen 0.11.1",
+ "rcgen",
  "regex",
  "reqwest",
  "retain_mut",
@@ -7839,18 +7838,6 @@ dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
  "num_cpus",
-]
-
-[[package]]
-name = "rcgen"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffbe84efe2f38dea12e9bfc1f65377fdf03e53a18cb3b995faedf7934c7e785b"
-dependencies = [
- "pem 1.1.1",
- "ring",
- "time 0.3.23",
- "yasna",
 ]
 
 [[package]]

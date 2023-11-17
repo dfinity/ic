@@ -88,7 +88,7 @@ DEPENDENCIES_TEST = [
     "//rs/test_utilities/load_wasm",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
 ]
 
 DEV_DATA = [

@@ -22,7 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:crossbeam-channel",
     "@crate_index//:futures",
     "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:tokio",

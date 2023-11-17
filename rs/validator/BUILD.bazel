@@ -22,7 +22,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:base64",
     "@crate_index//:mockall",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
 ]
 
 rust_library(
