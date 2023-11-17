@@ -1,6 +1,6 @@
 // The Local Replica is running the binary of a replica of the IC locally and thus allows for local testing
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use ic_agent::agent::http_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_base_types::{CanisterId, PrincipalId};

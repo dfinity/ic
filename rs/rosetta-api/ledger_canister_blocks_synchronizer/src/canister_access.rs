@@ -1,5 +1,5 @@
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_agent::agent::http_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
 use ic_agent::identity::AnonymousIdentity;
 use ic_agent::{Agent, AgentError, NonceGenerator};
 use ic_ledger_core::block::EncodedBlock;

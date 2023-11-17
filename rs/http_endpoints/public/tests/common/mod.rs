@@ -60,7 +60,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{CertificateDelegation, SignedIngressContent, UserQuery},
     signature::ThresholdSignature,
-    CryptoHashOfPartialState, Height, RegistryVersion, Time,
+    CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
@@ -240,10 +240,6 @@ pub fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_certified_state_reader);
 
     mock_state_manager
-}
-
-pub fn dummy_timestamp() -> Time {
-    Time::from_nanos_since_unix_epoch(1_690_000_000_000_000_000)
 }
 
 // Basic mock consensus pool cache at height 1.

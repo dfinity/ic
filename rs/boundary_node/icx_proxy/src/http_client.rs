@@ -28,7 +28,7 @@ use hyper::{
     Client,
 };
 use hyper_rustls::HttpsConnectorBuilder;
-use ic_agent::agent::http_transport;
+use ic_agent::agent::http_transport::hyper_transport;
 use itertools::Either;
 
 use crate::domain_addr::DomainAddr;
@@ -52,7 +52,7 @@ pub struct HttpClientOpts<'a> {
 pub type Body = hyper::Body;
 
 pub trait HyperBody:
-    http_transport::HyperBody
+    hyper_transport::HyperBody
     + From<&'static [u8]>
     + From<&'static str>
     + From<Bytes>
@@ -65,7 +65,7 @@ pub trait HyperBody:
 }
 
 impl<B> HyperBody for B where
-    B: http_transport::HyperBody
+    B: hyper_transport::HyperBody
         + From<&'static [u8]>
         + From<&'static str>
         + From<Bytes>
@@ -79,7 +79,7 @@ impl<B> HyperBody for B where
 
 /// Trait representing the constraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
 pub trait HyperService<B1: HyperBody>:
-    http_transport::HyperService<B1, ResponseBody = Self::ResponseBody2>
+    hyper_transport::HyperService<B1, ResponseBody = Self::ResponseBody2>
 {
     /// Values yielded in the `Body` of the `Response`.
     type ResponseBody2: HyperBody;
@@ -89,7 +89,7 @@ impl<B1, B2, S> HyperService<B1> for S
 where
     B1: HyperBody,
     B2: HyperBody,
-    S: http_transport::HyperService<B1, ResponseBody = B2>,
+    S: hyper_transport::HyperService<B1, ResponseBody = B2>,
 {
     type ResponseBody2 = B2;
 }

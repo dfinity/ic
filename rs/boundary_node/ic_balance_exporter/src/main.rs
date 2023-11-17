@@ -15,7 +15,8 @@ use dashmap::DashMap;
 use futures::{future::TryFutureExt, stream::FuturesUnordered};
 use hyper::{Body, Request, Response, StatusCode};
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
+    identity::BasicIdentity, Agent,
 };
 use mockall::automock;
 use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};

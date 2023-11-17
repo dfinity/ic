@@ -500,7 +500,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 rev = "6eda22d0dc882b347a945647902f2d844a404c7f",
             ),
             "ic-agent": crate.spec(
-                version = "^0.27.0",
+                version = "^0.30.2",
                 features = [
                     "hyper",
                 ],
@@ -545,7 +545,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^3.0.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.27.0",
+                version = "^0.30.2",
                 features = ["raw"],
             ),
             "ic-wasm": crate.spec(

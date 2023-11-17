@@ -25,7 +25,8 @@ use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
 use futures::future::TryFutureExt;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::Secp256k1Identity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
+    identity::Secp256k1Identity, Agent,
 };
 use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{

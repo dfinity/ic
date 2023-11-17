@@ -23,8 +23,8 @@ use crate::{
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     orchestrator::utils::rw_message::{
-        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-        store_message,
+        can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+        install_nns_and_check_progress, store_message,
     },
     util::{block_on, runtime_from_url},
 };
@@ -192,11 +192,12 @@ fn verify_node_is_making_progress(node: &IcNodeSnapshot, canister_id: Principal,
     node.await_status_is_healthy()
         .expect("Should become healthy");
 
-    assert!(can_read_msg(
+    assert!(can_read_msg_with_retries(
         logger,
         &node.get_public_url(),
         canister_id,
         MESSAGE_IN_THE_CANISTER,
+        10,
     ));
 
     let height = get_certification_height_from_metrics(node, logger);

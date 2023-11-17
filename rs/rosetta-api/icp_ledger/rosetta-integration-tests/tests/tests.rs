@@ -1,5 +1,5 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
-use ic_agent::agent::http_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
 use ic_ic00_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};

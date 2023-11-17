@@ -11,7 +11,8 @@ use std::{
 
 use candid::{CandidType, Principal};
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
+    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Agent},
+    identity::BasicIdentity,
 };
 use ic_utils::{
     canister::Argument,
