@@ -78,7 +78,7 @@ const DAY: Duration = Duration::from_secs(24 * 3600);
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
-pub const MAX_REQUEST_BODY_SIZE: usize = 2 * MB;
+pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
 const METRICS_CACHE_CAPACITY: usize = 30 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
