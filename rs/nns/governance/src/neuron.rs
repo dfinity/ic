@@ -806,7 +806,7 @@ impl Neuron {
             Some(DissolveDelaySeconds(seconds)) => {
                 if seconds == 0 {
                     println!(
-                        "{}WARNING: Neuron {:#?} is dissolved, but it is not \
+                        "{}WARNING: Neuron {:?} is dissolved, but it is not \
                          known when that happened. Thus, by default, \
                          dissolved_at_timestamp_seconds is set to None.",
                         LOG_PREFIX, self.id,
