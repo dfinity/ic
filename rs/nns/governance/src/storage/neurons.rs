@@ -179,7 +179,6 @@ where
     }
 
     /// Retrieves an existing entry.
-    #[allow(dead_code)] // TODO(NNS1-2416): Re-enable clippy once we start actually using this code.
     pub fn read(&self, neuron_id: NeuronId) -> Result<Neuron, NeuronStoreError> {
         let main_neuron_part = self
             .main
@@ -193,7 +192,6 @@ where
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
-    #[allow(dead_code)] // TODO(NNS1-2416): Re-enable clippy once we start actually using this code.
     pub fn update(&mut self, neuron: Neuron) -> Result<(), NeuronStoreError> {
         let neuron_id = Self::id_or_err(&neuron)?;
 
@@ -273,6 +271,10 @@ where
         Ok(())
     }
 
+    pub fn contains(&self, neuron_id: NeuronId) -> bool {
+        self.main.contains_key(&neuron_id.id)
+    }
+
     pub fn len(&self) -> u64 {
         self.main.len()
     }
@@ -292,54 +294,6 @@ where
         self.main
             .range(range)
             .map(|(_neuron_id, neuron)| self.reconstitute_neuron(neuron))
-    }
-
-    /// Inserts or updates, depending on whether an entry (with the same ID) is
-    /// already present.
-    ///
-    /// Like create, but if there is already an entry, it gets clobbered.
-    ///
-    /// This is useful when "writing through"/mirroring mutations on a heap
-    /// Neuron.
-    ///
-    /// Currently, the only way this can return Err is if there is an internal
-    /// bug, which the caller cannot possibly compensate for.
-    pub fn upsert(&mut self, neuron: Neuron) -> Result<(), NeuronStoreError> {
-        let neuron_id = Self::id_or_err(&neuron)?;
-
-        let DecomposedNeuron {
-            main: neuron,
-
-            hot_keys,
-            followees,
-            recent_ballots,
-
-            known_neuron_data,
-            transfer,
-        } = DecomposedNeuron::from(neuron);
-
-        let _previous_neuron = self.main.insert(
-            neuron_id.id,
-            // clone is done here, because we might later use neuron in an error
-            // message. This should be not a big performance hit, because this
-            // is an abridged neuron.
-            neuron.clone(),
-        );
-
-        // Auxiliary Data
-        // --------------
-        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
-        update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
-        self.update_followees(neuron_id, followees);
-
-        update_singleton_field(
-            neuron_id,
-            known_neuron_data,
-            &mut self.known_neuron_data_map,
-        );
-        update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
-
-        Ok(())
     }
 
     /// Internal function to take what's in the main map and fill in the remaining data from
