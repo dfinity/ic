@@ -39,7 +39,7 @@ ensure_variable_set WALLET_CANISTER
 ensure_variable_set PEM
 
 # Install the sns binary corresponding to the latest NNS Governance canister
-SNS_CLI_VERSION=$(nns_canister_git_version "${NNS_URL}" "governance")
+SNS_CLI_VERSION=${GIT_COMMIT:-$(nns_canister_git_version "${NNS_URL}" "governance")}
 install_binary sns "$SNS_CLI_VERSION" "$MY_DOWNLOAD_DIR"
 
 PERMUTATIONS=$(python3 \
