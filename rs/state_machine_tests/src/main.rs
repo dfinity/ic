@@ -1,10 +1,11 @@
 use clap::Parser;
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
-use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_iccsa::types::SignatureBytes;
 use ic_crypto_iccsa::{public_key_bytes_from_der, verify};
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key_from_der, threshold_sig_public_key_to_der,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};

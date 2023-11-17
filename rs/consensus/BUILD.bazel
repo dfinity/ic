@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/crypto",
     "//rs/crypto/prng",
     "//rs/crypto/test_utils/canister_threshold_sigs",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/https_outcalls/consensus",
     "//rs/interfaces",
     "//rs/interfaces/registry",

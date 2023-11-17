@@ -3,8 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/crypto",
     "//rs/crypto/sha2",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",

@@ -10,8 +10,8 @@ documentation.workspace = true
 anyhow = "1.0.31"
 base64 = { workspace = true }
 clap = { workspace = true }
-ic-crypto = { path = "../../crypto" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
 ic-registry-client-helpers = { path = "../helpers" }

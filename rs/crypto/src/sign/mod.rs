@@ -47,8 +47,6 @@ pub use canister_threshold_sig::{
 
 #[cfg(test)]
 mod tests;
-// TODO: Remove this indirection:
-pub(crate) use ic_crypto_internal_csp::imported_utilities::sign_utils as utils;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::signature::BasicSignatureBatch;

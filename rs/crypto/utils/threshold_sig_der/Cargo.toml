@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
+ic-crypto-internal-threshold-sig-bls12381 = { path = "../../internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-bls12381-der = { path = "../../internal/crypto_lib/threshold_sig/bls12_381/der_utils" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types/" }
 ic-types = { path = "../../../types/types" }
