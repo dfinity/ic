@@ -2693,8 +2693,8 @@ impl Governance {
                 "canister_info",
                 candid::encode_one(
                     CanisterInfoRequest::new(
-                        ledger_canister_id.try_into().unwrap(),
-                        Some(20),
+                        ledger_canister_id,
+                        Some(1),
                     )
                 ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error encoding canister_info request.\n{}", e)))?
             )
@@ -2730,7 +2730,7 @@ impl Governance {
 
         use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs};
         let ledger_upgrade_arg =
-            candid::encode_one(&Some(LedgerArgument::Upgrade(Some(UpgradeArgs {
+            candid::encode_one(Some(LedgerArgument::Upgrade(Some(UpgradeArgs {
                 transfer_fee: manage_ledger_parameters.transfer_fee.map(|tf| tf.into()),
                 change_fee_collector: manage_ledger_parameters.set_fee_collector.clone().map(
                     |set_fee_collector| {
@@ -5424,7 +5424,7 @@ impl Governance {
 
         let canister_info_request = {
             match candid::encode_one(CanisterInfoRequest::new(
-                self.proto.ledger_canister_id_or_panic().try_into().unwrap(),
+                self.proto.ledger_canister_id_or_panic(),
                 Some(20),
             )) {
                 Ok(b) => b,
@@ -5487,7 +5487,7 @@ impl Governance {
                     canister_change.details()
                 {
                     if let CanisterInstallMode::Upgrade = code_deployment.mode() {
-                        if &code_deployment.module_hash()[..] == &ledger_wasm_hash[..] {
+                        if code_deployment.module_hash()[..] == ledger_wasm_hash[..] {
                             // Success
                             log!(
                                 INFO,
