@@ -111,11 +111,11 @@ mod decode_memo {
 
     #[test]
     fn encode_burn_memo_is_stable() {
-        let destination_address: crate::address::Address =
-            "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
+        let memo = Memo::from(BurnMemo::Convert {
+            to_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
                 .parse()
-                .unwrap();
-        let memo: Memo = destination_address.into();
+                .unwrap(),
+        });
 
         assert_eq!(
             memo.0,
