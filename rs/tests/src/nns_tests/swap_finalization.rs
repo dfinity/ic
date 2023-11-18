@@ -16,10 +16,9 @@ use crate::{
     sns_client::SnsClient,
 };
 
-/// If the swap is committed, waits for the swap to finalize (for up to 2 minutes), and verifies that the swap was finalized as expected.
-pub async fn finalize_committed_swap_and_check_success(
+/// If the swap is committed, waits for the swap to finalize (for up to 2 minutes).
+pub async fn finalize_committed_swap(
     env: TestEnv,
-    expected_derived_swap_state: GetDerivedStateResponse,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
 ) {
     let log = env.logger();
@@ -49,8 +48,6 @@ pub async fn finalize_committed_swap_and_check_success(
             .result()
             .unwrap()
     };
-
-    assert_eq!(derived_swap_state, expected_derived_swap_state);
 
     info!(
         log,

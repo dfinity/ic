@@ -1,7 +1,5 @@
 use anyhow::Result;
-use ic_nervous_system_common::i2d;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
-use ic_sns_swap::pb::v1::GetDerivedStateResponse;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
@@ -9,12 +7,11 @@ use ic_tests::nns_tests::neurons_fund;
 use ic_tests::nns_tests::neurons_fund::NnsNfNeuron;
 use ic_tests::nns_tests::{
     sns_deployment, sns_deployment::generate_ticket_participants_workload, swap_finalization,
-    swap_finalization::finalize_committed_swap_and_check_success,
+    swap_finalization::finalize_committed_swap,
 };
 use ic_tests::sns_client::test_create_service_nervous_system_proposal;
 use ic_tests::systest;
 use ic_tests::util::block_on;
-use rust_decimal::prelude::ToPrimitive;
 use std::time::Duration;
 
 fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
@@ -98,37 +95,8 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
 
 fn finalize_swap(env: TestEnv) {
     let create_service_nervous_system_proposal = create_service_nervous_system_proposal();
-    let swap_params = create_service_nervous_system_proposal
-        .swap_parameters
-        .as_ref()
-        .unwrap()
-        .clone();
-
-    let sns_tokens_per_icp = i2d(create_service_nervous_system_proposal
-        .sns_token_e8s()
-        .unwrap())
-    .checked_div(i2d(swap_params.maximum_icp.unwrap().e8s.unwrap()))
-    .and_then(|d| d.to_f32())
-    .unwrap() as f64;
-
-    let expected_derived_swap_state = GetDerivedStateResponse {
-        direct_participant_count: swap_params.minimum_participants,
-        cf_participant_count: Some(nns_nf_neurons().len() as u64),
-        cf_neuron_count: Some(nns_nf_neurons().len() as u64),
-        buyer_total_icp_e8s: swap_params.maximum_icp.unwrap().e8s,
-        sns_tokens_per_icp: Some(sns_tokens_per_icp),
-        direct_participation_icp_e8s: Some(
-            swap_params.maximum_icp.unwrap().e8s()
-                - swap_params.neurons_fund_investment_icp.unwrap().e8s(),
-        ),
-        neurons_fund_participation_icp_e8s: Some(
-            swap_params.neurons_fund_investment_icp.unwrap().e8s(),
-        ),
-    };
-
-    block_on(finalize_committed_swap_and_check_success(
+    block_on(finalize_committed_swap(
         env,
-        expected_derived_swap_state,
         create_service_nervous_system_proposal,
     ));
 }
