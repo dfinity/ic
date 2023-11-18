@@ -541,11 +541,7 @@ fn combine_index_defects(
     defect1: Result<(), NeuronIndexDefect>,
     defect2: Result<(), NeuronIndexDefect>,
 ) -> Result<(), Vec<NeuronIndexDefect>> {
-    let defects: Vec<_> = defect1
-        .err()
-        .into_iter()
-        .chain(defect2.err().into_iter())
-        .collect();
+    let defects: Vec<_> = defect1.err().into_iter().chain(defect2.err()).collect();
     if defects.is_empty() {
         Ok(())
     } else {

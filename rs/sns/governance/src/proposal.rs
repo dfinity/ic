@@ -25,11 +25,13 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{i2d, E8};
+use ic_nervous_system_proto::pb::v1::Percentage;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
+    fmt::Write,
 };
 
 /// The maximum number of bytes in an SNS proposal's title.
@@ -724,11 +726,13 @@ fn validate_and_render_register_dapp_canisters(
         .collect();
 
     if error_canister_ids.is_empty() {
-        let canister_list = register_dapp_canisters
-            .canister_ids
-            .iter()
-            .map(|canister_id| format!("\n- {}", canister_id))
-            .collect::<String>();
+        let canister_list = register_dapp_canisters.canister_ids.iter().fold(
+            String::new(),
+            |mut out, canister_id| {
+                let _ = write!(out, "\n- {}", canister_id);
+                out
+            },
+        );
 
         let render = format!(
             "# Proposal to register {num_canisters_to_register} dapp canisters: \n\
@@ -736,10 +740,13 @@ fn validate_and_render_register_dapp_canisters(
         );
         Ok(render)
     } else {
-        let error_canister_list = error_canister_ids
-            .iter()
-            .map(|canister_id| format!("\n- {}", canister_id))
-            .collect::<String>();
+        let error_canister_list =
+            error_canister_ids
+                .iter()
+                .fold(String::new(), |mut out, canister_id| {
+                    let _ = write!(out, "\n- {}", canister_id);
+                    out
+                });
 
         let err_msg: String = format!(
             "Invalid RegisterDappCanisters Proposal: \n\
@@ -797,10 +804,13 @@ fn validate_and_render_deregister_dapp_canisters(
 
         Ok(rendered)
     } else {
-        let error_canister_list = error_canister_ids
-            .iter()
-            .map(|canister_id| format!("\n- {}", canister_id))
-            .collect::<String>();
+        let error_canister_list =
+            error_canister_ids
+                .iter()
+                .fold(String::new(), |mut out, canister_id| {
+                    let _ = write!(out, "\n- {}", canister_id);
+                    out
+                });
 
         let err_msg: String = format!(
             "Invalid DeregisterDappCanisters Proposal: \n\
@@ -1087,90 +1097,159 @@ impl ProposalData {
     /// The result is only meaningful if a decision on the proposal's result can be made, i.e.,
     /// either there is a majority of yes-votes or the proposal's deadline has passed.
     pub fn is_accepted(&self) -> bool {
-        let majority_required_to_adopt_basis_points = 5_000;
+        let majority_required_to_adopt =
+            NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER;
 
-        let minimum_yes_proportion_of_total_basis_points = self
-            .minimum_yes_proportion_of_total
-            .and_then(|percentage| percentage.basis_points)
-            .unwrap_or(
-                NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
-                    .basis_points
-                    .unwrap(),
-            ) as u128;
-
-        debug_assert!(
-            majority_required_to_adopt_basis_points < 10_000,
-            "majority_required_to_adopt_basis_points ({majority_required_to_adopt_basis_points}) should be < 100%"
-        );
-        debug_assert!(
-            majority_required_to_adopt_basis_points >= 5_000,
-            "majority_required_to_adopt_basis_points ({majority_required_to_adopt_basis_points}) should be >= 50%"
+        let minimum_yes_proportion_of_total = Percentage::from_basis_points(
+            self.minimum_yes_proportion_of_total
+                .and_then(|percentage| percentage.basis_points)
+                .unwrap_or(
+                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+                        .basis_points
+                        .unwrap(),
+                ),
         );
 
         debug_assert!(
-            minimum_yes_proportion_of_total_basis_points <= majority_required_to_adopt_basis_points,
-            "minimum_yes_proportion_of_total_basis_points ({minimum_yes_proportion_of_total_basis_points}) should be <= majority_required_to_adopt_basis_points ({majority_required_to_adopt_basis_points})"
+            majority_required_to_adopt < Percentage::from_basis_points(10_000),
+            "majority_required_to_adopt ({majority_required_to_adopt}) should be < 100%"
+        );
+        debug_assert!(
+            majority_required_to_adopt >= Percentage::from_basis_points(5_000),
+            "majority_required_to_adopt ({majority_required_to_adopt}) should be >= 50%"
         );
 
-        if let Some(tally) = &self.latest_tally {
-            debug_assert!(
-                tally.total >= tally.yes.saturating_add(tally.no),
-                "The total number of votes ({}) should be greater than or equal to the number of yes votes ({}) plus the number of no votes ({})",
-                tally.total,
-                tally.yes,
-                tally.no
-            );
+        debug_assert!(
+            minimum_yes_proportion_of_total <= majority_required_to_adopt,
+            "minimum_yes_proportion_of_total ({minimum_yes_proportion_of_total}) should be <= majority_required_to_adopt ({majority_required_to_adopt})"
+        );
 
-            // We'll convert the values to u128 to prevent overflow.
-            let yes = tally.yes as u128;
-            let no = tally.no as u128;
-            let total = tally.total as u128;
+        let Some(tally) = &self.latest_tally else {
+            return false;
+        };
 
-            let quorum_met = yes * 10_000 >= total * minimum_yes_proportion_of_total_basis_points;
+        debug_assert!(
+            tally.total >= tally.yes.saturating_add(tally.no),
+            "The total number of votes ({}) should be greater than or equal to the number of yes votes ({}) plus the number of no votes ({})",
+            tally.total,
+            tally.yes,
+            tally.no
+        );
 
-            // e.g. if majority_required_to_adopt_basis_points is 5000 (50%),
-            // this would require 50%+1 of the cast votes to be yes
-            let majority_met = yes * 10_000 > (yes + no) * 5_000;
+        let majority_met = Self::majority_decision(
+            tally.yes,
+            tally.no,
+            tally.yes + tally.no,
+            majority_required_to_adopt,
+        ) == Vote::Yes;
 
-            quorum_met && majority_met
-        } else {
-            false
-        }
+        // We'll convert the values to u128 to prevent overflow.
+        let yes = tally.yes as u128;
+        let total = tally.total as u128;
+        // The unwrap cannot fail because of how minimum_yes_proportion_of_total is computed earlier in this function
+        let minimum_yes_proportion_of_total_basis_points =
+            minimum_yes_proportion_of_total.basis_points.unwrap() as u128;
+
+        let quorum_met = yes * 10_000 >= total * minimum_yes_proportion_of_total_basis_points;
+
+        quorum_met && majority_met
     }
 
     /// Returns true if a decision can be made right now to adopt or reject the proposal.
     /// The proposal must be tallied prior to calling this method.
     pub fn can_make_decision(&self, now_seconds: u64) -> bool {
-        if let Some(tally) = &self.latest_tally {
-            // Even when a proposal's deadline has not passed, a proposal is
-            // adopted if strictly more than half of the votes are 'yes' and
-            // rejected if at least half of the votes are 'no'. The conditions
-            // are described as below to avoid overflow. In the absence of overflow,
-            // the below is equivalent to (2 * yes > total) || (2 * no >= total).
-            let majority =
-                (tally.yes > tally.total - tally.yes) || (tally.no >= tally.total - tally.no);
-            let expired = !self.accepts_vote(now_seconds);
-            let decision_reason = match (majority, expired) {
-                (true, true) => Some("majority and expiration"),
-                (true, false) => Some("majority"),
-                (false, true) => Some("expiration"),
-                (false, false) => None,
-            };
-            if let Some(reason) = decision_reason {
-                log!(
-                    INFO,
-                    "{}Proposal {} decided, thanks to {}. Tally at decision time: {:?}",
-                    log_prefix(),
-                    self.id
-                        .as_ref()
-                        .map_or("unknown".to_string(), |i| format!("{}", i.id)),
-                    reason,
-                    tally
-                );
-                return true;
-            }
+        debug_assert!(self.latest_tally.is_some());
+        let Some(tally) = &self.latest_tally else {
+            return false;
+        };
+        // Even when a proposal's deadline has not passed, a proposal is
+        // adopted if strictly more than half of the votes are 'yes' and
+        // rejected if at least half of the votes are 'no'. The conditions
+        // are described as below to avoid overflow. In the absence of overflow,
+        // the below is equivalent to (2 * yes > total) || (2 * no >= total).
+        let absolute_majority = self.early_decision() != Vote::Unspecified;
+        let expired = !self.accepts_vote(now_seconds);
+        let decision_reason = match (absolute_majority, expired) {
+            (true, true) => "majority and expiration",
+            (true, false) => "majority",
+            (false, true) => "expiration",
+            (false, false) => return false,
+        };
+        log!(
+            INFO,
+            "{}Proposal {} decided, thanks to {}. Tally at decision time: {:?}",
+            log_prefix(),
+            self.id
+                .as_ref()
+                .map_or("unknown".to_string(), |i| format!("{}", i.id)),
+            decision_reason,
+            tally
+        );
+        true
+    }
+
+    /// In some cases, a proposal can be decided before the voting period ends,
+    /// if enough voting has happened that further votes cannot change the result.
+    /// If the proposal has been decided, this function returns the decision.
+    /// Otherwise, it returns `Vote::Unspecified`.
+    ///
+    /// Preconditions:
+    /// - `latest_tally` must be `Some`.
+    pub fn early_decision(&self) -> Vote {
+        let tally = &self
+            .latest_tally
+            .as_ref()
+            .expect("expected latest_tally to not be None");
+
+        Self::majority_decision(
+            tally.yes,
+            tally.no,
+            tally.total,
+            NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
+        )
+    }
+
+    /// Considers the amount of 'yes' and 'no' voting power in relation to the total voting power,
+    /// based on a percentage threshold that must be met or exceeded for a decision.
+    /// - 'yes': Amount of voting power voting 'yes'.
+    /// - 'no': Amount of voting power voting 'no'.
+    /// - 'total': Total voting power.
+    /// - 'percentage_of_total_required': The minimum percentage of the total voting power required for a decision.
+    /// The function returns a `Vote`:
+    /// - `Vote::Yes` if the amount of voting power voting 'yes' votes exceeds `percentage_of_total_required` of the total.
+    /// - `Vote::No` if the amount of voting power voting 'no' votes is equal to or exceeds `1-percentage_of_total_required` of the total.
+    /// - `Vote::Unspecified` if neither the amount of voting power voting 'yes' nor 'no' meet their respective thresholds.
+    ///
+    /// Preconditions:
+    /// - `yes + no <= total`
+    /// - `percentage_of_total_required <= 100%`
+    /// - `percentage_of_total_required.basis_points` is not `None`
+    pub fn majority_decision(
+        yes: u64,
+        no: u64,
+        total: u64,
+        percentage_of_total_required: Percentage,
+    ) -> Vote {
+        let yes = yes as u128;
+        let no = no as u128;
+        let total = total as u128;
+        debug_assert!(total >= yes + no);
+
+        // "permyriad" being a somewhat-obscure term for "per 10,000", analogous to how "percentage" means "per 100"
+        let required_yes_of_total_basis_points =
+            u128::from(percentage_of_total_required.basis_points.unwrap());
+        let required_no_of_total_basis_points =
+            10_000u128.saturating_sub(required_yes_of_total_basis_points);
+
+        debug_assert!(required_yes_of_total_basis_points <= 10_000);
+
+        if yes * 10_000 > total * required_yes_of_total_basis_points {
+            Vote::Yes
+        } else if no * 10_000 >= total * required_no_of_total_basis_points {
+            Vote::No
+        } else {
+            Vote::Unspecified
         }
-        false
     }
 
     /// Return true if the proposal can be purged from storage, e.g.,
@@ -1851,7 +1930,7 @@ mod tests {
         let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
         let ledger_canister_id = *SNS_LEDGER_CANISTER_ID;
         let swap_canister_id = canister_test_id(503);
-        let ledger_archive_ids = vec![canister_test_id(504)];
+        let ledger_archive_ids = [canister_test_id(504)];
         let index_canister_id = canister_test_id(505);
 
         let root_hash = Sha256::hash(&[1]).to_vec();
@@ -2730,6 +2809,22 @@ Version {
     }
 
     #[test]
+    fn majority_decision_yes_vote_at_threshold() {
+        // Assuming a threshold of 60%, with total votes = 100
+        let threshold = Percentage::from_basis_points(6000);
+        let total = 100;
+        let yes = 60; // Exactly at threshold
+        assert_eq!(
+            ProposalData::majority_decision(yes, total - yes - 1, total, threshold),
+            Vote::Unspecified
+        );
+        assert_eq!(
+            ProposalData::majority_decision(yes + 1, total - yes - 1, total, threshold),
+            Vote::Yes
+        );
+    }
+
+    #[test]
     fn test_new_proposal_has_reward_status_settled() {
         let now = 1699645996; // 2023-11-10T19:53:16Z (Fri)
         let proposal = ProposalData {
@@ -2755,6 +2850,99 @@ Version {
         assert_eq!(
             proposal.reward_status(now),
             ProposalRewardStatus::ReadyToSettle
+        );
+    }
+
+    #[test]
+    fn majority_decision_no_vote_at_threshold() {
+        let threshold = Percentage::from_basis_points(6000);
+        let total = 100;
+        let no = 40; // Exactly at threshold for 'No'
+        assert_eq!(
+            ProposalData::majority_decision(total - no, no, total, threshold),
+            Vote::No
+        );
+        assert_eq!(
+            ProposalData::majority_decision(total - no, no - 1, total, threshold),
+            Vote::Unspecified
+        );
+    }
+
+    #[test]
+    fn majority_decision_equal_yes_no_votes_near_threshold() {
+        let threshold = Percentage::from_basis_points(5000);
+        let total_votes = 100;
+        let votes = 50; // If the vote is split 50/50, and the threshold is 50%, `no` should win
+        assert_eq!(
+            ProposalData::majority_decision(votes, votes, total_votes, threshold),
+            Vote::No
+        );
+        // But if there's one person who hasn't voted, they should determine the result
+        assert_eq!(
+            ProposalData::majority_decision(votes, votes, total_votes + 1, threshold),
+            Vote::Unspecified
+        );
+        // But then one additional person votes yes, and the result becomes yes
+        assert_eq!(
+            ProposalData::majority_decision(votes + 1, votes, total_votes + 1, threshold),
+            Vote::Yes
+        );
+        // Of course, if the additional person votes no, the result is still no
+        assert_eq!(
+            ProposalData::majority_decision(votes, votes + 1, total_votes + 1, threshold),
+            Vote::No
+        );
+    }
+
+    #[test]
+    fn majority_decision_no_votes() {
+        let threshold = Percentage::from_basis_points(5000);
+        let total_votes = 0;
+        let votes = 0;
+        assert_eq!(
+            ProposalData::majority_decision(votes, votes, total_votes, threshold),
+            Vote::No
+        );
+    }
+
+    #[test]
+    fn majority_decision_doesnt_overflow_yes() {
+        let threshold = Percentage::from_basis_points(5000);
+        let total_votes = u64::MAX;
+        let yes_votes = u64::MAX;
+        assert_eq!(
+            ProposalData::majority_decision(yes_votes, 0, total_votes, threshold),
+            Vote::Yes
+        );
+    }
+
+    #[test]
+    fn majority_decision_doesnt_overflow_no() {
+        let threshold = Percentage::from_basis_points(5000);
+        let total_votes = u64::MAX;
+        let no_votes = u64::MAX;
+        assert_eq!(
+            ProposalData::majority_decision(0, no_votes, total_votes, threshold),
+            Vote::No
+        );
+    }
+    #[test]
+    fn majority_decision_doesnt_overflow_split() {
+        let threshold = Percentage::from_basis_points(5000);
+        let total_votes = u64::MAX;
+        let yes_votes = u64::MAX / 2; // u64::MAX is an odd number, so there is one person who hasn't voted yet
+        let no_votes = u64::MAX / 2;
+        assert_eq!(
+            ProposalData::majority_decision(yes_votes, no_votes, total_votes, threshold),
+            Vote::Unspecified
+        );
+        assert_eq!(
+            ProposalData::majority_decision(yes_votes + 1, no_votes, total_votes, threshold),
+            Vote::Yes
+        );
+        assert_eq!(
+            ProposalData::majority_decision(yes_votes, no_votes + 1, total_votes, threshold),
+            Vote::No
         );
     }
 }

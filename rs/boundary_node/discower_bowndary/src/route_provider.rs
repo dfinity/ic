@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn test_routes_rotation() {
         let provider = RoundRobinRouteProvider::new(vec!["https://url1.com", "https://url2.com"]);
-        let url_strings = vec!["https://url1.com", "https://url2.com", "https://url1.com"];
+        let url_strings = ["https://url1.com", "https://url2.com", "https://url1.com"];
         let expected_urls: Vec<Url> = url_strings
             .iter()
             .map(|url_str| Url::parse(url_str).expect("Invalid URL"))

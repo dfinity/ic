@@ -238,11 +238,11 @@ impl GovernanceProto {
                 continue;
             }
 
-            let followee_index = index.entry(*function_id).or_insert_with(BTreeMap::new);
+            let followee_index = index.entry(*function_id).or_default();
             for followee in followees.followees.iter() {
                 followee_index
                     .entry(followee.to_string())
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(
                         neuron
                             .id
@@ -302,7 +302,7 @@ impl GovernanceProto {
         neuron_id: &NeuronId,
         principal: &PrincipalId,
     ) {
-        let neuron_ids = index.entry(*principal).or_insert_with(HashSet::new);
+        let neuron_ids = index.entry(*principal).or_default();
         neuron_ids.insert(neuron_id.clone());
     }
 
@@ -3356,13 +3356,11 @@ impl Governance {
                 let cache = self
                     .function_followee_index
                     .entry(f.function_id)
-                    .or_insert_with(BTreeMap::new);
+                    .or_default();
                 // We need to add this neuron as a follower for
                 // all followees.
                 for followee in &f.followees {
-                    let all_followers = cache
-                        .entry(followee.to_string())
-                        .or_insert_with(BTreeSet::new);
+                    let all_followers = cache.entry(followee.to_string()).or_default();
                     all_followers.insert(id.clone());
                 }
                 Ok(())
@@ -4333,9 +4331,7 @@ impl Governance {
         let action_to_proposals: HashMap<u64, Vec<u64>> = {
             let mut tmp: HashMap<u64, Vec<u64>> = HashMap::new();
             for (proposal_id, proposal) in self.proto.proposals.iter() {
-                tmp.entry(proposal.action)
-                    .or_insert_with(Vec::new)
-                    .push(*proposal_id);
+                tmp.entry(proposal.action).or_default().push(*proposal_id);
             }
             tmp
         };

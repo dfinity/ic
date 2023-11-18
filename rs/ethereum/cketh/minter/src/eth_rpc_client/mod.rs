@@ -202,7 +202,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
                     block,
                     include_full_transactions: false,
                 },
-                ResponseSizeEstimate::new(6 * 1024),
+                ResponseSizeEstimate::new(12 * 1024),
             )
             .await;
         results.reduce_with_equality()
@@ -433,8 +433,10 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                             first
                                 .1
                                 .into_iter()
-                                .chain(second.1.into_iter())
-                                .map(|(provider, result)| (provider, Ok(result))),
+                                .chain(second.1)
+                                .map(|(provider, result)| {
+                                    (provider, Ok(result))
+                                }),
                         ));
                     log!(
                         INFO,

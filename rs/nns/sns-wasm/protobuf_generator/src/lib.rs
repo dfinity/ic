@@ -37,6 +37,8 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     ic_sns_type_attr(&mut config, "SnsVersion", "#[derive(Eq, Hash)]");
     ic_sns_type_attr(&mut config, "SnsCanisterIds", "#[derive(Copy)]");
 
+    config.btree_map([".ic_sns_wasm.pb.v1.StableCanisterState.nns_proposal_to_deployed_sns"]);
+
     config
         .compile_protos(
             &proto_files,

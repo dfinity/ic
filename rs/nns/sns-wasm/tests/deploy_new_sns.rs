@@ -1,4 +1,4 @@
-use crate::common::EXPECTED_SNS_CREATION_FEE;
+use crate::common::{get_deployed_sns_by_proposal_id_unchecked, EXPECTED_SNS_CREATION_FEE};
 use candid::{Decode, Encode};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use common::set_up_state_machine_with_nns;
@@ -6,8 +6,9 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha2::Sha256;
 use ic_interfaces_registry::RegistryClient;
-use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
-use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
+use ic_nervous_system_clients::canister_status::{
+    CanisterStatusResultV2, CanisterStatusType::Running,
+};
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nervous_system_proto::pb::v1::Canister as NervousSystemProtoCanister;
 use ic_nns_constants::{
@@ -28,11 +29,13 @@ use ic_registry_keys::make_subnet_list_record_key;
 use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
 use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
-use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, DappCanistersTransferResult, DeployNewSnsRequest, DeployNewSnsResponse,
-    SnsCanisterIds, SnsCanisterType, SnsWasm, SnsWasmError,
+use ic_sns_wasm::{
+    pb::v1::{
+        AddWasmRequest, DappCanistersTransferResult, DeployNewSnsRequest, DeployNewSnsResponse,
+        SnsCanisterIds, SnsCanisterType, SnsWasm, SnsWasmError,
+    },
+    sns_wasm::SNS_CANISTER_COUNT_AT_INSTALL,
 };
-use ic_sns_wasm::sns_wasm::SNS_CANISTER_COUNT_AT_INSTALL;
 use ic_test_utilities::{
     types::ids::canister_test_id, universal_canister::UNIVERSAL_CANISTER_WASM,
 };
@@ -500,6 +503,7 @@ fn test_deploy_sns_and_transfer_dapps() {
         }),
         ..SnsInitPayload::with_valid_values_for_testing()
     };
+    let proposal_id = *sns_init_payload.nns_proposal_id.as_ref().unwrap();
 
     // Call the code under test
     let response = sns_wasm::deploy_new_sns(
@@ -561,4 +565,22 @@ fn test_deploy_sns_and_transfer_dapps() {
     } = response.dapps.first().unwrap();
 
     assert_eq!(actual_dapp_canister, Some(dapp_canister.get()));
+
+    // Make sure the recorded DeployedSns matches the ProposalId in the SnsInitPayload
+    let deployed_sns = get_deployed_sns_by_proposal_id_unchecked(&machine, proposal_id);
+
+    assert_eq!(
+        deployed_sns.governance_canister_id,
+        Some(governance_canister_id.get())
+    );
+    assert_eq!(deployed_sns.root_canister_id, Some(root_canister_id.get()));
+    assert_eq!(deployed_sns.swap_canister_id, Some(swap_canister_id.get()));
+    assert_eq!(
+        deployed_sns.ledger_canister_id,
+        Some(ledger_canister_id.get())
+    );
+    assert_eq!(
+        deployed_sns.index_canister_id,
+        Some(index_canister_id.get())
+    );
 }

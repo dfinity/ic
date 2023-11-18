@@ -227,7 +227,9 @@ impl<'a> Module<'a> {
                         .collect::<Result<_, _>>()?;
                 }
                 Payload::TypeSection(type_section_reader) => {
-                    types = type_section_reader.into_iter().collect::<Result<_, _>>()?;
+                    for rec_group in type_section_reader.into_iter() {
+                        types.extend(rec_group?.into_types());
+                    }
                 }
                 Payload::DataSection(data_section_reader) => {
                     data = data_section_reader

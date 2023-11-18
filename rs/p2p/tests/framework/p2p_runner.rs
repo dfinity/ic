@@ -287,7 +287,6 @@ pub fn spawn_replicas_as_threads(
 
     let mut join_handles = Vec::new();
     for i in 0..num_replicas {
-        let test = test;
         let test = Box::new(test);
         let replica_log = log.clone();
         let transport_hub = hub_access.lock();

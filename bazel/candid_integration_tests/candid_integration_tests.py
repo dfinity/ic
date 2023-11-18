@@ -64,7 +64,7 @@ def test_remove_variants_check_fails():
 
     res = run_example_did_git_test()
 
-    error_message = "Method do_stuff: func (Request) -> () is not a subtype of func (Request/1) -> ()'"
+    error_message = "Method do_stuff: func (Request) -> () is not a subtype of func (Request/1) -> ()"
 
     assert error_message in res.stderr.decode("utf-8")
     assert res.returncode == 101
@@ -97,7 +97,7 @@ def test_remove_required_field_from_input_check_fails():
 
     res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
-    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)'"
+    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)"
     assert error_message in res.stderr.decode("utf-8")
     assert res.returncode == 101
     assert "running also-reverse check" in res.stdout.decode("utf-8")
@@ -112,7 +112,7 @@ def test_remove_required_field_from_output_check_fails():
 
     res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
-    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)'"
+    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)"
     assert error_message in res.stderr.decode("utf-8")
     assert res.returncode == 101
 
@@ -126,7 +126,7 @@ def test_adding_a_required_field_to_input_check_fails():
 
     res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
-    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)'"
+    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)"
     assert error_message in res.stderr.decode("utf-8")
     assert res.returncode == 101
 
@@ -164,7 +164,7 @@ def test_override_didc_checks_failing_check_succeeds():
 
     res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
-    error_message = "Method do_stuff: func (Request) -> () is not a subtype of func (Request/1) -> ()'"
+    error_message = "Method do_stuff: func (Request) -> () is not a subtype of func (Request/1) -> ()"
     assert error_message in res.stderr.decode("utf-8")
     assert res.returncode == 101
 

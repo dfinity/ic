@@ -13,8 +13,8 @@ use crate::{
 };
 use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{

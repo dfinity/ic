@@ -134,7 +134,7 @@ fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
     self_tls_cert: TlsPublicKeyCert,
     ed25519_signing_key: CspServerEd25519SigningKey,
 ) -> ServerConfig {
-    let config = ServerConfig::builder()
+    ServerConfig::builder()
         .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&TLS13])
@@ -143,9 +143,7 @@ fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
         .with_cert_resolver(static_cert_resolver(
             certified_key(self_tls_cert, ed25519_signing_key),
             SignatureScheme::ED25519,
-        ));
-
-    config
+        ))
 }
 
 async fn accept_connection(

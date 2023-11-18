@@ -1,7 +1,7 @@
 use crate::{
-    neuron_store::{get_neuron_subaccount, NeuronStore, NeuronStoreError},
-    pb::v1::{Neuron, Topic},
-    storage::{with_stable_neuron_indexes, with_stable_neuron_store, Signed32},
+    neuron_store::{get_neuron_subaccount, NeuronStore},
+    pb::v1::Topic,
+    storage::{with_stable_neuron_indexes, Signed32},
 };
 
 use candid::{CandidType, Deserialize};
@@ -231,7 +231,7 @@ impl ValidationInProgress {
             KnownNeuronIndexValidator,
         >::new()));
 
-        tasks.push_back(Box::new(NeuronCopyValidator::new(
+        tasks.push_back(Box::new(StableNeuronStoreValidator::new(
             INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
         )));
 
@@ -272,7 +272,7 @@ impl Issues {
             let issue_group = self
                 .issue_groups_map
                 .entry(discriminant(&issue))
-                .or_insert(IssueGroup::default());
+                .or_default();
             issue_group.issues_count += 1;
             if issue_group.example_issues.len() < MAX_EXAMPLE_ISSUES_COUNT {
                 issue_group.example_issues.push(issue);
@@ -641,54 +641,22 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
     }
 }
 
-/// A validator for all neuron copies for times when they exists in both stable storage
-/// and heap.  
-/// This validator will not be needed once neurons are only stored in one or the other.
-struct NeuronCopyValidator {
+/// A validator to validate that all neurons in stable storage are inactive.
+struct StableNeuronStoreValidator {
     next_neuron_id: Option<NeuronId>,
     chunk_size: usize,
 }
 
-impl NeuronCopyValidator {
+impl StableNeuronStoreValidator {
     fn new(chunk_size: usize) -> Self {
         Self {
             next_neuron_id: Some(NeuronId { id: 0 }),
             chunk_size,
         }
     }
-
-    /// Validate that the neuron in stable storage and heap match exactly.
-    fn validate_neuron_matches_in_both_stores(
-        stable_neuron: Neuron,
-        neuron_store: &NeuronStore,
-    ) -> Option<ValidationIssue> {
-        let neuron_id = match stable_neuron.id.as_ref() {
-            // Should be impossible, as stable_neuron should be coming straight from the store.
-            None => {
-                return Some(ValidationIssue::NeuronStoreError(
-                    NeuronStoreError::NeuronIdIsNone.to_string(),
-                ));
-            }
-            Some(id) => id,
-        };
-        match neuron_store.with_neuron(neuron_id, |neuron| {
-            if *neuron != stable_neuron {
-                Some(ValidationIssue::NeuronCopyValueNotMatch(
-                    stable_neuron.id.unwrap(),
-                ))
-            } else {
-                None
-            }
-        }) {
-            Ok(maybe_issue) => maybe_issue,
-            Err(neuron_store_error) => Some(ValidationIssue::NeuronStoreError(
-                neuron_store_error.to_string(),
-            )),
-        }
-    }
 }
 
-impl ValidationTask for NeuronCopyValidator {
+impl ValidationTask for StableNeuronStoreValidator {
     fn is_done(&self) -> bool {
         self.next_neuron_id.is_none()
     }
@@ -699,23 +667,14 @@ impl ValidationTask for NeuronCopyValidator {
             None => return vec![],
         };
 
-        with_stable_neuron_store(|stable_neuron_store| {
-            stable_neuron_store
-                .range_neurons(next_neuron_id..)
-                .take(self.chunk_size)
-                .flat_map(|neuron| {
-                    let next_neuron_id = NeuronId {
-                        id: neuron.id.unwrap().id + 1,
-                    };
+        let (invalid_neuron_ids, neuron_id_for_next_batch) = neuron_store
+            .batch_validate_neurons_in_stable_store_are_inactive(next_neuron_id, self.chunk_size);
 
-                    let result = Self::validate_neuron_matches_in_both_stores(neuron, neuron_store);
-
-                    self.next_neuron_id = Some(next_neuron_id);
-
-                    result
-                })
-                .collect()
-        })
+        self.next_neuron_id = neuron_id_for_next_batch;
+        invalid_neuron_ids
+            .into_iter()
+            .map(|neuron_id| ValidationIssue::NeuronCopyValueNotMatch(neuron_id))
+            .collect()
     }
 }
 
@@ -729,7 +688,7 @@ mod tests {
     use maplit::{btreemap, hashmap};
 
     use crate::{
-        pb::v1::{neuron::Followees, KnownNeuronData, Neuron},
+        pb::v1::{neuron::DissolveState, neuron::Followees, KnownNeuronData, Neuron},
         storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
     };
 
@@ -815,102 +774,6 @@ mod tests {
     }
 
     #[test]
-    fn test_neuron_copy_validation_when_valid() {
-        let idle_neurons = (0..8).map(|_| next_test_neuron()).collect::<Vec<_>>();
-
-        let mut btree_map: BTreeMap<u64, Neuron> = idle_neurons
-            .clone()
-            .into_iter()
-            .map(|neuron| (neuron.id.unwrap().id, neuron))
-            .collect();
-
-        let non_idle = Neuron {
-            cached_neuron_stake_e8s: 1000,
-            ..next_test_neuron()
-        };
-        btree_map.insert(non_idle.id.unwrap().id, non_idle);
-
-        let neuron_store = NeuronStore::new(btree_map);
-
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            for neuron in idle_neurons {
-                stable_neuron_store.create(neuron).expect("Couldn't create");
-            }
-        });
-
-        let mut validator = NeuronCopyValidator::new(2);
-
-        for _ in 0..4 {
-            let defects = validator.validate_next_chunk(&neuron_store);
-            assert_eq!(defects, vec![]);
-            assert!(!validator.is_done());
-        }
-        let defects = validator.validate_next_chunk(&neuron_store);
-        assert_eq!(defects, vec![]);
-        assert!(validator.is_done());
-    }
-
-    #[test]
-    fn test_neuron_copy_validation_when_bad_neurons() {
-        let idle_neurons = (0..8).map(|_| next_test_neuron()).collect::<Vec<_>>();
-
-        let mut btree_map: BTreeMap<u64, Neuron> = idle_neurons
-            .clone()
-            .into_iter()
-            .map(|neuron| (neuron.id.unwrap().id, neuron))
-            .collect();
-
-        let non_idle = Neuron {
-            cached_neuron_stake_e8s: 1000,
-            ..next_test_neuron()
-        };
-        btree_map.insert(non_idle.id.unwrap().id, non_idle);
-
-        // Create some defects (mismatches)
-        btree_map.get_mut(&1).unwrap().cached_neuron_stake_e8s += 1;
-        btree_map.get_mut(&2).unwrap().cached_neuron_stake_e8s += 1;
-        btree_map.remove(&3);
-
-        let neuron_store = NeuronStore::new(btree_map);
-
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            for neuron in idle_neurons {
-                stable_neuron_store.create(neuron).expect("Couldn't create");
-            }
-        });
-
-        let mut validator = NeuronCopyValidator::new(2);
-
-        // Our first 2 entries should be no bueno
-        let defects = validator.validate_next_chunk(&neuron_store);
-        assert_eq!(
-            defects,
-            vec![
-                ValidationIssue::NeuronCopyValueNotMatch(NeuronId { id: 1 }),
-                ValidationIssue::NeuronCopyValueNotMatch(NeuronId { id: 2 })
-            ]
-        );
-        // Our 3rd entry is missing from heap entirely
-        let defects = validator.validate_next_chunk(&neuron_store);
-        assert_eq!(
-            defects,
-            vec![ValidationIssue::NeuronStoreError(
-                "Neuron not found: NeuronId { id: 3 }".to_string()
-            ),]
-        );
-
-        // No further issues should be found
-        for _ in 0..2 {
-            let defects = validator.validate_next_chunk(&neuron_store);
-            assert_eq!(defects, vec![]);
-            assert!(!validator.is_done());
-        }
-        let defects = validator.validate_next_chunk(&neuron_store);
-        assert_eq!(defects, vec![]);
-        assert!(validator.is_done());
-    }
-
-    #[test]
     fn test_validator_valid() {
         // Both followees and principals (controller is a hot key) have duplicates since we do allow
         // it at this time.
@@ -948,9 +811,23 @@ mod tests {
     fn test_validator_invalid_issues() {
         // Step 1: Cause as many issues as possible by having an inactive neuron (without adding it
         // to stable_neuron_store, and remove the only neuron from indexes).
-        let neuron = next_test_neuron();
+        let neuron = Neuron {
+            cached_neuron_stake_e8s: 0,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
+            ..next_test_neuron()
+        };
         let neuron_store = NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron.clone()});
+        // Remove the neuron from indexes to cause issues with indexes validation.
         with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(&neuron)).unwrap();
+        // Make the neuron active while it's still in stable storage, to cause the issue with stable neuron store validation.
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store
+                .update(Neuron {
+                    cached_neuron_stake_e8s: 1,
+                    ..neuron
+                })
+                .unwrap()
+        });
 
         // Step 2: Validate and get validation summary.
         let mut validator = NeuronDataValidator::new();
@@ -962,7 +839,7 @@ mod tests {
 
         // Step 3: Check validation summary for current issues.
         let current_issue_groups = summary.current_issues_summary.unwrap().issue_groups;
-        assert_eq!(current_issue_groups.len(), 8);
+        assert_eq!(current_issue_groups.len(), 9);
         assert!(current_issue_groups
             .iter()
             .any(|issue_group| issue_group.issues_count == 1
@@ -1023,6 +900,11 @@ mod tests {
                     issue_group.example_issues[0],
                     ValidationIssue::KnownNeuronMissingFromIndex { .. }
                 )));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && issue_group.example_issues[0]
+                    == ValidationIssue::NeuronCopyValueNotMatch(neuron.id.unwrap())));
 
         // Step 4: check that previous issues is empty and no running validation.
         assert_eq!(summary.previous_issues_summary, None);
@@ -1036,7 +918,7 @@ mod tests {
         let summary = validator.summary();
         assert_eq!(
             summary.previous_issues_summary.unwrap().issue_groups.len(),
-            8
+            9
         );
         assert_eq!(summary.current_validation_started_time_seconds, Some(now));
     }

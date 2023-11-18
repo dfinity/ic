@@ -19,7 +19,7 @@ use ic_nervous_system_clients::{
     update_settings::{CanisterSettings, UpdateSettings},
 };
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
-use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
+use std::{cell::RefCell, collections::BTreeSet, fmt::Write, thread::LocalKey};
 
 pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
@@ -280,10 +280,13 @@ impl SnsRootCanister {
         match result {
             Ok(response) => response,
             Err(errors) => {
-                let message = errors
-                    .into_iter()
-                    .map(|(principal, reason)| format!("\n{principal}: {reason}"))
-                    .collect::<String>();
+                let message =
+                    errors
+                        .into_iter()
+                        .fold(String::new(), |mut out, (principal, reason)| {
+                            let _ = write!(out, "\n{principal}: {reason}");
+                            out
+                        });
                 panic!("Registering dapp canisters failed. {message}");
             }
         }
@@ -2281,7 +2284,7 @@ mod tests {
             static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
-        let expected_archive_canister_ids = vec![
+        let expected_archive_canister_ids = [
             CanisterId::from_u64(99),
             CanisterId::from_u64(100),
             CanisterId::from_u64(101),
@@ -2365,8 +2368,7 @@ mod tests {
             static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
-        let expected_archive_canister_ids =
-            vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
+        let expected_archive_canister_ids = [CanisterId::from_u64(99), CanisterId::from_u64(100)];
 
         let ledger_canister_client = MockLedgerCanisterClient::new(vec![
             LedgerCanisterClientCall::Archives {

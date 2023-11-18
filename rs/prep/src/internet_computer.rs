@@ -194,7 +194,7 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
             node_provider_principal_id: item
                 .node_provider_principal_id
                 .map(|x| x.to_vec())
-                .unwrap_or_else(Vec::new),
+                .unwrap_or_default(),
             dc_id: item.dc_id.to_lowercase(),
             rewardable_nodes: item.rewardable_nodes,
             ipv6: item.ipv6,

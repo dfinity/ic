@@ -173,7 +173,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
             .expect("The key should be there initially");
 
         // Call retain, keeping the threshold key:
-        let active_key_ids: BTreeSet<KeyId> = vec![internal_public_coefficients.clone()]
+        let active_key_ids: BTreeSet<KeyId> = [internal_public_coefficients.clone()]
             .iter()
             .map(KeyId::from)
             .collect();
@@ -199,7 +199,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
             different_public_coefficients != internal_public_coefficients,
             "Public coefficients should be different - the different one has no entries after all!"
         );
-        let active_key_ids = vec![different_public_coefficients]
+        let active_key_ids = [different_public_coefficients]
             .iter()
             .map(KeyId::from)
             .collect();

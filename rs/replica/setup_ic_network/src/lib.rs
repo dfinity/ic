@@ -501,6 +501,7 @@ fn start_consensus(
     ));
 
     let ingress_manager = Arc::new(IngressManager::new(
+        time_source.clone(),
         consensus_time,
         ingress_history_reader,
         artifact_pools.ingress_pool.clone(),
@@ -778,7 +779,6 @@ fn start_consensus(
             send_advert,
             ecdsa::EcdsaImpl::new(
                 node_id,
-                subnet_id,
                 Arc::clone(&consensus_block_cache),
                 Arc::clone(&consensus_crypto),
                 metrics_registry.clone(),

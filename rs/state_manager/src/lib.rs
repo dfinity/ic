@@ -165,7 +165,6 @@ pub struct StateSyncMetrics {
 
 #[derive(Clone)]
 pub struct CheckpointMetrics {
-    log: ReplicaLogger,
     make_checkpoint_step_duration: HistogramVec,
     load_checkpoint_step_duration: HistogramVec,
     load_canister_step_duration: HistogramVec,
@@ -173,6 +172,7 @@ pub struct CheckpointMetrics {
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
     page_map_flush_skips: IntCounter,
+    log: ReplicaLogger,
 }
 
 impl CheckpointMetrics {
@@ -221,7 +221,6 @@ impl CheckpointMetrics {
         );
 
         Self {
-            log: replica_logger,
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
             load_canister_step_duration,
@@ -229,6 +228,7 @@ impl CheckpointMetrics {
             tip_handler_request_duration,
             page_map_flushes,
             page_map_flush_skips,
+            log: replica_logger,
         }
     }
 }
@@ -2096,7 +2096,7 @@ impl StateManagerImpl {
                 *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
             })
             .chain(std::iter::once(latest_certified_height))
-            .chain(latest_manifest_height.into_iter())
+            .chain(latest_manifest_height)
             .collect();
 
         // Send object to deallocation thread if it has capacity.

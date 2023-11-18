@@ -2830,7 +2830,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .rewardable_nodes
             .as_ref()
             .map(|s| parse_rewardable_nodes(s))
-            .unwrap_or_else(BTreeMap::new);
+            .unwrap_or_default();
 
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
@@ -2905,7 +2905,7 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
             .rewardable_nodes
             .as_ref()
             .map(|s| parse_rewardable_nodes(s))
-            .unwrap_or_else(BTreeMap::new);
+            .unwrap_or_default();
 
         UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(self.node_operator_id),
@@ -4346,9 +4346,7 @@ async fn get_firewall_rules_from_registry(
         .get_value(make_firewall_rules_record_key(scope).into_bytes(), None)
         .await;
 
-    if registry_answer.is_ok() {
-        let (bytes, _) = registry_answer.unwrap();
-
+    if let Ok((bytes, _)) = registry_answer {
         let ruleset = deserialize_registry_value::<FirewallRuleSet>(Ok(Some(bytes)))
             .unwrap()
             .unwrap();

@@ -48,7 +48,7 @@ use crate::{
     core::MAX_REQUEST_BODY_SIZE,
     http::{read_streaming_body, reqwest_error_infer, HttpClient},
     persist::Routes,
-    snapshot::Node,
+    snapshot::{Node, RegistrySnapshot},
 };
 
 // TODO which one to use?
@@ -298,7 +298,7 @@ pub trait Health: Sync + Send {
 
 #[async_trait]
 pub trait RootKey: Sync + Send {
-    async fn root_key(&self) -> Vec<u8>;
+    async fn root_key(&self) -> Option<Vec<u8>>;
 }
 
 // Router that helps handlers do their job by looking up in routing table
@@ -307,19 +307,19 @@ pub trait RootKey: Sync + Send {
 pub struct ProxyRouter {
     http_client: Arc<dyn HttpClient>,
     published_routes: Arc<ArcSwapOption<Routes>>,
-    root_key: Vec<u8>,
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl ProxyRouter {
     pub fn new(
         http_client: Arc<dyn HttpClient>,
         published_routes: Arc<ArcSwapOption<Routes>>,
-        root_key: Vec<u8>,
+        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     ) -> Self {
         Self {
             http_client,
             published_routes,
-            root_key,
+            published_registry_snapshot,
         }
     }
 }
@@ -389,8 +389,10 @@ impl Lookup for ProxyRouter {
 
 #[async_trait]
 impl RootKey for ProxyRouter {
-    async fn root_key(&self) -> Vec<u8> {
-        self.root_key.clone()
+    async fn root_key(&self) -> Option<Vec<u8>> {
+        self.published_registry_snapshot
+            .load_full()
+            .map(|x| x.nns_public_key.clone())
     }
 }
 
@@ -399,9 +401,7 @@ impl Health for ProxyRouter {
     async fn health(&self) -> ReplicaHealthStatus {
         // Return healthy state if we have at least one healthy replica node
         // TODO increase threshold? change logic?
-        let rt = self.published_routes.load_full();
-
-        match rt {
+        match self.published_routes.load_full() {
             Some(rt) => {
                 if rt.node_count > 0 {
                     ReplicaHealthStatus::Healthy
@@ -676,9 +676,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
 
 // Handler: emit an HTTP status code that signals the service's state
 pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {
-    let health = h.health().await;
-
-    if health == ReplicaHealthStatus::Healthy {
+    if h.health().await == ReplicaHealthStatus::Healthy {
         StatusCode::NO_CONTENT
     } else {
         StatusCode::SERVICE_UNAVAILABLE
@@ -693,7 +691,7 @@ pub async fn status(
 
     let status = HttpStatusResponse {
         ic_api_version: IC_API_VERSION.to_string(),
-        root_key: Some(rk.root_key().await.into()),
+        root_key: rk.root_key().await.map(|x| x.into()),
         impl_version: None,
         impl_hash: None,
         replica_health_status: Some(health),
@@ -726,7 +724,6 @@ pub async fn handle_call(
     request: Request<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Proxy the request
-    // All variables are defined if we got here, otherwise upper layers would refuse request earlier
     let resp = p
         .proxy(ctx.request_type, request, node, canister_id)
         .await?;

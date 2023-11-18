@@ -52,8 +52,8 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/validator",
     "@crate_index//:hex",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:tokio-test",
 ]
 

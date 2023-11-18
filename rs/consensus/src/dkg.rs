@@ -1257,7 +1257,7 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
             // Group all unvalidated dealings by dealer.
             .fold(BTreeMap::new(), |mut map, dealing| {
                 let key = (dealing.signature.signer, dealing.content.dkg_id);
-                let dealings = map.entry(key).or_insert_with(Vec::new);
+                let dealings: &mut Vec<_> = map.entry(key).or_default();
                 dealings.push(dealing);
                 processed += 1;
                 map

@@ -68,6 +68,6 @@ rust_test(
         "@crate_index//:hex",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )

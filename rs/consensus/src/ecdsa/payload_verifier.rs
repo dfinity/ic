@@ -111,13 +111,6 @@ impl From<TransientError> for EcdsaValidationError {
     }
 }
 
-fn from_registry_error(err: RegistryClientError) -> EcdsaValidationError {
-    match err {
-        RegistryClientError::DecodeError { .. } => PermanentError::RegistryClientError(err).into(),
-        _ => TransientError::RegistryClientError(err).into(),
-    }
-}
-
 impl From<InvalidChainCacheError> for PermanentError {
     fn from(err: InvalidChainCacheError) -> Self {
         PermanentError::InvalidChainCacheError(err)

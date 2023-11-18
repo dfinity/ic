@@ -14,6 +14,7 @@ use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_eth_guard;
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
+use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Reimbursed};
@@ -27,6 +28,7 @@ use ic_cketh_minter::{
     SCRAPPING_ETH_LOGS_INTERVAL,
 };
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use num_traits::cast::ToPrimitive;
 use std::str::FromStr;
@@ -184,7 +186,9 @@ async fn withdraw_eth(
             to: ic_cdk::id().into(),
             amount: Nat::from(amount),
             fee: None,
-            memo: Some(destination.into()),
+            memo: Some(Memo::from(BurnMemo::Convert {
+                to_address: destination,
+            })),
             created_at_time: None, // We don't set this field to disable transaction deduplication
                                    // which is unnecessary in canister-to-canister calls.
         })

@@ -16,6 +16,8 @@ pub struct StableCanisterState {
     pub access_controls_enabled: bool,
     #[prost(message, repeated, tag = "6")]
     pub allowed_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(btree_map = "uint64, uint64", tag = "7")]
+    pub nns_proposal_to_deployed_sns: ::prost::alloc::collections::BTreeMap<u64, u64>,
 }
 /// Details the offset and size of a WASM binary in stable memory and the hash of this binary.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
@@ -441,7 +443,7 @@ pub struct UpdateSnsSubnetListResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSnsSubnetIdsRequest {}
-/// The request type of get_sns_subnet_ids. Used to request the list of SNS subnet IDs that SNS-WASM will deploy
+/// The response type of get_sns_subnet_ids. Used to request the list of SNS subnet IDs that SNS-WASM will deploy
 /// SNS instances to.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -449,6 +451,41 @@ pub struct GetSnsSubnetIdsRequest {}
 pub struct GetSnsSubnetIdsResponse {
     #[prost(message, repeated, tag = "1")]
     pub sns_subnet_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
+/// The request type of get_deployed_sns_by_proposal_id. Used to get a `DeployedSns` by the ProposalId in the
+/// NNS that created it.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDeployedSnsByProposalIdRequest {
+    #[prost(uint64, tag = "1")]
+    pub proposal_id: u64,
+}
+/// The response type of get_deployed_sns_by_proposal_id. Used to get a `DeployedSns` by the ProposalId in the
+/// NNS that created it.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDeployedSnsByProposalIdResponse {
+    #[prost(
+        oneof = "get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult",
+        tags = "1, 2"
+    )]
+    pub get_deployed_sns_by_proposal_id_result: ::core::option::Option<
+        get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult,
+    >,
+}
+/// Nested message and enum types in `GetDeployedSnsByProposalIdResponse`.
+pub mod get_deployed_sns_by_proposal_id_response {
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum GetDeployedSnsByProposalIdResult {
+        #[prost(message, tag = "1")]
+        Error(super::SnsWasmError),
+        #[prost(message, tag = "2")]
+        DeployedSns(super::DeployedSns),
+    }
 }
 /// The type of canister a particular WASM is intended to be installed on.
 #[derive(

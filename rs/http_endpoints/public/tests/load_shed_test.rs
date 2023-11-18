@@ -3,13 +3,13 @@ pub mod common;
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, dummy_timestamp, get_free_localhost_socket_addr,
-    start_http_endpoint, wait_for_status_healthy,
+    default_read_certified_state, get_free_localhost_socket_addr, start_http_endpoint,
+    wait_for_status_healthy,
 };
 use async_trait::async_trait;
 use hyper::{Body, Client, Method, Request, StatusCode};
 use ic_agent::{
-    agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder},
+    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, QueryBuilder},
     agent_error::HttpErrorPayload,
     export::Principal,
     hash_tree::Label,
@@ -18,7 +18,10 @@ use ic_agent::{
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, Pprof, PprofCollector};
-use ic_types::messages::{Blob, HttpQueryResponse, HttpQueryResponseReply};
+use ic_types::{
+    messages::{Blob, HttpQueryResponse, HttpQueryResponseReply},
+    time::current_time,
+};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -62,6 +65,7 @@ fn test_load_shedding_query() {
 
     let ok_agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_verify_query_signatures(false)
         .build()
         .unwrap();
 
@@ -103,7 +107,7 @@ fn test_load_shedding_query() {
                     arg: Blob("success".into()),
                 },
             },
-            dummy_timestamp(),
+            current_time(),
         )))
     });
 

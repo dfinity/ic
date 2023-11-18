@@ -462,12 +462,10 @@ impl Player {
 
         let pool_reader = &PoolReader::new(consensus_pool);
         let finalized_height = pool_reader.get_finalized_height();
-        let target_height = Some(
-            finalized_height.min(
-                self.replay_target_height
-                    .map(Height::from)
-                    .unwrap_or_else(|| finalized_height),
-            ),
+        let target_height = finalized_height.min(
+            self.replay_target_height
+                .map(Height::from)
+                .unwrap_or_else(|| finalized_height),
         );
 
         // Validate artifacts in temporary pool
@@ -475,7 +473,7 @@ impl Player {
         invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
             consensus_pool,
             self.get_latest_cup_proto(),
-            target_height.unwrap(),
+            target_height,
         )?);
         if !invalid_artifacts.is_empty() {
             println!("Invalid artifacts:");
@@ -486,7 +484,7 @@ impl Player {
             self.message_routing.as_ref(),
             pool_reader,
             membership,
-            target_height,
+            Some(target_height),
         );
         self.wait_for_state(last_batch_height);
 
@@ -514,7 +512,7 @@ impl Player {
         validator: &ReplayValidator,
     ) -> bool {
         print!("Redelivering certifications:");
-        let mut cert_heights = Vec::from_iter(certification_pool.certified_heights().into_iter());
+        let mut cert_heights = Vec::from_iter(certification_pool.certified_heights());
         cert_heights.sort();
         for (i, &h) in cert_heights.iter().enumerate() {
             if i > 0 && cert_heights[i - 1].increment() != h {

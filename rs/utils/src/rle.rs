@@ -96,7 +96,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic(expected = "left: `8×01 4×02 4×03`,\n right: `8×01 4×02 3×03 1×04`")]
+    #[should_panic(expected = "left: 8×01 4×02 4×03\n right: 8×01 4×02 3×03 1×04")]
     fn test_debug_blob() {
         assert_eq!(
             DebugBlob(&[1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]),

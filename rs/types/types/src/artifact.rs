@@ -278,6 +278,7 @@ pub trait ArtifactKind: Sized {
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum UnvalidatedArtifactMutation<Artifact: ArtifactKind> {
     Insert((Artifact::Message, NodeId)),
     Remove(Artifact::Id),

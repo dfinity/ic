@@ -8,10 +8,9 @@ use crate::numeric::LogIndex;
 use crate::state::transactions::ReimbursementRequest;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use minicbor::{Decode, Encode, Encoder};
-use serde_bytes::ByteBuf;
 
 /// Encodes minter memo as a binary blob.
-pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
+fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
     let mut encoder = Encoder::new(Vec::new());
     encoder.encode(t).expect("minicbor encoding failed");
     encoder.into_writer()
@@ -42,6 +41,12 @@ pub enum MintMemo {
     },
 }
 
+impl From<MintMemo> for Memo {
+    fn from(value: MintMemo) -> Self {
+        Memo::from(encode(&value))
+    }
+}
+
 #[derive(Decode, Encode, Debug, Eq, PartialEq)]
 pub enum BurnMemo {
     #[n(0)]
@@ -53,37 +58,29 @@ pub enum BurnMemo {
     },
 }
 
+impl From<BurnMemo> for Memo {
+    fn from(value: BurnMemo) -> Self {
+        Memo::from(encode(&value))
+    }
+}
+
 impl From<ReceivedEthEvent> for Memo {
     fn from(event: ReceivedEthEvent) -> Self {
-        let memo = MintMemo::Convert {
+        Memo::from(MintMemo::Convert {
             from_address: event.from_address,
             tx_hash: event.transaction_hash,
             log_index: event.log_index,
-        };
-        let memo_bytes = encode(&memo);
-        Memo(ByteBuf::from(memo_bytes))
+        })
     }
 }
 
 impl From<ReimbursementRequest> for Memo {
     fn from(reimbursement_request: ReimbursementRequest) -> Self {
-        let memo = MintMemo::Reimburse {
+        Memo::from(MintMemo::Reimburse {
             withdrawal_id: reimbursement_request.withdrawal_id.get(),
             tx_hash: reimbursement_request
                 .transaction_hash
                 .expect("A hash should be set for reimbursement memos."),
-        };
-        let memo_bytes = encode(&memo);
-        Memo(ByteBuf::from(memo_bytes))
-    }
-}
-
-impl From<Address> for Memo {
-    fn from(address: Address) -> Self {
-        let memo = BurnMemo::Convert {
-            to_address: address,
-        };
-        let memo_bytes = encode(&memo);
-        Memo(ByteBuf::from(memo_bytes))
+        })
     }
 }

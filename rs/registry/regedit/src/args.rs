@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use clap::Parser;
-use ic_crypto::threshold_sig_public_key_from_der;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_registry_client::client::RegistryVersion;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use serde_json::Value;

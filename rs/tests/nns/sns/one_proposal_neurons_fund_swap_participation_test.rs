@@ -1,6 +1,5 @@
 use anyhow::Result;
-use ic_nervous_system_common::i2d;
-use ic_nervous_system_proto::pb::v1::Tokens;
+use ic_nervous_system_common::{i2d, E8};
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_sns_swap::pb::v1::GetDerivedStateResponse;
 use ic_tests::driver::group::SystemTestGroup;
@@ -30,55 +29,18 @@ use std::time::Duration;
 // "danger zone" and should modify the SNS to be robust to many more NF neurons.
 const NEURONS_FUND_NUM_PARTICIPANTS: u64 = 1500;
 
+const NEURONS_FUND_TOTAL_MATURITY_EQUIVALENT_ICP_E8S: u64 = 1_000_000 * E8;
+
 fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     const MIN_PARTICIPANTS: u64 = 4;
-    let test_parameters = test_create_service_nervous_system_proposal(MIN_PARTICIPANTS);
-    let test_swap_parameters = test_parameters.swap_parameters.as_ref().unwrap().clone();
-    let neurons_fund_investment = Tokens::from_e8s(
-        NEURONS_FUND_NUM_PARTICIPANTS
-            * test_swap_parameters
-                .minimum_participant_icp
-                .as_ref()
-                .unwrap()
-                .e8s
-                .unwrap(),
-    );
-    let minimum_icp = test_swap_parameters
-        .minimum_icp
-        .unwrap()
-        .checked_add(&neurons_fund_investment);
-    let maximum_icp = test_swap_parameters
-        .maximum_icp
-        .unwrap()
-        .checked_add(&neurons_fund_investment);
-    let maximum_participant_icp = test_swap_parameters
-        .maximum_participant_icp
-        .unwrap()
-        .checked_sub(&neurons_fund_investment);
-    CreateServiceNervousSystem {
-        swap_parameters: Some(
-            ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
-                minimum_icp,
-                maximum_icp,
-                maximum_participant_icp,
-                neurons_fund_investment_icp: Some(neurons_fund_investment),
-                ..test_swap_parameters
-            },
-        ),
-        ..test_parameters
-    }
+    test_create_service_nervous_system_proposal(MIN_PARTICIPANTS)
 }
 
 fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
-    let cf_contribution = create_service_nervous_system_proposal()
-        .swap_parameters
-        .unwrap()
-        .neurons_fund_investment_icp
-        .unwrap()
-        .e8s
-        .unwrap();
-
-    neurons_fund::initial_nns_neurons(cf_contribution, NEURONS_FUND_NUM_PARTICIPANTS)
+    neurons_fund::initial_nns_neurons(
+        NEURONS_FUND_TOTAL_MATURITY_EQUIVALENT_ICP_E8S,
+        NEURONS_FUND_NUM_PARTICIPANTS,
+    )
 }
 
 fn sns_setup_with_one_proposal(env: TestEnv) {

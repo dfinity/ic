@@ -9,6 +9,7 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use rusqlite::{params, Params};
 use rusqlite::{Connection, Statement, ToSql};
 use serde_bytes::ByteBuf;
+use std::str::FromStr;
 
 type Tokens = U64;
 
@@ -175,9 +176,9 @@ pub fn store_blocks(
                 spender_principal.map(|x| x.as_slice().to_vec()),
                 spender_subaccount,
                 transaction.memo.map(|x| x.0.as_slice().to_vec()),
-                amount.to_u64(),
-                expected_allowance.map(Tokens::to_u64),
-                fee.map(Tokens::to_u64),
+                amount.to_u64().to_string(),
+                expected_allowance.map(|ea| ea.to_u64().to_string()),
+                fee.map(|fee| fee.to_u64().to_string()),
                 transaction.created_at_time,
                 approval_expires_at
             ],
@@ -258,10 +259,7 @@ pub fn get_blockchain_gaps(
 
     // Both block vectors are ordered and since a gap always has a upper and lower end, both vectors will have the same length.
     // If U is the vector of upper limits and L of lower limits then the first gap in the blockchain is (L[0],U[0]) the second gap is (L[1],U[1]) ...
-    Ok(lower_gap_limits
-        .into_iter()
-        .zip(upper_gap_limits.into_iter())
-        .collect())
+    Ok(lower_gap_limits.into_iter().zip(upper_gap_limits).collect())
 }
 
 // Returns a icrc1 Transaction if the block index exists in the database, else returns None.
@@ -367,9 +365,9 @@ where
             row.get(7).map(opt_bytes_to_principal)?,
             row.get(8)?,
             row.get(9).map(opt_bytes_to_memo)?,
-            row.get(10)?,
-            row.get::<usize, Option<u64>>(11)?,
-            row.get::<usize, Option<u64>>(12)?,
+            row.get::<usize, String>(10)?,
+            row.get::<usize, Option<String>>(11)?,
+            row.get::<usize, Option<String>>(12)?,
             row.get::<usize, Option<u64>>(13)?,
             row.get::<usize, Option<u64>>(14)?,
         ))
@@ -385,12 +383,23 @@ where
             maybe_spender_principal,
             spender_subaccount,
             memo,
-            amount,
-            expected_allowance,
-            fee,
+            amount_str,
+            expected_allowance_str,
+            fee_str,
             transaction_created_at_time,
             approval_expires_at,
         ) = row?;
+        let amount = u64::from_str(&amount_str)?;
+        let expected_allowance = if let Some(expected_allowance_str) = expected_allowance_str {
+            Some(u64::from_str(&expected_allowance_str)?)
+        } else {
+            None
+        };
+        let fee = if let Some(fee_str) = fee_str {
+            Some(u64::from_str(&fee_str)?)
+        } else {
+            None
+        };
         result.push(Transaction {
             operation: match operation_type.as_str() {
                 "mint" => Operation::Mint {

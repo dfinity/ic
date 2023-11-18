@@ -474,7 +474,7 @@ impl CertifierImpl {
                         .filter_map(move |share| {
                             self.validate_share(certification_pool, hash, share)
                         })
-                        .chain(cert_change_set.into_iter()),
+                        .chain(cert_change_set),
                 )
             })
             .collect()

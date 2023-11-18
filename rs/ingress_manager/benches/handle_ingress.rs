@@ -223,6 +223,7 @@ where
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
             let runtime = tokio::runtime::Runtime::new().unwrap();
             let mut ingress_manager = IngressManager::new(
+                time_source.clone(),
                 Arc::new(consensus_time),
                 Box::new(ingress_hist_reader),
                 ingress_pool,

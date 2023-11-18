@@ -22,7 +22,6 @@ rust_library(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:openssl",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:sha2",

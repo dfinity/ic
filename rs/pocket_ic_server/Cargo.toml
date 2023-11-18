@@ -17,7 +17,6 @@ ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-config = { path = "../config" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-crypto = { path = "../crypto" }
 ic-types = { path = "../types/types" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-cdk = { workspace = true }

@@ -98,11 +98,12 @@ where
             metrics_registry.clone(),
             no_op_logger(),
         )));
-
+        let time_source = FastForwardTimeSource::new();
         test(
-            FastForwardTimeSource::new(),
+            time_source.clone(),
             ingress_pool.clone(),
             &mut IngressManager::new(
+                time_source,
                 consensus_time,
                 ingress_hist_reader,
                 ingress_pool,

@@ -32,6 +32,7 @@ message StableCanisterState {
   UpgradePath upgrade_path = 4;
   bool access_controls_enabled = 5;
   repeated ic_base_types.pb.v1.PrincipalId allowed_principals = 6;
+  map<uint64, uint64> nns_proposal_to_deployed_sns = 7;
 }
 
 // Details the offset and size of a WASM binary in stable memory and the hash of this binary.
@@ -240,7 +241,7 @@ message SnsVersion {
 
 // A human readable SnsVersion
 message PrettySnsVersion {
-  string root_wasm_hash =1;
+  string root_wasm_hash = 1;
   string governance_wasm_hash = 2;
   string ledger_wasm_hash = 3;
   string swap_wasm_hash = 4;
@@ -306,8 +307,23 @@ message UpdateSnsSubnetListResponse {
 // SNS instances to.
 message GetSnsSubnetIdsRequest {}
 
-// The request type of get_sns_subnet_ids. Used to request the list of SNS subnet IDs that SNS-WASM will deploy
+// The response type of get_sns_subnet_ids. Used to request the list of SNS subnet IDs that SNS-WASM will deploy
 // SNS instances to.
 message GetSnsSubnetIdsResponse {
   repeated ic_base_types.pb.v1.PrincipalId sns_subnet_ids = 1;
+}
+
+// The request type of get_deployed_sns_by_proposal_id. Used to get a `DeployedSns` by the ProposalId in the
+// NNS that created it.
+message GetDeployedSnsByProposalIdRequest {
+  uint64 proposal_id = 1;
+}
+
+// The response type of get_deployed_sns_by_proposal_id. Used to get a `DeployedSns` by the ProposalId in the
+// NNS that created it.
+message GetDeployedSnsByProposalIdResponse {
+  oneof get_deployed_sns_by_proposal_id_result {
+      SnsWasmError error = 1;
+      DeployedSns deployed_sns = 2;
+    }
 }

@@ -57,8 +57,17 @@ canister_git_version() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    __dfx -q canister --network "$NETWORK" metadata \
-        "$CANISTER_ID" git_commit_id
+    GIT_COMMIT_ID_FROM_METADATA=$(
+        __dfx -q canister --network "$NETWORK" metadata "$CANISTER_ID" git_commit_id
+    )
+    if [ "${GIT_COMMIT_ID_FROM_METADATA}" = "0000000000000000000000000000000000000000" ]; then
+        echo >&2 "Looks like the canister ${CANISTER_ID} was built from the tip of this branch."
+        GIT_COMMIT_ID=$(git rev-parse HEAD)
+        echo >&2 "Taking Git commit ID from the tip of this branch: ${GIT_COMMIT_ID}"
+    else
+        GIT_COMMIT_ID="${GIT_COMMIT_ID_FROM_METADATA}"
+    fi
+    echo -n "${GIT_COMMIT_ID}"
 }
 
 nns_canister_id() {

@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::num::NonZeroU64;
+use std::{collections::BTreeSet, num::NonZeroU64};
 
 const ERROR_TOLERANCE_ICP: Decimal = dec!(0.05);
 
@@ -43,24 +43,53 @@ fn known_values_test() {
 
 #[test]
 fn polynomial_matching_function_viability_test() {
-    for i in 0..64 {
-        let total_maturity_equivalent_icp_e8s = 2_u64.pow(i);
-        println!(
-            "Testing with total_maturity_equivalent_icp_e8s = 2^{} = {}",
-            i, total_maturity_equivalent_icp_e8s,
+    let interesting_u64_values: BTreeSet<u64> = (0..=64)
+        .flat_map(|i| {
+            let pow_of_two: u128 = 2_u128.pow(i);
+            vec![
+                pow_of_two.saturating_sub(42), // ensure we don't always hit (2^N), (2^N)+/-1
+                pow_of_two.saturating_sub(7),  // add even more diverse values
+                pow_of_two - 1,                // this means we also reach `0`
+                pow_of_two,
+                pow_of_two.saturating_add(1),
+                pow_of_two.saturating_add(7), // add even more diverse values
+                pow_of_two.saturating_add(42), // ensure we don't always hit (2^N), (2^N)+/-1
+            ]
+            .into_iter()
+            .map(|x| x.min(u64::MAX as u128) as u64)
+        })
+        .collect();
+    // smoke checks
+    assert!(interesting_u64_values.contains(&0));
+    assert!(interesting_u64_values.contains(&1));
+    assert!(interesting_u64_values.contains(&8));
+    assert!(interesting_u64_values.contains(&43));
+    assert!(interesting_u64_values.contains(&57));
+    assert!(interesting_u64_values.contains(&u64::MAX));
+    // actual tests
+    for total_maturity_equivalent_icp_e8s in interesting_u64_values.iter() {
+        // Check that the function can be created.
+        let f = assert_matches!(PolynomialMatchingFunction::new(*total_maturity_equivalent_icp_e8s), Ok(f) => f);
+        // Check that the function can be serialized / deserialized.
+        let f1: Box<PolynomialMatchingFunction> = assert_matches!(
+            DeserializableFunction::from_repr(&f.serialize()),
+            Ok(f_repr) => f_repr
         );
-        // Test the main constructor.
-        let f = PolynomialMatchingFunction::new(total_maturity_equivalent_icp_e8s).unwrap();
-        // Test serializability.
-        let f_repr = f.serialize();
-        let f1 = PolynomialMatchingFunction::from_repr(&f_repr).unwrap();
-        assert_eq!(format!("{:#?}", f1), format!("{:#?}", f));
+        // Check that serialization / deserialization cycle is idempotent.
+        assert_eq!(*f1, f);
         // Test that the function can be plotted.
         let _plot = f.plot(NonZeroU64::try_from(1_000).unwrap()).unwrap();
+        // Check that the maximum value is defined.
+        let _max_argument_icp_e8s = assert_matches!(f.max_argument_icp_e8s(), Ok(max_argument_icp_e8s) => max_argument_icp_e8s);
         // Test that it is safe to apply the function over a broad range of values.
-        for j in 0..64 {
-            let x_icp_e8s = 2_u64.pow(j);
-            let _y_icp = f.apply_and_rescale_to_icp_e8s(x_icp_e8s).unwrap();
+        for x_icp_e8s in interesting_u64_values.iter() {
+            // Check that the function can be applied to `x_icp_e8s`.
+            let y_icp = assert_matches!(f.apply(*x_icp_e8s), Ok(y_icp) => y_icp);
+            // Check that the result can be rescaled back to ICP e8s.
+            assert_matches!(rescale_to_icp_e8s(y_icp), Ok(_));
+            // Check that the result can be inverted.
+            let x1_icp_e8s = assert_matches!(f.invert(y_icp), Ok(x1_icp_e8s) => x1_icp_e8s);
+            assert_eq!(f.apply(x1_icp_e8s), f.apply(*x_icp_e8s));
         }
     }
 }

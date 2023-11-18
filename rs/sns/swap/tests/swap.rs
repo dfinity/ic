@@ -33,7 +33,9 @@ use ic_nervous_system_common_test_utils::{
     SpyLedger,
 };
 use ic_nervous_system_proto::pb::v1::Countries;
-use ic_neurons_fund::{NonDecreasingFunction, PolynomialMatchingFunction, SerializableFunction};
+use ic_neurons_fund::{
+    InvertibleFunction, NonDecreasingFunction, PolynomialMatchingFunction, SerializableFunction,
+};
 use ic_sns_governance::{
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,

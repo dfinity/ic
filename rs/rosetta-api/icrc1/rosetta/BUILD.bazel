@@ -21,7 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:hex",
     "@crate_index//:serde_cbor",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:lazy_static",
     "@crate_index//:url",
     "@crate_index//:http",

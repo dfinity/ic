@@ -17,6 +17,7 @@ use ic_cketh_minter::endpoints::{
 };
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_cketh_minter::logs::Log;
+use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{
     PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
@@ -26,7 +27,10 @@ use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_state_machine_tests::{Cycles, MessageId, StateMachine, StateMachineBuilder, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc3::transactions::Transaction as LedgerTransaction;
+use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -67,6 +71,20 @@ fn should_deposit_and_withdraw() {
     let cketh = cketh
         .deposit(DepositParams::default())
         .expect_mint()
+        .call_ledger_get_transaction(0)
+        .expect_mint(Mint {
+            amount: EXPECTED_BALANCE.into(),
+            to: Account {
+                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                subaccount: None,
+            },
+            memo: Some(Memo::from(MintMemo::Convert {
+                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
+                tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+                log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
+            })),
+            created_at_time: None,
+        })
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
         .expect_ok(1)
         .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
@@ -78,7 +96,20 @@ fn should_deposit_and_withdraw() {
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
         .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
             transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-        }));
+        }))
+        .call_ledger_get_transaction(withdrawal_id.clone())
+        .expect_burn(Burn {
+            amount: withdrawal_amount.clone(),
+            from: Account {
+                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                subaccount: None,
+            },
+            spender: None,
+            memo: Some(Memo::from(BurnMemo::Convert {
+                to_address: destination.parse().unwrap(),
+            })),
+            created_at_time: None,
+        });
     assert_eq!(cketh.balance_of(caller), Nat::from(0));
 
     let max_fee_per_gas = Nat::from(33003708258u64);
@@ -166,7 +197,7 @@ fn should_not_mint_when_logs_inconsistent() {
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
                 .respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
-                .respond_with(JsonRpcProvider::PublicNode, ankr_logs.clone())
+                .respond_with(JsonRpcProvider::Cloudflare, ankr_logs.clone())
         }))
         .expect_no_mint();
 }
@@ -322,7 +353,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
                 },
             )
             .modify_response(
-                JsonRpcProvider::PublicNode,
+                JsonRpcProvider::Cloudflare,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740744_u64.into()
                 },
@@ -341,6 +372,20 @@ fn should_reimburse() {
     let cketh = cketh
         .deposit(DepositParams::default())
         .expect_mint()
+        .call_ledger_get_transaction(0)
+        .expect_mint(Mint {
+            amount: EXPECTED_BALANCE.into(),
+            to: Account {
+                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                subaccount: None,
+            },
+            memo: Some(Memo::from(MintMemo::Convert {
+                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
+                tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+                log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
+            })),
+            created_at_time: None,
+        })
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
         .expect_ok(1);
 
@@ -366,7 +411,20 @@ fn should_reimburse() {
         )
         .expect_finalized_status(TxFinalizedStatus::PendingReimbursement(EthTransaction {
             transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-        }));
+        }))
+        .call_ledger_get_transaction(withdrawal_id.clone())
+        .expect_burn(Burn {
+            amount: withdrawal_amount.clone(),
+            from: Account {
+                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                subaccount: None,
+            },
+            spender: None,
+            memo: Some(Memo::from(BurnMemo::Convert {
+                to_address: destination.parse().unwrap(),
+            })),
+            created_at_time: None,
+        });
 
     assert_eq!(cketh.balance_of(caller), Nat::from(0));
 
@@ -380,21 +438,37 @@ fn should_reimburse() {
         balance_before_withdrawal.clone() - gas_cost.clone()
     );
 
-    let withdrawal_status = cketh.retrieve_eth_status(&withdrawal_id);
+    let reimbursed_amount = balance_before_withdrawal.clone() - gas_cost.clone();
+    let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1);
+    let failed_tx_hash =
+        "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
     assert_eq!(
-        withdrawal_status,
+        cketh.retrieve_eth_status(&withdrawal_id),
         RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
-            reimbursed_amount: balance_before_withdrawal.clone() - gas_cost.clone(),
-            reimbursed_in_block: withdrawal_id.clone() + 1,
-            transaction_hash: "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5"
-                .to_string(),
+            reimbursed_amount: reimbursed_amount.clone(),
+            reimbursed_in_block: reimbursed_in_block.clone(),
+            transaction_hash: failed_tx_hash.clone()
         })
     );
 
     let max_fee_per_gas = Nat::from(33003708258u64);
     let gas_limit = Nat::from(21_000);
 
-    cketh.assert_has_unique_events_in_order(&vec![
+    cketh
+        .call_ledger_get_transaction(reimbursed_in_block)
+        .expect_mint(Mint {
+            amount: reimbursed_amount,
+            to: Account {
+                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                subaccount: None,
+            },
+            memo: Some(Memo::from(MintMemo::Reimburse {
+                withdrawal_id: withdrawal_id.0.to_u64().unwrap(),
+                tx_hash:  failed_tx_hash.parse().unwrap(),
+            })),
+            created_at_time: None,
+        })
+        .assert_has_unique_events_in_order(&vec![
         EventPayload::AcceptedEthWithdrawalRequest {
             withdrawal_amount: withdrawal_amount.clone(),
             destination: destination.clone(),
@@ -1177,6 +1251,43 @@ impl CkEthSetup {
         }
     }
 
+    pub fn call_ledger_get_transaction<T: Into<Nat>>(
+        self,
+        ledger_index: T,
+    ) -> LedgerTransactionAssert {
+        use icrc_ledger_types::icrc3::transactions::{
+            GetTransactionsRequest, GetTransactionsResponse,
+        };
+
+        let request = GetTransactionsRequest {
+            start: ledger_index.into(),
+            length: 1.into(),
+        };
+        let mut response = Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.ledger_id,
+                        "get_transactions",
+                        Encode!(&request).unwrap()
+                    )
+                    .expect("failed to query get_transactions on the ledger")
+            ),
+            GetTransactionsResponse
+        )
+        .unwrap();
+        assert_eq!(
+            response.transactions.len(),
+            1,
+            "Expected exactly one transaction but got {:?}",
+            response.transactions
+        );
+        LedgerTransactionAssert {
+            setup: self,
+            ledger_transaction: response.transactions.pop().unwrap(),
+        }
+    }
+
     pub fn call_minter_withdraw_eth(
         self,
         from: Principal,
@@ -1451,6 +1562,33 @@ impl DepositFlow {
         (self.params.override_rpc_eth_get_logs)(default_eth_get_logs)
             .build()
             .expect_rpc_calls(&self.setup);
+    }
+}
+
+pub struct LedgerTransactionAssert {
+    setup: CkEthSetup,
+    ledger_transaction: LedgerTransaction,
+}
+
+impl LedgerTransactionAssert {
+    pub fn expect_mint(self, expected: Mint) -> CkEthSetup {
+        assert_eq!(self.ledger_transaction.kind, "mint");
+        assert_eq!(self.ledger_transaction.mint, Some(expected));
+        assert_eq!(self.ledger_transaction.burn, None);
+        assert_eq!(self.ledger_transaction.transfer, None);
+        assert_eq!(self.ledger_transaction.approve, None);
+        // we ignore timestamp
+        self.setup
+    }
+
+    pub fn expect_burn(self, expected: Burn) -> CkEthSetup {
+        assert_eq!(self.ledger_transaction.kind, "burn");
+        assert_eq!(self.ledger_transaction.mint, None);
+        assert_eq!(self.ledger_transaction.burn, Some(expected));
+        assert_eq!(self.ledger_transaction.transfer, None);
+        assert_eq!(self.ledger_transaction.approve, None);
+        // we ignore timestamp
+        self.setup
     }
 }
 
@@ -1898,7 +2036,7 @@ mod mock {
         //order is top-to-bottom and must match order used in production
         Ankr,
         BlockPi,
-        PublicNode,
+        Cloudflare,
     }
 
     impl JsonRpcProvider {
@@ -1906,7 +2044,7 @@ mod mock {
             match self {
                 JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
                 JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
-                JsonRpcProvider::PublicNode => "https://ethereum.publicnode.com",
+                JsonRpcProvider::Cloudflare => "https://cloudflare-eth.com",
             }
         }
     }

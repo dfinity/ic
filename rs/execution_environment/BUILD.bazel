@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
@@ -45,7 +45,7 @@ DEPENDENCIES = [
     "@crate_index//:num-rational",
     "@crate_index//:num-traits",
     "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
@@ -265,4 +265,19 @@ rust_bench(
         "@crate_index//:candid",
         "@crate_index//:serde",
     ] + BENCH_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "fees_and_limits",
+    srcs = ["tools/src/fees_and_limits.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        "//rs/config",
+        "//rs/embedders",
+        "//rs/replicated_state",
+        "//rs/system_api",
+        "//rs/types/types",
+        "@crate_index//:serde_json",
+    ],
 )

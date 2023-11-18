@@ -1,6 +1,6 @@
 use anyhow::Result;
 use core::fmt;
-use openssl::x509::X509;
+use sev::certs::snp;
 use sev::firmware::host::{CertTableEntry, CertType};
 use std::fmt::{Display, Formatter};
 use std::{fs, path::Path};
@@ -13,9 +13,9 @@ static CERTS_DIR: &str = "/var/lib/ic/data";
 
 #[derive(Default, Debug)]
 pub struct Certs {
-    pub ark: Option<X509>,
-    pub ask: Option<X509>,
-    pub vcek: Option<X509>,
+    pub ark: Option<snp::Certificate>,
+    pub ask: Option<snp::Certificate>,
+    pub vcek: Option<snp::Certificate>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -72,11 +72,13 @@ fn is_available() -> Result<(), CertsError> {
     Ok(())
 }
 
-fn read_pem(path: &str) -> Option<X509> {
-    fs::read(path).ok().and_then(|f| X509::from_pem(&f).ok())
+fn read_pem(path: &str) -> Option<snp::Certificate> {
+    fs::read(path)
+        .ok()
+        .and_then(|f| snp::Certificate::from_pem(&f).ok())
 }
 
-pub fn pem_to_der(pem: &Option<X509>) -> Vec<u8> {
+pub fn pem_to_der(pem: &Option<snp::Certificate>) -> Vec<u8> {
     pem.as_ref()
         .and_then(|p| p.to_der().ok())
         .unwrap_or_default()

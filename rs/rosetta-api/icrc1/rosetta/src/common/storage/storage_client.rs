@@ -152,9 +152,9 @@ impl StorageClient {
                 spender_principal BLOB,
                 spender_subaccount BLOB,
                 memo BLOB,
-                amount INTEGER,
-                expected_allowance INTEGER,
-                fee INTEGER,
+                amount TEXT,
+                expected_allowance TEXT,
+                fee TEXT,
                 transaction_created_at_time INTEGER,
                 approval_expires_at INTEGER,
                 PRIMARY KEY(block_idx),
@@ -179,7 +179,7 @@ mod tests {
     use crate::{common::utils::unit_test_utils::create_tmp_dir, Metadata};
     use ic_icrc1::Block;
     use ic_icrc1_test_utils::{
-        arb_small_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
+        arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
     };
     use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
@@ -196,7 +196,7 @@ mod tests {
 
     proptest! {
        #[test]
-       fn test_read_and_write_blocks(block in blocks_strategy(arb_small_amount()),index in (0..10000u64)){
+       fn test_read_and_write_blocks(block in blocks_strategy(arb_amount()),index in (0..10000u64)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let rosetta_block = RosettaBlock::from_icrc_ledger_block(block,index).unwrap();
            storage_client_memory.store_blocks(vec![rosetta_block.clone()]).unwrap();
@@ -238,7 +238,7 @@ mod tests {
         }
 
        #[test]
-       fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy(arb_small_amount()),1..100)){
+       fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy(arb_amount()),1..100)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let mut rosetta_blocks = vec![];
            for (index,block) in blocks.clone().into_iter().enumerate(){

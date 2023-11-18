@@ -69,7 +69,7 @@ pub fn rescale_to_icp(x_icp_e8s: u64) -> Decimal {
     u64_to_dec(x_icp_e8s) * dec!(0.000_000_01)
 }
 
-/// Attempts to rescale a decimal amount of ICPs to ICP e8s.
+/// Attempts to rescale a decimal amount of ICPs to ICP e8s. Warning: this operation is lossy.
 pub fn rescale_to_icp_e8s(x_icp: Decimal) -> Result<u64, String> {
     x_icp
         .checked_mul(u64_to_dec(E8))
@@ -112,38 +112,6 @@ pub trait NonDecreasingFunction {
     /// Returns `self.apply(x)` with the Ok result rescaled to ICP e8s.
     fn apply_and_rescale_to_icp_e8s(&self, x_icp_e8s: u64) -> Result<u64, String> {
         self.apply(x_icp_e8s).and_then(rescale_to_icp_e8s)
-    }
-
-    /// The least argument value (in ICP e8s) at which the function reaches its supremum.
-    fn max_argument_icp_e8s(&self) -> Result<u64, String> {
-        // A general version of this function could be implemented via binary search.
-        Ok(u64::MAX)
-    }
-
-    /// Attempts to compute the `(x, f(x))`` pairs for `x in [0..self.max_argument_icp_e8s()]`
-    /// with `num_samples` steps. Returned pairs are in ICP. Used in debugging.
-    fn plot(&self, num_samples: NonZeroU64) -> Result<Vec<(Decimal, Decimal)>, String> {
-        let max_argument_icp_e8s = self.max_argument_icp_e8s()?;
-        let num_samples: u64 = num_samples.into();
-        let step = max_argument_icp_e8s / num_samples;
-        (0..=num_samples)
-            .map(|i| {
-                let x_icp_e8s = i * step;
-                let y_icp = self.apply(x_icp_e8s)?;
-                let x_icp = rescale_to_icp(x_icp_e8s);
-                Ok((x_icp, y_icp))
-            })
-            .collect::<Result<Vec<(Decimal, Decimal)>, String>>()
-    }
-
-    fn dbg_plot(&self) -> String {
-        format!(
-            "{}: {}",
-            std::any::type_name::<Self>(),
-            self.plot(NonZeroU64::try_from(30).unwrap())
-                .map(|plot| format!("{:?}", plot))
-                .unwrap_or_else(|e| e),
-        )
     }
 }
 
@@ -213,20 +181,18 @@ impl ToString for InvertError {
 ///
 /// Additionally, the equality `f(g(y)) = y` must hold for all `y` s.t. `f(g(y))` is defined.
 pub trait InvertibleFunction: NonDecreasingFunction {
-    /// This method searches an inverse of `y` given the function defined by `apply`.
+    /// This method searches an inverse of `y` given the function defined by `self.apply`.
     ///
-    /// An error is returned if the function defined by `apply` is not monotonically increasing.
+    /// An error is returned if the function defined by `self.apply` is not monotonically increasing.
     ///
-    /// The default implementation assumes the function is non-descending
+    /// The default implementation assumes the function is non-decreasing.
     fn invert(&self, target_y: Decimal) -> Result<u64, InvertError> {
         if target_y.is_sign_negative() {
             return Err(InvertError::ValueIsNegative(target_y));
         }
 
-        let left: u64 = 0;
-        let right: u64 = self
-            .max_argument_icp_e8s()
-            .map_err(InvertError::MaxArgumentValueError)?;
+        let left = 0_u64;
+        let right = u64::MAX;
 
         // Search to find the highest `lower` where `f(lower) < target_y`,
         // and the lowest `higher` where `f(higher) >= target_y`.
@@ -251,15 +217,16 @@ pub trait InvertibleFunction: NonDecreasingFunction {
             // binary_search::search will return the two values inside the range that inclusively
             // "enclose" the exact inverse, if present. Let's return whichever was closer
             (Some(lower), Some(upper)) => {
-                if error(lower)? < error(upper)? {
+                let (error_l, error_r) = (error(lower)?, error(upper)?);
+                // <= means that we pick the leftmost value if the errors are zero for both bounds.
+                if error_l <= error_r {
                     Ok(lower)
                 } else {
                     Ok(upper)
                 }
             }
             // Otherwise, it'll return the beginning or end of the range.
-            // This case will be exercised if u64::MAX is less than the true
-            // inverse
+            // This case will be exercised if `u64::MAX` is less than the true inverse.
             (Some(lower), None) => {
                 if error(lower)?.is_zero() {
                     Ok(lower)
@@ -282,6 +249,39 @@ pub trait InvertibleFunction: NonDecreasingFunction {
                 right,
             }),
         }
+    }
+
+    /// Attempts to find the least argument value (in ICP e8s) at which the function reaches its
+    /// supremum.
+    fn max_argument_icp_e8s(&self) -> Result<u64, String> {
+        let max_y_icp = self.apply(u64::MAX)?;
+        self.invert(max_y_icp).map_err(|err| err.to_string())
+    }
+
+    /// Attempts to compute the `(x, f(x))` pairs for `x in [0..self.max_argument_icp_e8s()]`
+    /// with `num_samples` steps. Returned pairs are in ICP. Used in debugging.
+    fn plot(&self, num_samples: NonZeroU64) -> Result<Vec<(Decimal, Decimal)>, String> {
+        let max_argument_icp_e8s = self.max_argument_icp_e8s()?;
+        let num_samples: u64 = num_samples.into();
+        let step = max_argument_icp_e8s / num_samples;
+        (0..=num_samples)
+            .map(|i| {
+                let x_icp_e8s = i * step;
+                let y_icp = self.apply(x_icp_e8s)?;
+                let x_icp = rescale_to_icp(x_icp_e8s);
+                Ok((x_icp, y_icp))
+            })
+            .collect::<Result<Vec<(Decimal, Decimal)>, String>>()
+    }
+
+    fn dbg_plot(&self) -> String {
+        format!(
+            "{}: {}",
+            std::any::type_name::<Self>(),
+            self.plot(NonZeroU64::try_from(30).unwrap())
+                .map(|plot| format!("{:?}", plot))
+                .unwrap_or_else(|e| e),
+        )
     }
 }
 
@@ -466,14 +466,13 @@ impl BinomialFormula {
         self.members
             .iter()
             .enumerate()
-            .fold(Ok(Decimal::ZERO), |total, (i, member)| {
+            .try_fold(Decimal::ZERO, |total, (i, member)| {
                 let member = member.eval().map_err(|e| {
                     format!(
                         "Cannot evaluate binomial member #{} of {:?}: {}",
                         i, self, e
                     )
                 })?;
-                let total = total?;
                 total
                     .checked_add(member)
                     .ok_or_else(|| format!("Decimal overflow while computing {:?}.", self))
@@ -481,7 +480,7 @@ impl BinomialFormula {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct F1Cache {
     #[allow(unused)]
     t1: Decimal,
@@ -538,7 +537,7 @@ impl F1Cache {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct F2Cache {
     #[allow(unused)]
     t2: Decimal,
@@ -595,7 +594,7 @@ impl F2Cache {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct F3Cache {
     #[allow(unused)]
     t3: Decimal,
@@ -693,14 +692,14 @@ impl F3Cache {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct PolynomialMatchingFunctionCache {
     f_1: F1Cache,
     f_2: F2Cache,
     f_3: F3Cache,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct PolynomialMatchingFunctionPersistentData {
     pub t_1: Decimal,
     pub t_2: Decimal,
@@ -717,13 +716,29 @@ impl PolynomialMatchingFunctionCache {
             .map_err(|e| format!("Error while computing cached data for f_1: {}", e))?;
         let f_2 = F2Cache::new(data.t_2, data.t_3, data.cap)
             .map_err(|e| format!("Error while computing cached data for f_2: {}", e))?;
-        let f_3 = F3Cache::new(data.t_3, data.t_4, data.cap)
-            .map_err(|e| format!("Error while computing cached data for f_3: {}", e))?;
+        let f_3 = if data.t_4 > Decimal::ZERO {
+            F3Cache::new(data.t_3, data.t_4, data.cap)
+                .map_err(|e| format!("Error while computing cached data for f_3: {}", e))?
+        } else {
+            // Setting all polynomial coefficients to `1.0` to avoid dealing with `0^0`; at the same
+            // time, `cap == 0.0` makes `F3Cache::apply` always return `0.0`, respecting
+            // the semantics of `f_3` for `t4 == 0`.
+            F3Cache {
+                t3: data.t_3,
+                t4: data.t_4,
+                a: Decimal::ONE,
+                b: Decimal::ONE,
+                c: Decimal::ONE,
+                d: Decimal::ONE,
+                e: Decimal::ONE,
+                cap: Decimal::ZERO,
+            }
+        };
         Ok(Self { f_1, f_2, f_3 })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PolynomialMatchingFunction {
     persistent_data: PolynomialMatchingFunctionPersistentData,
     cache: PolynomialMatchingFunctionCache,
@@ -820,10 +835,6 @@ impl NonDecreasingFunction for PolynomialMatchingFunction {
         };
         Ok(res)
     }
-
-    fn max_argument_icp_e8s(&self) -> Result<u64, String> {
-        rescale_to_icp_e8s(self.persistent_data.t_4)
-    }
 }
 
 pub type PolynomialNeuronsFundParticipation =
@@ -846,50 +857,34 @@ pub trait Interval {
         if intervals.is_empty() {
             return None;
         }
-        let mut i = 0_usize;
+        let i = 0_usize;
         // Cannot underflow as intervals.len() >= 1.
-        let mut j = intervals.len() - 1;
-        while i <= j {
-            // [Spec] assume loop guard: i <= j
-            // [Spec] assume invariant: 0 <= i <= j+1, 0 <= j < intervals.len()
-
-            // Without `as u64`, an overflow would occur if e.g. `i==j==usize::MAX-1`. Note that
-            // the actual value of `usize::MAX` on Wasm32 targets is just `4294967295`, less than
-            // `u64::MAX`. Converting back to usize is safe, as the average is not greater
-            // than `j: usize`.
-            let m = (((i as u64) + (j as u64)) / 2) as usize;
-            // [Spec] assert(*) i <= m <= j  -- from math.
-            if intervals[m].to() <= x {
-                // If x == intervals[m].to, then x \in intervals[m+1]; move rightwards.
-                // ... [intervals[m].from, intervals[m].to) ... x ...
-                i = m + 1;
-                // [Spec] assert invariant: 0 <= i   <= j+1, 0 <= j < intervals.len()
-                // [Spec] -- `i==m+1`; `j` did not change.
-                // [Spec] assert: 0 <= m+1 <= j+1
-                // [Spec] -- given `0 <= m` from (*), we know that `0 <= m+1`.
-                // [Spec] -- `m+1 <= j+1`  <==>  `m <= j`.
-                // [Spec] -- `m <= j` follows from (*). QED
-            } else if x < intervals[m].from() {
-                // exclusive, since x==intervals[m].from ==> x \in intervals[m]; move leftwards.
-                // ... x ... [intervals[m].from, intervals[m].to) ...
-                if m == 0 {
-                    // The leftmost interval starts from a value greated than `x`.
-                    return None;
+        let j = intervals.len() - 1;
+        let search_result = binary_search::search(|m| x < intervals[*m].from(), i, j);
+        match search_result {
+            (Some(m), Some(_)) => {
+                let interval = &intervals[m];
+                // `m` will be the greatest index such that `!(x < intervals[*m].from())`.
+                // Can only fail if there is a "gap" with no intervals containing `x`.
+                debug_assert!(interval.contains(x));
+                Some(interval)
+            }
+            (Some(m), None) | (None, Some(m)) => {
+                let interval = &intervals[m];
+                if interval.contains(x) {
+                    Some(interval)
+                } else {
+                    None // There's no interval that contains `x`
                 }
-                // [Spec] assert(**) 0 < m
-                j = m - 1;
-                // [Spec] assert invariant: 0 <= i <= j+1, 0 <= j < intervals.len()
-                // [Spec] -- `i` did not change; `j==m-1`.
-                // [Spec] assert: 0 <= i <= m-1+1, 0 <= m-1 < intervals.len()
-                // [Spec] assert: 0 <= i <= m,     0 <= m-1 < intervals.len()
-                // [Spec] -- `i <= m` follows from (*).
-                // [Spec] -- given `0 < m` from (**), we know that `0 <= m-1`. QED
-            } else {
-                // x \in intervals[m]
-                return Some(&intervals[m]);
+            }
+            (None, None) => {
+                println!(
+                    "{}ERROR: cannot perform find_interval as the intervals aren't sorted",
+                    LOG_PREFIX,
+                );
+                None
             }
         }
-        None
     }
 }
 
@@ -994,7 +989,7 @@ where
             // (3) The computed overall participation amount (unexpectedly) exceeded `hard_cap`; so
             //     we enforce the limited at `hard_cap`.
             let effective_icp = hard_cap.min(intercept_icp.saturating_add(
-                // `slope_denominator`` cannot be zero as it has been validated.
+                // `slope_denominator` cannot be zero as it has been validated.
                 // See `LinearScalingCoefficientValidationError::DenominatorIsZero`.
                 // `slope_numerator / slope_denominator` is between 0.0 and 1.0.
                 // See `LinearScalingCoefficientValidationError::NumeratorGreaterThanDenominator`.

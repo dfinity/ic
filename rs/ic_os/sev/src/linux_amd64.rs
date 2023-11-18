@@ -3,11 +3,6 @@
 References:
   https://github.com/virtee/sev
 
-  Convert:
-    openssl::x509::X509::from_pem(pem_bytes)
-    openssl::x509::X509::from_der(der_bytes)
-    x509.to_der()
-    x509.to_pem()
 */
 
 use crate::{load_certs, pem_to_der, SnpError};
@@ -16,9 +11,9 @@ use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, node::NodeRegistry};
-use openssl::ecdsa::EcdsaSig;
-use openssl::x509::X509;
 use serde::{Deserialize, Serialize};
+use sev::certs::snp;
+use sev::certs::snp::Verifiable;
 use sev::firmware::guest::AttestationReport;
 use sha2::Digest;
 
@@ -155,8 +150,7 @@ where
                 description: "unable to convert serialized length".into(),
             }
         })?);
-        let mut buffer: Vec<u8> = Vec::new();
-        buffer.resize(len as usize, 0);
+        let mut buffer: Vec<u8> = vec![0; len as usize];
         read_into_buffer(&mut stream, &mut buffer).await?;
         let peer_package: AttestationPackage =
             serde_cbor::from_slice(buffer.as_slice()).map_err(|_| {
@@ -164,24 +158,32 @@ where
                     description: "unable to deserialize attestation".into(),
                 }
             })?;
-        let peer_ask = X509::from_der(&peer_package.ask_der).map_err(|_| {
+        let peer_ask = snp::Certificate::from_der(&peer_package.ask_der).map_err(|_| {
             ValidateAttestationError::HandshakeError {
                 description: "bad peer ask certificate".into(),
             }
         })?;
-        let peer_vcek = X509::from_der(&peer_package.vcek_der).map_err(|_| {
+        let peer_vcek = snp::Certificate::from_der(&peer_package.vcek_der).map_err(|_| {
             ValidateAttestationError::HandshakeError {
                 description: "bad peer vcek certificate".into(),
             }
         })?;
+        let ca_chain = snp::ca::Chain {
+            ark: certs.ark.clone().expect("missing ark"),
+            ask: peer_ask,
+        };
+        let chain = snp::Chain {
+            ca: ca_chain,
+            vcek: peer_vcek,
+        };
 
         // Validate peer attestation package.
-        if !is_cert_chain_valid(certs.ark.as_ref().unwrap(), &peer_ask, &peer_vcek) {
+        if !is_cert_chain_valid(&chain) {
             return Err(ValidateAttestationError::HandshakeError {
                 description: "attestation cert chain invalid".to_string(),
             });
         }
-        if !is_report_valid(&peer_package.report, &peer_vcek) {
+        if !is_report_valid(&peer_package.report, &chain) {
             return Err(ValidateAttestationError::HandshakeError {
                 description: "attestation report invalid".to_string(),
             });
@@ -208,74 +210,12 @@ where
     }
 }
 
-fn is_report_valid(report: &AttestationReport, vcek: &X509) -> bool {
-    // See https://github.com/AMDESE/sev-tool
-    // function Command::validate_guest_report
-    // and function sign_verify_message()
-    // Ultimately this is rooted in calls to openssl.
-    // We could fork and wrap this repo to integrate into Rust or reimplement in Rust.
-    //
-    // See https://github.com/virtee/sevctl
-    // We could adapt this for our purposes.
-    //
-    // We use the VCEK from the package.
-    // We do not validating WRT the PEK since we are not using that chain.
-    let raw_report = report as *const _ as *const u8;
-    #[allow(unsafe_code)]
-    let raw_report_slice = unsafe { std::slice::from_raw_parts(raw_report, 0x2A0) };
-    let hash = sha2::Sha384::digest(raw_report_slice);
-    let sig = match EcdsaSig::try_from(&report.signature) {
-        Ok(sig) => sig,
-        Err(_) => return false,
-    };
-    let vcek = match vcek.public_key() {
-        Ok(public_key) => public_key,
-        Err(_) => return false,
-    };
-    let vcek = match vcek.ec_key() {
-        Ok(ec_key) => ec_key,
-        Err(_) => return false,
-    };
-    match sig.verify(&hash, &vcek) {
-        Err(e) => {
-            println!("{:?}", e);
-            false
-        }
-        Ok(result) => {
-            println!("result false");
-            result
-        }
-    }
+fn is_report_valid(report: &AttestationReport, chain: &snp::Chain) -> bool {
+    (chain, report).verify().ok() == Some(())
 }
 
-fn is_cert_chain_valid(ark: &X509, ask: &X509, vcek: &X509) -> bool {
-    // See https://github.com/AMDESE/sev-tool
-    // Command::validate_cert_chain
-    // This is consistency checking
-    // Command::validate_cert_chain_vcek
-    // and Command::validate_cert_chain
-    let ark_public_key = match ark.public_key() {
-        Ok(key) => key,
-        Err(_) => {
-            return false;
-        }
-    };
-    if ark.verify(&ark_public_key).is_err() {
-        return false;
-    }
-    if ask.verify(&ark_public_key).is_err() {
-        return false;
-    }
-    let ask_public_key = match ask.public_key() {
-        Ok(key) => key,
-        Err(_) => {
-            return false;
-        }
-    };
-    if vcek.verify(&ask_public_key).is_err() {
-        return false;
-    }
-    true
+fn is_cert_chain_valid(chain: &snp::Chain) -> bool {
+    chain.verify().ok() == Some(&chain.vcek)
 }
 
 async fn read_into_buffer<T: AsyncRead + Unpin>(
@@ -325,34 +265,58 @@ mod test {
 
     #[test]
     fn test_is_cert_chain_valid() {
-        let ark = openssl::x509::X509::from_pem(ARK_PEM).expect("invalid ark PEM");
-        let ask = openssl::x509::X509::from_pem(ASK_PEM).expect("invalid ask PEM");
-        let vcek = openssl::x509::X509::from_pem(VCEK_PEM).expect("invalid vcek PEM");
-        assert!(is_cert_chain_valid(&ark, &ask, &vcek));
+        let ark = snp::Certificate::from_pem(ARK_PEM).expect("invalid ark PEM");
+        let ask = snp::Certificate::from_pem(ASK_PEM).expect("invalid ask PEM");
+        let vcek = snp::Certificate::from_pem(VCEK_PEM).expect("invalid vcek PEM");
+
+        let ca_chain = snp::ca::Chain { ark, ask };
+        let chain = snp::Chain { ca: ca_chain, vcek };
+
+        assert!(is_cert_chain_valid(&chain));
     }
 
     #[test]
     fn test_not_is_cert_chain_valid() {
-        let ark = openssl::x509::X509::from_pem(ARK_PEM).expect("invalid ark PEM");
-        let ask = openssl::x509::X509::from_pem(ASK_PEM).expect("invalid ask PEM");
-        let vcek = openssl::x509::X509::from_pem(VCEK_PEM).expect("invalid vcek PEM");
-        // Argument order wrong!
-        assert!(!is_cert_chain_valid(&vcek, &ask, &ark));
+        let ark = snp::Certificate::from_pem(ARK_PEM).expect("invalid ark PEM");
+        let ask = snp::Certificate::from_pem(ASK_PEM).expect("invalid ask PEM");
+        let vcek = snp::Certificate::from_pem(VCEK_PEM).expect("invalid vcek PEM");
+
+        let ca_chain = snp::ca::Chain { ark: ask, ask: ark }; // Argument order wrong!
+        let chain = snp::Chain { ca: ca_chain, vcek };
+
+        assert!(!is_cert_chain_valid(&chain));
     }
 
     #[test]
     fn test_is_report_valid() {
-        let vcek = openssl::x509::X509::from_pem(VCEK_PEM).expect("invalid vcek PEM");
+        let ark = snp::Certificate::from_pem(ARK_PEM).expect("invalid ark PEM");
+        let ask = snp::Certificate::from_pem(ASK_PEM).expect("invalid ask PEM");
+        let vcek = snp::Certificate::from_pem(VCEK_PEM).expect("invalid vcek PEM");
+
+        let ca_chain = snp::ca::Chain { ark, ask };
+        let chain = snp::Chain { ca: ca_chain, vcek };
+
         let attestation_report: AttestationReport =
             unsafe { std::ptr::read(ATTESTATION_REPORT.as_ptr() as *const _) };
-        assert!(is_report_valid(&attestation_report, &vcek));
+        assert!(is_report_valid(&attestation_report, &chain));
     }
 
     #[test]
     fn test_not_is_report_valid() {
-        let vcek = openssl::x509::X509::from_pem(VCEK_PEM).expect("invalid vcek PEM");
-        let attestation_report = AttestationReport::default();
-        assert!(!is_report_valid(&attestation_report, &vcek));
+        let ark = snp::Certificate::from_pem(ARK_PEM).expect("invalid ark PEM");
+        let ask = snp::Certificate::from_pem(ASK_PEM).expect("invalid ask PEM");
+        let vcek = snp::Certificate::from_pem(VCEK_PEM).expect("invalid vcek PEM");
+
+        let ca_chain = snp::ca::Chain { ark, ask };
+        let chain = snp::Chain { ca: ca_chain, vcek };
+
+        let attestation_report_invalid: AttestationReport = {
+            let mut buf = ATTESTATION_REPORT.to_vec();
+            buf[0] ^= 0x80; // flip first bit
+            unsafe { std::ptr::read(buf.as_ptr() as *const _) }
+        };
+        assert!(!is_report_valid(&attestation_report_invalid, &chain));
+        assert!(!is_report_valid(&AttestationReport::default(), &chain));
     }
 
     #[test]

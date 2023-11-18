@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
@@ -227,7 +228,7 @@ impl WasmExecutor for WasmExecutorImpl {
             &execution_state.exported_globals,
             self.log.clone(),
             wasm_reserved_pages,
-            Arc::new(DefaultOutOfInstructionsHandler {}),
+            Rc::new(DefaultOutOfInstructionsHandler {}),
         );
 
         // Collect logs only when the flag is enabled to avoid producing too much data.
@@ -479,7 +480,7 @@ pub fn compute_page_delta<'a>(
         // pages are not borrowed as mutable.
         let page_ref = unsafe {
             let offset: usize = i as usize * PAGE_SIZE;
-            page_bytes_from_ptr(instance, (heap_addr as *const u8).add(offset))
+            page_bytes_from_ptr(instance, heap_addr.add(offset))
         };
         pages.push((*page_index, page_ref));
     }
@@ -569,7 +570,7 @@ pub fn process(
     globals: &[Global],
     logger: ReplicaLogger,
     wasm_reserved_pages: NumWasmPages,
-    out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
+    out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
 ) -> (
     SliceExecutionOutput,
     WasmExecutionOutput,

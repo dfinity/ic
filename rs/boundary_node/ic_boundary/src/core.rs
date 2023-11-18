@@ -16,8 +16,9 @@ use axum::{
 };
 use axum_server::{accept::DefaultAcceptor, Server};
 use futures::TryFutureExt;
+use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::LocalStoreImpl;
+use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::CanisterId;
 use prometheus::Registry;
@@ -68,7 +69,6 @@ use crate::{
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
-const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 const SYSTEMCTL_BIN: &str = "/usr/bin/systemctl";
 
 const SECOND: Duration = Duration::from_secs(1);
@@ -78,7 +78,7 @@ const DAY: Duration = Duration::from_secs(24 * 3600);
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
-pub const MAX_REQUEST_BODY_SIZE: usize = 2 * MB;
+pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
 const METRICS_CACHE_CAPACITY: usize = 30 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
@@ -142,10 +142,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .fetch_and_start_polling()
         .context("failed to start registry client")?;
 
-    let nns_pub_key =
-        ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&cli.registry.nns_pub_key_pem)
-            .context("failed to parse nns public key")?;
-
     #[cfg(feature = "tls")]
     let (tls_configurator, tls_acceptor, token) = prepare_tls(&cli, &registry)
         .await
@@ -198,7 +194,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
         Arc::clone(&routing_table),
-        [DER_PREFIX.as_slice(), nns_pub_key.into_bytes().as_slice()].concat(),
+        Arc::clone(&registry_snapshot),
     );
 
     let proxy_router = Arc::new(proxy_router);
@@ -309,7 +305,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         cli.listen.http_port,
     ))
     .acceptor(DefaultAcceptor)
-    .serve(routers_http.clone().into_make_service()); // TODO change back to routers_http - for now routing http==https
+    .serve(routers_http.clone().into_make_service());
 
     // HTTPS
     #[cfg(feature = "tls")]
@@ -404,6 +400,49 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         Box::new(metrics_runner),
     ];
 
+    let (registry_replicator, nns_pub_key) = if !cli.registry.disable_registry_replicator {
+        // Check if we require an NNS key
+        let nns_pub_key = {
+            // Check if the local store is initialized
+            if !local_store
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .expect("failed to read registry local store")
+                .is_empty()
+            {
+                None
+            } else {
+                // If it's not - then we need an NNS public key to initialize it
+                let nns_pub_key_path = cli
+                    .registry
+                    .nns_pub_key_pem
+                    .expect("NNS public key is required to init Registry local store");
+
+                Some(
+                    ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&nns_pub_key_path)
+                        .expect("failed to parse NNS public key"),
+                )
+            }
+        };
+
+        // Notice no-op logger
+        let logger = ic_logger::new_replica_logger(
+            slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
+            &ic_config::logger::Config::default(),                          // config
+        );
+
+        (
+            Some(RegistryReplicator::new_with_clients(
+                logger,
+                local_store,
+                registry_client,
+                Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
+            )),
+            nns_pub_key,
+        )
+    } else {
+        (None, None)
+    };
+
     TokioScope::scope_and_block(|s| {
         s.spawn(
             axum::Server::bind(&cli.monitoring.metrics_addr)
@@ -411,26 +450,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .map_err(|err| anyhow!("server failed: {:?}", err)),
         );
 
-        if !cli.registry.disable_registry_replicator {
-            // Registry Replicator
-            let registry_replicator = {
-                // Notice no-op logger
-                let logger = ic_logger::new_replica_logger(
-                    slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
-                    &ic_config::logger::Config::default(),                          // config
-                );
-
-                RegistryReplicator::new_with_clients(
-                    logger,
-                    local_store,
-                    registry_client,
-                    Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
-                )
-            };
-
+        if let Some(v) = registry_replicator {
             s.spawn(async move {
-                registry_replicator
-                    .start_polling(cli.registry.nns_urls, Some(nns_pub_key))
+                v.start_polling(cli.registry.nns_urls, nns_pub_key)
                     .await
                     .context("failed to start registry replicator")?
                     .await

@@ -200,7 +200,7 @@ where
             let range_to_delete = HeightRange::new(Height::from(0), finalized_height.decrement());
 
             // Only notarization shares and finalization shares should be deleted
-            let expected_count = vec![
+            let expected_count = [
                 count_total(pool.random_beacon_share()),
                 count_total(pool.notarization_share())
                     - count(pool.notarization_share(), &range_to_delete),

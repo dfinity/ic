@@ -20,7 +20,10 @@ use crate::{
 use anyhow::{anyhow, bail, Error};
 use discower_bowndary::api_nodes_discovery::{Fetch, RegistryFetcher};
 use futures::stream::FuturesUnordered;
-use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
+use ic_agent::{
+    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Agent},
+    export::Principal,
+};
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
@@ -397,7 +400,6 @@ pub fn direct_to_replica_test(env: TestEnv) {
     futs.push(rt.spawn({
         let logger = logger.clone();
         let client = client;
-        let install_url = install_url;
         let name = "update random node";
         info!(&logger, "Starting subtest {}", name);
 

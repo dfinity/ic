@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 mod tests;
 
 impl CheckpointLoadingMetrics for CheckpointMetrics {
-    fn raise_critical_error(&self, msg: String) {
+    fn observe_broken_soft_invariant(&self, msg: String) {
         debug_assert!(false);
         self.load_checkpoint_soft_invariant_broken.inc();
         error!(

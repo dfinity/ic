@@ -17,9 +17,9 @@ use hyper::{
     Body, Request, Response, StatusCode, Uri,
 };
 use ic_agent::{
-    agent::{RejectCode, RejectResponse},
+    agent::{Agent, RejectCode, RejectResponse},
     agent_error::HttpErrorPayload,
-    Agent, AgentError,
+    AgentError,
 };
 use ic_response_verification::MAX_VERIFICATION_VERSION;
 use ic_utils::interfaces::http_request::HeaderField;
@@ -398,10 +398,10 @@ async fn process_request_inner(
     if should_validate {
         let validation = validator.validate(agent, &canister_id, &http_request, &http_response);
 
-        if validation.is_err() {
+        if let Err(e) = validation {
             return Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(validation.unwrap_err().into())
+                .body(e.into())
                 .unwrap());
         }
     }
@@ -495,9 +495,13 @@ fn handle_result(
         // leak here because a user could use `dfx` to get the same reply.
         ReplicaError(response) => {
             warn!("Replica Error");
+            let body = format!(
+                "Replica Error: reject code {:?}, reject message {}, error code {:?}",
+                response.reject_code, response.reject_message, response.error_code,
+            );
             Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
-                .body(response.to_string().into())
+                .body(body.into())
                 .unwrap()
         }
 

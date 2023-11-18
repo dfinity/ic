@@ -75,7 +75,6 @@ fn heap_topic_followee_index_to_proto(
             let followers_map = followers_map
                 .into_iter()
                 .map(|(followee, followers)| {
-                    let followee = followee;
                     let followers = Followers {
                         followers: followers.into_iter().map(|id| NeuronId { id }).collect(),
                     };

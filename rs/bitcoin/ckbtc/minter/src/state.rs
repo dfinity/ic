@@ -633,7 +633,7 @@ impl CkBtcMinterState {
             if self.update_balance_principals.contains(&account.owner) {
                 self.finalized_utxos
                     .entry(account.owner)
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(utxo.clone());
             }
 

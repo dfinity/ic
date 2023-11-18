@@ -5,7 +5,7 @@ use serde::Deserialize;
 pub(crate) const MAINNET_PROVIDERS: &[RpcNodeProvider] = &[
     RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
     RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
-    RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
+    RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare),
 ];
 
 pub(crate) const SEPOLIA_PROVIDERS: &[RpcNodeProvider] = &[
@@ -46,8 +46,8 @@ pub enum EthereumProvider {
     Ankr,
     // https://public.blockpi.io/
     BlockPi,
-    // https://publicnode.com/
-    PublicNode,
+    // https://developers.cloudflare.com/web3/ethereum-gateway/
+    Cloudflare,
 }
 
 impl EthereumProvider {
@@ -55,7 +55,7 @@ impl EthereumProvider {
         match self {
             EthereumProvider::Ankr => "https://rpc.ankr.com/eth",
             EthereumProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
-            EthereumProvider::PublicNode => "https://ethereum.publicnode.com",
+            EthereumProvider::Cloudflare => "https://cloudflare-eth.com",
         }
     }
 }

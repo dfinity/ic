@@ -176,7 +176,7 @@ impl<Unit, Repr: Copy> From<Repr> for BitMask<Unit, Repr> {
 
 impl<Unit, Repr: Copy> Clone for BitMask<Unit, Repr> {
     fn clone(&self) -> Self {
-        BitMask(self.0, PhantomData)
+        *self
     }
 }
 

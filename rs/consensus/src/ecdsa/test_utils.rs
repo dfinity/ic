@@ -459,10 +459,8 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     } = dependencies(pool_config.clone(), 1);
 
     // need to make sure subnet matches the transcript
-    let dummy_id = create_transcript_id(0);
     let pre_signer = EcdsaPreSignerImpl::new(
         NODE_1,
-        *dummy_id.source_subnet(),
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
         metrics_registry.clone(),
