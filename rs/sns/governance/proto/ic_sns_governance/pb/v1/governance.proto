@@ -348,9 +348,16 @@ message TransferSnsTreasuryFunds {
 // A proposal function that changes the ledger's parameters.
 // Fields with None values will remain unchanged.
 message ManageLedgerParameters {
+  
   optional uint64 transfer_fee = 1;
-  optional Account set_fee_collector = 2;
+  
+  oneof change_fee_collector {
+    Empty unset = 2;
+    Account set_to = 3;
+  }  
 }
+
+
 
 // A proposal function to change the values of SNS metadata.
 // Fields with None values will remain unchanged.

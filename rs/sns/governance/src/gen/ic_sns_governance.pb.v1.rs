@@ -402,8 +402,20 @@ pub mod transfer_sns_treasury_funds {
 pub struct ManageLedgerParameters {
     #[prost(uint64, optional, tag = "1")]
     pub transfer_fee: ::core::option::Option<u64>,
-    #[prost(message, optional, tag = "2")]
-    pub set_fee_collector: ::core::option::Option<Account>,
+    #[prost(oneof = "manage_ledger_parameters::ChangeFeeCollector", tags = "2, 3")]
+    pub change_fee_collector: ::core::option::Option<manage_ledger_parameters::ChangeFeeCollector>,
+}
+/// Nested message and enum types in `ManageLedgerParameters`.
+pub mod manage_ledger_parameters {
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ChangeFeeCollector {
+        #[prost(message, tag = "2")]
+        Unset(super::Empty),
+        #[prost(message, tag = "3")]
+        SetTo(super::Account),
+    }
 }
 /// A proposal function to change the values of SNS metadata.
 /// Fields with None values will remain unchanged.

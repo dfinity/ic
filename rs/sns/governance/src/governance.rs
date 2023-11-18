@@ -2728,20 +2728,14 @@ impl Governance {
         })?
         .wasm;
 
-        use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs};
+        use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs};
         let ledger_upgrade_arg =
             candid::encode_one(Some(LedgerArgument::Upgrade(Some(UpgradeArgs {
                 transfer_fee: manage_ledger_parameters.transfer_fee.map(|tf| tf.into()),
-                change_fee_collector: manage_ledger_parameters.set_fee_collector.clone().map(
-                    |set_fee_collector| {
-                        ChangeFeeCollector::SetTo(Account {
-                            owner: set_fee_collector.owner.unwrap().into(), // unwrap checked in the validate_and_render_manage_ledger_parameters function
-                            subaccount: set_fee_collector
-                                .subaccount
-                                .map(|s| s.subaccount.try_into().unwrap()), // unwrap checked in the validate_and_render_manage_ledger_parameters function
-                        })
-                    },
-                ),
+                change_fee_collector: manage_ledger_parameters
+                    .change_fee_collector
+                    .clone()
+                    .map(|change_fee_collector| change_fee_collector.try_into().unwrap()), // unwrap checked in the validate_and_render_manage_ledger_parameters function
                 ..UpgradeArgs::default()
             }))))
             .unwrap();

@@ -17,7 +17,8 @@ use ic_state_machine_tests::StateMachine;
 
 use ic_sns_governance::{
     pb::v1::{
-        proposal::Action, ManageLedgerParameters, NervousSystemParameters, NeuronPermissionList,
+        manage_ledger_parameters::ChangeFeeCollector, proposal::Action, Empty,
+        ManageLedgerParameters, NervousSystemParameters, NeuronPermissionList,
         NeuronPermissionType, Proposal, ProposalId,
     },
     types::DEFAULT_TRANSFER_FEE,
@@ -257,7 +258,7 @@ fn test_manage_ledger_parameters_change_fee_collector() {
         Proposal {
             title: "ManageLedgerParameters".to_string(),
             action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
-                set_fee_collector: Some(new_fee_collector.into()),
+                change_fee_collector: Some(ChangeFeeCollector::SetTo(new_fee_collector.into())),
                 ..Default::default()
             })),
             ..Default::default()
@@ -302,6 +303,68 @@ fn test_manage_ledger_parameters_change_fee_collector() {
             new_fee_collector
         ),
         DEFAULT_TRANSFER_FEE
+    );
+
+    // Unset the sns-ledger's fee_collector
+    let unset_fee_collector_proposal_id: ProposalId = sns_make_proposal(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        user,
+        neuron.clone(),
+        Proposal {
+            title: "ManageLedgerParameters".to_string(),
+            action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                change_fee_collector: Some(ChangeFeeCollector::Unset(Empty {})),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    sns_wait_for_proposal_execution(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        unset_fee_collector_proposal_id,
+    );
+
+    wait_for_ledger_canister_to_start_after_an_upgrade(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+    );
+
+    // make sure a transfer-fee does not go to the previous fee-collector.
+    let fee_collector_balance_before_unset = icrc1_balance(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        new_fee_collector,
+    );
+
+    icrc1_transfer(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        user,
+        TransferArg {
+            amount: Nat::from(5),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
+            from_subaccount: None,
+            to: Account {
+                owner: Principal::management_canister(),
+                subaccount: None,
+            },
+            memo: None,
+            created_at_time: None,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        icrc1_balance(
+            &state_machine,
+            sns_canisters.ledger_canister_id,
+            new_fee_collector
+        ),
+        fee_collector_balance_before_unset
     );
 }
 
