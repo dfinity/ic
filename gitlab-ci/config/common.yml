@@ -105,7 +105,7 @@ after_script:
   extends:
     - .build-k8s
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:2897914dc11056b943b8048cb75bb1160ab1cb43f52c406e67200116aae5b807"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:b1cb2c646c8c86bf4a7953bbf007bd724d15cbc1b137c844527239defa19c84a"
 
 # Container images used by jobs.
 
@@ -113,7 +113,7 @@ after_script:
   artifacts:
     expire_in: 3 days
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2897914dc11056b943b8048cb75bb1160ab1cb43f52c406e67200116aae5b807"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:b1cb2c646c8c86bf4a7953bbf007bd724d15cbc1b137c844527239defa19c84a"
   tags:
     - dfinity-ic
   variables:
