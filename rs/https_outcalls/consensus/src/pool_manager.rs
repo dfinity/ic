@@ -375,21 +375,15 @@ impl<T: CanisterHttpPool> ChangeSetProducer<T> for CanisterHttpPoolManagerImpl {
     type ChangeSet = CanisterHttpChangeSet;
 
     fn on_state_change(&self, canister_http_pool: &T) -> CanisterHttpChangeSet {
-        if self
-            .registry_client
-            .get_features(
-                self.replica_config.subnet_id,
-                self.registry_client.get_latest_version(),
-            )
-            .ok()
-            .flatten()
-            .map(|features| features.http_requests)
-            == Some(true)
-        {
-            self.generate_change_set(canister_http_pool)
-        } else {
-            vec![]
+        if let Ok(subnet_features) = self.registry_client.get_features(
+            self.replica_config.subnet_id,
+            self.registry_client.get_latest_version(),
+        ) {
+            if subnet_features.unwrap_or_default().http_requests {
+                return self.generate_change_set(canister_http_pool);
+            }
         }
+        vec![]
     }
 }
 

@@ -7,17 +7,36 @@ use std::{convert::TryFrom, str::FromStr};
 pub const DEFAULT_ECDSA_MAX_QUEUE_SIZE: u32 = 20;
 
 /// List of features that can be enabled or disabled on the given subnet.
-#[derive(CandidType, Clone, Copy, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[serde(default)]
 pub struct SubnetFeatures {
     /// This feature flag controls whether canister execution happens
     /// in sandboxed process or not. It is disabled by default.
     pub canister_sandboxing: bool,
 
     /// This feature flag controls whether canisters of this subnet are capable of
-    /// performing http(s) requests to the web2.
+    /// performing http(s) requests to the web2. It is enabled by default.
+    /// TODO: The feature should be disabled only in special circumstances.
+    /// Hence this field should be called 'disable_http_requests' and
+    /// by default an empty value in the registry should suffice.
+    #[serde(default = "default_http_requests")]
     pub http_requests: bool,
 
     pub sev_status: Option<SevFeatureStatus>,
+}
+
+fn default_http_requests() -> bool {
+    true
+}
+
+impl Default for SubnetFeatures {
+    fn default() -> Self {
+        Self {
+            canister_sandboxing: bool::default(),
+            http_requests: default_http_requests(),
+            sev_status: Option::<SevFeatureStatus>::default(),
+        }
+    }
 }
 
 impl SubnetFeatures {
