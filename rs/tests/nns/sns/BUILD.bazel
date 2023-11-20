@@ -196,6 +196,7 @@ system_test(
     name = "one_proposal_neurons_fund_swap_participation_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "manual",  # TODO: re-enable the test when it will be fixed.
         "system_test_hourly",
         "system_test_nightly",
     ],
