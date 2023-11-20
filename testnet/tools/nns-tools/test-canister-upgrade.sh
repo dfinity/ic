@@ -50,24 +50,8 @@ if [ "$CANISTER_NAME" == "cycles-minting" ]; then
         print_red "XRC_MOCK_CANISTER must be set as env variable for CMC upgrade"
         help
     )
-
-    # If CMC does not have a current version in metadata, we need to supply it.
-    # TODO - remove the ENV variable after CMC is updated
-    CURRENT_VERSION=${CURRENT_VERSION:-$(nns_canister_git_version "$NNS_URL" "$CANISTER_NAME")}
-
-    # Get ungzipped version to make it easy to detect upgrade status
-    CURRENT_VERSION_UNZIPPED=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$CURRENT_VERSION")
-
-    SKIP_STOPPING=yes propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" \
-        "$NEURON_ID" "$PEM" "$CANISTER_NAME" \
-        "$CURRENT_VERSION_UNZIPPED" "$(encode_candid_args_in_file \
-            "(record {
-                exchange_rate_canister = opt variant { Set = principal \"$XRC_MOCK_CANISTER\" } })")"
-
-    if ! wait_for_nns_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$CURRENT_VERSION_UNZIPPED"; then
-        print_red "Could not upgrade cycles-minting canister to its own version with different arguments"
-        exit 1
-    fi
+    point_cycles_minting_canister_to_mock_exchange_rate_canister \
+        "$XRC_MOCK_CANISTER" "$NNS_URL" "$NEURON_ID" "$PEM"
 fi
 
 propose_upgrade_canister_to_version_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$VERSION" "$ENCODED_ARGS_FILE"
