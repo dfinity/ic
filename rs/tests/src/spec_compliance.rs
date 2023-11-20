@@ -35,9 +35,8 @@ const EXCLUDED: &[&str] = &[
 pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
     use crate::driver::test_env_api::{retry, secs};
     use crate::util::block_on;
-    use hyper::client::connect::HttpConnector;
     use hyper::Client;
-    use hyper_tls::HttpsConnector;
+    use hyper_rustls::HttpsConnectorBuilder;
     use std::env;
 
     let vm_resources = VmResources {
@@ -107,10 +106,11 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
         let log = env.logger();
         retry(log.clone(), secs(300), secs(10), || {
             block_on(async {
-                let mut http_connector = HttpConnector::new();
-                http_connector.enforce_http(false);
-                let mut https_connector = HttpsConnector::new_with_connector(http_connector);
-                https_connector.https_only(true);
+                let https_connector = HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .https_only()
+                    .enable_http1()
+                    .build();
                 let client = Client::builder().build::<_, hyper::Body>(https_connector);
 
                 let webserver_ipv6 = get_universal_vm_address(&env);

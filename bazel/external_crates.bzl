@@ -489,9 +489,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                     "rustls",
                 ],
             ),
-            "hyper-tls": crate.spec(
-                version = "^0.5.0",
-            ),
             "ic0": crate.spec(
                 version = "^0.18.11",
             ),
