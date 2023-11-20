@@ -336,7 +336,7 @@ impl CatchUpPackageProvider {
             None => None,
             Some(cup_proto) => (&cup_proto)
                 .try_into()
-                .map_err(|_| warn!(self.logger, "Deserialization of CUP failed"))
+                .map_err(|err| warn!(self.logger, "Deserialization of CUP failed: {}", err))
                 .ok(),
         }
     }
