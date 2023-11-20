@@ -340,6 +340,7 @@ type ProposalData = record {
   proposal : opt Proposal;
   proposer : opt NeuronId;
   wait_for_quiet_state : opt WaitForQuietState;
+  minimum_yes_proportion_of_exercised : opt Percentage;
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
 };

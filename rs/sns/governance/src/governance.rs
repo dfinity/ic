@@ -2998,6 +2998,9 @@ impl Governance {
                 minimum_yes_proportion_of_total: Some(
                     NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
                 ),
+                minimum_yes_proportion_of_exercised: Some(
+                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
+                ),
             };
 
             proposal_data.wait_for_quiet_state = Some(WaitForQuietState {

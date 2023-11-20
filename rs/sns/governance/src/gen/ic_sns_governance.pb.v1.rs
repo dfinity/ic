@@ -882,11 +882,18 @@ pub struct ProposalData {
     /// accepted, it is considered "ready to settle".
     #[prost(uint64, optional, tag = "19")]
     pub reward_event_end_timestamp_seconds: ::core::option::Option<u64>,
-    /// Minimum "yes" votes needed for proposal adoption, as a fraction of
-    /// the total voting power. Example: 300bp represents a requirement that 3% of
-    /// the total voting power votes to adopt the proposal.
+    /// Minimum "yes" votes needed for proposal adoption, as a fraction of the
+    /// total voting power. Example: 300 basis points represents a requirement that
+    /// 3% of the total voting power votes to adopt the proposal.
     #[prost(message, optional, tag = "20")]
     pub minimum_yes_proportion_of_total:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+    /// Minimum "yes" votes needed for proposal adoption, as a fraction of the
+    /// exercised voting power. Example: 50_000 basis points represents a
+    /// requirement that 50% of the exercised voting power votes to adopt the
+    /// proposal.
+    #[prost(message, optional, tag = "21")]
+    pub minimum_yes_proportion_of_exercised:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
 }
 /// The nervous system's parameters, which are parameters that can be changed, via proposals,
