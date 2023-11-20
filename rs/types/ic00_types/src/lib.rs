@@ -2273,7 +2273,7 @@ impl InstallChunkedCodeArgs {
 
     pub fn store_canister_id(&self) -> Option<CanisterId> {
         self.store_canister
-            .map(|p| CanisterId::unchecked_from_principal(p))
+            .map(CanisterId::unchecked_from_principal)
     }
 }
 

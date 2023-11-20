@@ -16,7 +16,9 @@ use ic_ckbtc_minter::updates::retrieve_btc::{
     RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
     RetrieveBtcWithApprovalError,
 };
-use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_ckbtc_minter::updates::update_balance::{
+    PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
+};
 use ic_ckbtc_minter::{
     Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
 };
@@ -383,6 +385,56 @@ fn test_upgrade_restricted() {
 }
 
 #[test]
+fn test_no_new_utxos() {
+    let ckbtc = CkBtcSetup::new();
+
+    ckbtc.set_tip_height(100);
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 99,
+        outpoint: OutPoint {
+            txid: range_to_txid(1..=32),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+
+    let deposit_address = ckbtc.get_btc_address(user);
+
+    ckbtc.push_utxo(deposit_address, utxo.clone());
+
+    let update_balance_args = UpdateBalanceArgs {
+        owner: None,
+        subaccount: None,
+    };
+    let res = ckbtc
+        .env
+        .execute_ingress_as(
+            PrincipalId::new_user_test_id(1),
+            ckbtc.minter_id,
+            "update_balance",
+            Encode!(&update_balance_args).unwrap(),
+        )
+        .expect("Failed to call update_balance");
+    let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
+    assert_eq!(
+        res,
+        Err(UpdateBalanceError::NoNewUtxos {
+            pending_utxos: Some(vec![PendingUtxo {
+                outpoint: utxo.outpoint,
+                value: utxo.value,
+                confirmations: 2,
+            }]),
+            current_confirmations: Some(2),
+            required_confirmations: 12,
+        })
+    );
+}
+
+#[test]
 fn test_illegal_caller() {
     let env = StateMachine::new();
     let ledger_id = install_ledger(&env);
@@ -599,6 +651,16 @@ impl CkBtcSetup {
                 Encode!(fees).unwrap(),
             )
             .expect("failed to set fee percentiles");
+    }
+
+    pub fn set_tip_height(&self, tip_height: u32) {
+        self.env
+            .execute_ingress(
+                self.bitcoin_id,
+                "set_tip_height",
+                Encode!(&tip_height).unwrap(),
+            )
+            .expect("failed to set fee tip height");
     }
 
     pub fn push_utxo(&self, address: String, utxo: Utxo) {
