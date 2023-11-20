@@ -3,7 +3,7 @@ use crate::memo::MintMemo;
 use crate::state::{mutate_state, read_state, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use ic_btc_interface::{GetUtxosError, GetUtxosResponse, Utxo};
+use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
@@ -59,6 +59,13 @@ pub enum ErrorCode {
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct PendingUtxo {
+    pub outpoint: OutPoint,
+    pub value: u64,
+    pub confirmations: u32,
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub enum UpdateBalanceError {
     /// The minter experiences temporary issues, try the call again later.
     TemporarilyUnavailable(String),
@@ -72,6 +79,8 @@ pub enum UpdateBalanceError {
         current_confirmations: Option<u32>,
         /// The minimum number of UTXO confirmation required for the minter to accept a UTXO.
         required_confirmations: u32,
+        /// List of utxos that don't have enough confirmations yet to be processed.
+        pending_utxos: Option<Vec<PendingUtxo>>,
     },
     GenericError {
         error_code: u64,
@@ -161,7 +170,9 @@ pub async fn update_balance(
         // confirmation limit so that we can indicate the approximate
         // wait time to the caller.
         let GetUtxosResponse {
-            tip_height, utxos, ..
+            tip_height,
+            mut utxos,
+            ..
         } = get_utxos(
             btc_network,
             &address,
@@ -170,17 +181,22 @@ pub async fn update_balance(
         )
         .await?;
 
-        let current_confirmations = utxos
+        utxos.retain(|u| tip_height < u.height + min_confirmations);
+        let pending_utxos: Vec<PendingUtxo> = utxos
             .iter()
-            .filter_map(|u| {
-                (tip_height < u.height.saturating_add(min_confirmations))
-                    .then_some(tip_height - u.height)
+            .map(|u| PendingUtxo {
+                outpoint: u.outpoint.clone(),
+                value: u.value,
+                confirmations: tip_height - u.height + 1,
             })
-            .max();
+            .collect();
+
+        let current_confirmations = pending_utxos.iter().map(|u| u.confirmations).max();
 
         return Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations,
             required_confirmations: min_confirmations,
+            pending_utxos: Some(pending_utxos),
         });
     }
 
