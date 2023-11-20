@@ -4,17 +4,17 @@
 use crate::address::Address;
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::CandidBlockTag;
-use crate::eth_rpc_client::providers::RpcApi;
+use crate::eth_rpc_client::providers::RpcNodeProvider;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::RpcTransport;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
-use candid::{candid_method, CandidType, Principal};
+use candid::{candid_method, CandidType};
 use ethnum;
 use ic_canister_log::log;
-use ic_cdk::api::call::{call_with_payment128, RejectionCode};
+use ic_cdk::api::call::{RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
     TransformContext,
@@ -687,7 +687,7 @@ impl HttpResponsePayload for TransactionCount {}
 
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
 pub async fn call<T, I, O>(
-    api: &RpcApi,
+    provider: &RpcNodeProvider,
     method: impl Into<String>,
     params: I,
     mut response_size_estimate: ResponseSizeEstimate,
@@ -704,6 +704,7 @@ where
         method: eth_method.clone(),
         id: 1,
     };
+    let api = T::resolve_api(provider)?;
     let url = &api.url;
     let mut headers = vec![HttpHeader {
         name: "Content-Type".to_string(),
@@ -757,15 +758,20 @@ where
         }
         ic_cdk::api::call::msg_cycles_accept128(cycles);
 
-        let response: HttpResponse = match call_with_payment128(
-            Principal::management_canister(),
-            "http_request",
-            (request,),
+        // let response: HttpResponse = match call_with_payment128(
+        //     Principal::management_canister(),
+        //     "http_request",
+        //     (request,),
+        //     cycles,
+        // )
+        let response: HttpResponse = match T::http_request(
+            provider,
+            request,
             cycles,
         )
         .await
         {
-            Ok((response,)) => response,
+            Ok(response) => response,
             Err((code, message))
                 if code == RejectionCode::SysFatal && message.contains("size limit") =>
             {

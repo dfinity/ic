@@ -13,6 +13,8 @@ use crate::state::State;
 use async_trait::async_trait;
 use candid::CandidType;
 use ic_canister_log::log;
+use ic_cdk::api::call::RejectionCode;
+use ic_cdk::api::management_canister::http_request::{CanisterHttpRequestArgument, HttpResponse};
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
@@ -33,13 +35,13 @@ pub trait RpcTransport: Debug {
     // TODO: remove after refactoring to `call_json_rpc()`
     fn get_subnet_size() -> u32;
 
-    fn resolve_api(provider: RpcNodeProvider) -> Result<RpcApi, ProviderError>;
+    fn resolve_api(provider: &RpcNodeProvider) -> Result<RpcApi, ProviderError>;
 
-    async fn call_json_rpc<T: DeserializeOwned>(
-        provider: RpcNodeProvider,
-        json: &str,
-        max_response_bytes: u64,
-    ) -> Result<T, RpcError>;
+    async fn http_request(
+        provider: &RpcNodeProvider,
+        request: CanisterHttpRequestArgument,
+        cycles: u128,
+    ) -> Result<HttpResponse, (RejectionCode, String)>;
 }
 
 // Placeholder during refactoring
@@ -53,15 +55,15 @@ impl RpcTransport for DefaultTransport {
         unimplemented!()
     }
 
-    fn resolve_api(provider: RpcNodeProvider) -> Result<RpcApi, ProviderError> {
+    fn resolve_api(provider: &RpcNodeProvider) -> Result<RpcApi, ProviderError> {
         Ok(provider.api())
     }
 
-    async fn call_json_rpc<T: DeserializeOwned>(
-        _provider: RpcNodeProvider,
-        _json: &str,
-        _max_response_bytes: u64,
-    ) -> Result<T, RpcError> {
+    async fn http_request(
+        _provider: &RpcNodeProvider,
+        _request: CanisterHttpRequestArgument,
+        _cycles: u128,
+    ) -> Result<HttpResponse, (RejectionCode, String)> {
         unimplemented!()
     }
 }
@@ -119,7 +121,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
                 provider
             );
             let result = eth_rpc::call::<T, _, _>(
-                &T::resolve_api(*provider)?,
+                provider,
                 method.clone(),
                 params.clone(),
                 response_size_estimate,
@@ -165,7 +167,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
                 log!(DEBUG, "[parallel_call]: will call provider: {:?}", provider);
                 fut.push(async {
                     eth_rpc::call::<T, _, _>(
-                        &T::resolve_api(*provider)?,
+                        provider,
                         method.clone(),
                         params.clone(),
                         response_size_estimate,
