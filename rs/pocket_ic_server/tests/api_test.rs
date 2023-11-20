@@ -1,4 +1,4 @@
-use pocket_ic::common::rest::STANDARD;
+use pocket_ic::common::rest::SubnetConfigSet;
 use reqwest::{StatusCode, Url};
 
 use std::path::PathBuf;
@@ -22,7 +22,10 @@ fn test_creation_of_instance() {
     let client = reqwest::blocking::Client::new();
     let response = client
         .post(url.join("instances").unwrap())
-        .json(&vec![STANDARD])
+        .json(&SubnetConfigSet {
+            application: 1,
+            ..Default::default()
+        })
         .send()
         .unwrap();
 

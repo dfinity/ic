@@ -261,39 +261,71 @@ pub mod base64 {
 
 // ================================================================================================================= //
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum SubnetKind {
     Application,
-    System,
+    Bitcoin,
+    Fiduciary,
+    II,
     NNS,
+    SNS,
+    System,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+/// This represents which named subnets the user wants to create, and how
+/// many of the general app/system subnets, which are indistinguishable.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, Default)]
+pub struct SubnetConfigSet {
+    pub nns: bool,
+    pub sns: bool,
+    pub ii: bool,
+    pub fiduciary: bool,
+    pub bitcoin: bool,
+    pub system: usize,
+    pub application: usize,
+}
+
+impl SubnetConfigSet {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.system > 0
+            || self.application > 0
+            || self.nns
+            || self.sns
+            || self.ii
+            || self.fiduciary
+            || self.bitcoin
+        {
+            return Ok(());
+        }
+        Err("SubnetConfigSet must contain at least one subnet".to_owned())
+    }
+
+    /// Return the configured named subnets in order.
+    pub fn get_named(&self) -> Vec<SubnetKind> {
+        use SubnetKind::*;
+        vec![
+            (self.nns, NNS),
+            (self.sns, SNS),
+            (self.ii, II),
+            (self.fiduciary, Fiduciary),
+            (self.bitcoin, Bitcoin),
+        ]
+        .into_iter()
+        .filter(|(flag, _)| *flag)
+        .map(|(_, kind)| kind)
+        .collect()
+    }
+}
+
+/// Configuration details for a subnet, returned by PocketIc server
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SubnetConfig {
-    pub subnet_type: SubnetKind,
+    pub subnet_kind: SubnetKind,
+    /// Number of nodes in the subnet.
     pub size: u64,
+    /// Some mainnet subnets have several disjunct canister ranges.
+    pub canister_ranges: Vec<CanisterIdRange>,
 }
-
-pub const STANDARD: SubnetConfig = SubnetConfig {
-    subnet_type: SubnetKind::Application,
-    size: 13,
-};
-pub const NNS: SubnetConfig = SubnetConfig {
-    subnet_type: SubnetKind::NNS,
-    size: 40,
-};
-pub const FIDUCIARY: SubnetConfig = SubnetConfig {
-    subnet_type: SubnetKind::Application,
-    size: 28,
-};
-pub const SNS: SubnetConfig = SubnetConfig {
-    subnet_type: SubnetKind::Application,
-    size: 34,
-};
-pub const II: SubnetConfig = SubnetConfig {
-    subnet_type: SubnetKind::System,
-    size: 13,
-};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CanisterIdRange {
@@ -302,13 +334,49 @@ pub struct CanisterIdRange {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Topology(pub HashMap<SubnetId, (CanisterIdRange, SubnetConfig)>);
+pub struct Topology(pub HashMap<SubnetId, SubnetConfig>);
 
 impl Topology {
-    pub fn get_nns_subnet(&self) -> Option<SubnetId> {
+    pub fn get_app_subnets(&self) -> Vec<SubnetId> {
+        self.find_subnets(SubnetKind::Application)
+    }
+
+    pub fn get_bitcoin(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::Bitcoin)
+    }
+
+    pub fn get_fiduciary(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::Fiduciary)
+    }
+
+    pub fn get_ii(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::II)
+    }
+
+    pub fn get_nns(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::NNS)
+    }
+
+    pub fn get_sns(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::SNS)
+    }
+
+    pub fn get_system_subnets(&self) -> Vec<SubnetId> {
+        self.find_subnets(SubnetKind::System)
+    }
+
+    fn find_subnets(&self, kind: SubnetKind) -> Vec<SubnetId> {
         self.0
             .iter()
-            .find(|(_, (_, config))| config.subnet_type == SubnetKind::NNS)
+            .filter(|(_, config)| config.subnet_kind == kind)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    fn find_subnet(&self, kind: SubnetKind) -> Option<SubnetId> {
+        self.0
+            .iter()
+            .find(|(_, config)| config.subnet_kind == kind)
             .map(|(id, _)| *id)
     }
 }
