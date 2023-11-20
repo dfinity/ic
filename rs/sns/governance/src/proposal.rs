@@ -1201,11 +1201,21 @@ impl ProposalData {
             .as_ref()
             .expect("expected latest_tally to not be None");
 
+        let minimum_yes_proportion_of_exercised = Percentage::from_basis_points(
+            self.minimum_yes_proportion_of_exercised
+                .and_then(|percentage| percentage.basis_points)
+                .unwrap_or(
+                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+                        .basis_points
+                        .unwrap(),
+                ),
+        );
+
         Self::majority_decision(
             tally.yes,
             tally.no,
             tally.total,
-            NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
+            minimum_yes_proportion_of_exercised,
         )
     }
 
@@ -2758,6 +2768,7 @@ Version {
             failure_reason: None,
             ballots: btreemap!{},
             minimum_yes_proportion_of_total: None,
+            minimum_yes_proportion_of_exercised: None,
             failed_timestamp_seconds: 0,
             proposal_creation_timestamp_seconds: 1670488610, // 2022-12-08T08:36:50Z (Thu)
             initial_voting_period_seconds: 345_600, // 4 days
