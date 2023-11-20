@@ -23,8 +23,7 @@ use crate::{
             get_neuron_response, get_proposal_response,
             governance::{
                 self, neuron_in_flight_command,
-                neuron_in_flight_command::Command as InFlightCommand,
-                ManageLedgerParametersPendingUpgradeData, MaturityModulation,
+                neuron_in_flight_command::Command as InFlightCommand, MaturityModulation,
                 NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
             },
             governance_error::ErrorType,
@@ -2110,15 +2109,8 @@ impl Governance {
                 self.perform_transfer_sns_treasury_funds(transfer).await
             }
             Action::ManageLedgerParameters(manage_ledger_parameters) => {
-                let mlp_result = self
-                    .perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters)
-                    .await;
-                match mlp_result {
-                    // return here because a successfull perform_manage_ledger_parameters result means that the ledger upgrade is scheduled,
-                    // and the heartbeat logic will set the proposal execution status.
-                    Ok(()) => return,
-                    Err(e) => Err(e),
-                }
+                self.perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters)
+                    .await
             }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
@@ -2705,7 +2697,7 @@ impl Governance {
             })
             .map_err(|err| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
 
-        let current_ledger_version_number: u64 =
+        let ledger_canister_info_version_number_before_upgrade: u64 =
             ledger_canister_info
             .changes()
             .last().ok_or(GovernanceError::new_with_message(ErrorType::External, "Could not execute proposal. Error finding current ledger canister_info version number".to_string()))?
@@ -2713,7 +2705,7 @@ impl Governance {
 
         let ledger_wasm = get_wasm(
             &*self.env,
-            current_version.ledger_wasm_hash.to_vec(),
+            current_version.ledger_wasm_hash.clone(),
             SnsCanisterType::Ledger,
         )
         .await
@@ -2748,24 +2740,69 @@ impl Governance {
         )
         .await?;
 
-        // A ledger upgrade has been successfully kicked-off. Set the manage_ledger_parameters_pending_upgrade field
-        // so that Governance's heartbeat logic can check on the status of this upgrade.
-        // Since we are upgrading the ledger to it's current/same wasm module, the heartbeat must use the canister_info version number to check for the completion.
-        self.proto.mlp_pending_upgrade = Some(ManageLedgerParametersPendingUpgradeData {
-            ledger_canister_info_version_number_before_upgrade: current_ledger_version_number,
-            manage_ledger_parameters_request: Some(manage_ledger_parameters),
-            ledger_wasm_hash: current_version.ledger_wasm_hash.to_vec(),
-            mark_failed_at_seconds: self.env.now() + 5 * 60,
-            checking_upgrade_lock: 0,
-            proposal_id,
-        });
+        let mark_failed_at_seconds = self.env.now() + 5 * 60;
 
-        log!(
-            INFO,
-            "Successfully kicked off ManageLedgerParameters ledger upgrade."
-        );
+        loop {
+            let ledger_canister_info = self.env
+                .call_canister(
+                    CanisterId::ic_00(),
+                    "canister_info",
+                    candid::encode_one(
+                        CanisterInfoRequest::new(
+                            ledger_canister_id,
+                            Some(20),
+                        )
+                    ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error encoding canister_info request.\n{}", e)))?
+                )
+                .await
+                .map(|b| {
+                    candid::decode_one::<CanisterInfoResponse>(&b)
+                        .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error decoding canister_info response.\n{}", e)))
+                })
+                .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Canister method call canister_info failed: {:?}", e)))??;
 
-        Ok(())
+            for canister_change in ledger_canister_info.changes().iter().rev() {
+                if canister_change.canister_version()
+                    > ledger_canister_info_version_number_before_upgrade
+                {
+                    if let CanisterChangeDetails::CanisterCodeDeployment(code_deployment) =
+                        canister_change.details()
+                    {
+                        if let CanisterInstallMode::Upgrade = code_deployment.mode() {
+                            if code_deployment.module_hash()[..]
+                                == current_version.ledger_wasm_hash[..]
+                            {
+                                // success
+                                // update nervous-system-parameters transaction_fee if the fee is changed.
+                                if let Some(nervous_system_parameters) =
+                                    self.proto.parameters.as_mut()
+                                {
+                                    if let Some(transfer_fee) =
+                                        manage_ledger_parameters.transfer_fee
+                                    {
+                                        nervous_system_parameters.transaction_fee_e8s =
+                                            Some(transfer_fee);
+                                    }
+                                }
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+
+            if self.env.now() > mark_failed_at_seconds {
+                let error = format!(
+                    "Upgrade marked as failed at {} seconds from genesis. \
+                    Did not find an upgrade in the ledger's canister_info recent_changes.",
+                    self.env.now(),
+                );
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    error,
+                ));
+            }
+        }
     }
 
     // Returns an option with the NervousSystemParameters
@@ -4523,10 +4560,6 @@ impl Governance {
         );
 
         measure_span(self.profiling_information, "maybe_gc", || self.maybe_gc());
-
-        if self.should_check_mlp_pending_upgrade() {
-            self.check_mlp_pending_upgrade_status().await;
-        }
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -5350,182 +5383,6 @@ impl Governance {
             owner: self.env.canister_id().get().0,
             subaccount: Some(subaccount),
         }
-    }
-
-    fn should_check_mlp_pending_upgrade(&self) -> bool {
-        self.proto.mlp_pending_upgrade.is_some()
-    }
-
-    async fn check_mlp_pending_upgrade_status(&mut self) {
-        // This expect is safe because we only call this after checking exactly that condition in
-        // should_check_mlp_pending_upgrade
-        let mlp_pending_upgrade = self.proto.mlp_pending_upgrade.as_ref().expect(
-            "There must be mlp_pending_upgrade or should_check_mlp_pending_upgrade returns false",
-        );
-
-        // Pre-checks finished, we now extract needed variables.
-        let mark_failed_at = mlp_pending_upgrade.mark_failed_at_seconds;
-        let proposal_id = mlp_pending_upgrade.proposal_id;
-        let ledger_canister_info_version_number_before_upgrade =
-            mlp_pending_upgrade.ledger_canister_info_version_number_before_upgrade;
-        let ledger_wasm_hash = mlp_pending_upgrade.ledger_wasm_hash.clone();
-        let mlp_request = mlp_pending_upgrade.manage_ledger_parameters_request.clone();
-
-        // Mark the check as active before async call.
-        self.proto
-            .mlp_pending_upgrade
-            .as_mut()
-            .unwrap()
-            .checking_upgrade_lock += 1;
-
-        let lock = self
-            .proto
-            .mlp_pending_upgrade
-            .as_ref()
-            .unwrap()
-            .checking_upgrade_lock;
-
-        if lock > 1000 {
-            let error =
-                "Too many attempts to check upgrade without success. Marking upgrade failed.";
-
-            self.fail_manage_ledger_parameters_proposal(
-                proposal_id,
-                GovernanceError::new_with_message(ErrorType::External, error),
-            );
-            return;
-        }
-
-        if lock > 1 {
-            return;
-        }
-
-        let log_error_and_fail_if_past_mark_failed_at = |self_: &mut Governance, estring: &str| {
-            log!(ERROR, "{}", estring);
-            if self_.env.now() > mark_failed_at {
-                let error = format!(
-                    "Upgrade marked as failed at {} seconds from genesis. \
-                    {}",
-                    self_.env.now(),
-                    estring,
-                );
-                self_.fail_manage_ledger_parameters_proposal(
-                    proposal_id,
-                    GovernanceError::new_with_message(ErrorType::External, error),
-                );
-            }
-        };
-
-        let canister_info_request = {
-            match candid::encode_one(CanisterInfoRequest::new(
-                self.proto.ledger_canister_id_or_panic(),
-                Some(20),
-            )) {
-                Ok(b) => b,
-                Err(e) => {
-                    self.proto
-                        .mlp_pending_upgrade
-                        .as_mut()
-                        .unwrap()
-                        .checking_upgrade_lock = 0;
-
-                    log_error_and_fail_if_past_mark_failed_at(
-                        self,
-                        &format!("Error encoding canister_info request: {:?}", e),
-                    );
-                    return;
-                }
-            }
-        };
-
-        let ledger_canister_info_call_result = self
-            .env
-            .call_canister(CanisterId::ic_00(), "canister_info", canister_info_request)
-            .await;
-
-        // Mark the check as inactive after async call.
-        self.proto
-            .mlp_pending_upgrade
-            .as_mut()
-            .unwrap()
-            .checking_upgrade_lock = 0;
-
-        let ledger_canister_info = match ledger_canister_info_call_result {
-            Ok(b) => match candid::decode_one::<CanisterInfoResponse>(&b) {
-                Ok(ci) => ci,
-                Err(e) => {
-                    log_error_and_fail_if_past_mark_failed_at(
-                        self,
-                        &format!("Error decoding canister_info response: {:?}", e),
-                    );
-                    return;
-                }
-            },
-            Err(call_error) => {
-                log_error_and_fail_if_past_mark_failed_at(
-                    self,
-                    &format!(
-                        "Call error when calling for the ledger's canister_info: {:?}",
-                        call_error
-                    ),
-                );
-                return;
-            }
-        };
-
-        for canister_change in ledger_canister_info.changes().iter().rev() {
-            if canister_change.canister_version()
-                > ledger_canister_info_version_number_before_upgrade
-            {
-                if let CanisterChangeDetails::CanisterCodeDeployment(code_deployment) =
-                    canister_change.details()
-                {
-                    if let CanisterInstallMode::Upgrade = code_deployment.mode() {
-                        if code_deployment.module_hash()[..] == ledger_wasm_hash[..] {
-                            // Success
-                            log!(
-                                INFO,
-                                "Upgrade marked successful at {} from genesis.",
-                                self.env.now(),
-                            );
-
-                            self.set_proposal_execution_status(proposal_id, Ok(()));
-                            self.proto.mlp_pending_upgrade = None;
-
-                            if let Some(nervous_system_parameters) = self.proto.parameters.as_mut()
-                            {
-                                if let Some(mlp_request) = mlp_request {
-                                    if let Some(transfer_fee) = mlp_request.transfer_fee {
-                                        nervous_system_parameters.transaction_fee_e8s =
-                                            Some(transfer_fee);
-                                    }
-                                }
-                            }
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-
-        if self.env.now() > mark_failed_at {
-            let error = format!(
-                "Upgrade marked as failed at {} seconds from genesis. \
-                Did not find an upgrade in the ledger's canister_info recent_changes.",
-                self.env.now(),
-            );
-            self.fail_manage_ledger_parameters_proposal(
-                proposal_id,
-                GovernanceError::new_with_message(ErrorType::External, error),
-            );
-        }
-    }
-
-    fn fail_manage_ledger_parameters_proposal(&mut self, proposal_id: u64, error: GovernanceError) {
-        log!(ERROR, "{}", error.error_message);
-        let result = Err(error);
-        self.set_proposal_execution_status(proposal_id, result);
-        self.proto.mlp_pending_upgrade = None;
     }
 }
 

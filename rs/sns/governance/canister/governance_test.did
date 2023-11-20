@@ -182,7 +182,6 @@ type Governance = record {
   latest_reward_event : opt RewardEvent;
   pending_version : opt UpgradeInProgress;
   swap_canister_id : opt principal;
-  mlp_pending_upgrade : opt ManageLedgerParametersPendingUpgradeData;
   ledger_canister_id : opt principal;
   proposals : vec record { nat64; ProposalData };
   in_flight_commands : vec record { text; NeuronInFlightCommand };
@@ -232,14 +231,6 @@ type ListProposalsResponse = record { proposals : vec ProposalData };
 type ManageLedgerParameters = record {
   transfer_fee : opt nat64;
   change_fee_collector : opt ChangeFeeCollector;
-};
-type ManageLedgerParametersPendingUpgradeData = record {
-  mark_failed_at_seconds : nat64;
-  ledger_wasm_hash : vec nat8;
-  checking_upgrade_lock : nat64;
-  proposal_id : nat64;
-  ledger_canister_info_version_number_before_upgrade : nat64;
-  manage_ledger_parameters_request : opt ManageLedgerParameters;
 };
 type ManageNeuron = record { subaccount : vec nat8; command : opt Command };
 type ManageNeuronResponse = record { command : opt Command_1 };
