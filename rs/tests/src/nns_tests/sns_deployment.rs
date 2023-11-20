@@ -1368,19 +1368,19 @@ async fn create_one_sale_participant(
                 SNS_ENDPOINT_RETRY_BACKOFF,
                 None,
             )
+    }
+    .await
+    .check_response(|response| {
+        let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
+        if response_amount >= contribution {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
         }
-        .await
-        .check_response(|response| {
-            let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
-            if response_amount >= contribution {
-                Ok(())
-            } else {
-                Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
-            }
-        })
-        .with_workflow_position(4)
-        .push_outcome_display_error(outcome)
-        .result()?;
+    })
+    .with_workflow_position(4)
+    .push_outcome_display_error(outcome)
+    .result()?;
 
     // 5. Check that the ticket has been deleted via swap.get_open_ticket
     {

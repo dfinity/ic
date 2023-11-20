@@ -64,7 +64,7 @@ use crate::{
 };
 
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
-pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 150_000 * E8;
+pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 250_000 * E8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsClient {
