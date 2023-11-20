@@ -35,6 +35,7 @@ use serde::Deserialize;
 use slog::{error, info};
 use std::{net::SocketAddrV6, time::Duration};
 use tokio::runtime::Runtime;
+const CANISTER_CALL_ATTEMPTS: usize = 5;
 
 /* tag::catalog[]
 Title:: API BN binary canister test
@@ -165,15 +166,22 @@ pub fn canister_routing_test(env: TestEnv) {
         "Incrementing counters on canisters via BN agent update calls ..."
     );
     block_on(set_counters_on_counter_canisters(
+        &log,
         bn_agent.clone(),
         canister_ids.clone(),
         canister_values.clone(),
+        CANISTER_CALL_ATTEMPTS,
     ));
     info!(
         log,
         "Asserting expected counters on canisters via BN agent query calls ... "
     );
-    let counters = block_on(read_counters_on_counter_canisters(bn_agent, canister_ids));
+    let counters = block_on(read_counters_on_counter_canisters(
+        &log,
+        bn_agent,
+        canister_ids,
+        CANISTER_CALL_ATTEMPTS,
+    ));
     assert_eq!(counters, canister_values);
 }
 
