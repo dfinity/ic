@@ -7498,9 +7498,6 @@ impl Governance {
 
     /// Refunds the maturity represented via `refunds` and stores this information in ProposalData
     /// of this `proposal_id` (for auditability).
-    ///
-    /// This function may be called only from `settle_neurons_fund_participation`, which also
-    /// handles async safety.
     fn refund_maturity_to_neurons_fund(
         &mut self,
         proposal_id: &ProposalId,
