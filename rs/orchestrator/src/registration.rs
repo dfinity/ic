@@ -600,10 +600,10 @@ fn metrics_config_to_endpoint(
 }
 
 fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> OrchestratorResult<String> {
-    let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|_e| {
+    let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|err| {
         OrchestratorError::invalid_configuration_error(format!(
-            "Could not parse IP-address: {}",
-            ip_addr
+            "Could not parse IP-address {}: {}",
+            ip_addr, err
         ))
     })?;
     if parsed_ip_addr.is_loopback() {

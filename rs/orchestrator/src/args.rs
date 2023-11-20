@@ -67,13 +67,19 @@ impl OrchestratorArgs {
     /// they don't already exist
     pub(crate) fn create_dirs(&self) {
         if !&self.replica_binary_dir.exists() {
-            fs::create_dir(&self.replica_binary_dir)
-                .unwrap_or_else(|_| panic!("Failed to create dir: {:?}", &self.replica_binary_dir));
+            fs::create_dir(&self.replica_binary_dir).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to create dir {}: {}",
+                    self.replica_binary_dir.display(),
+                    err,
+                )
+            });
         }
 
         if !self.cup_dir.exists() {
-            fs::create_dir(&self.cup_dir)
-                .unwrap_or_else(|_| panic!("Failed to create dir: {:?}", &self.cup_dir));
+            fs::create_dir(&self.cup_dir).unwrap_or_else(|err| {
+                panic!("Failed to create dir {}: {}", self.cup_dir.display(), err)
+            });
         }
     }
 
