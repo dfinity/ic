@@ -63,7 +63,7 @@ fn single_request_test() {
     let context = default_validation_context();
 
     for subnet_size in 1..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(subnet_size, |payload_builder, canister_http_pool| {
+        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
             let (response, metadata) = test_response_and_metadata(0);
             let shares = metadata_to_shares(subnet_size, &metadata);
 
@@ -117,7 +117,7 @@ fn multiple_payload_test() {
 
     // Run the test over a range of subnet configurations
     for subnet_size in 1..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(subnet_size, |payload_builder, canister_http_pool| {
+        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
             // Add response and shares to pool
             let (past_response, past_metadata) = {
                 let mut pool_access = canister_http_pool.write().unwrap();
@@ -242,7 +242,7 @@ fn multiple_payload_test() {
 #[test]
 fn multiple_share_same_source_test() {
     for subnet_size in 3..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(subnet_size, |payload_builder, canister_http_pool| {
+        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
             {
                 let mut pool_access = canister_http_pool.write().unwrap();
 
@@ -297,7 +297,7 @@ fn timeout_priority() {
     let response_count = 10;
     let timeout_count = 100;
 
-    test_config_with_http_feature(4, |mut payload_builder, canister_http_pool| {
+    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
         {
             let mut pool_access = canister_http_pool.write().unwrap();
             // add 100% capacity of normal (non-timeout) requests to the pool
@@ -366,7 +366,7 @@ fn timeout_priority() {
 /// Check that the payload builder includes a divergence responses
 #[test]
 fn divergence_response_inclusion_test() {
-    test_config_with_http_feature(10, |payload_builder, canister_http_pool| {
+    test_config_with_http_feature(true, 10, |payload_builder, canister_http_pool| {
         {
             let mut pool_access = canister_http_pool.write().unwrap();
 
@@ -443,7 +443,7 @@ fn divergence_response_inclusion_test() {
 /// payload builder does not process all of them but only CANISTER_HTTP_RESPONSES_PER_BLOCK
 #[test]
 fn max_responses() {
-    test_config_with_http_feature(4, |payload_builder, canister_http_pool| {
+    test_config_with_http_feature(true, 4, |payload_builder, canister_http_pool| {
         // Add a high number of possible responses to the pool
         (0..CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK + 200)
             .map(|callback| test_response_and_metadata(callback as u64))
@@ -484,6 +484,7 @@ fn max_responses() {
 #[test]
 fn oversized_validation() {
     let validation_result = run_validatation_test(
+        true,
         |response, _| {
             // Give response oversized content
             response.content = CanisterHttpResponseContent::Success(vec![123; 2 * 1024 * 1024]);
@@ -504,6 +505,7 @@ fn oversized_validation() {
 #[test]
 fn registry_version_validation() {
     let validation_result = run_validatation_test(
+        true,
         |_, metadata| {
             // Set metadata to a newer registry version
             metadata.registry_version = RegistryVersion::new(2);
@@ -526,6 +528,7 @@ fn registry_version_validation() {
 #[test]
 fn hash_validation() {
     let validation_result = run_validatation_test(
+        true,
         |response, _| {
             // Change response content to have a different hash
             response.content = CanisterHttpResponseContent::Success(b"cba".to_vec());
@@ -546,6 +549,7 @@ fn hash_validation() {
 #[test]
 fn timeout_validation() {
     let validation_result = run_validatation_test(
+        true,
         |_, _| { /* Nothing to modify */ },
         &ValidationContext {
             // Set the time further in the future, such that this payload is timed out
@@ -570,6 +574,7 @@ fn timeout_validation() {
 #[test]
 fn registry_unavailable_validation() {
     let validation_result = run_validatation_test(
+        true,
         |_, _| { /* Nothing to modify */ },
         &ValidationContext {
             // Use a higher registry version, that does not exist yet
@@ -591,17 +596,7 @@ fn registry_unavailable_validation() {
 /// the existing helper functions
 #[test]
 fn feature_disabled_validation() {
-    let validation_result = run_validatation_test(
-        |_, metadata| {
-            // Set registry version to 0
-            metadata.registry_version = RegistryVersion::new(0);
-        },
-        &ValidationContext {
-            // Use registry version 0
-            registry_version: RegistryVersion::new(0),
-            ..default_validation_context()
-        },
-    );
+    let validation_result = run_validatation_test(false, |_, _| {}, &default_validation_context());
     match validation_result {
         Err(ValidationError::Transient(
             PayloadTransientError::CanisterHttpPayloadValidationError(
@@ -615,7 +610,7 @@ fn feature_disabled_validation() {
 /// Test that duplicate payloads don't validate
 #[test]
 fn duplicate_validation() {
-    test_config_with_http_feature(4, |payload_builder, _| {
+    test_config_with_http_feature(true, 4, |payload_builder, _| {
         let (response, metadata) = test_response_and_metadata(0);
 
         let payload = CanisterHttpPayload {
@@ -657,7 +652,7 @@ fn duplicate_validation() {
 #[test]
 fn divergence_response_validation_test() {
     for subnet_size in 3..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(subnet_size, |payload_builder, _| {
+        test_config_with_http_feature(true, subnet_size, |payload_builder, _| {
             let (_, metadata) = test_response_and_metadata(0);
             let (_, other_metadata) = test_response_and_metadata_with_content(
                 0,
@@ -888,6 +883,7 @@ pub(crate) fn metadata_to_shares(
 
 /// Mock up a test node, which has the feature enabled
 pub(crate) fn test_config_with_http_feature<T>(
+    https_feature_flag: bool,
     num_nodes: usize,
     run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>) -> T,
 ) -> T {
@@ -897,7 +893,7 @@ pub(crate) fn test_config_with_http_feature<T>(
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
         let mut subnet_record = SubnetRecordBuilder::from(&committee).build();
         subnet_record.features = Some(SubnetFeatures {
-            http_requests: true,
+            http_requests: https_feature_flag,
             ..SubnetFeatures::default()
         });
 
@@ -946,13 +942,14 @@ pub(crate) fn default_validation_context() -> ValidationContext {
 /// This is useful to run a number of tests against the payload validator, without the need
 /// to mock up all needed structures again and again.
 fn run_validatation_test<F>(
+    https_feature_flag: bool,
     mut modify: F,
     validation_context: &ValidationContext,
 ) -> Result<(), PayloadValidationError>
 where
     F: FnMut(&mut CanisterHttpResponse, &mut CanisterHttpResponseMetadata),
 {
-    test_config_with_http_feature(4, |payload_builder, _| {
+    test_config_with_http_feature(https_feature_flag, 4, |payload_builder, _| {
         let (mut response, mut metadata) = test_response_and_metadata(0);
         modify(&mut response, &mut metadata);
 

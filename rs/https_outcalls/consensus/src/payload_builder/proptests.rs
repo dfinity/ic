@@ -47,7 +47,7 @@ fn run_proptest(
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     let context = default_validation_context();
-    test_config_with_http_feature(SUBNET_SIZE, |payload_builder, canister_http_pool| {
+    test_config_with_http_feature(true, SUBNET_SIZE, |payload_builder, canister_http_pool| {
         {
             let mut pool_access = canister_http_pool.write().unwrap();
 
