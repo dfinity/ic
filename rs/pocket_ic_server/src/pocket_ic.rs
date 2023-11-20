@@ -15,16 +15,18 @@ use ic_state_machine_tests::{
     StateMachineConfig, Time,
 };
 use ic_test_utilities::types::ids::subnet_test_id;
-use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, RawAddCycles, RawCanisterCall, RawEffectivePrincipal,
-    RawSetStableMemory, Topology,
+    RawSetStableMemory, SubnetConfigSet, SubnetKind, Topology,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
+use std::iter::repeat;
+use std::str::FromStr;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -32,75 +34,86 @@ use std::{
 };
 use tokio::runtime::Runtime;
 
+/// We assume that the maximum number of subnets on the mainnet is 1024.
+/// Used for generating canister ID ranges that do not appear on mainnet.
+pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
+
 pub struct PocketIc {
     subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
     routing_table: RoutingTable,
-    /// Constant for now. Filled on initialization.
+    /// Constant, created on initialization.
     pub topology: Topology,
     // Used for choosing a random subnet when the user does not specify
-    // a subnet where a canister should be created. This value is seeded,
-    // so we still maintain reproducibility.
+    // where a canister should be created. This value is seeded,
+    // so reproducibility is maintained.
     randomness: StdRng,
 }
 
 impl PocketIc {
-    pub fn new(runtime: Arc<Runtime>, subnet_configs: Vec<rest::SubnetConfig>) -> Self {
-        // The user may request an NNS. We must make sure there is at most one, and that only an NNS
-        // has the canister range [0, 2^20-1].
-        // If an NNS config exists, pull it to the front and filter out all other NNS configs.
-        let nns_predicate = |conf: &rest::SubnetConfig| conf.subnet_type == rest::SubnetKind::NNS;
-        let nns_cfg = subnet_configs.iter().cloned().find(nns_predicate);
-        let mut cfgs: Vec<rest::SubnetConfig> = subnet_configs
-            .into_iter()
-            .filter(|conf| !nns_predicate(conf))
-            .collect();
-        // We start the subnet ranges from 0 if we have an NNS, and from 1 otherwise.
-        let start_index = if let Some(nns_cfg) = nns_cfg {
-            cfgs.insert(0, nns_cfg);
-            0
-        } else {
-            1
+    pub fn new(runtime: Arc<Runtime>, subnet_configs: SubnetConfigSet) -> Self {
+        let fixed_range_subnets = subnet_configs.get_named();
+        let flexible_subnets = {
+            let sys = repeat(SubnetKind::System).take(subnet_configs.system);
+            let app = repeat(SubnetKind::Application).take(subnet_configs.application);
+            sys.chain(app)
         };
-        // The subnet id and range are now derived from the index in this vec and the start_index.
-        // Before we can create the individual subnets, we need to create a routing table, which needs info
-        // about the whole set of subnets.
-        let subnet_config_info: Vec<(SubnetId, CanisterIdRange, rest::SubnetConfig)> = cfgs
-            .into_iter()
-            .enumerate()
-            .map(|(i, cfg)| {
-                let i: u64 = i as u64 + start_index;
-                let range = CanisterIdRange {
-                    start: CanisterId::from_u64(i * CANISTER_IDS_PER_SUBNET),
-                    end: CanisterId::from_u64((i + 1) * CANISTER_IDS_PER_SUBNET - 1),
-                };
-                let subnet_id = subnet_test_id(i);
-                (subnet_id, range, cfg)
-            })
-            .collect();
 
-        // Set up routing table and subnet list for registry.
+        let mut range_gen = RangeGen::new();
+        let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
+        let mut subnet_ids = Vec::new();
         let mut routing_table = RoutingTable::new();
-        let mut subnet_id_list = Vec::new();
-        for (subnet_id, range, _) in subnet_config_info.iter() {
-            routing_table.insert(*range, *subnet_id).unwrap();
-            subnet_id_list.push(*subnet_id);
-        }
-        // Set up registry data provider.
-        let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
-        // Now we can create all subnets and the topology.
+        for (subnet_counter, subnet_kind) in fixed_range_subnets
+            .into_iter()
+            .chain(flexible_subnets)
+            .enumerate()
+        {
+            let subnet_id = subnet_test_id(subnet_counter as u64);
+            subnet_ids.push(subnet_id);
+
+            let RangeConfig {
+                canister_id_ranges: ranges,
+                canister_allocation_range: alloc_range,
+            } = get_range_config(subnet_kind, &mut range_gen);
+
+            // Insert ranges and allocation range into routing table
+            for range in &ranges {
+                routing_table.insert(*range, subnet_id).unwrap();
+            }
+            if let Some(alloc_range) = alloc_range {
+                routing_table.insert(alloc_range, subnet_id).unwrap();
+            }
+
+            subnet_config_info.push(SubnetConfigInfo {
+                subnet_id,
+                ranges,
+                subnet_kind,
+            });
+        }
+
+        let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>> =
             Arc::new(RwLock::new(HashMap::new()));
         let mut topology = Topology(HashMap::new());
-        for (subnet_id, range, cfg) in subnet_config_info {
-            let subnet_config = SubnetConfig::new(conv_type(cfg.subnet_type));
-            let config =
-                StateMachineConfig::new(subnet_config, execution_environment::Config::default());
+
+        // Create all StateMachines and the topology from the subnet config infos.
+        for SubnetConfigInfo {
+            subnet_id,
+            ranges,
+            subnet_kind,
+        } in subnet_config_info
+        {
+            let subnet_config = SubnetConfig::new(conv_type(subnet_kind));
+            let hypervisor_config = execution_environment::Config {
+                default_provisional_cycles_balance: Cycles::new(0),
+                ..Default::default()
+            };
+            let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
             let subnet = StateMachineBuilder::new()
                 .with_runtime(runtime.clone())
-                .with_config(Some(config))
+                .with_config(Some(sm_config))
                 .with_subnet_id(subnet_id)
-                .with_subnet_list(subnet_id_list.clone())
+                .with_subnet_list(subnet_ids.clone())
                 .with_routing_table(routing_table.clone())
                 .with_registry_data_provider(registry_data_provider.clone())
                 .with_ecdsa_keys(vec![EcdsaKeyId {
@@ -110,16 +123,13 @@ impl PocketIc {
                 .build_with_subnets(subnets.clone());
             subnet.set_time(SystemTime::now());
 
-            topology.0.insert(
-                subnet_id.get().0,
-                (
-                    rest::CanisterIdRange {
-                        start: range.start.into(),
-                        end: range.end.into(),
-                    },
-                    cfg,
-                ),
-            );
+            // What we return to the library:
+            let subnet_config = pocket_ic::common::rest::SubnetConfig {
+                subnet_kind,
+                size: subnet_size(subnet_kind),
+                canister_ranges: ranges.iter().map(|r| from_range(r)).collect(),
+            };
+            topology.0.insert(subnet_id.get().0, subnet_config);
         }
 
         for subnet in subnets.read().unwrap().values() {
@@ -154,19 +164,18 @@ impl PocketIc {
     }
 
     fn random_subnet(&mut self) -> Arc<StateMachine> {
-        // A new canister should be installed on an app subnet by default.
-        // If there are no app subnets, we fall back to non-NNS system subnets.
-        // If there are none of these, we install in the NNS subnet.
-        let random_application_subnet =
-            self.get_random_subnet_of_type(rest::SubnetKind::Application);
-        if let Some(subnet) = random_application_subnet {
+        // A new canister should be created on an app subnet by default.
+        // If there are no app subnets, fall back to system subnets.
+        // If there are none of these, install it on any subnet.
+        let random_app_subnet = self.get_random_subnet_of_type(rest::SubnetKind::Application);
+        if let Some(subnet) = random_app_subnet {
             return subnet;
         }
         let random_system_subnet = self.get_random_subnet_of_type(rest::SubnetKind::System);
         if let Some(subnet) = random_system_subnet {
             return subnet;
         }
-        // If there are no application or system subnets, return the (only) NNS subnet.
+        // If there are no application or system subnets, return any subnet.
         self.any_subnet()
     }
 
@@ -187,7 +196,7 @@ impl PocketIc {
             .topology
             .0
             .iter()
-            .filter(|(_, (_, config))| config.subnet_type == subnet_type)
+            .filter(|(_, config)| config.subnet_kind == subnet_type)
             .collect_vec();
         if !subnets.is_empty() {
             let n = subnets.len();
@@ -203,7 +212,13 @@ impl PocketIc {
 
 impl Default for PocketIc {
     fn default() -> Self {
-        Self::new(Runtime::new().unwrap().into(), vec![rest::STANDARD])
+        Self::new(
+            Runtime::new().unwrap().into(),
+            SubnetConfigSet {
+                application: 1,
+                ..Default::default()
+            },
+        )
     }
 }
 
@@ -225,11 +240,132 @@ impl HasStateLabel for PocketIc {
 }
 
 fn conv_type(inp: rest::SubnetKind) -> SubnetType {
+    use rest::SubnetKind::*;
     match inp {
-        rest::SubnetKind::Application => SubnetType::Application,
-        rest::SubnetKind::System => SubnetType::System,
-        rest::SubnetKind::NNS => SubnetType::System,
+        Application | Fiduciary | SNS => SubnetType::Application,
+        Bitcoin | II | NNS | System => SubnetType::System,
     }
+}
+
+fn subnet_size(subnet: SubnetKind) -> u64 {
+    use rest::SubnetKind::*;
+    match subnet {
+        Application => 13,
+        Fiduciary => 28,
+        SNS => 34,
+        Bitcoin => 13,
+        II => 28,
+        NNS => 40,
+        System => 13,
+    }
+}
+
+fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
+    let CanisterIdRange { start, end } = range;
+    let start = start.get().into();
+    let end = end.get().into();
+    rest::CanisterIdRange { start, end }
+}
+
+fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> RangeConfig {
+    use rest::SubnetKind::*;
+    match subnet_kind {
+        Application | System => {
+            let range = range_gen.next_range();
+            RangeConfig {
+                canister_id_ranges: vec![range],
+                canister_allocation_range: None,
+            }
+        }
+        Bitcoin => {
+            let canister_allocation_range = range_gen.next_range();
+            let range = gen_range("g3wsl-eqaaa-aaaan-aaaaa-cai", "2qqia-xyaaa-aaaan-p777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+        Fiduciary => {
+            let canister_allocation_range = range_gen.next_range();
+            let range = gen_range("mf7xa-laaaa-aaaar-qaaaa-cai", "qoznl-yiaaa-aaaar-7777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+        II => {
+            let canister_allocation_range = range_gen.next_range();
+            let range1 = gen_range("rdmx6-jaaaa-aaaaa-aaadq-cai", "rdmx6-jaaaa-aaaaa-aaadq-cai");
+            let range2 = gen_range("uc7f6-kaaaa-aaaaq-qaaaa-cai", "ijz7v-ziaaa-aaaaq-7777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range1, range2],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+        NNS => {
+            let canister_allocation_range = range_gen.next_range();
+            let range1 = gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai");
+            let range2 = gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range1, range2],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+        SNS => {
+            let canister_allocation_range = range_gen.next_range();
+            let range = gen_range("ybpmr-kqaaa-aaaaq-aaaaa-cai", "ekjw2-zyaaa-aaaaq-p777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+    }
+}
+
+/// A stateful helper for finding available canister ranges.
+#[derive(Default)]
+struct RangeGen {
+    range_offset: u64,
+}
+
+impl RangeGen {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Returns the next canister id range from the top
+    pub fn next_range(&mut self) -> CanisterIdRange {
+        let offset = (u64::MAX / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
+        self.range_offset += 1;
+        let start = offset * CANISTER_IDS_PER_SUBNET;
+        let end = ((offset + 1) * CANISTER_IDS_PER_SUBNET) - 1;
+        CanisterIdRange {
+            start: CanisterId::from_u64(start),
+            end: CanisterId::from_u64(end),
+        }
+    }
+}
+
+fn gen_range(start: &str, end: &str) -> CanisterIdRange {
+    CanisterIdRange {
+        start: CanisterId::from_str(start).unwrap(),
+        end: CanisterId::from_str(end).unwrap(),
+    }
+}
+
+struct RangeConfig {
+    /// Ranges for manual allocation where the user provides a canister_id.
+    pub canister_id_ranges: Vec<CanisterIdRange>,
+    /// Range for automatic allocation: The management canister chooses
+    /// a canister_id from this range.
+    pub canister_allocation_range: Option<CanisterIdRange>,
+}
+
+/// Internal struct used during initialization.
+struct SubnetConfigInfo {
+    pub subnet_id: SubnetId,
+    pub ranges: Vec<CanisterIdRange>,
+    pub subnet_kind: SubnetKind,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -269,7 +405,7 @@ impl Operation for GetTime {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        // Time is kept in sync across subnets, so we can take any subnet.
+        // Time is kept in sync across subnets, so one can take any subnet.
         let nanos = systemtime_to_unix_epoch_nanos(pic.any_subnet().time());
         OpOut::Time(nanos)
     }
@@ -875,7 +1011,13 @@ mod tests {
     }
 
     fn new_pic_counter_installed_system_subnet() -> (PocketIc, CanisterId) {
-        let mut pic = PocketIc::new(Runtime::new().unwrap().into(), vec![rest::II]);
+        let mut pic = PocketIc::new(
+            Runtime::new().unwrap().into(),
+            SubnetConfigSet {
+                ii: true,
+                ..Default::default()
+            },
+        );
         let canister_id = pic.any_subnet().create_canister(None);
 
         let module = counter_wasm();

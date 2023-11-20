@@ -2,17 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
 
-## 1.0.0
+## 2.0.0 - 2023-11-21
+
+### Added
+- Support for multiple subnets
+- Support for cross-subnet canister calls
+- Ability to mute the server's stdout/stderr streams by setting the `POCKET_IC_MUTE_SERVER` environment variable
+- New struct `PocketIcBuilder` to create a PocketIC instance with a subnet configuration
+- New constructor `PocketIc::from_config(config: SubnetConfigSet)` to create a PocketIC instance with a specified subnet topology
+- New `create_canister_with_id()` method to create a canister with a specified ID
+- New `create_canister_on_subnet()` method to create a canister on a specified subnet
+- New `topology()` method returning a map of subnet IDs to subnet configurations
+- New struct `SubnetConfig` returned by `topology()` to describe a subnet
+- New struct `SubnetConfigSet` describing the desired subnet topology on initialization
+- New enum `SubnetKind` to specify different kinds ob subnets
+
+
+### Changed
+- `create_canister()` method now takes no arguments, the anonymous prinicpal is used. To use a custom sender, use `create_canister_with_settings()`
+
+
+### Removed
+- `create_checkpoint()` method
+
+
+
+## 1.0.0 - 2023-10-12
 
 ### Added
 - Blocking REST-API: Encode IC-call in endpoint, not in body.
-
-## 0.1.0
-
-### Added
-- Blocking API to make IC-calls to a PocketIC server.
