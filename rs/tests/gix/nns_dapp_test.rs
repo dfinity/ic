@@ -16,9 +16,8 @@ end::catalog[] */
 use anyhow::{bail, Result};
 
 use candid::Principal;
-use hyper::client::connect::HttpConnector;
 use hyper::Client;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnectorBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_tests::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
@@ -71,10 +70,11 @@ fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: 
     let log = env.logger();
     retry(log.clone(), secs(600), secs(30), || {
         block_on(async {
-            let mut http_connector = HttpConnector::new();
-            http_connector.enforce_http(false);
-            let mut https_connector = HttpsConnector::new_with_connector(http_connector);
-            https_connector.https_only(true);
+            let https_connector = HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .https_only()
+                .enable_http1()
+                .build();
             let client = Client::builder().build::<_, hyper::Body>(https_connector);
 
             let dapp_url = format!("https://{}.{}", canister_id, farm_url);

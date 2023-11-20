@@ -1,5 +1,5 @@
 {
-  "checksum": "260b47ec5bcd02228f151357ba4309336dcbfb8301c77b4d0a04512214795e6f",
+  "checksum": "8635ee15ca1ea9662962100f0c08f4ec6fb7f23ee0fa8d6ff2e091734bec03da",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13440,10 +13440,6 @@
             {
               "id": "hyper-socks2 0.8.0",
               "target": "hyper_socks2"
-            },
-            {
-              "id": "hyper-tls 0.5.0",
-              "target": "hyper_tls"
             },
             {
               "id": "ic-agent 0.30.2",
