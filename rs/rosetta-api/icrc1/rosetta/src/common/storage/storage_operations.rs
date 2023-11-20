@@ -208,6 +208,21 @@ pub fn get_block_at_idx(
     read_single_block(&mut stmt, params![])
 }
 
+// Returns a RosettaBlock with the smallest index larger than block_idx.
+// Returns None if there are no blocks with larger index.
+// Returns an Error if the query fails.
+fn get_block_at_next_idx(
+    connection: &Connection,
+    block_idx: u64,
+) -> anyhow::Result<Option<RosettaBlock>> {
+    let command = format!(
+        "SELECT idx,serialized_block FROM blocks WHERE idx > {} ORDER BY idx ASC LIMIT 1",
+        block_idx
+    );
+    let mut stmt = connection.prepare(&command)?;
+    read_single_block(&mut stmt, params![])
+}
+
 // Returns a RosettaBlock if the block hash exists in the database, else returns None.
 // Returns an Error if the query fails.
 pub fn get_block_by_hash(
@@ -247,19 +262,20 @@ pub fn get_blocks_by_index_range(
 pub fn get_blockchain_gaps(
     connection: &Connection,
 ) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
-    // If there exists a gap in the stored blockchain from (a,b) then this query will return all blocks which represent b in all the gaps that exist in the database
-    let command =  "SELECT b1.idx,b1.serialized_block FROM blocks b1 LEFT JOIN blocks b2 ON b1.idx = b2.idx +1 WHERE b2.idx IS NULL AND b1.idx > (SELECT idx from blocks ORDER BY idx ASC LIMIT 1) ORDER BY b1.idx ASC";
+    // Search for blocks, such that there is no block with index+1.
+    let command = "SELECT b1.idx,b1.serialized_block FROM blocks b1 WHERE not exists(select 1 from blocks b2 where b2.idx = b1.idx + 1)";
     let mut stmt = connection.prepare(command)?;
-    let upper_gap_limits = read_blocks(&mut stmt, params![])?;
+    let gap_starts = read_blocks(&mut stmt, params![])?;
+    let mut gap_limits = vec![];
 
-    // If there exists a gap in the stored blockchain from (a,b) then this query will return all blocks which represent a in all the gaps that exist in the database
-    let command =  "SELECT b1.idx,b1.serialized_block FROM  blocks b1 LEFT JOIN blocks b2 ON b1.idx + 1 = b2.idx WHERE b2.idx IS NULL AND b1.idx < (SELECT idx from blocks ORDER BY idx DESC LIMIT 1) ORDER BY b1.idx ASC";
-    let mut stmt = connection.prepare(command)?;
-    let lower_gap_limits = read_blocks(&mut stmt, params![])?;
+    for gap_start in gap_starts {
+        let gap_end = get_block_at_next_idx(connection, gap_start.index)?;
+        if let Some(gap_end) = gap_end {
+            gap_limits.push((gap_start, gap_end));
+        }
+    }
 
-    // Both block vectors are ordered and since a gap always has a upper and lower end, both vectors will have the same length.
-    // If U is the vector of upper limits and L of lower limits then the first gap in the blockchain is (L[0],U[0]) the second gap is (L[1],U[1]) ...
-    Ok(lower_gap_limits.into_iter().zip(upper_gap_limits).collect())
+    Ok(gap_limits)
 }
 
 // Returns a icrc1 Transaction if the block index exists in the database, else returns None.

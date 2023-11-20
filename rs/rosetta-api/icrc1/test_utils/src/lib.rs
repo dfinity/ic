@@ -205,17 +205,19 @@ pub fn valid_blockchain_strategy<Tokens: TokensType>(
 
 pub fn valid_blockchain_with_gaps_strategy<Tokens: TokensType>(
     size: usize,
-) -> impl Strategy<Value = Vec<Block<Tokens>>> {
+) -> impl Strategy<Value = (Vec<Block<Tokens>>, Vec<usize>)> {
     let blockchain_strategy = valid_blockchain_strategy(size);
-    let random_indices = prop::collection::hash_set(any::<u8>().prop_map(|x| x as u64), 0..size);
-    (blockchain_strategy, random_indices).prop_map(|(mut blockchain, indices)| {
-        for index in indices.into_iter() {
-            if !blockchain.is_empty() {
-                let fitted_index = index % blockchain.len() as u64;
-                blockchain.remove(fitted_index as usize);
-            }
-        }
-        blockchain
+    let gaps = prop::collection::vec(0..5usize, size);
+    (blockchain_strategy, gaps).prop_map(|(blockchain, gaps)| {
+        let block_indices = gaps
+            .into_iter()
+            .enumerate()
+            .scan(0, |acc, (index, gap)| {
+                *acc += gap;
+                Some(index + *acc)
+            })
+            .collect();
+        (blockchain, block_indices)
     })
 }
 
