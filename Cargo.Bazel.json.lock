@@ -1,5 +1,5 @@
 {
-  "checksum": "75fe2935602eea8d4168b95bcad1ce472acca8197db1c8f62dcd3e228650ee73",
+  "checksum": "ee1531e1c4fd526e884f8c578cc5c8660358f0b3a4262102da83e252400aa077",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13438,7 +13438,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-socks2 0.6.0",
+              "id": "hyper-socks2 0.8.0",
               "target": "hyper_socks2"
             },
             {
@@ -21691,13 +21691,13 @@
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
-    "hyper-socks2 0.6.0": {
+    "hyper-socks2 0.8.0": {
       "name": "hyper-socks2",
-      "version": "0.6.0",
+      "version": "0.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/hyper-socks2/0.6.0/download",
-          "sha256": "e01b408a306f4e49b1eac23dd88f0852c0abb2b1d162d498cd889cfcd56d8eec"
+          "url": "https://crates.io/api/v1/crates/hyper-socks2/0.8.0/download",
+          "sha256": "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
         }
       },
       "targets": [
@@ -21718,9 +21718,10 @@
         ],
         "crate_features": {
           "common": [
-            "default",
-            "hyper-tls",
-            "tls"
+            "hyper-rustls",
+            "rustls",
+            "rustls-native-certs",
+            "rusttls"
           ],
           "selects": {}
         },
@@ -21743,8 +21744,17 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-tls 0.5.0",
-              "target": "hyper_tls"
+              "id": "hyper-rustls 0.24.1",
+              "target": "hyper_rustls"
+            },
+            {
+              "id": "rustls 0.21.5",
+              "target": "rustls",
+              "alias": "rusttls"
+            },
+            {
+              "id": "rustls-native-certs 0.6.3",
+              "target": "rustls_native_certs"
             },
             {
               "id": "thiserror 1.0.43",
@@ -21758,7 +21768,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.6.0"
+        "version": "0.8.0"
       },
       "license": "Apache-2.0 OR MIT"
     },

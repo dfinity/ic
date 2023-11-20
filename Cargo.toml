@@ -426,6 +426,7 @@ clap = { version = "3.2.25", features = ["derive"] }
 ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.28"
 futures = "0.3.28"
+hyper-socks2 = { version = "0.8.0", default_features = false, features = ["rustls"] }
 ic-agent = { version = "0.30.2", features = ["hyper"] }
 ic-cdk = "0.10.0"
 ic-cdk-macros = "0.7.0"

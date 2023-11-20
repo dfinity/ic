@@ -483,7 +483,11 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 ],
             ),
             "hyper-socks2": crate.spec(
-                version = "^0.6.0",
+                version = "^0.8.0",
+                default_features = False,
+                features = [
+                    "rustls",
+                ],
             ),
             "hyper-tls": crate.spec(
                 version = "^0.5.0",
