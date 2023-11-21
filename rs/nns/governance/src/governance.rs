@@ -1640,8 +1640,17 @@ impl Governance {
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
-        let (heap_neurons, topic_followee_map, heap_governance_proto) =
+        let (heap_neurons, topic_followee_map, mut heap_governance_proto) =
             split_governance_proto(governance_proto);
+
+        // This is to resolve the incident where a spawning operation did not commit properly
+        // because of other operations in the same message went beyond the instruction limit.
+        if heap_governance_proto.in_flight_commands.len() == 1
+            && heap_governance_proto.spawning_neurons.unwrap_or_default()
+        {
+            heap_governance_proto.in_flight_commands.clear();
+            heap_governance_proto.spawning_neurons = Some(false);
+        }
 
         Self {
             heap_data: heap_governance_proto,
