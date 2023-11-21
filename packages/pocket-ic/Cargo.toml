@@ -1,13 +1,20 @@
 [package]
 name = "pocket-ic"
-version = "1.0.0"
+version = "2.0.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
 readme = "README.md"
 categories = ["emulators", "development-tools::testing", "wasm"]
 keywords = ["icp", "canister", "testing", "smart-contract", "internet-computer"]
-include = ["src", "Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE"]
+include = [
+    "src",
+    "Cargo.toml",
+    "CHANGELOG.md",
+    "README.md",
+    "HOWTO.md",
+    "LICENSE",
+]
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
