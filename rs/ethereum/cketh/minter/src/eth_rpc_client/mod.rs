@@ -32,7 +32,6 @@ mod tests;
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait RpcTransport: Debug {
-    // TODO: remove after refactoring to `call_json_rpc()`
     fn get_subnet_size() -> u32;
 
     fn resolve_api(provider: &RpcNodeProvider) -> Result<RpcApi, ProviderError>;
@@ -41,7 +40,7 @@ pub trait RpcTransport: Debug {
         provider: &RpcNodeProvider,
         request: CanisterHttpRequestArgument,
         cycles: u128,
-    ) -> Result<HttpResponse, (RejectionCode, String)>;
+    ) -> CallResult<HttpResponse>;
 }
 
 // Placeholder during refactoring
@@ -63,7 +62,7 @@ impl RpcTransport for DefaultTransport {
         _provider: &RpcNodeProvider,
         _request: CanisterHttpRequestArgument,
         _cycles: u128,
-    ) -> Result<HttpResponse, (RejectionCode, String)> {
+    ) -> CallResult<HttpResponse> {
         unimplemented!()
     }
 }
