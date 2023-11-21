@@ -33,7 +33,8 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_metrics::{
-    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
+    fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, Response, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
@@ -1880,6 +1881,82 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
 
     let new_state = test.drain_subnet_messages(long_running_canister_ids);
     assert_eq!(new_state.subnet_queues().input_queues_message_count(), 4);
+}
+
+#[test]
+fn scheduler_executes_postponed_raw_rand_requests() {
+    let canister_id = canister_test_id(2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_slice: NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+    test.advance_to_round(ExecutionRound::new(2));
+    let last_round = test.last_round();
+
+    // Inject fake request to be able to create a response.
+    let canister = get_running_canister(canister_id);
+    test.inject_call_to_ic00(
+        Method::RawRand,
+        EmptyBlob.encode(),
+        Cycles::new(0),
+        canister_id,
+        InputQueueType::LocalSubnet,
+    );
+    let state = test.state_mut();
+    state.put_canister_state(canister);
+    state.pop_subnet_input();
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_raw_rand_request(
+            RequestBuilder::new().sender(canister_id).build(),
+            last_round,
+            mock_time(),
+        );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+
+    // Execute the postponed `raw_rand` messages.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        0
+    );
+
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "execution_round_postponed_raw_rand_queue_messages",
+        ),
+        Some(HistogramStats { sum: 1.0, count: 1 })
+    );
+
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "execution_round_postponed_raw_rand_queue_instructions",
+        ),
+        Some(HistogramStats { sum: 0.0, count: 1 })
+    );
 }
 
 #[test]
