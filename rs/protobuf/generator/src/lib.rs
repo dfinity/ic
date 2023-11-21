@@ -250,6 +250,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(candid::CandidType, Eq)]",
     );
     config.type_attribute(
+        ".registry.subnet.v1.SubnetFeatures",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );

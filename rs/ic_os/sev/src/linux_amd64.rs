@@ -50,7 +50,7 @@ where
         peer: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
-        // TODO: Replace this with `sev_status` feature check in subnet registry
+        // TODO: Replace this with `sev_enabled` feature check in subnet registry
         if true {
             return Ok(stream);
         }

@@ -45,8 +45,9 @@ use ic_prep_lib::{
     node::{NodeConfiguration, NodeIndex},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
-use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SevFeatureStatus, SubnetFeatures};
+use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
@@ -555,30 +556,11 @@ impl CliArgs {
 fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     let canister_sandboxing = features.iter().any(|s| s.as_str() == "canister_sandboxing");
     let http_requests = features.iter().any(|s| s.as_str() == "http_requests");
-    let sev_status = if features
-        .iter()
-        .any(|s| s.as_str() == "sev_insecure_enabled")
-    {
-        Some(SevFeatureStatus::InsecureEnabled.into())
-    } else if features
-        .iter()
-        .any(|s| s.as_str() == "sev_insecure_integrity_enabled")
-    {
-        Some(SevFeatureStatus::InsecureIntegrityEnabled.into())
-    } else if features
-        .iter()
-        .any(|s| s.as_str() == "sev_secure_no_upgrade_enabled")
-    {
-        Some(SevFeatureStatus::SecureNoUpgradeEnabled.into())
-    } else if features.iter().any(|s| s.as_str() == "sev_secure_enabled") {
-        Some(SevFeatureStatus::SecureEnabled.into())
-    } else {
-        None
-    };
+    let sev_enabled = features.iter().any(|s| s.as_str() == "sev_enabled");
     SubnetFeatures {
         canister_sandboxing,
         http_requests,
-        sev_status,
+        sev_enabled,
     }
 }
 

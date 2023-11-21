@@ -220,7 +220,7 @@ fn subnet_to_subnet_config(
         subnet.max_instructions_per_message,
         subnet.max_instructions_per_round,
         subnet.max_instructions_per_install_code,
-        subnet.features.map(|f| f.into()),
+        subnet.features,
         None,
         subnet.max_number_of_canisters,
         subnet.ssh_readonly_access,

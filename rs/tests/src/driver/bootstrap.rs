@@ -141,7 +141,7 @@ pub fn init_ic(
                 subnet.max_instructions_per_message,
                 subnet.max_instructions_per_round,
                 subnet.max_instructions_per_install_code,
-                subnet.features.map(|f| f.into()),
+                subnet.features,
                 subnet.ecdsa_config.clone().map(|c| c.into()),
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),

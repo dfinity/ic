@@ -2,15 +2,14 @@ use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::LocalStoreCertifiedTimeReader;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetFeatures, SubnetListRecord,
-    SubnetRecord,
+    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -187,7 +186,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_instructions_per_message: 5_000_000_000,
         max_instructions_per_round: 7_000_000_000,
         max_instructions_per_install_code: 200_000_000_000,
-        features: Some(SubnetFeatures::default()),
+        features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
@@ -273,7 +272,7 @@ impl SubnetRecordBuilder {
     }
 
     pub fn with_features(mut self, features: SubnetFeatures) -> Self {
-        self.record.features = Some(features);
+        self.record.features = Some(features.into());
         self
     }
 
