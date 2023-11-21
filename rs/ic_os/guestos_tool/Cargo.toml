@@ -12,4 +12,8 @@ anyhow = {version = "^1"}
 clap = {version = "^4", features = ["derive"]}
 itertools = { workspace = true }
 regex = {version = "^1.3"}
+config = { path = "../config" }
+network = { path = "../network" }
+utils = { path = "../utils" }
+indoc = "1.0.9"
 

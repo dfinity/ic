@@ -81,6 +81,16 @@ pub fn has_ipv6_connectivity(
     }
 }
 
+pub fn get_interface_name(interface_path: &PathBuf) -> Result<String> {
+    interface_path
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .context(format!(
+            "Error getting filename from path: {:?}",
+            interface_path
+        ))
+}
+
 /// Return vec of Interface's which:
 ///   Have physical links attached
 ///   Do not contain the string 'virtual'
@@ -98,13 +108,7 @@ pub fn get_interfaces() -> Result<Vec<Interface>> {
 
     eprintln!("Gathering info about each interface:");
     for interface_path in valid_interfaces {
-        let name = interface_path
-            .file_name()
-            .map(|f| f.to_string_lossy().to_string())
-            .context(format!(
-                "Error getting filename from path: {:?}",
-                interface_path
-            ))?;
+        let name = get_interface_name(interface_path)?;
         eprintln!("Interface name: {:?}", name);
 
         // Activate the link to see physical cable connectivity. Then deactivate
@@ -213,7 +217,7 @@ fn deactivate_link(interface_name: &str) -> Result<()> {
 }
 
 /// Get paths of all available network interfaces. E.g. /sys/class/net/enp0s31f6
-fn get_interface_paths() -> Vec<PathBuf> {
+pub fn get_interface_paths() -> Vec<PathBuf> {
     let interfaces = match fs::read_dir(SYSFS_NETWORK_DIR) {
         Ok(itr) => itr,
         Err(e) => {
@@ -231,7 +235,12 @@ fn get_interface_paths() -> Vec<PathBuf> {
 }
 
 fn is_valid_network_interface(path: &&PathBuf) -> bool {
-    let filename = path.file_name().unwrap().to_string_lossy();
+    let Some(filename) = path.file_name() else {
+        eprintln!("ERROR: Invalid network interface path: {:#?}", path);
+        return false;
+    };
+    let filename = filename.to_string_lossy();
+
     let first3_chars = filename.chars().take(3).collect::<String>().to_lowercase();
     /*
     Only target ethernet devices (not infiniband or wireless).
