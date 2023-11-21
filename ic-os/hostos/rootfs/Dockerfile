@@ -113,6 +113,9 @@ RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-
     adduser ic-replica vsock && \
     adduser ic-replica sudo
 
+# User which will run the replica service.
+RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy
+
 # Accounts to allow remote access to state bits
 
 # The "backup" user account. We simply use the existing "backup" account and

@@ -72,6 +72,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 "PROTOC_NO_VENDOR": "1",
             },
         )],
+        "metrics-proxy": [crate.annotation(
+            gen_binaries = True,
+        )],
     }
     CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
     crates_repository(
@@ -651,6 +654,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "maplit": crate.spec(
                 version = "^1.0.2",
+            ),
+            "metrics-proxy": crate.spec(
+                git = "https://github.com/dfinity/metrics-proxy.git",
+                rev = "0394778a3c4608842670674aca40a0feaea01059",
             ),
             "minicbor": crate.spec(
                 version = "^0.19.1",
@@ -1269,7 +1276,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.5",
             ),
             "url": crate.spec(
-                version = "^2.1.1",
+                version = "^2.4.1",
                 features = [
                     "serde",
                 ],

@@ -1,5 +1,5 @@
 {
-  "checksum": "6e67df921a01d3dc2f456730763c447f4b450f30006c5832247315124da43e5c",
+  "checksum": "514ada52194153dac3d91a3238d3cde9e7e8d08c4303605afdac1d9cf0ff34ad",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3680,6 +3680,83 @@
           ],
           "selects": {}
         }
+      },
+      "license": "MIT"
+    },
+    "axum-otel-metrics 0.7.0": {
+      "name": "axum-otel-metrics",
+      "version": "0.7.0",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/DFINITYManu/axum-otel-metrics.git",
+          "commitish": {
+            "Rev": "27040d4cfd5e0c8af4588df3092329e184884b35"
+          }
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum_otel_metrics",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "axum_otel_metrics",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "axum 0.6.20",
+              "target": "axum"
+            },
+            {
+              "id": "futures-util 0.3.28",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "http-body 0.4.5",
+              "target": "http_body"
+            },
+            {
+              "id": "opentelemetry 0.20.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "opentelemetry-prometheus 0.13.0",
+              "target": "opentelemetry_prometheus"
+            },
+            {
+              "id": "opentelemetry-semantic-conventions 0.12.0",
+              "target": "opentelemetry_semantic_conventions"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "prometheus 0.13.3",
+              "target": "prometheus"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.0"
       },
       "license": "MIT"
     },
@@ -13757,6 +13834,10 @@
               "target": "maplit"
             },
             {
+              "id": "metrics-proxy 0.1.0",
+              "target": "metrics_proxy"
+            },
+            {
               "id": "minicbor 0.19.1",
               "target": "minicbor"
             },
@@ -15094,6 +15175,51 @@
         "version": "0.3.4"
       },
       "license": "MPL-2.0"
+    },
+    "duration-string 0.3.0": {
+      "name": "duration-string",
+      "version": "0.3.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/duration-string/0.3.0/download",
+          "sha256": "6fcc1d9ae294a15ed05aeae8e11ee5f2b3fe971c077d45a42fb20825fba6ee13"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "duration_string",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "duration_string",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.190",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "license": null
     },
     "dyn-clone 1.0.14": {
       "name": "dyn-clone",
@@ -16699,6 +16825,36 @@
         "version": "0.3.1"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "exitcode 1.1.2": {
+      "name": "exitcode",
+      "version": "1.1.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/exitcode/1.1.2/download",
+          "sha256": "de853764b47027c2e862a995c34978ffa63c1501f2e15f987ba11bd4f9bba193"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "exitcode",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "exitcode",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "1.1.2"
+      },
+      "license": "Apache-2.0"
     },
     "eyre 0.6.8": {
       "name": "eyre",
@@ -29073,6 +29229,152 @@
       },
       "license": "MPL-2.0"
     },
+    "metrics-proxy 0.1.0": {
+      "name": "metrics-proxy",
+      "version": "0.1.0",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/metrics-proxy.git",
+          "commitish": {
+            "Rev": "0394778a3c4608842670674aca40a0feaea01059"
+          }
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "metrics_proxy",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "metrics-proxy",
+            "crate_root": "src/main.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "metrics_proxy",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "axum 0.6.20",
+              "target": "axum"
+            },
+            {
+              "id": "axum-otel-metrics 0.7.0",
+              "target": "axum_otel_metrics"
+            },
+            {
+              "id": "clap 4.4.6",
+              "target": "clap"
+            },
+            {
+              "id": "duration-string 0.3.0",
+              "target": "duration_string"
+            },
+            {
+              "id": "exitcode 1.1.2",
+              "target": "exitcode"
+            },
+            {
+              "id": "futures-util 0.3.28",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-rustls 0.24.1",
+              "target": "hyper_rustls"
+            },
+            {
+              "id": "itertools 0.11.0",
+              "target": "itertools"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "opentelemetry 0.20.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "pretty_assertions 1.4.0",
+              "target": "pretty_assertions"
+            },
+            {
+              "id": "prometheus 0.13.3",
+              "target": "prometheus"
+            },
+            {
+              "id": "prometheus-parse 0.2.4",
+              "target": "prometheus_parse"
+            },
+            {
+              "id": "regex 1.10.2",
+              "target": "regex"
+            },
+            {
+              "id": "reqwest 0.11.22",
+              "target": "reqwest"
+            },
+            {
+              "id": "rustls 0.21.7",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pemfile 1.0.3",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "serde 1.0.190",
+              "target": "serde"
+            },
+            {
+              "id": "serde_yaml 0.8.26",
+              "target": "serde_yaml"
+            },
+            {
+              "id": "tokio 1.33.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-http 0.4.4",
+              "target": "tower_http"
+            },
+            {
+              "id": "url 2.4.1",
+              "target": "url"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": null
+    },
     "mime 0.3.17": {
       "name": "mime",
       "version": "0.3.17",
@@ -33231,6 +33533,7 @@
           "common": [
             "default",
             "metrics",
+            "rt-tokio",
             "trace"
           ],
           "selects": {}
@@ -33325,6 +33628,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "prometheus-encoding"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -33352,6 +33661,45 @@
         },
         "edition": "2021",
         "version": "0.13.0"
+      },
+      "license": "Apache-2.0"
+    },
+    "opentelemetry-semantic-conventions 0.12.0": {
+      "name": "opentelemetry-semantic-conventions",
+      "version": "0.12.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/opentelemetry-semantic-conventions/0.12.0/download",
+          "sha256": "73c9f9340ad135068800e7f1b24e9e09ed9e7143f5bf8518ded3d3ec69789269"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_semantic_conventions",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry_semantic_conventions",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "opentelemetry 0.20.0",
+              "target": "opentelemetry"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.12.0"
       },
       "license": "Apache-2.0"
     },
@@ -33650,6 +33998,9 @@
             "percent-encoding",
             "rand",
             "regex",
+            "rt-tokio",
+            "tokio",
+            "tokio-stream",
             "trace"
           ],
           "selects": {}
@@ -33699,6 +34050,14 @@
             {
               "id": "thiserror 1.0.49",
               "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.33.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-stream 0.1.14",
+              "target": "tokio_stream"
             }
           ],
           "selects": {}
@@ -52566,6 +52925,7 @@
             "compression-zstd",
             "default",
             "request-id",
+            "timeout",
             "tokio",
             "tokio-util",
             "tower",
@@ -60811,7 +61171,8 @@
     }
   },
   "binary_crates": [
-    "ic-wasm 0.4.0"
+    "ic-wasm 0.4.0",
+    "metrics-proxy 0.1.0"
   ],
   "workspace_members": {
     "direct-cargo-bazel-deps 0.0.1": ""

@@ -33,6 +33,7 @@ def image_deps(mode, _malicious = False):
             # additional files to install
             "//publish/binaries:vsock_host": "/opt/ic/bin/vsock_host:0755",
             "//publish/binaries:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
+            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//ic-os:scripts/build-bootstrap-config-image.sh": "/opt/ic/bin/build-bootstrap-config-image.sh:0755",
         },
 
