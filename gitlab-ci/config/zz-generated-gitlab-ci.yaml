@@ -4861,6 +4861,7 @@ rosetta-release:
       set -euo pipefail
 
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+      docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
 
       # - Query the current rosetta version
       bazel build //rs/rosetta-api:version
@@ -4868,7 +4869,7 @@ rosetta-release:
       readonly VERSION_TAG="v$ROSETTA_RELEASE_VERSION"
 
       # - Abort the release if the image with that version was already published.
-      if docker manifest inspect "dfinity/rosetta-api:$VERSION_TAG"; then
+      if docker manifest inspect "docker.io/dfinity/rosetta-api:$VERSION_TAG"; then
           echo Rosetta version "$ROSETTA_RELEASE_VERSION" is already published on DockerHub
           exit 0
       fi
