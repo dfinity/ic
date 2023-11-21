@@ -57,6 +57,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
+    pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
@@ -331,6 +332,32 @@ impl SchedulerMetrics {
                     "execution_round_consensus_queue_messages",
                     "The number of messages executed during consensus \
                           queue processing in an execution round",
+                    metrics_registry,
+                ),
+            },
+            round_postponed_raw_rand_queue: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_postponed_raw_rand_queue_duration_seconds",
+                    "The duration of postponed raw rand queue processing in \
+                          an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_postponed_raw_rand_queue_instructions",
+                    "The number of instructions executed during postponed \
+                          raw rand queue processing in an execution round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_postponed_raw_rand_queue_slices",
+                    "The number of slices executed during postponed \
+                          raw rand queue processing in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_postponed_raw_rand_queue_messages",
+                    "The number of messages executed during postponed \
+                          raw rand queue processing in an execution round",
                     metrics_registry,
                 ),
             },
