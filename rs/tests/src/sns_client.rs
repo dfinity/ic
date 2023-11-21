@@ -289,7 +289,7 @@ impl SnsClient {
 
         let sns_client = SnsClient {
             sns_canisters,
-            /// TODO: Provide a wallet canister for static testnet?
+            // TODO: Provide a wallet canister for static testnet?
             wallet_canister_id: PrincipalId::from_str("aaaaa-aa").unwrap(),
             sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };

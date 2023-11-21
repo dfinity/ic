@@ -22,8 +22,8 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    const METADATA_DECIMALS_KEY: &str = "icrc1:decimals";
-    const METADATA_SYMBOL_KEY: &str = "icrc1:symbol";
+    const METADATA_DECIMALS_KEY: &'static str = "icrc1:decimals";
+    const METADATA_SYMBOL_KEY: &'static str = "icrc1:symbol";
 
     pub fn from_args(symbol: String, decimals: u8) -> Self {
         Self { symbol, decimals }

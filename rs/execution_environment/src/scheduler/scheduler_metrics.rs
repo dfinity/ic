@@ -38,6 +38,15 @@ pub(super) struct SchedulerMetrics {
     pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
+    /// Metric `consumed_cycles_since_replica_started` is not
+    /// monotonically increasing. Cycles consumed are increasing the
+    /// value of the metric while refunding cycles are decreasing it.
+    ///
+    /// `f64` gauge because cycles values are `u128`: converting them
+    /// into `u64` would result in truncation when the value overflows
+    /// 64 bits (which would be indistinguishable from a huge refund);
+    /// whereas conversion to `f64` merely results in loss of precision
+    /// when dealing with values > 2^53.
     pub(super) consumed_cycles_since_replica_started: Gauge,
     pub(super) consumed_cycles_since_replica_started_by_use_case: GaugeVec,
     pub(super) input_queue_messages: IntGaugeVec,
@@ -193,15 +202,6 @@ impl SchedulerMetrics {
                 "replicated_state_available_canister_ids",
                 "Number of allocated canister IDs that can still be generated.",
             ),
-            /// Metric `consumed_cycles_since_replica_started` is not
-            /// monotonically increasing. Cycles consumed are increasing the
-            /// value of the metric while refunding cycles are decreasing it.
-            ///
-            /// `f64` gauge because cycles values are `u128`: converting them
-            /// into `u64` would result in truncation when the value overflows
-            /// 64 bits (which would be indistinguishable from a huge refund);
-            /// whereas conversion to `f64` merely results in loss of precision
-            /// when dealing with values > 2^53.
             consumed_cycles_since_replica_started: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
                 "Number of cycles consumed since replica started",

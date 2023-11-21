@@ -97,8 +97,8 @@ fn install_ledger(env: &StateMachine) -> CanisterId {
 fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
     let args = CkbtcMinterInitArgs {
         btc_network: Network::Regtest.into(),
-        /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
-        /// a testing key for testnet and mainnet
+        // The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
+        // a testing key for testnet and mainnet
         ecdsa_key_name: "dfx_test_key".parse().unwrap(),
         retrieve_btc_min_amount: 2000,
         ledger_id,
