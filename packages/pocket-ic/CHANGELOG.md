@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ability to mute the server's stdout/stderr streams by setting the `POCKET_IC_MUTE_SERVER` environment variable
 - New struct `PocketIcBuilder` to create a PocketIC instance with a subnet configuration
 - New constructor `PocketIc::from_config(config: SubnetConfigSet)` to create a PocketIC instance with a specified subnet topology
+- New `get_subnet()` method to get the subnet of a canister
 - New `create_canister_with_id()` method to create a canister with a specified ID
 - New `create_canister_on_subnet()` method to create a canister on a specified subnet
 - New `topology()` method returning a map of subnet IDs to subnet configurations
