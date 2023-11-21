@@ -1010,22 +1010,25 @@ impl SystemMetadata {
         // Split complete, reset split marker.
         *split_from = None;
 
-        // Reject in-progress subnet messages executing on canisters migrated from this
-        // subnet
+        // Reject in-progress subnet messages that cannot be handled on this
+        // subnet.
         self.reject_in_progress_management_calls_after_split(&is_local_canister, subnet_queues);
     }
 
-    /// Rejects all in-progress subnet messages whose target canisters are no longer
-    /// on this subnet, in the second phase of a subnet split. Enqueues reject
-    /// responses into the provided `subnet_queues` for calls originating from
-    /// canisters; and records a `Failed` state in `self.ingress_history` for calls
-    /// originating from ingress messages.
-    ///
-    /// On the other subnet (which must be *subnet B*), the execution of these same
-    /// messages, now without matching subnet call contexts, will be silently
-    /// aborted / rolled back (without producing a response). This is the only way
-    /// to ensure consistency for a message that would otherwise be executing on one
-    /// subnet, but for which a response may only be produced by another subnet.
+    /// Creates rejects for all in-progress management messages that cannot or should
+    /// not be handled on this subnet in the second phase of a subnet split.
+    /// Enqueues reject responses into the provided `subnet_queues` for calls originating
+    /// from canisters; and records a `Failed` state in `self.ingress_history` for calls
+    /// originating from ingress messages. The rejects are created for:
+    ///     - All in-progress subnet messages whose target canisters are no longer
+    ///     on this subnet.
+    ///       On the other subnet (which must be *subnet B*), the execution of these same
+    ///     messages, now without matching subnet call contexts, will be silently
+    ///     aborted / rolled back (without producing a response). This is the only way
+    ///     to ensure consistency for a message that would otherwise be executing on one
+    ///     subnet, but for which a response may only be produced by another subnet.
+    ///     - Specific requests that must be entirely handled by the local subnet where
+    ///    the originator canister exists.
     fn reject_in_progress_management_calls_after_split<F>(
         &mut self,
         is_local_canister: F,
@@ -1051,6 +1054,19 @@ impl SystemMetadata {
             self.reject_management_call_after_split(
                 stop_canister_call.call,
                 stop_canister_call.effective_canister_id,
+                subnet_queues,
+            );
+        }
+
+        // Management `RawRand` requests are rejected if the sender has migrated to another subnet.
+        for raw_rand_context in self
+            .subnet_call_context_manager
+            .remove_non_local_raw_rand_calls(&is_local_canister)
+        {
+            let migrated_canister_id = raw_rand_context.request.sender();
+            self.reject_management_call_after_split(
+                CanisterCall::Request(Arc::new(raw_rand_context.request)),
+                migrated_canister_id,
                 subnet_queues,
             );
         }
