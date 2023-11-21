@@ -133,10 +133,10 @@ pub struct MmapMemory {
 unsafe impl Send for MmapMemory {}
 unsafe impl Sync for MmapMemory {}
 
-/// The minimal required guard region for correctness is 2GiB. We use 4GiB as a
+/// The minimal required guard region for correctness is 2GiB. We use 8GiB as a
 /// safety measure since the allocation happens in the virtual memory and its
 /// overhead is negligible.
-const MIN_GUARD_REGION_SIZE: usize = 4 * 1024 * 1024 * 1024;
+const MIN_GUARD_REGION_SIZE: usize = 8 * 1024 * 1024 * 1024;
 
 impl MmapMemory {
     pub fn new(mem_size_in_bytes: usize, guard_size_in_bytes: usize) -> Self {
