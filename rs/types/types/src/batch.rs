@@ -31,6 +31,8 @@ use ic_ic00_types::EcdsaKeyId;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto};
 
+pub const ENABLE_QUERY_STATS: bool = false;
+
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Batch {
@@ -112,7 +114,12 @@ impl BatchPayload {
             signed_ingress_msgs: self.ingress.try_into()?,
             certified_stream_slices: self.xnet.stream_slices,
             bitcoin_adapter_responses: self.self_validating.0,
-            query_stats: None,
+            query_stats: match ENABLE_QUERY_STATS {
+                true => QueryStatsPayload::deserialize(&self.query_stats)
+                    .ok()
+                    .flatten(),
+                false => None,
+            },
         })
     }
 
