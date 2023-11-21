@@ -262,12 +262,10 @@ fn dts_update_concurrent_cycles_change_fails() {
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance \
-             is {} cycles and the freezing threshold {} cycles",
+             please top up the canister with at least {} additional cycles",
             a_id,
-            call_charge,
-            initial_cycles - max_execution_cost - cycles_debit,
-            freezing_threshold
+            (freezing_threshold + call_charge)
+                - (initial_cycles - max_execution_cost - cycles_debit)
         )
     );
 
