@@ -195,17 +195,10 @@ type SetFirewallConfigPayload = record {
   firewall_config : text;
   ipv6_prefixes : vec text;
 };
-type SevFeatureStatus = variant {
-  SecureEnabled;
-  Disabled;
-  InsecureIntegrityEnabled;
-  SecureNoUpgradeEnabled;
-  InsecureEnabled;
-};
 type SubnetFeatures = record {
   canister_sandboxing : bool;
-  sev_status : opt SevFeatureStatus;
   http_requests : bool;
+  sev_enabled : opt bool;
 };
 type SubnetType = variant { application; verified_application; system };
 type UpdateApiBoundaryNodeDomainPayload = record {

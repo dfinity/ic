@@ -20,7 +20,7 @@ use ic_interfaces::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::{
     mock_time,
     state_manager::RefMockStateManager,
@@ -284,7 +284,7 @@ fn multiple_share_same_source_test() {
 
 /// Submit a group of requests (50% timeouts, 100% other), so that the total
 /// request count exceeds the capacity of a single payload.
-///         
+///
 /// Expect: Timeout requests are given priority, so they are included in the
 ///         payload. That means that 50% of the payload should consist of timeouts
 ///         while the rest is filled with the remaining requests.
@@ -892,10 +892,14 @@ pub(crate) fn test_config_with_http_feature<T>(
         .collect::<Vec<_>>();
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
         let mut subnet_record = SubnetRecordBuilder::from(&committee).build();
-        subnet_record.features = Some(SubnetFeatures {
-            http_requests: https_feature_flag,
-            ..SubnetFeatures::default()
-        });
+
+        subnet_record.features = Some(
+            SubnetFeatures {
+                http_requests: https_feature_flag,
+                ..SubnetFeatures::default()
+            }
+            .into(),
+        );
 
         let Dependencies {
             crypto,

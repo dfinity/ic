@@ -931,6 +931,10 @@ struct ProposeToUpdateElectedReplicaVersionsCmd {
     pub replica_version_to_elect: Option<String>,
 
     #[clap(long)]
+    /// The launch measurement of the replica version to elect.
+    pub guest_launch_measurement: Option<String>,
+
+    #[clap(long)]
     /// The hex-formatted SHA-256 hash of the archive served by
     /// 'release_package_urls'.
     pub release_package_sha256_hex: Option<String>,
@@ -966,7 +970,7 @@ impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
             replica_version_to_elect: self.replica_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurement_sha256_hex: self.guest_launch_measurement.clone(),
             replica_versions_to_unelect: self.replica_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
@@ -1151,6 +1155,10 @@ struct ProposeToCreateSubnetCmd {
     /// subnet.
     #[clap(long)]
     pub max_number_of_canisters: Option<u64>,
+
+    /// The features that are enabled and disabled on the subnet.
+    #[clap(long)]
+    pub features: Option<SubnetFeatures>,
 }
 
 /// Parse the options that are used to create EcdsaInitialConfig option
@@ -1274,7 +1282,7 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             max_instructions_per_install_code: self
                 .max_instructions_per_install_code
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
-            features: SubnetFeatures::default(),
+            features: self.features.unwrap_or_default().into(),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
@@ -1821,7 +1829,7 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
-            features: self.features,
+            features: self.features.map(|v| v.into()),
             ecdsa_config,
             ecdsa_key_signing_enable,
             ecdsa_key_signing_disable,

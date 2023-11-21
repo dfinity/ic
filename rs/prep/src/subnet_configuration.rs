@@ -17,11 +17,9 @@ use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    subnet::v1::{
-        CatchUpPackageContents, EcdsaConfig, InitialNiDkgTranscriptRecord, SubnetFeatures,
-        SubnetRecord,
-    },
+    subnet::v1::{CatchUpPackageContents, EcdsaConfig, InitialNiDkgTranscriptRecord, SubnetRecord},
 };
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::{
@@ -311,7 +309,7 @@ impl SubnetConfig {
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
-            features: Some(self.features),
+            features: Some(self.features.into()),
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,

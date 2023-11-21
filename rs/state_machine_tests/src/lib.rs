@@ -300,7 +300,7 @@ fn make_nodes_registry(
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         })
-        .with_features(features.into())
+        .with_features(features)
         .build();
 
     insert_initial_dkg_transcript(
