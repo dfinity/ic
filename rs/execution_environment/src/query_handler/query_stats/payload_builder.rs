@@ -1,4 +1,3 @@
-use super::ENABLE_QUERY_STATS;
 use crossbeam_channel::{Receiver, TryRecvError};
 use ic_base_types::{CanisterId, NodeId};
 use ic_interfaces::{
@@ -11,7 +10,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{LocalQueryStats, QueryStatsPayload, ValidationContext},
+    batch::{LocalQueryStats, QueryStatsPayload, ValidationContext, ENABLE_QUERY_STATS},
     Height, NumBytes, QueryStatsEpoch,
 };
 use std::{

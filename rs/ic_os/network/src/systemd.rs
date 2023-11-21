@@ -11,7 +11,7 @@ use crate::mac_address::FormattedMacAddress;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
-fn generate_nameserver_list<'a, I>(nameservers: I) -> Result<String>
+pub fn generate_nameserver_list<'a, I>(nameservers: I) -> Result<String>
 where
     I: IntoIterator<Item = &'a str>,
 {
@@ -100,7 +100,7 @@ Gateway={ipv6_gateway}
     )
 }
 
-fn restart_systemd_networkd() {
+pub fn restart_systemd_networkd() {
     let _ = Command::new("timeout")
         .args(["3", "systemctl", "restart", "systemd-networkd"])
         .status();

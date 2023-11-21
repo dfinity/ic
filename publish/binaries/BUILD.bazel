@@ -3,6 +3,8 @@ load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 
 LINUX_ONLY = [
+    "metrics-proxy",
+    "sevctl",
     "snptool",
     "vsock_guest",
     "vsock_host",
@@ -53,6 +55,7 @@ BINARIES = {
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
     "icx-proxy-dev": "//rs/boundary_node/icx_proxy:icx-proxy-dev",
     "log-vector-config-generator": "//rs/observability/log_vector_config_generator:log_vector_config_generator",
+    "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
     "orchestrator": "//rs/orchestrator",
     "prometheus-config-updater": "//rs/observability/prometheus_config_updater:prometheus_config_updater",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",

@@ -234,81 +234,141 @@ impl NeuronsFundSnapshot {
         self.neurons.into_values().collect()
     }
 
-    /// Implements the `self - other` semantics for calculating Neurons' Fund refunds.
+    /// Implements the `self - other` semantics for calculating Neurons' Fund refunds, consuming
+    /// `self`. This means that the resulting snapshot is comprised of neuron portions with maturity
+    /// amounts set to the difference between the corresponding neuron portions from `self`
+    /// and `other`.
     ///
-    /// Example:
-    /// self = { (N1, maturity=100), (N2, maturity=200), (N3, maturity=300) }
-    /// other = { (N1, maturity=60), (N3, maturity=300) }
-    /// result = Ok({ (N1, maturity=40), (N2, maturity=200), (N2, maturity=200) })
-    pub fn diff(&self, other: &Self) -> Result<Self, String> {
+    /// Example A:
+    /// self = { (N1, amount=100), (N2, amount=200), (N3, amount=300) }
+    /// other = { (N1, amount=80), (N3, amount=300) }
+    /// result = Ok({ (N1, amount=20), (N2, amount=200) })
+    ///
+    /// All remaining fields in the resulting snapshot's neuron portions are taken from `other`.
+    /// `maturity_equivalent_icp_e8s` and `controller` are properties of the neuron itself, so they
+    /// remain the same for all of this neuron's portions. However, the value of `is_capped` is
+    /// taken from `other` for a different reason: The snapshot returned by this function
+    /// corresponds to the final state of an SNS Swap (in which the Neurons' Fund is participating),
+    /// and since final is a subset of initially reserved snapshot, consider `initial.diff(final)`.
+    ///
+    /// Example B:
+    /// self = { (N1, amount=100) }
+    /// other = { (N1, amount=80), (N3, amount=300) }
+    /// result = Err("Cannot compute diff ...")
+    #[allow(clippy::manual_try_fold)]
+    pub fn diff(self, other: &Self) -> Result<Self, String> {
         let mut deductible_neurons = other.neurons().clone();
+        let err_prefix = || "Cannot compute diff of two Neurons' Fund snapshots".to_string();
         let neurons = self
             .neurons
-            .iter()
-            .map(|(id, left)| {
-                let err_prefix =
-                    || format!("Cannot compute diff of two portions of neuron {:?}: ", id);
-                let controller = left.controller;
-                let (amount_icp_e8s, maturity_equivalent_icp_e8s, is_capped) = if let Some(right) = deductible_neurons.remove(id)
-                {
-                    if right.amount_icp_e8s > left.amount_icp_e8s {
-                        return Err(format!(
-                            "{}left.amount_icp_e8s={:?}, right.amount_icp_e8s={:?}.",
-                            err_prefix(),
-                            left.amount_icp_e8s,
-                            right.amount_icp_e8s,
-                        ));
-                    }
-                    if right.maturity_equivalent_icp_e8s != left.maturity_equivalent_icp_e8s {
-                        return Err(format!(
-                            "{}left.maturity_equivalent_icp_e8s={:?} != right.maturity_equivalent_icp_e8s={:?}.",
-                            err_prefix(),
-                            left.maturity_equivalent_icp_e8s,
-                            right.maturity_equivalent_icp_e8s,
-                        ));
-                    }
-                    if right.controller != controller {
-                        return Err(format!(
-                            "{}left.controller={:?}, right.controller={:?}.",
-                            err_prefix(),
+            .into_iter()
+            .filter_map(|(id, left)| {
+                let (amount_icp_e8s, maturity_equivalent_icp_e8s, controller, is_capped) =
+                    if let Some(right) = deductible_neurons.remove(&id) {
+                        let err_prefix =
+                            || format!("Cannot compute diff of two portions of neuron {:?}: ", id);
+                        let Some(amount_icp_e8s) =
+                            left.amount_icp_e8s.checked_sub(right.amount_icp_e8s)
+                        else {
+                            return Some(Err(format!(
+                                "{}left.amount_icp_e8s={:?}, right.amount_icp_e8s={:?}.",
+                                err_prefix(),
+                                left.amount_icp_e8s,
+                                right.amount_icp_e8s,
+                            )));
+                        };
+                        let maturity_equivalent_icp_e8s = {
+                            if left.maturity_equivalent_icp_e8s != right.maturity_equivalent_icp_e8s
+                            {
+                                return Some(Err(format!(
+                                    "{}left.maturity_equivalent_icp_e8s={:?} != \
+                                right.maturity_equivalent_icp_e8s={:?}.",
+                                    err_prefix(),
+                                    left.maturity_equivalent_icp_e8s,
+                                    right.maturity_equivalent_icp_e8s,
+                                )));
+                            }
+                            right.maturity_equivalent_icp_e8s
+                        };
+                        let controller = {
+                            if left.controller != right.controller {
+                                return Some(Err(format!(
+                                    "{}left.controller={:?}, right.controller={:?}.",
+                                    err_prefix(),
+                                    left.controller,
+                                    right.controller,
+                                )));
+                            };
+                            right.controller
+                        };
+                        let is_capped = {
+                            if !left.is_capped && right.is_capped {
+                                return Some(Err(format!(
+                                    "{}left.is_capped=false, right.is_capped=true.",
+                                    err_prefix()
+                                )));
+                            }
+                            // Taking right.is_capped, as that corresponds to the capping of
+                            // the effectively taken portion of the neuron (left.is_capped is
+                            // whether the originally reserved portion has been capped).
+                            right.is_capped
+                        };
+                        (
+                            amount_icp_e8s,
+                            maturity_equivalent_icp_e8s,
                             controller,
-                            right.controller,
-                        ));
-                    }
-                    if right.is_capped && !left.is_capped {
-                        return Err(format!(
-                            "{}left.is_capped=false, right.is_capped=true.",
-                            err_prefix()
-                        ));
-                    }
-                    // Taking right.is_capped, as that corresponds to the capping of the effectively
-                    // taken portion of the neuron (left.is_capped is whether the originally
-                    // reserved portion has been capped).
-                    (left.amount_icp_e8s - right.amount_icp_e8s, left.maturity_equivalent_icp_e8s, right.is_capped)
+                            is_capped,
+                        )
+                    } else {
+                        (
+                            left.amount_icp_e8s,
+                            left.maturity_equivalent_icp_e8s,
+                            left.controller,
+                            // The effectively taken portion of this neuron is zero, so it cannot
+                            // be capped.
+                            false,
+                        )
+                    };
+                if amount_icp_e8s == 0 {
+                    // Nothing to refund for this neuron.
+                    None
                 } else {
-                    (left.amount_icp_e8s, left.maturity_equivalent_icp_e8s, left.is_capped)
-                };
-                Ok((
-                    *id,
-                    NeuronsFundNeuronPortion {
-                        id: *id,
+                    let portion = NeuronsFundNeuronPortion {
+                        id,
                         controller,
                         amount_icp_e8s,
                         maturity_equivalent_icp_e8s,
                         is_capped,
-                    },
-                ))
+                    };
+                    Some(Ok((id, portion)))
+                }
             })
-            .collect::<Result<BTreeMap<NeuronId, NeuronsFundNeuronPortion>, _>>()?;
+            // Avoid using `try_fold` here as we should not short-circuit errors.
+            .fold(Ok(BTreeMap::new()), |overall_result, sub_result| {
+                match (overall_result, sub_result) {
+                    (Ok(mut portions), Ok((id, portion))) => {
+                        portions.insert(id, portion);
+                        Ok(portions)
+                    }
+                    (Ok(_), Err(error)) => Err(vec![error]),
+                    (Err(errors), Ok(_)) => Err(errors),
+                    (Err(mut errors), Err(error)) => {
+                        errors.push(error);
+                        Err(errors)
+                    }
+                }
+            })
+            .map_err(|errors| format!("{}:\n  - {}", err_prefix(), errors.join("\n  - ")))?;
         if !deductible_neurons.is_empty() {
             let extra_neuron_portions_str = deductible_neurons
                 .keys()
-                .map(|n| n.id.to_string())
+                .map(|n| format!("{:?}", n))
                 .collect::<Vec<String>>()
                 .join(", ");
             return Err(format!(
-                "Cannot compute diff of two NeuronsFundSnapshot instances: right-hand side \
+                "{}: right-hand side \
                 contains {} extra neuron portions: {}",
+                err_prefix(),
                 deductible_neurons.len(),
                 extra_neuron_portions_str,
             ));
@@ -1920,12 +1980,13 @@ mod neurons_fund_anonymization_tests {
 #[cfg(test)]
 mod neurons_fund_participation_constraints_test {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_nervous_system_common::E8;
     use ic_neurons_fund::{
         rescale_to_icp, NonDecreasingFunction, SerializableFunction,
         ValidatedLinearScalingCoefficient,
     };
-    use maplit::btreeset;
+    use maplit::{btreemap, btreeset};
 
     fn new_neurons_fund_neuron(id: u64, maturity_equivalent_icp_e8s: u64) -> NeuronsFundNeuron {
         let id = NeuronId { id };
@@ -2005,6 +2066,351 @@ mod neurons_fund_participation_constraints_test {
             Box::from(LogisticFunction::new_test_curve()),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn test_diff_with_empty_snapshot() {
+        // Test that `{} - {} == {}`.
+        assert_eq!(
+            NeuronsFundSnapshot::empty().diff(&NeuronsFundSnapshot::empty()),
+            Ok(NeuronsFundSnapshot::empty())
+        );
+        let controller = PrincipalId::default();
+        let nid = |id: u64| NeuronId { id };
+        let snapshot = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 100,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+                nid(2) => NeuronsFundNeuronPortion {
+                    id: nid(2),
+                    amount_icp_e8s: 200,
+                    maturity_equivalent_icp_e8s: 2000,
+                    is_capped: false,
+                    controller,
+                },
+                nid(3) => NeuronsFundNeuronPortion {
+                    id: nid(3),
+                    amount_icp_e8s: 300,
+                    maturity_equivalent_icp_e8s: 9000,
+                    is_capped: true,
+                    controller,
+                }
+            },
+        };
+        // Test that `snapshot - snapshot == {}`.
+        assert_eq!(
+            snapshot.clone().diff(&snapshot),
+            Ok(NeuronsFundSnapshot::empty())
+        );
+        // Test that `snapshot - {} == snapshot1`, where `snapshot1` is identical to `snapshot`,
+        // except that the `is_capped` field of all of its elements is set to `false`.
+        assert_eq!(
+            snapshot.clone().diff(&NeuronsFundSnapshot::empty()),
+            Ok(NeuronsFundSnapshot {
+                neurons: btreemap! {
+                    nid(1) => NeuronsFundNeuronPortion {
+                        id: nid(1),
+                        amount_icp_e8s: 100,
+                        maturity_equivalent_icp_e8s: 1000,
+                        is_capped: false,
+                        controller,
+                    },
+                    nid(2) => NeuronsFundNeuronPortion {
+                        id: nid(2),
+                        amount_icp_e8s: 200,
+                        maturity_equivalent_icp_e8s: 2000,
+                        is_capped: false,
+                        controller,
+                    },
+                    nid(3) => NeuronsFundNeuronPortion {
+                        id: nid(3),
+                        amount_icp_e8s: 300,
+                        maturity_equivalent_icp_e8s: 9000,
+                        is_capped: false,
+                        controller,
+                    }
+                },
+            })
+        );
+    }
+
+    #[test]
+    fn test_diff_ok_once_then_err() {
+        let controller = PrincipalId::default();
+        let nid = |id: u64| NeuronId { id };
+        let left = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 100,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+                nid(2) => NeuronsFundNeuronPortion {
+                    id: nid(2),
+                    amount_icp_e8s: 200,
+                    maturity_equivalent_icp_e8s: 2000,
+                    is_capped: false,
+                    controller,
+                },
+                nid(3) => NeuronsFundNeuronPortion {
+                    id: nid(3),
+                    amount_icp_e8s: 300,
+                    maturity_equivalent_icp_e8s: 9000,
+                    is_capped: true,
+                    controller,
+                }
+            },
+        };
+        let right = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 80,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+                nid(3) => NeuronsFundNeuronPortion {
+                    id: nid(3),
+                    amount_icp_e8s: 300,
+                    maturity_equivalent_icp_e8s: 9000,
+                    is_capped: true,
+                    controller,
+                }
+            },
+        };
+        let expected_diff = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 20,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+                nid(2) => NeuronsFundNeuronPortion {
+                    id: nid(2),
+                    amount_icp_e8s: 200,
+                    maturity_equivalent_icp_e8s: 2000,
+                    is_capped: false,
+                    controller,
+                }
+            },
+        };
+        let diff = assert_matches!(left.diff(&right), Ok(diff) if diff == expected_diff => diff);
+        // The `diff` is strict (not idempotent), so the second subtraction should fail.
+        assert_eq!(
+            diff.diff(&right),
+            Err("Cannot compute diff of two Neurons' Fund snapshots:\n  \
+                - Cannot compute diff of two portions of neuron NeuronId { id: 1 }: \
+                left.amount_icp_e8s=20, right.amount_icp_e8s=80."
+                .to_string())
+        );
+    }
+
+    #[test]
+    fn test_diff_extra_neuron_err() {
+        let controller = PrincipalId::default();
+        let nid = |id: u64| NeuronId { id };
+        let left = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 100,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+            },
+        };
+        let right = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 80,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+                nid(3) => NeuronsFundNeuronPortion {
+                    id: nid(3),
+                    amount_icp_e8s: 300,
+                    maturity_equivalent_icp_e8s: 9000,
+                    is_capped: true,
+                    controller,
+                }
+            },
+        };
+        assert_eq!(
+            left.diff(&right),
+            Err(format!(
+                "Cannot compute diff of two Neurons' Fund snapshots: \
+                right-hand side contains 1 extra neuron portions: {:?}",
+                nid(3)
+            ))
+        );
+    }
+
+    #[test]
+    fn test_diff_negative_amount_in_diff_err() {
+        let controller = PrincipalId::default();
+        let nid = |id: u64| NeuronId { id };
+        let left = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 100,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+            },
+        };
+        let right = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 180,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+            },
+        };
+        assert_eq!(
+            left.diff(&right),
+            Err(format!(
+                "Cannot compute diff of two Neurons' Fund snapshots:\n  \
+                - Cannot compute diff of two portions of neuron {:?}: \
+                left.amount_icp_e8s=100, right.amount_icp_e8s=180.",
+                nid(1)
+            ))
+        );
+    }
+
+    #[test]
+    fn test_diff_controller_err() {
+        let nid = |id: u64| NeuronId { id };
+        let left = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 100,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller: PrincipalId::new_user_test_id(111),
+                },
+            },
+        };
+        let right = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 80,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller: PrincipalId::new_user_test_id(222),
+                },
+            },
+        };
+        assert_eq!(
+            left.diff(&right),
+            Err(format!(
+                "Cannot compute diff of two Neurons' Fund snapshots:\n  \
+                  - Cannot compute diff of two portions of neuron {:?}: \
+                    left.controller={}, \
+                    right.controller={}.",
+                nid(1),
+                PrincipalId::new_user_test_id(111),
+                PrincipalId::new_user_test_id(222),
+            ))
+        );
+    }
+
+    #[test]
+    fn test_diff_maturity_err() {
+        let controller = PrincipalId::default();
+        let nid = |id: u64| NeuronId { id };
+        let left = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 100,
+                    maturity_equivalent_icp_e8s: 1000,
+                    is_capped: false,
+                    controller,
+                },
+            },
+        };
+        let right = NeuronsFundSnapshot {
+            neurons: btreemap! {
+                nid(1) => NeuronsFundNeuronPortion {
+                    id: nid(1),
+                    amount_icp_e8s: 80,
+                    maturity_equivalent_icp_e8s: 1111,
+                    is_capped: false,
+                    controller,
+                },
+            },
+        };
+        assert_eq!(
+            left.diff(&right),
+            Err(
+                "Cannot compute diff of two Neurons' Fund snapshots:\n  - Cannot compute diff \
+                of two portions of neuron NeuronId { id: 1 }: \
+                left.maturity_equivalent_icp_e8s=1000 != right.maturity_equivalent_icp_e8s=1111."
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn test_diff_is_capped() {
+        let nid = |id: u64| NeuronId { id };
+        let controller = PrincipalId::default();
+        let test_with = |is_capped_left: bool, is_capped_right: bool| {
+            let left = NeuronsFundSnapshot {
+                neurons: btreemap! {
+                    nid(1) => NeuronsFundNeuronPortion {
+                        id: nid(1),
+                        amount_icp_e8s: 100,
+                        maturity_equivalent_icp_e8s: 1000,
+                        is_capped: is_capped_left,
+                        controller,
+                    },
+                },
+            };
+            let right = NeuronsFundSnapshot {
+                neurons: btreemap! {
+                    nid(1) => NeuronsFundNeuronPortion {
+                        id: nid(1),
+                        amount_icp_e8s: 80,
+                        maturity_equivalent_icp_e8s: 1000,
+                        is_capped: is_capped_right,
+                        controller,
+                    },
+                },
+            };
+            left.diff(&right)
+        };
+        // If a neuron was initially uncapped and is still uncapped, let's record the fact that it's
+        // uncapped also in the refund (i.e, `diff`).
+        assert_matches!(test_with(false, false), Ok(diff) if !diff.neurons[&nid(1)].is_capped);
+        // If a neuron was initially uncapped, if shouldn't become capped at the end of a swap.
+        assert_matches!(test_with(false, true), Err(_));
+        // If a neuron was initially capped but is not capped at the end of a swap, let's record
+        // the fact that it's not capped also in the refund (i.e, `diff`).
+        assert_matches!(test_with(true, false), Ok(diff) if !diff.neurons[&nid(1)].is_capped);
+        // If a neuron was initially capped and is still capped at the end of a swap, let's record
+        // the fact that it's still capped also in the refund (i.e, `diff`).
+        assert_matches!(test_with(true, true), Ok(diff) if diff.neurons[&nid(1)].is_capped);
     }
 
     #[test]

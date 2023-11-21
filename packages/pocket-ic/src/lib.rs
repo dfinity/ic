@@ -24,7 +24,7 @@
 //!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
 //!  }
 //!
-//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
+//! fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) -> WasmResult {
 //!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
 //!         .expect("Failed to call counter canister")
 //! }
@@ -34,15 +34,16 @@
 use crate::common::rest::{
     ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, InstanceId, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory,
-    RawStableMemory, RawTime, RawWasmResult, SubnetConfig, STANDARD,
+    RawStableMemory, RawTime, RawWasmResult, SubnetKind,
 };
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
+    CandidType, Principal,
 };
 use common::rest::{
-    RawEffectivePrincipal, RawSubnetId, RawVerifyCanisterSigArg, SubnetId, Topology,
+    RawEffectivePrincipal, RawSubnetId, RawVerifyCanisterSigArg, SubnetConfigSet, SubnetId,
+    Topology,
 };
 use ic_cdk::api::management_canister::{
     main::{CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument},
@@ -67,6 +68,85 @@ const LOCALHOST: &str = "127.0.0.1";
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
+pub struct PocketIcBuilder {
+    pub config: SubnetConfigSet,
+}
+
+#[allow(clippy::new_without_default)]
+impl PocketIcBuilder {
+    pub fn new() -> Self {
+        Self {
+            config: SubnetConfigSet::default(),
+        }
+    }
+
+    pub fn build(self) -> PocketIc {
+        PocketIc::from_config(self.config)
+    }
+
+    pub fn with_nns_subnet(self) -> Self {
+        Self {
+            config: SubnetConfigSet {
+                nns: true,
+                ..self.config
+            },
+        }
+    }
+
+    pub fn with_sns_subnet(self) -> Self {
+        Self {
+            config: SubnetConfigSet {
+                sns: true,
+                ..self.config
+            },
+        }
+    }
+
+    pub fn with_ii_subnet(self) -> Self {
+        Self {
+            config: SubnetConfigSet {
+                ii: true,
+                ..self.config
+            },
+        }
+    }
+
+    pub fn with_fiduciary_subnet(self) -> Self {
+        Self {
+            config: SubnetConfigSet {
+                fiduciary: true,
+                ..self.config
+            },
+        }
+    }
+
+    pub fn with_bitcoin_subnet(self) -> Self {
+        Self {
+            config: SubnetConfigSet {
+                bitcoin: true,
+                ..self.config
+            },
+        }
+    }
+
+    pub fn with_system_subnet(self) -> Self {
+        Self {
+            config: SubnetConfigSet {
+                system: self.config.system + 1,
+                ..self.config
+            },
+        }
+    }
+
+    pub fn with_application_subnet(self) -> Self {
+        Self {
+            config: SubnetConfigSet {
+                application: self.config.application + 1,
+                ..self.config
+            },
+        }
+    }
+}
 /// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
     /// The unique ID of this PocketIC instance.
@@ -78,18 +158,17 @@ pub struct PocketIc {
 }
 
 impl PocketIc {
-    /// Creates a new PocketIC instance with a single subnet on the server.
+    /// Creates a new PocketIC instance with a single application subnet on the server.
     /// The server is started if it's not already running.
     pub fn new() -> Self {
-        Self::new_with_subnet_config(vec![STANDARD])
+        PocketIcBuilder::new().with_application_subnet().build()
     }
 
     /// Creates a new PocketIC instance with the specified subnet config.
-    /// Note that there can be at most one NNS subnet, multiple NNS subnets
-    /// are deduplicated.
     /// The server is started if it's not already running.
-    pub fn new_with_subnet_config(config: Vec<SubnetConfig>) -> Self {
-        assert!(!config.is_empty(), "PocketIC needs at least one subnet");
+    pub fn from_config(config: SubnetConfigSet) -> Self {
+        config.validate().unwrap();
+
         let parent_pid = std::os::unix::process::parent_id();
         let log_guard = setup_tracing(parent_pid);
 
@@ -150,7 +229,7 @@ impl PocketIc {
     #[instrument(skip(self, data), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), data_len = %data.len(), compression = ?compression))]
     pub fn set_stable_memory(
         &self,
-        canister_id: Principal,
+        canister_id: CanisterId,
         data: Vec<u8>,
         compression: BlobCompression,
     ) {
@@ -167,7 +246,7 @@ impl PocketIc {
 
     /// Get stable memory of a canister.
     #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
-    pub fn get_stable_memory(&self, canister_id: Principal) -> Vec<u8> {
+    pub fn get_stable_memory(&self, canister_id: CanisterId) -> Vec<u8> {
         let endpoint = "read/get_stable_memory";
         let RawStableMemory { blob } = self.post(
             endpoint,
@@ -225,7 +304,7 @@ impl PocketIc {
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn root_key(&self) -> Option<Vec<u8>> {
-        let subnet_id = self.topology.get_nns_subnet()?;
+        let subnet_id = self.topology.get_nns()?;
         let subnet_id: RawSubnetId = subnet_id.into();
         let endpoint = "read/pub_key";
         let res = self.post::<Vec<u8>, _>(endpoint, subnet_id);
@@ -264,7 +343,7 @@ impl PocketIc {
 
     /// Get the current cycles balance of a canister.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
-    pub fn cycle_balance(&self, canister_id: Principal) -> u128 {
+    pub fn cycle_balance(&self, canister_id: CanisterId) -> u128 {
         let endpoint = "read/get_cycles";
         let result: RawCycles = self.post(
             endpoint,
@@ -277,7 +356,7 @@ impl PocketIc {
 
     /// Add cycles to a canister. Returns the new balance.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), amount = %amount))]
-    pub fn add_cycles(&self, canister_id: Principal, amount: u128) -> u128 {
+    pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
         let endpoint = "update/add_cycles";
         let result: RawCycles = self.post(
             endpoint,
@@ -293,7 +372,7 @@ impl PocketIc {
     #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn update_call(
         &self,
-        canister_id: Principal,
+        canister_id: CanisterId,
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
@@ -313,7 +392,7 @@ impl PocketIc {
     #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn query_call(
         &self,
-        canister_id: Principal,
+        canister_id: CanisterId,
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
@@ -329,14 +408,14 @@ impl PocketIc {
         )
     }
 
-    /// Create a canister with default settings and 100T cycles.
-    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
-    pub fn create_canister(&self, sender: Option<Principal>) -> CanisterId {
+    /// Create a canister with default settings as the anonymous principal.
+    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id))]
+    pub fn create_canister(&self) -> CanisterId {
         let CanisterIdRecord { canister_id } = call_candid_as(
             self,
             Principal::management_canister(),
             RawEffectivePrincipal::None,
-            sender.unwrap_or(Principal::anonymous()),
+            Principal::anonymous(),
             "provisional_create_canister_with_cycles",
             (CreateCanisterArgument { settings: None },),
         )
@@ -345,32 +424,12 @@ impl PocketIc {
         canister_id
     }
 
-    /// Create a canister with default settings and 100T cycles on a specific subnet.
-    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), subnet_id = %subnet_id.to_string()))]
-    pub fn create_canister_on_subnet(
-        &self,
-        sender: Option<Principal>,
-        subnet_id: SubnetId,
-    ) -> CanisterId {
-        let CanisterIdRecord { canister_id } = call_candid_as(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::SubnetId(subnet_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "provisional_create_canister_with_cycles",
-            (CreateCanisterArgument { settings: None },),
-        )
-        .map(|(x,)| x)
-        .unwrap();
-        canister_id
-    }
-
-    /// Create a canister with 100T cycles and custom settings.
+    /// Create a canister with optional custom settings and a sender.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, settings = ?settings, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn create_canister_with_settings(
         &self,
-        settings: Option<CanisterSettings>,
         sender: Option<Principal>,
+        settings: Option<CanisterSettings>,
     ) -> CanisterId {
         let CanisterIdRecord { canister_id } = call_candid_as(
             self,
@@ -385,12 +444,58 @@ impl PocketIc {
         canister_id
     }
 
-    /// Create a canister with100T cycles and custom settings on a specific subnet.
-    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, settings = ?settings, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), subnet_id = %subnet_id.to_string()))]
-    pub fn create_canister_on_subnet_with_settings(
+    /// Creates a canister with a specific canister ID and optional custom settings.
+    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS subnet.
+    /// Panics if the canister ID is not contained in any of the subnets, of if it is already in use.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
+    pub fn create_canister_with_id(
         &self,
-        settings: Option<CanisterSettings>,
         sender: Option<Principal>,
+        settings: Option<CanisterSettings>,
+        canister_id: CanisterId,
+    ) -> Result<CanisterId, String> {
+        use SubnetKind::{Application, System};
+
+        let subnet_id = self.get_subnet(canister_id);
+        if subnet_id.is_none() {
+            return Err(format!(
+                "Canister ID {} is not contained in any subnet",
+                canister_id
+            ));
+        }
+        if let Some(subnet_id) = subnet_id {
+            let config = self.topology.0.get(&subnet_id).unwrap();
+            if config.subnet_kind == Application || config.subnet_kind == System {
+                return Err(
+                    "Create canister with ID is only supported for Bitcoin, Fiduciary, II, SNS and NNS subnets".into()
+                );
+            }
+        }
+
+        let CanisterIdRecord {
+            canister_id: actual_canister_id,
+        } = call_candid_as(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "provisional_create_canister_with_cycles",
+            (ProvisionalCreateCanisterArgument {
+                settings,
+                specified_id: Some(canister_id),
+            },),
+        )
+        .map(|(x,)| x)
+        .unwrap();
+        Ok(actual_canister_id)
+    }
+
+    /// Create a canister on a specific subnet with optional custom settings.
+    #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, subnet_id = %subnet_id.to_string()))]
+    pub fn create_canister_on_subnet(
+        &self,
+        sender: Option<Principal>,
+        settings: Option<CanisterSettings>,
         subnet_id: SubnetId,
     ) -> CanisterId {
         let CanisterIdRecord { canister_id } = call_candid_as(
@@ -533,12 +638,12 @@ impl PocketIc {
     /// Checks whether the provided canister exists.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub fn canister_exists(&self, canister_id: CanisterId) -> bool {
-        self.get_subnet_of_canister(canister_id).is_some()
+        self.get_subnet(canister_id).is_some()
     }
 
     /// Returns the subnet ID of the canister if the canister exists.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
-    pub fn get_subnet_of_canister(&self, canister_id: CanisterId) -> Option<SubnetId> {
+    pub fn get_subnet(&self, canister_id: CanisterId) -> Option<SubnetId> {
         let endpoint = "read/get_subnet";
         let result: Option<RawSubnetId> = self.post(
             endpoint,
@@ -595,7 +700,7 @@ impl PocketIc {
         &self,
         endpoint: &str,
         effective_principal: RawEffectivePrincipal,
-        canister_id: Principal,
+        canister_id: CanisterId,
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
@@ -620,7 +725,7 @@ impl PocketIc {
 
     fn update_call_with_effective_principal(
         &self,
-        canister_id: Principal,
+        canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
         sender: Principal,
         method: &str,
@@ -658,7 +763,7 @@ impl Drop for PocketIc {
 /// PocketIC executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid_as<Input, Output>(
     env: &PocketIc,
-    canister_id: Principal,
+    canister_id: CanisterId,
     effective_principal: RawEffectivePrincipal,
     sender: Principal,
     method: &str,
@@ -683,7 +788,7 @@ where
 /// PocketIC executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid<Input, Output>(
     env: &PocketIc,
-    canister_id: Principal,
+    canister_id: CanisterId,
     effective_principal: RawEffectivePrincipal,
     method: &str,
     input: Input,
@@ -705,7 +810,7 @@ where
 /// Call a canister candid query method, anonymous.
 pub fn query_candid<Input, Output>(
     env: &PocketIc,
-    canister_id: Principal,
+    canister_id: CanisterId,
     method: &str,
     input: Input,
 ) -> Result<Output, CallError>
@@ -720,7 +825,7 @@ where
 /// signature is not verified).
 pub fn query_candid_as<Input, Output>(
     env: &PocketIc,
-    canister_id: Principal,
+    canister_id: CanisterId,
     sender: Principal,
     method: &str,
     input: Input,
@@ -786,6 +891,14 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
     }
 }
 
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
+)]
+struct ProvisionalCreateCanisterArgument {
+    pub settings: Option<CanisterSettings>,
+    pub specified_id: Option<Principal>,
+}
+
 /// Error type for [`TryFrom<u64>`].
 #[derive(Clone, Copy, Debug)]
 pub enum TryFromError {
@@ -806,6 +919,7 @@ pub enum ErrorCode {
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
+    CanisterIdAlreadyExists = 205,
     CanisterNotFound = 301,
     CanisterMethodNotFound = 302,
     CanisterAlreadyInstalled = 303,
@@ -848,6 +962,7 @@ pub enum ErrorCode {
     InsufficientCyclesInMemoryGrow = 532,
     ReservedCyclesLimitExceededInMemoryAllocation = 533,
     ReservedCyclesLimitExceededInMemoryGrow = 534,
+    InsufficientCyclesInMessageMemoryGrow = 535,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -860,6 +975,7 @@ impl TryFrom<u64> for ErrorCode {
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
+            205 => Ok(ErrorCode::CanisterIdAlreadyExists),
             301 => Ok(ErrorCode::CanisterNotFound),
             302 => Ok(ErrorCode::CanisterMethodNotFound),
             303 => Ok(ErrorCode::CanisterAlreadyInstalled),
@@ -902,6 +1018,7 @@ impl TryFrom<u64> for ErrorCode {
             532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
             533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
             534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
+            535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -968,10 +1085,10 @@ The PocketIC binary could not be found at {:?}. Please specify the path to the b
 or place it in your current working directory (you are running PocketIC from {:?}).
 
 Run the following commands to get the binary:
-    curl -sLO https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/$platform/pocket-ic.gz
+    curl -sLO https://download.dfinity.systems/ic/29ec86dc9f9ca4691d4d4386c8b2aa41e14d9d16/openssl-static-binaries/x86_64-$platform/pocket-ic.gz
     gzip -d pocket-ic.gz
     chmod +x pocket-ic
-where $platform is 'x86_64-linux' for Linux and 'x86_64-darwin' for Intel/rosetta-enabled Darwin.
+where $platform is 'linux' for Linux and 'darwin' for Intel/rosetta-enabled Darwin.
         ", &bin_path, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
     }
 

@@ -2762,20 +2762,14 @@ impl Governance {
         Ok(child_nid)
     }
 
-    pub fn redirect_merge_maturity_to_stake_maturity(
-        &mut self,
-        id: &NeuronId,
-        caller: &PrincipalId,
-        merge_maturity: &manage_neuron::MergeMaturity,
-    ) -> Result<MergeMaturityResponse, GovernanceError> {
-        let stake_maturity = manage_neuron::StakeMaturity {
-            percentage_to_stake: Some(merge_maturity.percentage_to_merge),
-        };
-        let stake_result = self.stake_maturity_of_neuron(id, caller, &stake_maturity);
-        match stake_result {
-            Ok((_stake_response, merge_response)) => Ok(merge_response),
-            Err(e) => Err(e),
-        }
+    /// Returns an error indicating MergeMaturity is no longer a valid action.
+    /// Can be removed after October 2024, along with corresponding code.
+    pub fn merge_maturity_removed_error<T>(&mut self) -> Result<T, GovernanceError> {
+        Err(GovernanceError::new_with_message(
+            ErrorType::InvalidCommand,
+            "The command MergeMaturity is no longer available, as this functionality was \
+            superseded by StakeMaturity. Use StakeMaturity instead.",
+        ))
     }
 
     /// Stakes the maturity of a neuron.
@@ -4880,6 +4874,11 @@ impl Governance {
             )
         })?;
 
+        // Early exit for deprecated commands.
+        if let Command::MergeMaturity(_) = manage_neuron.command.as_ref().unwrap() {
+            return self.merge_maturity_removed_error();
+        }
+
         let is_managed_neuron_not_for_profit = self
             .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
                 managed_neuron.not_for_profit
@@ -6418,9 +6417,7 @@ impl Governance {
                 .spawn_neuron(&id, caller, s)
                 .await
                 .map(ManageNeuronResponse::spawn_response),
-            Some(Command::MergeMaturity(m)) => self
-                .redirect_merge_maturity_to_stake_maturity(&id, caller, m)
-                .map(ManageNeuronResponse::merge_maturity_response),
+            Some(Command::MergeMaturity(_)) => self.merge_maturity_removed_error(),
             Some(Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
                 .map(|(response, _)| ManageNeuronResponse::stake_maturity_response(response)),
@@ -7501,9 +7498,6 @@ impl Governance {
 
     /// Refunds the maturity represented via `refunds` and stores this information in ProposalData
     /// of this `proposal_id` (for auditability).
-    ///
-    /// This function may be called only from `settle_neurons_fund_participation`, which also
-    /// handles async safety.
     fn refund_maturity_to_neurons_fund(
         &mut self,
         proposal_id: &ProposalId,

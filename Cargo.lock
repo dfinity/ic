@@ -4109,8 +4109,12 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.4.6",
+ "config",
+ "indoc",
  "itertools",
+ "network",
  "regex",
+ "utils",
 ]
 
 [[package]]
@@ -4594,15 +4598,17 @@ dependencies = [
 
 [[package]]
 name = "hyper-socks2"
-version = "0.6.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e01b408a306f4e49b1eac23dd88f0852c0abb2b1d162d498cd889cfcd56d8eec"
+checksum = "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
 dependencies = [
  "async-socks5",
  "futures",
  "http",
  "hyper 0.14.26",
- "hyper-tls",
+ "hyper-rustls",
+ "rustls",
+ "rustls-native-certs",
  "thiserror",
  "tokio",
 ]
@@ -10088,7 +10094,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -14397,7 +14403,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
@@ -17410,7 +17416,6 @@ dependencies = [
  "humantime",
  "hyper 0.14.26",
  "hyper-rustls",
- "hyper-tls",
  "ic-agent",
  "ic-artifact-pool",
  "ic-backup",

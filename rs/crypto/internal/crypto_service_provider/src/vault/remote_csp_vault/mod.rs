@@ -150,10 +150,7 @@ pub trait TarpcCspVault {
     async fn validate_pks_and_sks() -> Result<ValidNodePublicKeys, ValidatePksAndSksError>;
 
     // Corresponds to `TlsHandshakeCspVault.gen_tls_key_pair()`.
-    async fn gen_tls_key_pair(
-        node: NodeId,
-        not_after: String,
-    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
+    async fn gen_tls_key_pair(node: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
 
     // Corresponds to `TlsHandshakeCspVault.tls_sign()`.
     async fn tls_sign(message: ByteBuf, key_id: KeyId) -> Result<CspSignature, CspTlsSignError>;

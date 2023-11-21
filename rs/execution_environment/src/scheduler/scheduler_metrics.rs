@@ -38,6 +38,15 @@ pub(super) struct SchedulerMetrics {
     pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
+    /// Metric `consumed_cycles_since_replica_started` is not
+    /// monotonically increasing. Cycles consumed are increasing the
+    /// value of the metric while refunding cycles are decreasing it.
+    ///
+    /// `f64` gauge because cycles values are `u128`: converting them
+    /// into `u64` would result in truncation when the value overflows
+    /// 64 bits (which would be indistinguishable from a huge refund);
+    /// whereas conversion to `f64` merely results in loss of precision
+    /// when dealing with values > 2^53.
     pub(super) consumed_cycles_since_replica_started: Gauge,
     pub(super) consumed_cycles_since_replica_started_by_use_case: GaugeVec,
     pub(super) input_queue_messages: IntGaugeVec,
@@ -57,6 +66,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
+    pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
@@ -192,15 +202,6 @@ impl SchedulerMetrics {
                 "replicated_state_available_canister_ids",
                 "Number of allocated canister IDs that can still be generated.",
             ),
-            /// Metric `consumed_cycles_since_replica_started` is not
-            /// monotonically increasing. Cycles consumed are increasing the
-            /// value of the metric while refunding cycles are decreasing it.
-            ///
-            /// `f64` gauge because cycles values are `u128`: converting them
-            /// into `u64` would result in truncation when the value overflows
-            /// 64 bits (which would be indistinguishable from a huge refund);
-            /// whereas conversion to `f64` merely results in loss of precision
-            /// when dealing with values > 2^53.
             consumed_cycles_since_replica_started: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
                 "Number of cycles consumed since replica started",
@@ -331,6 +332,32 @@ impl SchedulerMetrics {
                     "execution_round_consensus_queue_messages",
                     "The number of messages executed during consensus \
                           queue processing in an execution round",
+                    metrics_registry,
+                ),
+            },
+            round_postponed_raw_rand_queue: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_postponed_raw_rand_queue_duration_seconds",
+                    "The duration of postponed raw rand queue processing in \
+                          an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_postponed_raw_rand_queue_instructions",
+                    "The number of instructions executed during postponed \
+                          raw rand queue processing in an execution round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_postponed_raw_rand_queue_slices",
+                    "The number of slices executed during postponed \
+                          raw rand queue processing in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_postponed_raw_rand_queue_messages",
+                    "The number of messages executed during postponed \
+                          raw rand queue processing in an execution round",
                     metrics_registry,
                 ),
             },

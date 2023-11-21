@@ -49,7 +49,7 @@ maximum-capacity-canister-http:
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
           --git-rev="$GIT_REVISION" --remote-path="release" \
           --out="artifacts/release"
-      pigz -d "${CI_PROJECT_DIR}/artifacts/release/ic-admin.gz"
+      gzip -d "${CI_PROJECT_DIR}/artifacts/release/ic-admin.gz"
       chmod u+x "${CI_PROJECT_DIR}/artifacts/release/ic-admin"
       ln -sf "${CI_PROJECT_DIR}/artifacts/release/ic-admin" ic-admin
       "${CI_PROJECT_DIR}/artifacts/release/ic-admin" --nns-url="$NNS_URL" propose-to-update-subnet --features http_requests --subnet 1 --test-neuron-proposer --summary "Updating a subnet"
@@ -61,7 +61,7 @@ maximum-capacity-canister-http:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -103,7 +103,7 @@ maximum-capacity-system-baseline-query:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       # Upload results from both run (the entire folder of that GIT revision)
@@ -133,7 +133,7 @@ maximum-capacity-system-baseline-update:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -161,7 +161,7 @@ maximum-capacity-large-memory-query:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -189,7 +189,7 @@ maximum-capacity-large-memory-update:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -217,7 +217,7 @@ maximum-capacity-multiple-large-memory-update:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -245,7 +245,7 @@ maximum-capacity-mixed-workloads:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -276,7 +276,7 @@ maximum-capacity-mixed-counter-memory:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -303,7 +303,7 @@ maximum-capacity-qr:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -330,7 +330,7 @@ maximum-capacity-sha256:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -358,7 +358,7 @@ benchmark-response-payload:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -386,7 +386,7 @@ benchmark-xnet:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -630,7 +630,7 @@ tecdsa:
       # TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       # $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
       cd -
@@ -657,7 +657,7 @@ delegated-identity-bench:
 
       $SHELL_WRAPPER python3 experiments/run_delegation_experiment.py --testnet $TESTNET --num_procs 64 --iter_duration 30 --num_identities 200 --rps 30,100,200,500,1000
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
       cd -
@@ -685,7 +685,7 @@ maximum-capacity-boundary-nodes-queries:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
       cd -

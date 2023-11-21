@@ -16,7 +16,6 @@ use crate::vault::test_utils::pks_and_sks::generate_idkg_dealing_encryption_key_
 use ic_types::crypto::CurrentNodePublicKeys;
 
 const NODE_1: u64 = 4241;
-const NOT_AFTER: &str = "99991231235959Z";
 
 #[test]
 fn should_retrieve_current_public_keys() {
@@ -28,7 +27,7 @@ fn should_retrieve_current_public_keys() {
         .gen_committee_signing_key_pair()
         .expect("Could not generate committee signing keys");
     let cert = csp_vault
-        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+        .gen_tls_key_pair(node_test_id(NODE_1))
         .expect("Generation of TLS keys failed.");
     let (nidkg_public_key, nidkg_pop) = csp_vault
         .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
@@ -133,7 +132,7 @@ fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_
         .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
         .expect("Failed to generate NI-DKG dealing encryption key pair");
     let _tls_certificate = csp_vault
-        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+        .gen_tls_key_pair(node_test_id(NODE_1))
         .expect("Failed to generate TLS certificate");
 
     let result = csp_vault
@@ -245,7 +244,7 @@ mod current_node_public_keys_with_timestamps {
             .current_node_public_keys_with_timestamps()
             .expect("Failed to retrieve current node public keys");
 
-        assert_matches!(pks_with_timestamps.node_signing_public_key, 
+        assert_matches!(pks_with_timestamps.node_signing_public_key,
             Some(pk) if pk.timestamp == Some(node_signing_pk_timestamp.as_millis_since_unix_epoch()));
         assert_matches!(pks_with_timestamps.committee_signing_public_key,
             Some(pk) if pk.timestamp == Some(committee_signing_pk_timestamp.as_millis_since_unix_epoch()));

@@ -50,6 +50,8 @@ while test $# -gt $CTR; do
             shift
             ;;
         -f | --full)
+            echo """Legacy image will be deprecated by 2023-12-31. Please use the main image and report any issues to IDX if your task does not work with the main image."""
+            read -p "Continue anyway? (Y/N): " confirm && [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]] || exit 1
             IMAGE="docker.io/dfinity/ic-build-legacy"
             BUILD_ARGS=()
             echo "Using docker.io/dfinity/ic-build-legacy image."

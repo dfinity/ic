@@ -251,10 +251,13 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)?;
 
         node_record
-            .and_then(|v| v.hostos_version_id)
-            .map(|v| {
-                HostosVersion::try_from(v).map_err(|_| {
-                    OrchestratorError::UpgradeError("Could not parse HostOS version".to_string())
+            .and_then(|node_record| node_record.hostos_version_id)
+            .map(|node_record| {
+                HostosVersion::try_from(node_record).map_err(|err| {
+                    OrchestratorError::UpgradeError(format!(
+                        "Could not parse HostOS version: {}",
+                        err
+                    ))
                 })
             })
             .transpose()

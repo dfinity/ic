@@ -448,27 +448,16 @@ impl SchedulerImpl {
                 break;
             }
             if let Some(msg) = state.pop_subnet_input() {
-                let instruction_limits = get_instructions_limits_for_subnet_message(
-                    self.deterministic_time_slicing,
-                    &self.config,
-                    &msg,
-                );
-
-                let instructions_before = round_limits.instructions;
-                let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
+                let (new_state, message_instructions) = self.execute_subnet_message(
                     msg,
                     state,
-                    instruction_limits,
                     csprng,
-                    ecdsa_subnet_public_keys,
-                    registry_settings,
                     round_limits,
+                    registry_settings,
+                    measurement_scope,
+                    ecdsa_subnet_public_keys,
                 );
                 state = new_state;
-                let round_instructions_executed =
-                    as_num_instructions(instructions_before - round_limits.instructions);
-                let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
-                measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
 
                 if message_instructions.is_none() {
                     // This may happen only if the message execution was paused,
@@ -487,6 +476,40 @@ impl SchedulerImpl {
             }
         }
         state
+    }
+
+    /// Invokes `ExecutionEnvironmnet` to execute a subnet message.
+    fn execute_subnet_message(
+        &self,
+        msg: CanisterMessage,
+        state: ReplicatedState,
+        csprng: &mut Csprng,
+        round_limits: &mut RoundLimits,
+        registry_settings: &RegistryExecutionSettings,
+        measurement_scope: &MeasurementScope,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ) -> (ReplicatedState, Option<NumInstructions>) {
+        let instruction_limits = get_instructions_limits_for_subnet_message(
+            self.deterministic_time_slicing,
+            &self.config,
+            &msg,
+        );
+
+        let instructions_before = round_limits.instructions;
+        let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
+            msg,
+            state,
+            instruction_limits,
+            csprng,
+            ecdsa_subnet_public_keys,
+            registry_settings,
+            round_limits,
+        );
+        let round_instructions_executed =
+            as_num_instructions(instructions_before - round_limits.instructions);
+        let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
+        measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
+        (new_state, message_instructions)
     }
 
     /// Performs multiple iterations of canister execution until the instruction
@@ -1465,29 +1488,51 @@ impl Scheduler for SchedulerImpl {
             // For now, we assume all subnet messages need the entire replicated
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
-                let instruction_limits = InstructionLimits::new(
-                    FlagStatus::Disabled,
-                    self.config.max_instructions_per_message_without_dts,
-                    self.config.max_instructions_per_message_without_dts,
-                );
-                let instructions_before = round_limits.instructions;
-                let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
+                let (new_state, _) = self.execute_subnet_message(
                     CanisterMessage::Response(response.into()),
                     state,
-                    instruction_limits,
                     &mut csprng,
-                    &ecdsa_subnet_public_keys,
-                    registry_settings,
                     &mut round_limits,
+                    registry_settings,
+                    &measurement_scope,
+                    &ecdsa_subnet_public_keys,
                 );
                 state = new_state;
-                let round_instructions_executed =
-                    as_num_instructions(instructions_before - round_limits.instructions);
-                let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
-                measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
                 if round_limits.reached() {
                     break;
                 }
+            }
+        }
+
+        // Execute postponed `raw_rand` subnet messages.
+        {
+            // Drain the queue holding postponed `raw_rand`` queue.
+            let measurement_scope = MeasurementScope::nested(
+                &self.metrics.round_postponed_raw_rand_queue,
+                &root_measurement_scope,
+            );
+
+            // Each round, we check for any postponed `raw_rand` requests.
+            // If found, they are processed immediately. Raw rand is not
+            // consuming instructions, so all existing raw_rand requests
+            // will be processed.
+            while let Some(raw_rand_context) = state
+                .metadata
+                .subnet_call_context_manager
+                .raw_rand_contexts
+                .pop_front()
+            {
+                debug_assert!(raw_rand_context.execution_round_id < current_round);
+                let (new_state, _) = self.execute_subnet_message(
+                    CanisterMessage::Request(raw_rand_context.request.into()),
+                    state,
+                    &mut csprng,
+                    &mut round_limits,
+                    registry_settings,
+                    &measurement_scope,
+                    &ecdsa_subnet_public_keys,
+                );
+                state = new_state;
             }
         }
 

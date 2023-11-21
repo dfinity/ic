@@ -8,7 +8,6 @@ use crate::LocalCspVault;
 use ic_types_test_utils::ids::node_test_id;
 
 const NODE_1: u64 = 4241;
-const NOT_AFTER: &str = "99991231235959Z";
 
 #[test]
 fn key_should_be_present_only_after_generation() {
@@ -54,7 +53,7 @@ fn tls_key_should_be_present_only_after_generation() {
     let csp_vault1 = LocalCspVault::builder_for_test().build_into_arc();
     let csp_vault2 = LocalCspVault::builder_for_test().build_into_arc();
     let public_key_cert1 = csp_vault1
-        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+        .gen_tls_key_pair(node_test_id(NODE_1))
         .expect("error generating TLS key pair");
     let key_id1 = KeyId::try_from(&public_key_cert1).unwrap();
     assert!(
@@ -67,7 +66,7 @@ fn tls_key_should_be_present_only_after_generation() {
     );
 
     let public_key_cert2 = csp_vault2
-        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+        .gen_tls_key_pair(node_test_id(NODE_1))
         .expect("error generating TLS key pair");
     let key_id2 = KeyId::try_from(&public_key_cert2).unwrap();
     assert_ne!(

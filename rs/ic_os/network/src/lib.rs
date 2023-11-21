@@ -10,7 +10,7 @@ use ipv6::generate_ipv6_address;
 use mac_address::FormattedMacAddress;
 
 pub mod info;
-mod interfaces;
+pub mod interfaces;
 pub mod ipv6;
 pub mod mac_address;
 pub mod node_type;

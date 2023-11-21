@@ -3,16 +3,12 @@
 * @dfinity-lab/teams/owners-owners
 
 # [Misc]
-/.dependencies/           @dfinity-lab/teams/prodsec
 /.devcontainer/           @dfinity-lab/teams/idx
 /.github/                 @dfinity-lab/teams/idx
 /buf.yaml                 @dfinity-lab/teams/message-routing-owners
-/dshell/                  @dfinity-lab/teams/idx
 /hs/                      @dfinity-lab/teams/ic-testing-verification
 /licenses/                @dfinity-lab/teams/idx
-/outsource/               @dfinity-lab/teams/idx
 /bin/ict                  @dfinity-lab/teams/ic-testing-verification
-/.cargo/                  @dfinity-lab/teams/idx
 /bin/                     @dfinity-lab/teams/idx
 
 # [Bazel]
@@ -78,12 +74,10 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /testnet/ansible/                                          @dfinity-lab/teams/platform-operations
 /testnet/docs/                                             @dfinity-lab/teams/ic-support-eu @dfinity-lab/teams/ic-support-na
 /testnet/env/                                              @dfinity-lab/teams/platform-operations
-
 /testnet/release/                                          @dfinity-lab/teams/DRE
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/networking-team
-
 /testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
 /testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification
 
@@ -298,10 +292,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /nix/                     @dfinity-lab/teams/idx
 /experimental/nix/        @dfinity-lab/teams/idx
 /nix/overlays/haskell.nix @dfinity-lab/teams/ic-testing-verification
-
-# Log-based formal policy monitoring
-# [Policy-Monitoring]
-/policy-monitoring/       @dfinity-lab/teams/ic-testing-verification
 
 # [No-Approvals]
 # Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.

@@ -1,31 +1,34 @@
 use candid::{decode_one, encode_one, Principal};
 use ic_base_types::PrincipalId;
+use ic_cdk::api::management_canister::provisional::CanisterId;
 use ic_universal_canister::{wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo, Name,
     Symbol, Tokens, TransferArgs, TransferError,
 };
 use pocket_ic::{
-    common::rest::{BlobCompression, SubnetKind, II, NNS, STANDARD},
-    PocketIc, WasmResult,
+    common::rest::{BlobCompression, SubnetConfigSet, SubnetKind},
+    PocketIc, PocketIcBuilder, WasmResult,
 };
 use std::{collections::HashMap, io::Read, time::SystemTime};
+
+// 2T cycles
+const INIT_CYCLES: u128 = 2_000_000_000_000;
 
 #[test]
 fn test_xnet_ledger_canister() {
     // Set up PocketIC with two subnets: the NNS and an application subnet.
-    let pic = PocketIc::new_with_subnet_config(vec![NNS, STANDARD]);
-    let nns_subnet = pic.topology().get_nns_subnet().unwrap();
-    let app_subnet = *pic
-        .topology()
-        .0
-        .iter()
-        .find(|(_, (_, config))| config.subnet_type == SubnetKind::Application)
-        .unwrap()
-        .0;
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let nns_subnet = pic.topology().get_nns().unwrap();
+    let app_subnet = pic.topology().get_app_subnets()[0];
 
     // Install a proxy canister on the application subnet.
-    let proxy_canister = pic.create_canister_on_subnet(None, app_subnet);
+    let proxy_canister = pic.create_canister_on_subnet(None, None, app_subnet);
+    pic.add_cycles(proxy_canister, INIT_CYCLES);
+
     pic.install_canister(
         proxy_canister,
         UNIVERSAL_CANISTER_WASM.to_vec(),
@@ -36,7 +39,7 @@ fn test_xnet_ledger_canister() {
     // Create a ledger canister on the NNS subnet.
     let wasm_path = std::env::var_os("LEDGER_WASM").expect("Missing wasm file");
     let ledger_wasm = std::fs::read(wasm_path).unwrap();
-    let ledger_canister = pic.create_canister_on_subnet(None, nns_subnet);
+    let ledger_canister = pic.create_canister_on_subnet(None, None, nns_subnet);
 
     // Give the proxy canister some tokens to pay the beneficiary.
     let beneficiary = AccountIdentifier::new(PrincipalId::new_user_test_id(1), None);
@@ -159,39 +162,127 @@ where
 }
 
 #[test]
+fn test_create_canister_with_id() {
+    let config = SubnetConfigSet {
+        nns: true,
+        ii: true,
+        ..Default::default()
+    };
+    let pic = PocketIc::from_config(config);
+    // goes on NNS
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    let actual_canister_id = pic
+        .create_canister_with_id(None, None, canister_id)
+        .unwrap();
+    assert_eq!(actual_canister_id, canister_id);
+    assert_eq!(
+        pic.get_subnet(canister_id).unwrap(),
+        pic.topology().get_nns().unwrap()
+    );
+    // goes on II
+    let canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+    let actual_canister_id = pic
+        .create_canister_with_id(None, None, canister_id)
+        .unwrap();
+    assert_eq!(actual_canister_id, canister_id);
+    assert_eq!(
+        pic.get_subnet(canister_id).unwrap(),
+        pic.topology().get_ii().unwrap()
+    );
+}
+
+#[test]
+fn test_create_canister_after_create_canister_with_id_occupied_next_canister_id() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+
+    let canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+    let actual_canister_id = pic
+        .create_canister_with_id(None, None, canister_id)
+        .unwrap();
+    assert_eq!(actual_canister_id, canister_id);
+    let other_canister_id = pic.create_canister();
+    assert_ne!(other_canister_id, canister_id);
+}
+
+#[test]
+#[should_panic(expected = "only supported for Bitcoin, Fiduciary, II, SNS and NNS subnets")]
+fn test_create_canister_with_id_on_app_subnet_fails() {
+    let pic = PocketIc::new();
+
+    let valid_canister_id = pic.create_canister();
+    let _ = pic
+        .create_canister_with_id(None, None, valid_canister_id)
+        .unwrap();
+}
+
+#[test]
+#[should_panic(expected = "only supported for Bitcoin, Fiduciary, II, SNS and NNS subnets")]
+fn test_create_canister_with_id_on_system_subnet_fails() {
+    let pic = PocketIcBuilder::new().with_system_subnet().build();
+
+    let valid_canister_id = pic.create_canister();
+    let _ = pic
+        .create_canister_with_id(None, None, valid_canister_id)
+        .unwrap();
+}
+
+#[test]
+#[should_panic(expected = "CanisterAlreadyInstalled")]
+fn test_create_canister_with_used_id_should_panic() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+
+    let canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+    let _ = pic.create_canister_with_id(None, None, canister_id);
+    let _ = pic.create_canister_with_id(None, None, canister_id);
+}
+
+#[test]
 fn test_random_subnet_selection() {
     // Application subnet has highest priority
-    let config = vec![NNS, STANDARD, II];
-    let pic = PocketIc::new_with_subnet_config(config.clone());
-    let canister_id = pic.create_canister(None);
-    let subnet_id = pic.get_subnet_of_canister(canister_id).unwrap();
-    let subnet_config = pic.topology().0.get(&subnet_id).unwrap().1;
-    assert_eq!(subnet_config, config[1]);
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .with_ii_subnet()
+        .with_fiduciary_subnet()
+        .with_bitcoin_subnet()
+        .with_system_subnet()
+        .with_application_subnet()
+        .build();
+
+    let canister_id = pic.create_canister();
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    let subnet_kind = pic.topology().0.get(&subnet_id).unwrap().subnet_kind;
+    assert_eq!(subnet_kind, SubnetKind::Application);
 
     // System subnet has highest priority
-    let pic = PocketIc::new_with_subnet_config(vec![NNS, II]);
-    let canister_id = pic.create_canister(None);
-    let subnet_id = pic.get_subnet_of_canister(canister_id).unwrap();
-    let subnet_config = pic.topology().0.get(&subnet_id).unwrap().1;
-    assert_eq!(subnet_config, II);
-
-    let pic = PocketIc::new_with_subnet_config(vec![NNS]);
-    let canister_id = pic.create_canister(None);
-    let subnet_id = pic.get_subnet_of_canister(canister_id).unwrap();
-    let subnet_type = pic.topology().0.get(&subnet_id).unwrap().1;
-    assert_eq!(subnet_type, NNS);
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .with_ii_subnet()
+        .with_fiduciary_subnet()
+        .with_bitcoin_subnet()
+        .with_system_subnet()
+        .build();
+    let canister_id = pic.create_canister();
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    let subnet_kind = pic.topology().0.get(&subnet_id).unwrap().subnet_kind;
+    assert_eq!(subnet_kind, SubnetKind::System);
 }
 
 #[test]
 fn test_xnet_call() {
-    let config = vec![STANDARD, STANDARD];
-    let pic = PocketIc::new_with_subnet_config(config);
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
 
-    let subnet_id_1 = *pic.topology().0.iter().next().unwrap().0;
-    let subnet_id_2 = *pic.topology().0.iter().nth(1).unwrap().0;
+    let subnet_id_1 = pic.topology().get_app_subnets()[0];
+    let subnet_id_2 = pic.topology().get_app_subnets()[1];
 
-    let canister_1 = pic.create_canister_on_subnet(None, subnet_id_1);
-    let canister_2 = pic.create_canister_on_subnet(None, subnet_id_2);
+    let canister_1 = pic.create_canister_on_subnet(None, None, subnet_id_1);
+    let canister_2 = pic.create_canister_on_subnet(None, None, subnet_id_2);
+    pic.add_cycles(canister_1, INIT_CYCLES);
+    pic.add_cycles(canister_2, INIT_CYCLES);
 
     pic.install_canister(canister_1, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
     pic.install_canister(canister_2, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
@@ -261,15 +352,17 @@ fn test_xnet_call() {
 
 #[test]
 fn test_routing_with_multiple_subnets() {
-    let config = vec![NNS, STANDARD];
-    let pic = PocketIc::new_with_subnet_config(config);
-    let topology = pic.topology();
-    assert_eq!(topology.0.len(), 2);
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
 
-    let subnet_id_1 = *topology.0.iter().next().unwrap().0;
-    let canister_id_1 = pic.create_canister_on_subnet(None, subnet_id_1);
-    let subnet_id_2 = *topology.0.iter().nth(1).unwrap().0;
-    let canister_id_2 = pic.create_canister_on_subnet(None, subnet_id_2);
+    let subnet_id_1 = pic.topology().get_nns().unwrap();
+    let canister_id_1 = pic.create_canister_on_subnet(None, None, subnet_id_1);
+    let subnet_id_2 = pic.topology().get_app_subnets()[0];
+    let canister_id_2 = pic.create_canister_on_subnet(None, None, subnet_id_2);
+    pic.add_cycles(canister_id_1, INIT_CYCLES);
+    pic.add_cycles(canister_id_2, INIT_CYCLES);
 
     let counter_wasm = counter_wasm();
     pic.install_canister(canister_id_1, counter_wasm.clone(), vec![], None);
@@ -288,22 +381,21 @@ fn test_routing_with_multiple_subnets() {
     assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
 
     // Creating a canister without specifying a subnet should still work.
-    let _canister_id = pic.create_canister(None);
+    let _canister_id = pic.create_canister();
 }
 
 #[test]
 fn test_multiple_large_xnet_payloads() {
-    let pic = PocketIc::new_with_subnet_config(vec![NNS, STANDARD]);
-    let nns_subnet = pic.topology().get_nns_subnet().unwrap();
-    let app_subnet = *pic
-        .topology()
-        .0
-        .iter()
-        .find(|(_, (_, config))| config.subnet_type == SubnetKind::Application)
-        .unwrap()
-        .0;
-    let canister_1 = pic.create_canister_on_subnet(None, nns_subnet);
-    let canister_2 = pic.create_canister_on_subnet(None, app_subnet);
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let nns_subnet = pic.topology().get_nns().unwrap();
+    let app_subnet = pic.topology().get_app_subnets()[0];
+    let canister_1 = pic.create_canister_on_subnet(None, None, nns_subnet);
+    let canister_2 = pic.create_canister_on_subnet(None, None, app_subnet);
+    pic.add_cycles(canister_1, INIT_CYCLES);
+    pic.add_cycles(canister_2, INIT_CYCLES);
 
     pic.install_canister(canister_1, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
     pic.install_canister(canister_2, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
@@ -378,7 +470,7 @@ fn test_get_and_set_and_advance_time() {
 #[test]
 fn test_get_set_cycle_balance() {
     let pic = PocketIc::new();
-    let canister_id = pic.create_canister(None);
+    let canister_id = pic.create_canister();
     let initial_balance = pic.cycle_balance(canister_id);
     let new_balance = pic.add_cycles(canister_id, 420);
     assert_eq!(new_balance, initial_balance + 420);
@@ -399,7 +491,8 @@ fn test_create_and_drop_instances() {
 fn test_counter_canister() {
     let pic = PocketIc::new();
 
-    let can_id = pic.create_canister(None);
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
 
     // Open a wasm file and install it on the canister
     let counter_wasm = counter_wasm();
@@ -426,20 +519,20 @@ fn test_root_key() {
     let pic = PocketIc::new();
     assert!(pic.root_key().is_none());
 
-    let pic = PocketIc::new_with_subnet_config(vec![NNS, STANDARD, STANDARD]);
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
     assert!(pic.root_key().is_some());
 }
 
 #[test]
-#[should_panic(expected = "needs at least one subnet")]
+#[should_panic(expected = "SubnetConfigSet must contain at least one subnet")]
 fn test_new_pocket_ic_without_subnets_panics() {
-    let _pic: PocketIc = PocketIc::new_with_subnet_config(vec![]);
+    let _pic: PocketIc = PocketIc::from_config(SubnetConfigSet::default());
 }
 
 #[test]
 fn test_canister_exists() {
     let pic = PocketIc::new();
-    let canister_id = pic.create_canister(None);
+    let canister_id = pic.create_canister();
     assert!(pic.canister_exists(canister_id));
     let nonexistent_canister_id = Principal::anonymous();
     assert!(!pic.canister_exists(nonexistent_canister_id));
@@ -447,29 +540,28 @@ fn test_canister_exists() {
 
 #[test]
 fn test_get_subnet_of_canister() {
-    let pic = PocketIc::new_with_subnet_config(vec![NNS, STANDARD]);
-    let topology = pic.topology();
-    let nns_subnet = topology.get_nns_subnet().unwrap();
-    let application_subnet = topology
-        .0
-        .iter()
-        .find(|(_, (_, config))| config.subnet_type == SubnetKind::Application)
-        .unwrap()
-        .0;
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let nns_subnet = pic.topology().get_nns().unwrap();
+    let app_subnet = pic.topology().get_app_subnets()[0];
 
-    let canister_id = pic.create_canister_on_subnet(None, nns_subnet);
-    let subnet_id = pic.get_subnet_of_canister(canister_id);
+    let canister_id = pic.create_canister_on_subnet(None, None, nns_subnet);
+    let subnet_id = pic.get_subnet(canister_id);
     assert_eq!(subnet_id.unwrap(), nns_subnet);
 
-    let canister_id = pic.create_canister_on_subnet(None, *application_subnet);
-    let subnet_id = pic.get_subnet_of_canister(canister_id);
-    assert_eq!(subnet_id.unwrap(), *application_subnet);
+    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+    let subnet_id = pic.get_subnet(canister_id);
+    assert_eq!(subnet_id.unwrap(), app_subnet);
 }
 
 #[test]
 fn test_set_and_get_stable_memory_not_compressed() {
     let pic = PocketIc::new();
-    let canister_id = pic.create_canister(None);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+
     let counter_wasm = counter_wasm();
     pic.install_canister(canister_id, counter_wasm, vec![], None);
 
@@ -483,7 +575,8 @@ fn test_set_and_get_stable_memory_not_compressed() {
 #[test]
 fn test_set_and_get_stable_memory_compressed() {
     let pic = PocketIc::new();
-    let canister_id = pic.create_canister(None);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
     let counter_wasm = counter_wasm();
     pic.install_canister(canister_id, counter_wasm, vec![], None);
 
@@ -503,7 +596,7 @@ fn counter_wasm() -> Vec<u8> {
     std::fs::read(wasm_path).unwrap()
 }
 
-fn call_counter_can(ic: &PocketIc, can_id: Principal, method: &str) -> WasmResult {
+fn call_counter_can(ic: &PocketIc, can_id: CanisterId, method: &str) -> WasmResult {
     ic.update_call(
         can_id,
         Principal::anonymous(),

@@ -90,6 +90,12 @@ fn main() -> Result<()> {
                 ))
                 .add_test(systest!(canister_heartbeat_can_stop))
                 .add_test(systest!(canister_heartbeat_cannot_reply)),
+            // Enable tests when feature is enabled.
+            // .add_test(systest!(install_large_wasm))
+            // .add_test(systest!(install_large_wasm_with_other_store))
+            // .add_test(systest!(
+            //     install_large_wasm_with_other_store_fails_cross_subnet
+            // )),
         )
         .execute_from_args()?;
 

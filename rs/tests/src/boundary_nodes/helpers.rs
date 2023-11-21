@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::driver::{
     test_env::TestEnv,
     test_env_api::{
@@ -10,6 +12,7 @@ use futures::future::join_all;
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
 use ic_utils::interfaces::ManagementCanister;
+use slog::debug;
 
 pub fn get_install_url(env: &TestEnv) -> Result<(url::Url, PrincipalId), Error> {
     let subnet = env
@@ -130,9 +133,11 @@ pub async fn install_canisters(
 }
 
 pub async fn set_counters_on_counter_canisters(
+    log: &slog::Logger,
     agent: Agent,
     canisters: Vec<Principal>,
     counter_values: Vec<u32>,
+    max_attempts: usize,
 ) {
     // Perform update calls in parallel via multiple futures.
     let mut futures = Vec::new();
@@ -141,13 +146,24 @@ pub async fn set_counters_on_counter_canisters(
         let calls = counter_values[idx];
         futures.push(async move {
             for call in 1..calls + 1 {
-                let res = agent
-                    .update(canister_id, "write")
-                    .call_and_wait()
-                    .await
-                    .unwrap();
+                let mut attempt = 1;
+                let write_result: Vec<u8> = loop {
+                    if attempt > max_attempts {
+                        panic!("write call on canister={canister_id} failed after {max_attempts} attempts");
+                    }
+                    let result = agent.update(canister_id, "write").call_and_wait().await;
+                    if let Err(err) = result {
+                        debug!(log,
+                            "write call on canister={canister_id} failed on attempt {attempt}, err: {err:?}",
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    } else {
+                        break result.unwrap();
+                    }
+                    attempt += 1;
+                };
                 let counter = u32::from_le_bytes(
-                    res.as_slice()
+                    write_result.as_slice()
                         .try_into()
                         .expect("slice with incorrect length"),
                 );
@@ -159,17 +175,34 @@ pub async fn set_counters_on_counter_canisters(
 }
 
 pub async fn read_counters_on_counter_canisters(
+    log: &slog::Logger,
     agent: Agent,
     canisters: Vec<Principal>,
+    max_attempts: usize,
 ) -> Vec<u32> {
     // Perform query calls in parallel via multiple futures.
     let mut futures = Vec::new();
     for canister_id in canisters {
         let agent = agent.clone();
         futures.push(async move {
-            let res = agent.query(&canister_id, "read").call().await.unwrap();
+            let mut attempt = 1;
+            let read_result: Vec<u8> = loop {
+                if attempt > max_attempts {
+                    panic!("read call on canister={canister_id} failed after {max_attempts} attempts");
+                }
+                let result = agent.query(&canister_id, "read").call().await;
+                if let Err(err) = result {
+                    debug!(log,
+                        "read call on canister={canister_id} failed on attempt {attempt}, err: {err:?}",
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                } else {
+                    break result.unwrap();
+                }
+                attempt += 1;
+            };
             u32::from_le_bytes(
-                res.as_slice()
+                read_result.as_slice()
                     .try_into()
                     .expect("slice with incorrect length"),
             )

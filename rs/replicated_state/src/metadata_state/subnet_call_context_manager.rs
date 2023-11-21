@@ -373,6 +373,22 @@ impl SubnetCallContextManager {
             time,
         });
     }
+
+    pub fn remove_non_local_raw_rand_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<RawRandContext> {
+        let mut removed = Vec::new();
+        self.raw_rand_contexts.retain(|context| {
+            if is_local_canister(context.request.sender()) {
+                true
+            } else {
+                removed.push(context.clone());
+                false
+            }
+        });
+        removed
+    }
 }
 
 impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {

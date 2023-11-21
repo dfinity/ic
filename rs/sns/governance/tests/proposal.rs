@@ -3,10 +3,12 @@ use ic_sns_governance::pb::v1::{ProposalData, Tally, Vote};
 use proptest::proptest;
 
 mod early_decision {
+    use ic_sns_governance::pb::v1::NervousSystemParameters;
+
     use super::*;
 
     proptest! {
-        // If a proposal can be adopted by absolute majority, flipping the "yes/no" votes should be sufficient to reject the decision
+        // If a proposal can be adopted by 50% absolute majority, flipping the "yes/no" votes should be sufficient to reject the decision
         #[test]
         fn flips_when_votes_flip(
             minimum_yes_proportion_of_total in 0u64..5_000,
@@ -26,6 +28,9 @@ mod early_decision {
                 initial_voting_period_seconds: 10,
                 minimum_yes_proportion_of_total: Some(Percentage::from_basis_points(
                     minimum_yes_proportion_of_total,
+                )),
+                minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(
+                    5000,
                 )),
                 ..Default::default()
             };
@@ -51,11 +56,47 @@ mod early_decision {
             );
         }
 
+        // If minimum_yes_proportion_of_total or minimum_yes_proportion_of_exercised
+        // are None, the proposal logic should assume the default values
+        #[test]
+        fn assumes_default_voting_thresholds_when_not_present(
+            yes in 0u64..1_000_000,
+            no in 0u64..1_000_000,
+            uncast in 0u64..1_000_000,
+        ) {
+            let total = yes + no + uncast;
+            let base_proposal = ProposalData {
+                latest_tally: Some(Tally {
+                    yes,
+                    no,
+                    total,
+                    timestamp_seconds: 1,
+                }),
+                proposal_creation_timestamp_seconds: 1,
+                initial_voting_period_seconds: 10,
+                ..Default::default()
+            };
+            let specified_proposal = ProposalData {
+                minimum_yes_proportion_of_total: Some(
+                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
+                ),
+                minimum_yes_proportion_of_exercised: Some(
+                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
+                ),
+                ..base_proposal.clone()
+            };
+            assert_eq!(base_proposal.early_decision(), specified_proposal.early_decision());
+            assert_eq!(base_proposal.is_accepted(), specified_proposal.is_accepted());
+            assert_eq!(base_proposal.can_make_decision(1), specified_proposal.can_make_decision(1));
+        }
+
+
         // Once a decision has been made, casting more votes in either direction
         // should not change the decision
         #[test]
         fn monotonic(
             minimum_yes_proportion_of_total in 0u64..5_000,
+            minimum_yes_proportion_of_exercised in 5_000u64..9_999,
             yes in 0u64..1_000_000,
             no in 0u64..1_000_000,
             uncast in 0u64..1_000_000,
@@ -73,6 +114,9 @@ mod early_decision {
                 initial_voting_period_seconds: 10,
                 minimum_yes_proportion_of_total: Some(Percentage::from_basis_points(
                     minimum_yes_proportion_of_total,
+                )),
+                minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(
+                    minimum_yes_proportion_of_exercised,
                 )),
                 ..Default::default()
             };
@@ -117,6 +161,7 @@ mod early_decision {
         #[test]
         fn could_go_either_way(
             minimum_yes_proportion_of_total in 0u64..5_000,
+            minimum_yes_proportion_of_exercised in 5_000u64..9_999,
             yes in 0u64..1_000_000,
             no in 0u64..1_000_000,
             uncast in 0u64..1_000_000,
@@ -133,6 +178,9 @@ mod early_decision {
                 initial_voting_period_seconds: 10,
                 minimum_yes_proportion_of_total: Some(Percentage::from_basis_points(
                     minimum_yes_proportion_of_total,
+                )),
+                minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(
+                    minimum_yes_proportion_of_exercised,
                 )),
                 ..Default::default()
             };
@@ -244,6 +292,7 @@ mod early_decision {
             proposal_creation_timestamp_seconds: 1,
             initial_voting_period_seconds: 10,
             minimum_yes_proportion_of_total: Some(Percentage::from_basis_points(0)),
+            minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(5_000)),
             ..Default::default()
         };
         assert_eq!(undecided_proposal.early_decision(), Vote::Unspecified);
@@ -254,7 +303,7 @@ mod early_decision {
             latest_tally: Some(Tally {
                 yes: 5,
                 no: 4,
-                total: 9, // Total is less than the sum of yes and no
+                total: 9,
                 timestamp_seconds: 1,
             }),
             ..undecided_proposal.clone()
@@ -287,6 +336,62 @@ mod early_decision {
         };
         assert_eq!(no_proposal.early_decision(), Vote::No);
         assert!(no_proposal.can_make_decision(now_seconds));
+
+        // Test case 3: A very narrow victory for Yes...
+        let yes_proposal = ProposalData {
+            latest_tally: Some(Tally {
+                yes: 5_001,
+                no: 4_999,
+                total: 10_000,
+                timestamp_seconds: 1,
+            }),
+            minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(5_000)),
+            ..undecided_proposal.clone()
+        };
+        assert_eq!(yes_proposal.early_decision(), Vote::Yes);
+        assert!(yes_proposal.can_make_decision(now_seconds));
+
+        // Test case 3 cont.: ...becomes undecided if we were missing one `yes` vote
+        let yes_proposal = ProposalData {
+            latest_tally: Some(Tally {
+                yes: 5_000,
+                no: 4_999,
+                total: 10_000,
+                timestamp_seconds: 1,
+            }),
+            minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(5_000)),
+            ..undecided_proposal.clone()
+        };
+        assert_eq!(yes_proposal.early_decision(), Vote::Unspecified);
+        assert!(!yes_proposal.can_make_decision(now_seconds));
+
+        // Test case 4: Another very narrow victory for Yes...
+        let yes_proposal = ProposalData {
+            latest_tally: Some(Tally {
+                yes: 7_501,
+                no: 2_499,
+                total: 10_000,
+                timestamp_seconds: 1,
+            }),
+            minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(7_500)),
+            ..undecided_proposal.clone()
+        };
+        assert_eq!(yes_proposal.early_decision(), Vote::Yes);
+        assert!(yes_proposal.can_make_decision(now_seconds));
+
+        // Test case 4 cont.: ...becomes a loss if minimum_yes_proportion_of_exercised is increased
+        let yes_proposal = ProposalData {
+            latest_tally: Some(Tally {
+                yes: 7_501,
+                no: 2_499,
+                total: 10_000,
+                timestamp_seconds: 1,
+            }),
+            minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(7_501)),
+            ..undecided_proposal.clone()
+        };
+        assert_eq!(yes_proposal.early_decision(), Vote::No);
+        assert!(yes_proposal.can_make_decision(now_seconds));
     }
 
     // Once an absolute majority has been achieved, it cannot be changed, regardless of additional voting.

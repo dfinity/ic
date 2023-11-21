@@ -111,7 +111,6 @@ mock! {
         fn gen_tls_key_pair(
             &self,
             node_id: NodeId,
-            not_after: &str,
         ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
     }
 

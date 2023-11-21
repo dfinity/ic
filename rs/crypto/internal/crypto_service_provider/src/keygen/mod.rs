@@ -25,12 +25,8 @@ impl CspKeyGenerator for Csp {
         self.csp_vault.gen_committee_signing_key_pair()
     }
 
-    fn gen_tls_key_pair(
-        &self,
-        node_id: NodeId,
-        not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
-        self.csp_vault.gen_tls_key_pair(node_id, not_after)
+    fn gen_tls_key_pair(&self, node_id: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+        self.csp_vault.gen_tls_key_pair(node_id)
     }
 }
 

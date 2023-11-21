@@ -60,6 +60,9 @@ canister_bazel_label() {
         "xrc-mock-canister")
             echo "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister"
             ;;
+        "cycles-minting")
+            echo "//rs/nns/cmc:cycles-minting-canister"
+            ;;
         # TODO cycles-minting, genesis-token, identity, ledger, lifeline, nns-ui, registry
         *)
             echo "Sorry. I do not know how to build ${CANISTER_NAME}."

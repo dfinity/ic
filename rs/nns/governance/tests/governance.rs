@@ -15,7 +15,7 @@ use common::increase_dissolve_delay_raw;
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use dfn_protobuf::ToProto;
 use fixtures::{
-    new_motion_proposal, principal, LedgerBuilder, NNSBuilder, NNSStateChange, NeuronBuilder,
+    new_motion_proposal, principal, NNSBuilder, NNSStateChange, NeuronBuilder,
     ProposalNeuronBehavior, NNS,
 };
 use futures::future::{join_all, FutureExt};
@@ -68,7 +68,7 @@ use ic_nns_governance::{
             MergeMaturity, NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split,
             StartDissolving,
         },
-        manage_neuron_response::{self, Command as CommandResponse, MergeMaturityResponse},
+        manage_neuron_response::{self, Command as CommandResponse},
         neuron::{self, DissolveState, Followees},
         neurons_fund_snapshot::NeuronsFundNeuronPortion,
         proposal::{self, Action, ActionDesc},
@@ -109,7 +109,7 @@ use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
-use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
+use proptest::prelude::proptest;
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use std::{
@@ -8996,310 +8996,71 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
     test_can_follow_by(|n| NeuronIdOrSubaccount::NeuronId(n.id.unwrap()));
     test_can_follow_by(|n| NeuronIdOrSubaccount::Subaccount(n.account.to_vec()));
 }
-
-fn assert_merge_maturity_executes_as_expected_new(
-    nns: &mut NNS,
-    id: &NeuronId,
-    controller: &PrincipalId,
-    percentage_to_merge: u32,
-    expected_merged_maturity: u64,
-) {
-    let neuron = nns.get_neuron(id).clone();
-    let response = nns
-        .merge_maturity(id, controller, percentage_to_merge)
-        .unwrap();
-    let merged_maturity = response.merged_maturity_e8s;
-
-    assert_eq!(merged_maturity, expected_merged_maturity);
-
-    let expected_resulting_maturity = neuron.maturity_e8s_equivalent - merged_maturity;
-    let expected_regular_stake = neuron.cached_neuron_stake_e8s;
-    let expected_total_stake = neuron.cached_neuron_stake_e8s
-        + neuron.staked_maturity_e8s_equivalent.unwrap_or(0)
-        + merged_maturity;
-    let post_merge_account_balance = nns.get_neuron_stake(&neuron);
-    let merged_neuron = nns.get_neuron(id);
-
-    assert_eq!(
-        merged_neuron.maturity_e8s_equivalent,
-        expected_resulting_maturity
-    );
-    assert_eq!(
-        merged_neuron.cached_neuron_stake_e8s,
-        expected_regular_stake,
-    );
-    assert_eq!(
-        merged_neuron.cached_neuron_stake_e8s
-            + merged_neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
-        expected_total_stake
-    );
-    assert_eq!(
-        merged_neuron.cached_neuron_stake_e8s,
-        post_merge_account_balance
-    );
-
-    // When *staking* maturity, we do not change the age of the neuron.
-    assert_eq!(
-        neuron.aging_since_timestamp_seconds,
-        merged_neuron.aging_since_timestamp_seconds
-    );
-}
-
-proptest! {
-
 #[test]
-fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
-                                     supply in 100_000_000u64..400_000_000,
-                                     stake in 100_000_000u64..5_000_000_000_000_000,
-                                     staked_maturity in 100_000_000u64..5_000_000_000,
-                                     fees in 100_000_000u64..100_000_000_000,
-                                     // maturity must be <= stake
-                                     maturity in 25_000_000u64..100_000_000) {
+fn test_merge_maturity_returns_expected_error() {
     let mut nns = NNSBuilder::new()
-        .set_block_height(543212234)
-        .set_start_time(start)
-        .with_supply(supply)
-        .add_account_for(principal(1), 100_000_000)
         .add_neuron(
-            NeuronBuilder::new(100, stake, principal(1))
-                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
-                .set_neuron_fees(fees)
-                .set_maturity(maturity)
-                .set_staked_maturity(staked_maturity),
+            NeuronBuilder::new(100, 1, principal(1))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
         )
-        .set_economics(NetworkEconomics {
-            neuron_minimum_stake_e8s: 100_000_000,
-            ..Default::default()
-        })
         .create();
-
-    nns.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
 
     let id = NeuronId { id: 100 };
     let neuron = nns.get_neuron(&id);
-    let neuron_stake_e8s: u64 = neuron.cached_neuron_stake_e8s;
-    let account_id = LedgerBuilder::neuron_account_id(&neuron);
-    let account_balance = nns.get_account_balance(account_id);
-    assert_eq!(neuron_stake_e8s, account_balance);
-
     let controller = *neuron.controller.as_ref().unwrap();
 
-    // Assert that maturity can't be merged by someone who doesn't control the
-    // neuron
-    assert!(nns
-        .merge_maturity(&id, &TEST_NEURON_2_OWNER_PRINCIPAL, 10)
-        .is_err());
+    let result = nns.merge_maturity(&id, &controller, 10);
+    assert!(result.is_err());
 
-    // Assert percents outside of (0, 100] are rejected
-    assert!(nns.merge_maturity(&id, &controller, 0).is_err());
-    assert!(nns.merge_maturity(&id, &controller, 250).is_err());
-
-    // Now we merge the maturity in gradually, first 10%, then 50% of what
-    // remains, then all of the remainder. In this way, all of the maturity is
-    // merged, just in three steps so that we can check the progress.
-
-    // Assert that 10% of a neuron's maturity can be merged successfully
-    let mut current_staked_maturity = staked_maturity;
-    let mut maturity_left = maturity;
-    assert_merge_maturity_executes_as_expected_new(&mut nns, &id, &controller, 10, maturity_left / 10);
-    current_staked_maturity += maturity_left / 10;
-    maturity_left -= maturity_left / 10;
-
-    // Assert that 50% of a neuron's maturity can be merged successfully
-    assert_merge_maturity_executes_as_expected_new(&mut nns, &id, &controller, 50, maturity_left / 2);
-    current_staked_maturity += maturity_left / 2;
-    maturity_left -= maturity_left / 2;
-
-    // Assert that 100% of a neuron's maturity can be merged successfully
-    assert_merge_maturity_executes_as_expected_new(&mut nns, &id, &controller, 100, maturity_left);
-    current_staked_maturity += maturity_left;
-    maturity_left -= maturity_left;
-
-    assert_eq!(current_staked_maturity, staked_maturity + maturity);
-    assert_eq!(maturity_left, 0);
-
-    prop_assert_changes!(nns, Changed::Changed(vec![
-        NNSStateChange::Now(U64Change(
-            start,
-            start + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1,
-        )),
-        NNSStateChange::GovernanceProto(vec![GovernanceChange::Neurons(vec![MapChange::Changed(
-            100,
-            vec![
-                NeuronChange::MaturityE8SEquivalent(U64Change(maturity, maturity_left)),
-                NeuronChange::StakedMaturityE8SEquivalent(OptionChange::BothSome(U64Change(staked_maturity, current_staked_maturity))),
-            ],
-        )])]),
-    ]));
+    let error = result.unwrap_err();
+    assert_eq!(error.error_type, ErrorType::InvalidCommand as i32);
+    assert_eq!(
+        error.error_message,
+        "The command MergeMaturity is no longer available, as this functionality was \
+        superseded by StakeMaturity. Use StakeMaturity instead.",
+    );
 }
-
-}
-
-proptest! {
 
 #[test]
-fn test_merge_maturity_of_neuron(
-    starting_maturity in 1_000_000u64..250_000_000_000
-) {
-    // Since it's a proptest and it uses stable storage, we need to reset the stable memory before
-    // each iteration.
-    ic_nns_governance::storage::reset_stable_memory();
-    let (driver, mut gov, neuron) = create_mature_neuron(false);
-
-    let id = neuron.id.unwrap();
-    let controller = neuron.controller.unwrap();
-    let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
-    let account = AccountIdentifier::new(
-        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-        Some(Subaccount::try_from(neuron.account.as_slice()).unwrap()),
-    );
-    let account_balance = driver
-        .account_balance(account)
-        .now_or_never()
-        .unwrap()
-        .unwrap()
-        .get_e8s();
-    prop_assert_eq!(neuron_stake_e8s, account_balance);
-
-    gov.with_neuron_mut(&id, |neuron| {
-        neuron.maturity_e8s_equivalent = starting_maturity;
-    }).unwrap();
-
-    // Assert that maturity can't be merged by someone who doesn't control the
-    // neuron
-    prop_assert!(merge_maturity(&mut gov, id, &TEST_NEURON_2_OWNER_PRINCIPAL, 10).is_err());
-
-    // Assert percents outside of (0, 100] are rejected
-    prop_assert!(merge_maturity(&mut gov, id, &controller, 0).is_err());
-    prop_assert!(merge_maturity(&mut gov, id, &controller, 250).is_err());
-
-    let mut decrement_maturity = {
-        let mut remaining_maturity = starting_maturity;
-        move |percent: u64| {
-            let amount = (remaining_maturity * percent) / 100;
-            remaining_maturity -= amount;
-            amount
-        }
-    };
-
-    // Assert that 10% of a neuron's maturity can be merged successfully
-    assert_merge_maturity_executes_as_expected(
-        &mut gov,
+fn test_manage_neuron_merge_maturity_returns_expected_error() {
+    let fake_driver = fake::FakeDriver::default();
+    let id: u64 = 1;
+    // This fixture works well for us since we just need a single neuron to make this call with.
+    let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
-        &controller,
-        10,
-        decrement_maturity(10),
-        &driver,
-    )?;
-
-    // Assert that 50% of a neuron's maturity can be merged successfully
-    assert_merge_maturity_executes_as_expected(
-        &mut gov,
-        id,
-        &controller,
-        50,
-        decrement_maturity(50),
-        &driver,
-    )?;
-
-    // Assert that 100% of a neuron's maturity can be merged successfully
-    assert_merge_maturity_executes_as_expected(
-        &mut gov,
-        id,
-        &controller,
-        100,
-        decrement_maturity(100),
-        &driver,
-    )?;
-}
-
-}
-
-/// Merge the maturity for a given neuron and assert that the neuron's stake,
-/// maturity and account balance were correctly modified
-fn assert_merge_maturity_executes_as_expected(
-    gov: &mut Governance,
-    id: NeuronId,
-    controller: &PrincipalId,
-    percentage_to_merge: u32,
-    expected_merged_maturity: u64,
-    driver: &fake::FakeDriver,
-) -> std::result::Result<(), TestCaseError> {
-    let neuron = gov.neuron_store.with_neuron(&id, |n| n.clone()).unwrap();
-    let account = AccountIdentifier::new(
-        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-        Some(Subaccount::try_from(neuron.account.as_slice()).unwrap()),
+        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
     );
-    let response = merge_maturity(gov, id, controller, percentage_to_merge).unwrap();
-    let merged_maturity = response.merged_maturity_e8s;
-    prop_assert_eq!(merged_maturity, expected_merged_maturity);
-    let expected_resulting_maturity = neuron.maturity_e8s_equivalent - merged_maturity;
-    let expected_regular_stake = neuron.cached_neuron_stake_e8s;
-    let expected_total_stake = neuron.cached_neuron_stake_e8s
-        + neuron.staked_maturity_e8s_equivalent.unwrap_or(0)
-        + merged_maturity;
-    let post_merge_account_balance = driver
-        .account_balance(account)
-        .now_or_never()
-        .unwrap()
-        .unwrap()
-        .get_e8s();
-    let merged_neuron = gov.neuron_store.with_neuron(&id, |n| n.clone()).unwrap();
-    prop_assert_eq!(
-        merged_neuron.maturity_e8s_equivalent,
-        expected_resulting_maturity
-    );
-    prop_assert_eq!(
-        merged_neuron.cached_neuron_stake_e8s,
-        expected_regular_stake
-    );
-    prop_assert_eq!(
-        merged_neuron.cached_neuron_stake_e8s
-            + merged_neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
-        expected_total_stake
-    );
-    prop_assert_eq!(
-        merged_neuron.cached_neuron_stake_e8s,
-        post_merge_account_balance
+    let mut gov = Governance::new(
+        fixture,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
 
-    // When *staking* maturity, we do not change the age of the neuron.
-    prop_assert_eq!(
-        neuron.aging_since_timestamp_seconds,
-        merged_neuron.aging_since_timestamp_seconds
-    );
-
-    Ok(())
-}
-
-/// A helper to merge the maturity of a neuron
-fn merge_maturity(
-    gov: &mut Governance,
-    id: NeuronId,
-    controller: &PrincipalId,
-    percentage_to_merge: u32,
-) -> Result<MergeMaturityResponse, GovernanceError> {
-    let result = gov
+    let response = gov
         .manage_neuron(
-            controller,
+            &principal(id),
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id)),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id })),
                 command: Some(Command::MergeMaturity(MergeMaturity {
-                    percentage_to_merge,
+                    percentage_to_merge: 10,
                 })),
             },
         )
         .now_or_never()
-        .unwrap()
-        .command
         .unwrap();
 
-    match result {
-        manage_neuron_response::Command::Error(e) => Err(e),
-        manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
-        _ => panic!("Merge maturity command returned unexpected response"),
-    }
+    assert_eq!(
+        response,
+        ManageNeuronResponse {
+            command: Some(CommandResponse::Error(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "The command MergeMaturity is no longer available, as this functionality was \
+                superseded by StakeMaturity. Use StakeMaturity instead."
+            ))),
+        }
+    );
 }
 
 #[test]

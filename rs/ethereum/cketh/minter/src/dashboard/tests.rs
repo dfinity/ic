@@ -568,8 +568,24 @@ fn should_display_reimbursed_requests() {
                 "Success",
             ],
         )
-        .has_reimbursed_transactions(1, &vec!["17", "123", "1_079_000_000_000_000"])
-        .has_reimbursed_transactions(2, &vec!["16", "123", "1_079_000_000_000_000"]);
+        .has_reimbursed_transactions(
+            1,
+            &vec![
+                "17",
+                "123",
+                "1_079_000_000_000_000",
+                "0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762",
+            ],
+        )
+        .has_reimbursed_transactions(
+            2,
+            &vec![
+                "16",
+                "123",
+                "1_079_000_000_000_000",
+                "0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e",
+            ],
+        );
 }
 
 fn initial_dashboard() -> DashboardTemplate {

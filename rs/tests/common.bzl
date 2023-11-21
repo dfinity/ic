@@ -111,7 +111,6 @@ DEPENDENCIES = [
     "@crate_index//:humantime",
     "@crate_index//:hyper",
     "@crate_index//:hyper-rustls",
-    "@crate_index//:hyper-tls",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",

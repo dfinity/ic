@@ -64,7 +64,7 @@ use crate::{
 };
 
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
-pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 150_000 * E8;
+pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 250_000 * E8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsClient {
@@ -289,7 +289,7 @@ impl SnsClient {
 
         let sns_client = SnsClient {
             sns_canisters,
-            /// TODO: Provide a wallet canister for static testnet?
+            // TODO: Provide a wallet canister for static testnet?
             wallet_canister_id: PrincipalId::from_str("aaaaa-aa").unwrap(),
             sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };

@@ -700,22 +700,20 @@ mod tls_handshake_csp_vault {
         #[test]
         fn should_delegate_for_gen_tls_key_pair(
             node_id in arb_node_id(),
-            not_after in ".*",
             expected_result in maybe_err_weighted(0.95, Just(valid_tls_public_key_cert()), arb_csp_tls_keygen_error())
         ) {
-            let expected_not_after = not_after.clone();
             let mut local_vault = MockLocalCspVault::new();
             local_vault
                 .expect_gen_tls_key_pair()
                 .times(1)
-                .withf(move |node_id_, not_after_| {
-                    *node_id_ == node_id && not_after_ == expected_not_after
+                .withf(move |node_id_| {
+                    *node_id_ == node_id
                 })
                 .return_const(expected_result.clone());
             let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
             let remote_vault = env.new_vault_client();
 
-            let result = remote_vault.gen_tls_key_pair(node_id, &not_after);
+            let result = remote_vault.gen_tls_key_pair(node_id);
 
             prop_assert_eq!(result, expected_result);
         }
