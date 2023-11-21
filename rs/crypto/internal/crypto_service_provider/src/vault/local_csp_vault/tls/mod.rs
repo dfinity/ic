@@ -14,22 +14,20 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, Time};
 use rand::{CryptoRng, Rng};
 use std::time::Duration;
-use time::macros::format_description;
-use time::PrimitiveDateTime;
+use time::macros::datetime;
 
 #[cfg(test)]
 mod tests;
 
+const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: i64 =
+    datetime!(9999-12-31 23:59:59 UTC).unix_timestamp();
+
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     TlsHandshakeCspVault for LocalCspVault<R, S, C, P>
 {
-    fn gen_tls_key_pair(
-        &self,
-        node: NodeId,
-        not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+    fn gen_tls_key_pair(&self, node: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         let start_time = self.metrics.now();
-        let result = self.gen_tls_key_pair_internal(node, not_after);
+        let result = self.gen_tls_key_pair_internal(node);
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
             MetricsScope::Local,
@@ -60,7 +58,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn gen_tls_key_pair_internal(
         &self,
         node: NodeId,
-        not_after: &str,
     ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         const TWO_MINUTES: Duration = Duration::from_secs(120);
 
@@ -70,13 +67,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             .saturating_sub_duration(TWO_MINUTES);
 
         let common_name = &node.get().to_string()[..];
-        let not_after_u64 = asn1_time_string_to_unix_timestamp(not_after)?;
 
         let (cert, secret_key) = generate_tls_key_pair_der(
             &mut *self.rng_write_lock(),
             common_name,
             issuance_time.as_secs_since_unix_epoch(),
-            not_after_u64,
+            RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE as u64,
         )?;
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes).map_err(|err| {
             CspTlsKeygenError::InternalError {
@@ -194,21 +190,6 @@ fn validate_tls_certificate(
             internal_error: format!("TLS certificate validation error: {}", error),
         }
     })
-}
-
-fn asn1_time_string_to_unix_timestamp(time_asn1: &str) -> Result<u64, CspTlsKeygenError> {
-    let asn1_format = format_description!("[year][month][day][hour][minute][second]Z"); // e.g., 99991231235959Z
-    let time_primitivedatetime = PrimitiveDateTime::parse(time_asn1, asn1_format)
-        .map_err(|_e| CspTlsKeygenError::InvalidArguments {
-            message: format!("invalid X.509 certificate expiration date (notAfter={time_asn1}): failed to parse ASN1 datetime format"),
-        })?;
-    let time_i64 = time_primitivedatetime.assume_utc().unix_timestamp();
-    let time_u64 = u64::try_from(time_i64).map_err(|_e| CspTlsKeygenError::InvalidArguments {
-        message: format!(
-            "invalid X.509 certificate expiration date (notAfter={time_asn1}): failed to convert to u64"
-        ),
-    })?;
-    Ok(time_u64)
 }
 
 impl From<TlsKeyPairAndCertGenerationError> for CspTlsKeygenError {

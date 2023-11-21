@@ -90,10 +90,9 @@ mod csp_tests {
 
     fn csp_with_tls_key_pair() -> (Csp, TlsPublicKeyCert) {
         const NODE_1: u64 = 4241;
-        const NOT_AFTER: &str = "99991231235959Z";
         let csp = Csp::builder_for_test().build();
         let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .gen_tls_key_pair(node_test_id(NODE_1))
             .expect("error generating TLS key pair");
         (csp, cert)
     }

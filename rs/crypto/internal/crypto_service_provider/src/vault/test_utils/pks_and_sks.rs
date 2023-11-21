@@ -38,8 +38,6 @@ pub(crate) fn generate_idkg_dealing_encryption_key_pair<V: IDkgProtocolCspVault>
 }
 
 pub(crate) fn generate_all_keys<V: CspVault>(csp_vault: &V) -> CurrentNodePublicKeys {
-    const NOT_AFTER: &str = "99991231235959Z";
-
     let _node_signing_pk = csp_vault
         .gen_node_signing_key_pair()
         .expect("Failed to generate node signing key pair");
@@ -50,7 +48,7 @@ pub(crate) fn generate_all_keys<V: CspVault>(csp_vault: &V) -> CurrentNodePublic
         .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
         .expect("Failed to generate NI-DKG dealing encryption key pair");
     let _tls_certificate = csp_vault
-        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+        .gen_tls_key_pair(node_test_id(NODE_1))
         .expect("Failed to generate TLS certificate");
     let _idkg_dealing_encryption_key = generate_idkg_dealing_encryption_key_pair(csp_vault);
     csp_vault

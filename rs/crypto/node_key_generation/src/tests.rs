@@ -19,8 +19,6 @@ use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::time::Time;
 use ic_types_test_utils::ids::node_test_id;
 
-const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "99991231235959Z";
-
 mod generate_node_signing_keys {
     use super::*;
 
@@ -64,13 +62,10 @@ mod generate_tls_keys {
     const NODE_ID: u64 = 123;
 
     #[test]
-    fn should_delegate_to_csp_with_correct_not_after() {
+    fn should_delegate_to_csp() {
         let mut csp = MockAllCryptoServiceProvider::new();
-        let (expected_tls_certificate, _validation_time) = with_csp_gen_tls_key_pair(
-            &mut csp,
-            node_test_id(NODE_ID),
-            RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE.to_string(),
-        );
+        let (expected_tls_certificate, _validation_time) =
+            with_csp_gen_tls_key_pair(&mut csp, node_test_id(NODE_ID));
 
         let actual_tls_certificate = generate_tls_keys(&csp, node_test_id(NODE_ID));
 
@@ -306,12 +301,11 @@ fn with_csp_gen_committee_signing_key_pair(csp: &mut MockAllCryptoServiceProvide
 fn with_csp_gen_tls_key_pair(
     csp: &mut MockAllCryptoServiceProvider,
     node_id: NodeId,
-    not_after: String,
 ) -> (TlsPublicKeyCert, Time) {
     let (tls_certificate, validation_time) = valid_tls_certificate();
     csp.expect_gen_tls_key_pair()
         .times(1)
-        .withf(move |_node_id, _not_after| *_node_id == node_id && _not_after == not_after)
+        .withf(move |node_id_| *node_id_ == node_id)
         .return_const(Ok(tls_certificate.clone()));
     (tls_certificate, validation_time)
 }
@@ -353,11 +347,7 @@ fn with_csp_generating_all_keys(csp: &mut MockAllCryptoServiceProvider) -> Valid
         .expect("invalid node signing public key")
         .derived_node_id();
     let committee_signing_pk = with_csp_gen_committee_signing_key_pair(csp);
-    let (tls_certificate, validation_time) = with_csp_gen_tls_key_pair(
-        csp,
-        node_id,
-        RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE.to_string(),
-    );
+    let (tls_certificate, validation_time) = with_csp_gen_tls_key_pair(csp, node_id);
     let dkg_dealing_encryption_pk = with_csp_dkg_gen_dealing_encryption_key_pair(csp, node_id);
     let idkg_dealing_encryption_pk = with_csp_idkg_gen_dealing_encryption_key_pair(csp);
 

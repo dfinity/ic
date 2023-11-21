@@ -716,20 +716,15 @@ pub trait TlsHandshakeCspVault: Send + Sync {
     ///   form of the given `node_id`,
     /// * validity starting two minutes before the time of calling this method
     ///   (to account for differences in system clocks on different nodes), and
-    /// * validity ending at `not_after`, which must be specified according to
-    ///   section 4.1.2.5 in RFC 5280.
+    /// * no well-defined certificate expiration date (a `notAfter` value set to the
+    ///   `GeneralizedTime` value of `99991231235959Z` as specified according to
+    ///   section 4.1.2.5 in RFC 5280).
     ///
     /// Returns the key ID of the secret key, and the public key certificate.
     ///
     /// # Errors
-    /// * if `not_after` is not specified according to RFC 5280 or if
-    /// `not_after` is in the past
     /// * if a malformed X509 certificate is generated
-    fn gen_tls_key_pair(
-        &self,
-        node: NodeId,
-        not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
+    fn gen_tls_key_pair(&self, node: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
 
     /// Signs the given message using the specified algorithm and key ID.
     ///

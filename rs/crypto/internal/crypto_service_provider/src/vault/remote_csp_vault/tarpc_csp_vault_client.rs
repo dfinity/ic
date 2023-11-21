@@ -524,16 +524,11 @@ impl NiDkgCspVault for RemoteCspVault {
 }
 
 impl TlsHandshakeCspVault for RemoteCspVault {
-    fn gen_tls_key_pair(
-        &self,
-        node: NodeId,
-        not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
-        self.tokio_block_on(self.tarpc_csp_client.gen_tls_key_pair(
-            context_with_timeout(self.rpc_timeout),
-            node,
-            not_after.to_string(),
-        ))
+    fn gen_tls_key_pair(&self, node: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .gen_tls_key_pair(context_with_timeout(self.rpc_timeout), node),
+        )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspTlsKeygenError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
