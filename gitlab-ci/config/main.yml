@@ -975,6 +975,9 @@ tnet-test:
   needs:
     - job: bazel-test-all
       artifacts: false
+  tags:
+    - dfinity-ic
+    - ch
   extends:
     - .bazel-test-all
   rules:

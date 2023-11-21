@@ -5271,7 +5271,7 @@ tnet-test:
       kill "$(jobs -p)" || true
   tags:
     - dfinity-ic
-    - bazel
+    - ch
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: build
