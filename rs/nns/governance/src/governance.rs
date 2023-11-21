@@ -1645,11 +1645,24 @@ impl Governance {
 
         // This is to resolve the incident where a spawning operation did not commit properly
         // because of other operations in the same message went beyond the instruction limit.
-        if heap_governance_proto.in_flight_commands.len() == 1
-            && heap_governance_proto.spawning_neurons.unwrap_or_default()
-        {
-            heap_governance_proto.in_flight_commands.clear();
-            heap_governance_proto.spawning_neurons = Some(false);
+        if heap_governance_proto.spawning_neurons.unwrap_or_default() {
+            let neuron_ids_with_spawn_command_lock: Vec<_> = heap_governance_proto
+                .in_flight_commands
+                .iter_mut()
+                .filter_map(|(neuron_id, in_flight_command)| {
+                    if matches!(in_flight_command.command, Some(InFlightCommand::Spawn(_))) {
+                        Some(neuron_id)
+                    } else {
+                        None
+                    }
+                })
+                .copied()
+                .collect();
+            if neuron_ids_with_spawn_command_lock.len() == 1 {
+                let neuron_id = neuron_ids_with_spawn_command_lock[0];
+                heap_governance_proto.in_flight_commands.remove(&neuron_id);
+                heap_governance_proto.spawning_neurons = Some(false);
+            }
         }
 
         Self {
