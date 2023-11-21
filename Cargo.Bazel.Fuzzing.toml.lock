@@ -742,6 +742,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-otel-metrics"
+version = "0.7.0"
+source = "git+https://github.com/DFINITYManu/axum-otel-metrics.git?rev=27040d4cfd5e0c8af4588df3092329e184884b35#27040d4cfd5e0c8af4588df3092329e184884b35"
+dependencies = [
+ "axum",
+ "futures-util",
+ "http",
+ "http-body 0.4.5",
+ "opentelemetry 0.20.0",
+ "opentelemetry-prometheus 0.13.0",
+ "opentelemetry-semantic-conventions",
+ "pin-project-lite",
+ "prometheus",
+ "tower",
+]
+
+[[package]]
 name = "axum-server"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2710,6 +2727,7 @@ dependencies = [
  "log4rs",
  "lru",
  "maplit",
+ "metrics-proxy",
  "minicbor",
  "minicbor-derive",
  "mio 0.7.14",
@@ -3007,6 +3025,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dbaceec3c6e4211c79e7b1800fb9680527106beb2f9c51904a3210c03a448c74"
 dependencies = [
  "dtoa",
+]
+
+[[package]]
+name = "duration-string"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fcc1d9ae294a15ed05aeae8e11ee5f2b3fe971c077d45a42fb20825fba6ee13"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -3315,6 +3342,12 @@ dependencies = [
  "errno 0.2.8",
  "libc",
 ]
+
+[[package]]
+name = "exitcode"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de853764b47027c2e862a995c34978ffa63c1501f2e15f987ba11bd4f9bba193"
 
 [[package]]
 name = "eyre"
@@ -5714,6 +5747,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 
 [[package]]
+name = "metrics-proxy"
+version = "0.1.0"
+source = "git+https://github.com/dfinity/metrics-proxy.git?rev=0394778a3c4608842670674aca40a0feaea01059#0394778a3c4608842670674aca40a0feaea01059"
+dependencies = [
+ "axum",
+ "axum-otel-metrics",
+ "clap 4.4.6",
+ "duration-string",
+ "exitcode",
+ "futures-util",
+ "http",
+ "hyper 0.14.27",
+ "hyper-rustls",
+ "itertools 0.11.0",
+ "lazy_static",
+ "opentelemetry 0.20.0",
+ "pretty_assertions",
+ "prometheus",
+ "prometheus-parse",
+ "regex",
+ "reqwest",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "serde_yaml",
+ "tokio",
+ "tower",
+ "tower-http",
+ "url",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6452,6 +6517,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry-semantic-conventions"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73c9f9340ad135068800e7f1b24e9e09ed9e7143f5bf8518ded3d3ec69789269"
+dependencies = [
+ "opentelemetry 0.20.0",
+]
+
+[[package]]
 name = "opentelemetry_api"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6521,6 +6595,8 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "thiserror",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]
