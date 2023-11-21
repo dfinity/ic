@@ -443,8 +443,8 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
-            /// This effectively disables the storage reservation mechanism on
-            /// verified application subnets.
+            // This effectively disables the storage reservation mechanism on
+            // verified application subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
@@ -464,20 +464,20 @@ impl CyclesAccountManagerConfig {
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
-            /// The ECDSA signature fee is the fee charged when creating a
-            /// signature on this subnet. The request likely came from a
-            /// different subnet which is not a system subnet. There is an
-            /// explicit exception for requests originating from the NNS when the
-            /// charging occurs.
-            /// Costs:
-            /// - zero cost if called from NNS subnet
-            /// - non-zero cost if called from any other subnet which is not NNS subnet
+            // The ECDSA signature fee is the fee charged when creating a
+            // signature on this subnet. The request likely came from a
+            // different subnet which is not a system subnet. There is an
+            // explicit exception for requests originating from the NNS when the
+            // charging occurs.
+            // Costs:
+            // - zero cost if called from NNS subnet
+            // - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
             http_response_per_byte_fee: Cycles::new(0),
-            /// This effectively disables the storage reservation mechanism on system subnets.
+            // This effectively disables the storage reservation mechanism on system subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }

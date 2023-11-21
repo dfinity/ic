@@ -1884,8 +1884,8 @@ impl Governance {
                 self.proto
                     .id_to_nervous_system_functions
                     .values()
-                    .cloned()
-                    .filter(|f| f != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER),
+                    .filter(|&f| f != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER)
+                    .cloned(),
             )
             .collect();
 

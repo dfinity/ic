@@ -345,11 +345,11 @@ pub(crate) fn get_enabled_signing_keys(
     Ok(ecdsa_config
         .key_ids
         .iter()
-        .cloned()
-        .filter(|key_id| match signing_subnets.get(key_id) {
+        .filter(|&key_id| match signing_subnets.get(key_id) {
             Some(subnets) => subnets.contains(&subnet_id),
             None => false,
         })
+        .cloned()
         .collect())
 }
 

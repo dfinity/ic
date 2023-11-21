@@ -183,10 +183,9 @@ use std::future::Future;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
-use tokio::runtime::Runtime as Rt;
+use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
@@ -540,12 +539,12 @@ impl TopologySnapshot {
     pub async fn block_for_newest_mainnet_registry_version(&self) -> Result<TopologySnapshot> {
         let duration = Duration::from_secs(720);
         let backoff = Duration::from_secs(2);
-        let prev_version: Arc<Mutex<RegistryVersion>> =
-            Arc::new(Mutex::new(self.local_registry.get_latest_version()));
+        let prev_version: Arc<TokioMutex<RegistryVersion>> =
+            Arc::new(TokioMutex::new(self.local_registry.get_latest_version()));
         let version = retry_async(&self.env.logger(), duration, backoff, || {
             let prev_version = prev_version.clone();
             async move {
-                let mut prev_version = prev_version.lock().unwrap();
+                let mut prev_version = prev_version.lock().await;
                 self.local_registry.sync_with_nns().await?;
                 let version = self.local_registry.get_latest_version();
                 info!(

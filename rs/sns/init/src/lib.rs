@@ -1016,13 +1016,10 @@ impl SnsInitPayload {
                 Err(msg) => Some(msg),
                 Ok(_) => None,
             })
-            .cloned()
-            // Because we validate the same fields multiple times, usually
-            // to check that the field is not set to None, we get many duplicate
-            // error messages. So here we're filtering out duplicate messages.
-            .filter(|x|
+            .filter(|&x|
                 // returns true iff the set did not already contain the value
                 seen_messages.insert(x.clone()))
+            .cloned()
             .collect::<Vec<String>>()
             .join("\n");
 

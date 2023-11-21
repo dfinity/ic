@@ -331,10 +331,9 @@ impl CertifierImpl {
     ) -> Vec<CertificationMessage> {
         state_hashes
             .iter()
-            .cloned()
             // Filter out all heights, where the current replica does not belong to the committee
             // and, hence, should not sign.
-            .filter(|(height, _)| {
+            .filter(|&(height, _)| {
                 self.membership
                     .node_belongs_to_threshold_committee(
                         self.replica_config.node_id,
@@ -351,11 +350,12 @@ impl CertifierImpl {
             })
             // Filter out all heights if we have a share signed by us already (this is a linear scan
             // through all shares of the same height, but is bound by the number of replicas).
-            .filter(|(height, _)| {
+            .filter(|&(height, _)| {
                 certification_pool
                     .shares_at_height(*height)
                     .all(|share| share.signed.signature.signer != self.replica_config.node_id)
             })
+            .cloned()
             .filter_map(|(height, hash)| {
                 let content = CertificationContent::new(hash);
                 let dkg_id =
