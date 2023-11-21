@@ -1,6 +1,8 @@
 load("@rules_haskell//haskell:defs.bzl", "haskell_binary", "haskell_library")
 load("//bazel:candid.bzl", "did_git_test")
 
+exports_files(["ic.did"])
+
 STACK_DEPS = [
     "@stackage//:aeson",
     "@stackage//:asn1-encoding",
