@@ -10,6 +10,7 @@ pub mod malicious_input;
 pub mod nns_shielding;
 pub mod queries;
 pub mod system_api_security_test;
+pub mod wasm_chunk_store;
 
 use crate::driver::{
     ic::{InternetComputer, Subnet},
