@@ -7,10 +7,10 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["didc"])
 """
 
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 SHA256 = {
-    "linux64": "606faeff92054a221e5e79e0cf239db3a3a8bc460c3d2aea628db58c7adca028",
-    "macos": "34656fccf768db0c461ff6be821c708a5d5fcc2cf8768fa18fcf39148211cda4",
+    "linux64": "1ed8f69036438217c0672097bba75aaf91e6851847d378ea4e0064377d8939fa",
+    "macos": "5df9a457c5ede103c7d017c23a4c1abce4d17db50442a9407724a9006db2f710",
 }
 
 URL = "https://github.com/dfinity/candid/releases/download/{version}/didc-{platform}"
@@ -36,8 +36,8 @@ def _candid_impl(repository_ctx):
     if platform not in SHA256:
         fail("Unsupported platform: '" + platform + "'")
 
-    if VERSION == "0.1.6":
-        release_tag = "2022-11-17"
+    if VERSION == "0.1.7":
+        release_tag = "2023-11-16"
     else:
         fail("Unsupported version '" + VERSION + "'")
 
