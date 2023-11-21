@@ -13,7 +13,7 @@ use crate::state::State;
 use async_trait::async_trait;
 use candid::CandidType;
 use ic_canister_log::log;
-use ic_cdk::api::call::RejectionCode;
+use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{CanisterHttpRequestArgument, HttpResponse};
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::BTreeMap;
