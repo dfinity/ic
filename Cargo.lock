@@ -4109,8 +4109,12 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.4.6",
+ "config",
+ "indoc",
  "itertools",
+ "network",
  "regex",
+ "utils",
 ]
 
 [[package]]

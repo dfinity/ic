@@ -190,7 +190,7 @@ the account user home directories.
 
 == Generate network configuration
 
-Service: +generate-network-config.service+, script +/opt/ic/bin/generate-network-config.sh+.
+Service: +generate-network-config.service+
 Dependes on +bootstrap-ic-node.service+, runs before +systemd-networkd.service+.
 
 This parses the network configuration given in the +config+ partition and
@@ -199,7 +199,7 @@ later.
 
 == Set up hostname
 
-Service: +generate-network-config.service+, script +/opt/ic/bin/generate-network-config.sh+.
+Service: +generate-network-config.service+
 Dependes on +bootstrap-ic-node.service+, runs before +systemd-networkd.service+.
 
 Sets hostname as defined in the +config+ partition.

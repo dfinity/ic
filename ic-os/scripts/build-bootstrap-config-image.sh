@@ -213,8 +213,8 @@ function build_ic_bootstrap_tar() {
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
 
     cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
-ipv6_address=$IPV6_ADDRESS
-ipv6_gateway=$IPV6_GATEWAY
+${IPV6_ADDRESS:+ipv6_address=$IPV6_ADDRESS}
+${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
 name_servers=$NAME_SERVERS
 hostname=$HOSTNAME
 EOF
