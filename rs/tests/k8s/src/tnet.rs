@@ -39,15 +39,16 @@ use crate::virtualmachine::*;
 
 pub static TNET_IPV6: Lazy<String> =
     Lazy::new(|| var("TNET_IPV6").unwrap_or("fda6:8d22:43e1:fda6".to_string()));
-static CDN_URL: Lazy<String> =
-    Lazy::new(|| var("CDN_URL").unwrap_or("https://download.dfinity.systems".to_string()));
-static CONFIG_URL: Lazy<String> = Lazy::new(|| {
-    var("CONFIG_URL").unwrap_or("https://objects.sf1-idx1.dfinity.network".to_string())
+static TNET_CDN_URL: Lazy<String> =
+    Lazy::new(|| var("TNET_CDN_URL").unwrap_or("https://download.dfinity.systems".to_string()));
+static TNET_CONFIG_URL: Lazy<String> = Lazy::new(|| {
+    var("TNET_CONFIG_URL").unwrap_or("https://objects.sf1-idx1.dfinity.network".to_string())
 });
-static BUCKET: Lazy<String> = Lazy::new(|| {
-    var("BUCKET").unwrap_or("tnet-config-5f1a0cb6-fdf2-4ca8-b816-9b9c2ffa1669".to_string())
+static TNET_BUCKET: Lazy<String> = Lazy::new(|| {
+    var("TNET_BUCKET").unwrap_or("tnet-config-5f1a0cb6-fdf2-4ca8-b816-9b9c2ffa1669".to_string())
 });
-static NAMESPACE: Lazy<String> = Lazy::new(|| var("NAMESPACE").unwrap_or("tnets".to_string()));
+static TNET_NAMESPACE: Lazy<String> =
+    Lazy::new(|| var("TNET_NAMESPACE").unwrap_or("tnets".to_string()));
 
 static TNET_STATIC_LABELS: Lazy<BTreeMap<String, String>> =
     Lazy::new(|| BTreeMap::from([("app".to_string(), "tnet".to_string())]));
@@ -67,20 +68,20 @@ pub struct K8sClient {
 
 impl K8sClient {
     pub async fn new(client: Client) -> Result<Self> {
-        let api_pod: Api<Pod> = Api::namespaced(client.clone(), &NAMESPACE);
-        let api_pvc: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &NAMESPACE);
+        let api_pod: Api<Pod> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
+        let api_pvc: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
 
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api_dv = Api::<DynamicObject>::namespaced_with(client.clone(), &NAMESPACE, &ar);
+        let api_dv = Api::<DynamicObject>::namespaced_with(client.clone(), &TNET_NAMESPACE, &ar);
 
         let gvk = GroupVersionKind::gvk("kubevirt.io", "v1", "VirtualMachine");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api_vm = Api::<DynamicObject>::namespaced_with(client.clone(), &NAMESPACE, &ar);
+        let api_vm = Api::<DynamicObject>::namespaced_with(client.clone(), &TNET_NAMESPACE, &ar);
 
         let gvk = GroupVersionKind::gvk("kubevirt.io", "v1", "VirtualMachineInstance");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api_vmi = Api::<DynamicObject>::namespaced_with(client.clone(), &NAMESPACE, &ar);
+        let api_vmi = Api::<DynamicObject>::namespaced_with(client.clone(), &TNET_NAMESPACE, &ar);
 
         Ok(Self {
             client,
@@ -122,7 +123,7 @@ impl TNet {
     pub fn new(name: &str) -> Result<Self> {
         Self {
             name: name.to_string(),
-            namespace: NAMESPACE.clone(),
+            namespace: TNET_NAMESPACE.clone(),
             ..Default::default()
         }
         .ttl(Duration::days(1))
@@ -160,7 +161,7 @@ impl TNet {
 
     pub async fn delete(idx: u32) -> Result<()> {
         let client = Client::try_default().await?;
-        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &NAMESPACE);
+        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
 
         api.delete(&Self::owner_config_map_name(idx), &Default::default())
             .await?;
@@ -169,7 +170,7 @@ impl TNet {
 
     pub async fn list() -> Result<Vec<(String, String)>> {
         let client = Client::try_default().await?;
-        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &NAMESPACE);
+        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
 
         let label_selector = TNET_STATIC_LABELS
             .iter()
@@ -199,7 +200,7 @@ impl TNet {
                     .method("PUT")
                     .uri(format!(
                         "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
-                        *NAMESPACE, name, action,
+                        *TNET_NAMESPACE, name, action,
                     ))
                     .body("{}".as_bytes().to_vec())
                     .unwrap(),
@@ -219,7 +220,7 @@ impl TNet {
 
         let gvk = GroupVersionKind::gvk("kubevirt.io", "v1", "VirtualMachine");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api_vm = Api::<DynamicObject>::namespaced_with(client.clone(), &NAMESPACE, &ar);
+        let api_vm = Api::<DynamicObject>::namespaced_with(client.clone(), &TNET_NAMESPACE, &ar);
         let vms = api_vm
             .list(&ListParams {
                 label_selector: format!("{}={}", TNET_NAME_LABEL, tnet).into(),
@@ -248,7 +249,7 @@ impl TNet {
         self.version = version.to_string();
         self.image_url = format!(
             "{}/ic/{}/guest-os/disk-img-dev/disk-img.tar.gz",
-            *CDN_URL, self.version
+            *TNET_CDN_URL, self.version
         );
         self
     }
@@ -287,7 +288,11 @@ impl TNet {
         path: P,
         uri: &str,
     ) -> Result<()> {
-        Ok(Self::upload_url(path, &format!("{}/{}/{}", *CONFIG_URL, *BUCKET, uri)).await?)
+        Ok(Self::upload_url(
+            path,
+            &format!("{}/{}/{}", *TNET_CONFIG_URL, *TNET_BUCKET, uri),
+        )
+        .await?)
     }
 
     async fn upload_url<P: AsRef<Path> + std::fmt::Display + Clone>(
@@ -340,7 +345,7 @@ impl TNet {
         let index = self.index.expect("should have an index");
         self.config_url = Some(format!(
             "{}/{}/{}/tnet-{}",
-            *CONFIG_URL, *BUCKET, self.version, index
+            *TNET_CONFIG_URL, *TNET_BUCKET, self.version, index
         ));
         self.ipv6_net = Some(format!("{}:{:x}::/80", *TNET_IPV6, index).parse().unwrap());
 
@@ -378,7 +383,7 @@ impl TNet {
 
     async fn tnet_owner(&mut self) -> Result<()> {
         let client = Client::try_default().await?;
-        let config_map_api = Api::<ConfigMap>::namespaced(client.clone(), &NAMESPACE);
+        let config_map_api = Api::<ConfigMap>::namespaced(client.clone(), &TNET_NAMESPACE);
 
         debug!("Allocating namespace");
         let config_map = (|| async {
@@ -471,7 +476,7 @@ impl TNet {
 
         wait_for_event(
             self.k8s.as_ref().unwrap().client.clone(),
-            &NAMESPACE,
+            &TNET_NAMESPACE,
             "Import Successful",
             "PersistentVolumeClaim",
             tnet_image,
