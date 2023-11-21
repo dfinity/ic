@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::env::var;
 use std::net::Ipv6Addr;
+use std::path::Path;
 
 use backon::ExponentialBuilder;
 use backon::Retryable;
@@ -282,55 +283,55 @@ impl TNet {
         Ok(self)
     }
 
-    async fn upload_config(&self) -> Result<()> {
+    pub async fn upload<P: AsRef<Path> + std::fmt::Display + Clone>(
+        path: P,
+        uri: &str,
+    ) -> Result<()> {
+        Ok(Self::upload_url(path, &format!("{}/{}/{}", *CONFIG_URL, *BUCKET, uri)).await?)
+    }
+
+    async fn upload_url<P: AsRef<Path> + std::fmt::Display + Clone>(
+        path: P,
+        url: &str,
+    ) -> Result<()> {
         let client = reqwest::Client::new();
 
-        for (count, node) in self
-            .nns_nodes
-            .iter()
-            .chain(self.app_nodes.iter())
-            .enumerate()
-        {
-            info!(
-                "Uploading bootstrap-{}.img to {}",
-                count,
-                node.config_url.clone().unwrap()
-            );
-            let file = tokio::fs::File::open(format!("out/bootstrap-{}.img", count)).await?;
-            let res = client
-                .put(node.config_url.clone().unwrap())
-                .body({
-                    let stream = FramedRead::new(file, BytesCodec::new());
-                    Body::wrap_stream(stream)
-                })
-                .send()
-                .await?;
-            debug!("Upload's put response: {:?}", res);
-            if res.status().as_u16() != 200 {
-                return Err(anyhow!(
-                    "Failed to upload bootstrap-{}.img to {}",
-                    count,
-                    node.config_url.clone().unwrap()
-                ));
-            }
-        }
-
-        let file = tokio::fs::File::open("out/init.tar").await?;
+        info!("Uploading {} to {}", path.clone(), url);
+        let file = tokio::fs::File::open(path.clone()).await?;
         let res = client
-            .put(format!("{}/init.tar", self.config_url.clone().unwrap()))
+            .put(url)
             .body({
                 let stream = FramedRead::new(file, BytesCodec::new());
                 Body::wrap_stream(stream)
             })
             .send()
             .await?;
-        debug!("Response: {:?}", res);
+        debug!("Upload's put response: {:?}", res);
         if res.status().as_u16() != 200 {
-            return Err(anyhow!(
-                "Failed to upload init.tar to {}",
-                self.config_url.clone().unwrap()
-            ));
+            return Err(anyhow!("Failed to upload {} to {}", path.clone(), url));
         }
+
+        Ok(())
+    }
+
+    async fn upload_config(&self) -> Result<()> {
+        for (count, node) in self
+            .nns_nodes
+            .iter()
+            .chain(self.app_nodes.iter())
+            .enumerate()
+        {
+            Self::upload_url(
+                format!("out/bootstrap-{}.img", count),
+                &node.config_url.clone().unwrap(),
+            )
+            .await?;
+        }
+        Self::upload_url(
+            "out/init.tar",
+            &format!("{}/init.tar", self.config_url.clone().unwrap()),
+        )
+        .await?;
 
         Ok(())
     }
