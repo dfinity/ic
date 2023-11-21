@@ -95,11 +95,11 @@ impl ErrorReproducibility for IDkgDealingEncryptionKeysGenerationError {
 /// The secret key is stored in the key store of the provided `csp`,
 /// and is used to create a self-signed public key certificate returned by this function.
 ///
-/// The certificate's notAfter date indicates according to RFC5280 (section
-/// 4.1.2.5; see https://tools.ietf.org/html/rfc5280#section-4.1.2.5) that the
-/// certificate has no well-defined expiration date.
+/// The certificate's notAfter date will be set according to RFC5280 (section 4.1.2.5; see
+/// https://tools.ietf.org/html/rfc5280#section-4.1.2.5) to indicate that the certificate has no
+/// well-defined expiration date.
 pub fn generate_tls_keys<T: CryptoServiceProvider>(csp: &T, node: NodeId) -> TlsPublicKeyCert {
-    csp.gen_tls_key_pair(node, "99991231235959Z")
+    csp.gen_tls_key_pair(node)
         .expect("error generating TLS key pair")
 }
 

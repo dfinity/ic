@@ -214,7 +214,6 @@ mock! {
         fn gen_tls_key_pair(
             &self,
             node: NodeId,
-            not_after: &str,
         ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
 
         fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;

@@ -306,10 +306,9 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         node: NodeId,
-        not_after: String,
     ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.gen_tls_key_pair(node, &not_after);
+        let job = move || vault.gen_tls_key_pair(node);
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 

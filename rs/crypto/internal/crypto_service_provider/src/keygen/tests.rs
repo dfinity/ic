@@ -272,13 +272,12 @@ mod tls {
     use crate::CspPublicKeyStore;
 
     const NODE_1: u64 = 4241;
-    const NOT_AFTER: &str = "99991231235959Z";
 
     #[test]
     fn should_correctly_generate_tls_certificate() {
         let csp = csp_with_fixed_seed();
         let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .gen_tls_key_pair(node_test_id(NODE_1))
             .expect("Generation of TLS keys failed.");
         let key_id = KeyId::try_from(&cert).unwrap();
 
@@ -302,17 +301,15 @@ mod tls {
     fn should_fail_with_internal_error_if_node_signing_public_key_already_set() {
         let csp = Csp::builder_for_test().build();
 
-        assert!(csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .is_ok());
-        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        assert!(csp.gen_tls_key_pair(node_test_id(NODE_1)).is_ok());
+        let result = csp.gen_tls_key_pair(node_test_id(NODE_1));
 
         assert_matches!(result,
             Err(CspTlsKeygenError::InternalError { internal_error })
             if internal_error.contains("TLS certificate already set")
         );
 
-        assert_matches!(csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER),
+        assert_matches!(csp.gen_tls_key_pair(node_test_id(NODE_1)),
             Err(CspTlsKeygenError::InternalError { internal_error })
             if internal_error.contains("TLS certificate already set")
         );
@@ -332,7 +329,7 @@ mod tls {
             )
             .build();
 
-        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let result = csp.gen_tls_key_pair(node_test_id(NODE_1));
 
         assert_matches!(result, Err(CspTlsKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
