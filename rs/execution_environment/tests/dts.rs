@@ -415,11 +415,10 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance is \
-             {} cycles and the freezing threshold 0 cycles",
+             please top up the canister with at least {} additional cycles",
             canister_id,
-            normal_ingress_cost,
-            initial_balance - install_code_ingress_cost - max_execution_cost,
+            normal_ingress_cost
+                - (initial_balance - install_code_ingress_cost - max_execution_cost),
         )
     );
 
@@ -472,12 +471,10 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance is \
-             {} cycles and the freezing threshold {} cycles",
+             please top up the canister with at least {} additional cycles",
             canister_id,
-            normal_ingress_cost,
-            initial_balance - install_code_ingress_cost - max_execution_cost,
-            freezing_threshold,
+            (freezing_threshold + normal_ingress_cost)
+                - (initial_balance - install_code_ingress_cost - max_execution_cost),
         )
     );
 

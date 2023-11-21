@@ -801,8 +801,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
-            format!("Canister installation failed with `Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles`", canister_id,
-            minimum_balance, original_balance, freezing_threshold_cycles)
+            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
         ))
     );
 }

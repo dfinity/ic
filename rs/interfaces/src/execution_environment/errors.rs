@@ -58,8 +58,8 @@ impl std::fmt::Display for CanisterOutOfCyclesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles",
-            self.canister_id, self.requested, self.available, self.threshold
+            "Canister {} is out of cycles: please top up the canister with at least {} additional cycles",
+            self.canister_id, (self.threshold + self.requested) - self.available
         )
     }
 }
