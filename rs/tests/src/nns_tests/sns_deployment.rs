@@ -1398,8 +1398,8 @@ async fn create_one_sale_participant(
             .ticket()
             .map_err(|err| {
                 // Convert the error code to a string for easier debugging
-                new_sale_ticket_response::err::Type::from_i32(err)
-                    .unwrap_or_else(|| panic!("{err} could not be converted to error type"))
+                new_sale_ticket_response::err::Type::try_from(err)
+                    .unwrap_or_else(|_| panic!("{err} could not be converted to error type"))
             })
             .map_err(|err| anyhow::anyhow!("get_open_ticket failed: {err:?}"))?;
         if response.is_some() {

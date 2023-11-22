@@ -1918,6 +1918,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
 
 impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits {
     type Error = ProxyDecodeError;
+
     fn try_from(value: pb_canister_state_bits::ExecutionStateBits) -> Result<Self, Self::Error> {
         let mut globals = Vec::with_capacity(value.exported_globals.len());
         for g in value.exported_globals.into_iter() {
@@ -1945,7 +1946,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
                 .unwrap_or_default(),
             binary_hash,
             next_scheduled_method: match value.next_scheduled_method {
-                Some(method_id) => pb_canister_state_bits::NextScheduledMethod::from_i32(method_id)
+                Some(method_id) => pb_canister_state_bits::NextScheduledMethod::try_from(method_id)
                     .unwrap_or_default()
                     .into(),
                 None => NextScheduledMethod::default(),

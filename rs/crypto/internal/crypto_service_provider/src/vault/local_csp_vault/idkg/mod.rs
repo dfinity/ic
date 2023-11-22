@@ -745,7 +745,7 @@ fn idkg_public_key_proto_to_key_id(
     public_keys
         .iter()
         .map(|public_key| {
-            let curve_type = match AlgorithmIdProto::from_i32(public_key.algorithm) {
+            let curve_type = match AlgorithmIdProto::try_from(public_key.algorithm).ok() {
                 Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
                 alg_id => Err(IDkgRetainKeysError::InternalError {
                     internal_error: format!("Unsupported algorithm {:?}", alg_id),

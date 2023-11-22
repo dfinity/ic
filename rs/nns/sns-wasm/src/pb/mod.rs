@@ -112,7 +112,7 @@ impl SnsWasm {
 
     /// Return the SnsCanisterType if it's valid, else return an error
     pub fn checked_sns_canister_type(&self) -> Result<SnsCanisterType, String> {
-        match SnsCanisterType::from_i32(self.canister_type) {
+        match SnsCanisterType::try_from(self.canister_type).ok() {
             None => Err(
                 "Invalid value for SnsWasm::canister_type.  See documentation for valid values"
                     .to_string(),

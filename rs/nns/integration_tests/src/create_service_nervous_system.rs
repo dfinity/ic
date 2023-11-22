@@ -101,7 +101,7 @@ fn test_several_proposals() {
     match response_2.command {
         Some(manage_neuron_response::Command::Error(err)) => {
             assert_eq!(
-                ErrorType::from_i32(err.error_type),
+                ErrorType::try_from(err.error_type).ok(),
                 Some(ErrorType::PreconditionFailed),
                 "{:#?}",
                 err,
@@ -162,13 +162,13 @@ fn test_several_proposals() {
     let proposal_3 = final_proposals.get(&proposal_id_3).unwrap();
 
     assert_eq!(
-        ProposalStatus::from_i32(proposal_1.status).unwrap(),
+        ProposalStatus::try_from(proposal_1.status).unwrap(),
         ProposalStatus::Executed,
         "{:#?}",
         proposal_1,
     );
     assert_eq!(
-        ProposalStatus::from_i32(proposal_3.status).unwrap(),
+        ProposalStatus::try_from(proposal_3.status).unwrap(),
         ProposalStatus::Open,
         "{:#?}",
         proposal_1,

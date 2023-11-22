@@ -5,7 +5,7 @@
 pub struct ConnectionEndpoint {
     /// The IP address. Senders SHOULD use dotted-quad notation for IPv4 addresses
     /// and RFC5952 representation for IPv6 addresses (which means that IPv6
-    /// addresses are *not* enclosed in `[` and `]`, as they are not written
+    /// addresses are *not* enclosed in `\[` and `\]`, as they are not written
     /// with the port in the same field).
     ///
     /// Clients MUST be prepared to accept IPv6 addresses in the forms shown in

@@ -225,7 +225,7 @@ impl Environment for CanisterEnv {
         proposal_id: u64,
         update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        let mt = NnsFunction::from_i32(update.nns_function).ok_or_else(||
+        let mt = NnsFunction::try_from(update.nns_function).map_err(|_|
             // No update type specified.
             GovernanceError::new(ErrorType::PreconditionFailed))?;
 

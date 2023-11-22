@@ -1,6 +1,6 @@
 use crate::{
-    governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
-    logs::{ERROR, INFO},
+    governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
+    logs::INFO,
     pb::{
         sns_root_types::{
             set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
@@ -867,7 +867,7 @@ impl NervousSystemParameters {
 
         for permission in &neuron_permission_list.permissions {
             if !grantable_permissions.contains(&permission) {
-                illegal_permissions.insert(NeuronPermissionType::from_i32(*permission));
+                illegal_permissions.insert(NeuronPermissionType::try_from(*permission).ok());
             }
         }
 
@@ -936,24 +936,6 @@ impl From<CanisterInstallModeError> for GovernanceError {
                 "Invalid mode for install_code: {}",
                 canister_install_mode_error.0
             ),
-        }
-    }
-}
-
-/// Converts a Vote integer enum value into a typed enum value.
-impl From<i32> for Vote {
-    fn from(vote_integer: i32) -> Vote {
-        match Vote::from_i32(vote_integer) {
-            Some(v) => v,
-            None => {
-                log!(
-                    ERROR,
-                    "{}Vote::from invoked with unexpected value {}.",
-                    log_prefix(),
-                    vote_integer
-                );
-                Vote::Unspecified
-            }
         }
     }
 }
@@ -1905,8 +1887,8 @@ impl TryFrom<NeuronPermissionList> for BTreeSet<NeuronPermissionType> {
             .permissions
             .into_iter()
             .map(|p| {
-                NeuronPermissionType::from_i32(p)
-                    .ok_or_else(|| format!("Invalid permission: {}", p))
+                NeuronPermissionType::try_from(p)
+                    .map_err(|err| format!("Invalid permission: {}, err: {}", p, err))
             })
             .collect()
     }
@@ -1928,7 +1910,7 @@ impl From<NeuronPermissionList> for Vec<Result<NeuronPermissionType, i32>> {
         permissions
             .permissions
             .into_iter()
-            .map(|p| NeuronPermissionType::from_i32(p).ok_or(p))
+            .map(|p| NeuronPermissionType::try_from(p).map_err(|_| p))
             .collect()
     }
 }

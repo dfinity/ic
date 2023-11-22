@@ -2332,7 +2332,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
         .unwrap_err();
     assert_eq!(
         ErrorType::InsufficientFunds,
-        ErrorType::from_i32(err.error_type).unwrap(),
+        ErrorType::try_from(err.error_type).unwrap(),
         "actual error: {:?}",
         err
     );
@@ -4483,7 +4483,7 @@ fn test_claim_neuron_without_minimum_stake_fails() {
     match manage_neuron_response.command.unwrap() {
         CommandResponse::Error(error) => {
             assert_eq!(
-                ErrorType::from_i32(error.error_type).unwrap(),
+                ErrorType::try_from(error.error_type).unwrap(),
                 ErrorType::InsufficientFunds
             );
         }
@@ -13889,7 +13889,7 @@ async fn make_open_sns_token_swap_proposals_concurrently(proposals: Vec<Proposal
                 error_message,
             }) => {
                 // Assert that type is Unavailable.
-                let error_type = ErrorType::from_i32(*error_type).unwrap();
+                let error_type = ErrorType::try_from(*error_type).unwrap();
                 assert_eq!(error_type, ErrorType::Unavailable, "{}", error_message);
 
                 // Assert that message contains all the right keywords.

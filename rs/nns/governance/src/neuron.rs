@@ -104,7 +104,7 @@ impl Neuron {
         self.followees
             .iter()
             .filter_map(|(topic, followees)| {
-                let topic = match Topic::from_i32(*topic) {
+                let topic = match Topic::try_from(*topic).ok() {
                     Some(topic) => topic,
                     None => {
                         println!(

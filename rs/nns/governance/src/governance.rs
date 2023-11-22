@@ -355,22 +355,6 @@ impl From<Result<NeuronsFundAuditInfo, GovernanceError>> for GetNeuronsFundAudit
     }
 }
 
-/// Converts a Vote integer enum value into a typed enum value.
-impl From<i32> for Vote {
-    fn from(vote_integer: i32) -> Vote {
-        match Vote::from_i32(vote_integer) {
-            Some(v) => v,
-            None => {
-                println!(
-                    "{}Vote::from invoked with unexpected value {}.",
-                    LOG_PREFIX, vote_integer
-                );
-                Vote::Unspecified
-            }
-        }
-    }
-}
-
 impl Vote {
     /// Returns whether this vote is eligible for voting reward.
     fn eligible_for_rewards(&self) -> bool {
@@ -719,7 +703,7 @@ impl Proposal {
                 Action::Motion(_) => Topic::Governance,
                 Action::ApproveGenesisKyc(_) => Topic::Kyc,
                 Action::ExecuteNnsFunction(m) => {
-                    if let Some(mt) = NnsFunction::from_i32(m.nns_function) {
+                    if let Ok(mt) = NnsFunction::try_from(m.nns_function) {
                         match mt {
                             NnsFunction::Unspecified => {
                                 println!("{}ERROR: NnsFunction::Unspecified", LOG_PREFIX);
@@ -838,7 +822,7 @@ impl Action {
     fn allowed_when_resources_are_low(&self) -> bool {
         match &self {
             Action::ExecuteNnsFunction(update) => {
-                match NnsFunction::from_i32(update.nns_function) {
+                match NnsFunction::try_from(update.nns_function).ok() {
                     Some(f) => f.allowed_when_resources_are_low(),
                     None => false,
                 }
@@ -1060,7 +1044,7 @@ impl ProposalData {
         let mut no = 0;
         let mut undecided = 0;
         for ballot in self.ballots.values() {
-            let lhs: &mut u64 = if let Some(vote) = Vote::from_i32(ballot.vote) {
+            let lhs: &mut u64 = if let Ok(vote) = Vote::try_from(ballot.vote) {
                 match vote {
                     Vote::Unspecified => &mut undecided,
                     Vote::Yes => &mut yes,
@@ -1292,7 +1276,7 @@ impl Storable for Topic {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        Self::from_i32(i32::from_be_bytes(bytes.as_ref().try_into().unwrap()))
+        Self::try_from(i32::from_be_bytes(bytes.as_ref().try_into().unwrap()))
             .expect("Failed to read i32 as Topic")
     }
 }
@@ -5894,7 +5878,7 @@ impl Governance {
             .map(|p| p.topic())
             .unwrap_or(Topic::Unspecified);
 
-        let vote = Vote::from_i32(pb.vote).unwrap_or(Vote::Unspecified);
+        let vote = Vote::try_from(pb.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
             // Invalid vote specified, i.e., not yes or no.
             return Err(GovernanceError::new_with_message(
@@ -5995,7 +5979,7 @@ impl Governance {
         }
 
         // Validate topic exists
-        let topic = Topic::from_i32(follow_request.topic).ok_or_else(|| {
+        let topic = Topic::try_from(follow_request.topic).map_err(|_| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
@@ -6867,7 +6851,17 @@ impl Governance {
                     for (voter, ballot) in proposal.ballots.iter() {
                         let voting_rights = (ballot.voting_power as f64) * reward_weight;
                         total_voting_rights += voting_rights;
-                        if Vote::from(ballot.vote).eligible_for_rewards() {
+                        #[allow(clippy::blocks_in_if_conditions)]
+                        if Vote::try_from(ballot.vote)
+                            .unwrap_or_else(|_| {
+                                println!(
+                                    "{}Vote::from invoked with unexpected value {}.",
+                                    LOG_PREFIX, ballot.vote
+                                );
+                                Vote::Unspecified
+                            })
+                            .eligible_for_rewards()
+                        {
                             *voters_to_used_voting_right
                                 .entry(NeuronId { id: *voter })
                                 .or_insert(0f64) += voting_rights;
@@ -7224,7 +7218,7 @@ impl Governance {
         // the Neurons' Fund the previous Lifecycle should be set to allow for retries.
         let original_sns_token_swap_lifecycle = proposal_data
             .sns_token_swap_lifecycle
-            .and_then(Lifecycle::from_i32)
+            .and_then(|v| Lifecycle::try_from(v).ok())
             .unwrap_or(Lifecycle::Unspecified);
         // Validate the state machine
         let initial_neurons_fund_participation = match (
@@ -7684,7 +7678,7 @@ impl Governance {
         // success.
         if proposal_data
             .sns_token_swap_lifecycle
-            .and_then(Lifecycle::from_i32)
+            .and_then(|v| Lifecycle::try_from(v).ok())
             .unwrap_or(Lifecycle::Unspecified)
             .is_terminal()
         {

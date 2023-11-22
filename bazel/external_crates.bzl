@@ -800,7 +800,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.3",
             ),
             "pprof": crate.spec(
-                version = "^0.12.1",
+                version = "^0.13.0",
                 features = [
                     "flamegraph",
                     "prost-codec",
@@ -851,13 +851,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.3.0",
             ),
             "prost": crate.spec(
-                version = "^0.11",
+                version = "^0.12",
             ),
             "prost-build": crate.spec(
-                version = "^0.11",
+                version = "^0.12",
             ),
             "prost-derive": crate.spec(
-                version = "^0.11",
+                version = "^0.12",
             ),
             "protobuf": crate.spec(
                 version = "^2.27.1",
@@ -1227,10 +1227,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.9",
+                version = "^0.10",
             ),
             "tonic-build": crate.spec(
-                version = "^0.9",
+                version = "^0.10",
             ),
             "tower": crate.spec(
                 version = "^0.4.13",

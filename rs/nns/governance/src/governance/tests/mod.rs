@@ -2140,7 +2140,7 @@ fn governance_remove_neuron_updates_followee_index_correctly() {
 
     let entry = governance
         .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(2).unwrap());
+        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
     assert_eq!(entry, vec![NeuronId { id: 1 }]);
 
     let neuron = governance
@@ -2150,7 +2150,7 @@ fn governance_remove_neuron_updates_followee_index_correctly() {
 
     let entry = governance
         .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(2).unwrap());
+        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
     assert_eq!(entry, vec![]);
 }
 

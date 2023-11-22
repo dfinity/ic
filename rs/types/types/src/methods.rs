@@ -125,7 +125,7 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
             PbWasmMethod::CompositeQuery(query) => Ok(Self::CompositeQuery(query)),
             PbWasmMethod::System(system) => {
                 let method =
-                    PbSystemMethod::from_i32(system).unwrap_or(PbSystemMethod::Unspecified);
+                    PbSystemMethod::try_from(system).unwrap_or(PbSystemMethod::Unspecified);
 
                 Ok(Self::System(match method {
                     PbSystemMethod::Unspecified => {

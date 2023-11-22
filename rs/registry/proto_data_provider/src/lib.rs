@@ -165,7 +165,7 @@ impl ProtoRegistryDataProvider {
 
         mutations.sort_by(|l, r| l.key.cmp(&r.key));
         for m in mutations.iter_mut() {
-            m.mutation_type = match Type::from_i32(m.mutation_type).unwrap() {
+            m.mutation_type = match Type::try_from(m.mutation_type).unwrap() {
                 Type::Insert | Type::Update | Type::Upsert => Type::Upsert,
                 Type::Delete => {
                     unimplemented!("Need to implement Delete below to execute these mutations")

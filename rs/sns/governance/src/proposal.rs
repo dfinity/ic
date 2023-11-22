@@ -1050,7 +1050,7 @@ impl ProposalData {
         let mut no = 0;
         let mut undecided = 0;
         for ballot in self.ballots.values() {
-            let lhs: &mut u64 = if let Some(vote) = Vote::from_i32(ballot.vote) {
+            let lhs: &mut u64 = if let Ok(vote) = Vote::try_from(ballot.vote) {
                 match vote {
                     Vote::Unspecified => &mut undecided,
                     Vote::Yes => &mut yes,

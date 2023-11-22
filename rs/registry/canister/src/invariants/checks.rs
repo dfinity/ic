@@ -120,7 +120,7 @@ impl Registry {
         let mut snapshot = self.take_latest_snapshot();
         for mutation in mutations.iter() {
             let key = &mutation.key;
-            match Type::from_i32(mutation.mutation_type).unwrap() {
+            match Type::try_from(mutation.mutation_type).unwrap() {
                 Type::Insert | Type::Update | Type::Upsert => {
                     snapshot.insert(key.to_vec(), mutation.value.clone());
                 }

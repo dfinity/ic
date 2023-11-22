@@ -404,7 +404,7 @@ fn test_neuron_store_builds_index_unless_provided() {
     assert_eq!(neuron_store.topic_followee_index.num_entries(), 4);
     assert_eq!(
         neuron_store
-            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(3).unwrap())
+            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(3).unwrap())
             .into_iter()
             .collect::<HashSet<_>>(),
         hashset! {NeuronId { id: 3 }, NeuronId { id: 1 }}
@@ -416,7 +416,7 @@ fn test_neuron_store_builds_index_unless_provided() {
     assert_eq!(neuron_store.topic_followee_index.num_entries(), 0);
     assert_eq!(
         neuron_store
-            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(3).unwrap()),
+            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(3).unwrap()),
         vec![]
     );
 }

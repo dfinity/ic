@@ -628,7 +628,7 @@ impl TryFrom<pb::WasmCustomSection> for CustomSection {
     type Error = ProxyDecodeError;
     fn try_from(item: pb::WasmCustomSection) -> Result<Self, Self::Error> {
         let visibility = CustomSectionType::try_from(
-            pb::CustomSectionType::from_i32(item.visibility).unwrap_or_default(),
+            pb::CustomSectionType::try_from(item.visibility).unwrap_or_default(),
         )?;
         Ok(Self {
             visibility,

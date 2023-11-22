@@ -1537,7 +1537,7 @@ fn assert_ballot_is_cast(ballots: &BTreeMap<String, Ballot>, neuron_id: &NeuronI
         "NeuronId {} expected '{:?}', actual '{:?}'",
         neuron_id,
         vote,
-        Vote::from_i32(ballot.vote).unwrap()
+        Vote::try_from(ballot.vote).unwrap()
     );
 }
 
