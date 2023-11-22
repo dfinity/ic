@@ -547,6 +547,7 @@ pub struct StateMachineBuilder {
     checkpoints_enabled: bool,
     subnet_type: SubnetType,
     subnet_size: usize,
+    node_id: NodeId,
     nns_subnet_id: SubnetId,
     subnet_id: SubnetId,
     /// The `subnet_list` should contain all subnet IDs with corresponding `SubnetRecord`s available in the registry
@@ -565,6 +566,7 @@ pub struct StateMachineBuilder {
 impl StateMachineBuilder {
     pub fn new() -> Self {
         let own_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+        let own_node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         Self {
             state_dir: TempDir::new().expect("failed to create a temporary directory"),
             nonce: 0,
@@ -574,6 +576,7 @@ impl StateMachineBuilder {
             subnet_type: SubnetType::System,
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
+            node_id: own_node_id,
             nns_subnet_id: own_subnet_id,
             subnet_id: own_subnet_id,
             subnet_list: None,
@@ -631,6 +634,10 @@ impl StateMachineBuilder {
             subnet_size,
             ..self
         }
+    }
+
+    pub fn with_node_id(self, node_id: NodeId) -> Self {
+        Self { node_id, ..self }
     }
 
     pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
@@ -767,6 +774,7 @@ impl StateMachineBuilder {
     ) -> Arc<StateMachine> {
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let subnet_id = self.subnet_id;
+        let node_id = self.node_id;
         let sm = Arc::new(self.build());
 
         // Register this new `StateMachine` in the *shared* association
@@ -799,6 +807,7 @@ impl StateMachineBuilder {
         // which contains no `PayloadBuilderImpl` after creation.
         *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new_for_testing(
             subnet_id,
+            node_id,
             sm.registry_client.clone(),
             sm.ingress_manager.clone(),
             Arc::new(xnet_payload_builder),

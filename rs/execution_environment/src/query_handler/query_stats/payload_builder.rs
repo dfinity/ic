@@ -1,7 +1,7 @@
 use crossbeam_channel::{Receiver, TryRecvError};
 use ic_base_types::{CanisterId, NodeId};
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload},
+    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     consensus::{PayloadTransientError, PayloadValidationError},
     query_stats::QueryStatsTransientValidationError,
     validation::ValidationError,
@@ -85,9 +85,9 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-        context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
         // Empty payloads are always valid
         if payload.is_empty() {
@@ -100,7 +100,12 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
             return transient_error(QueryStatsTransientValidationError::Disabled);
         }
 
-        self.validate_payload_impl(height, payload, past_payloads, context)
+        self.validate_payload_impl(
+            height,
+            payload,
+            past_payloads,
+            proposal_context.validation_context,
+        )
     }
 }
 

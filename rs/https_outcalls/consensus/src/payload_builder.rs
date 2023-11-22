@@ -12,7 +12,7 @@ use ic_consensus_utils::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload},
+    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
         CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError, CanisterHttpPool,
         CanisterHttpTransientValidationError,
@@ -599,9 +599,9 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-        context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
         let _time = self
             .metrics
@@ -631,7 +631,12 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 CanisterHttpPermanentValidationError::DecodeError(e),
             ))
         })?;
-        self.validate_canister_http_payload_impl(height, &payload, context, delivered_ids)
+        self.validate_canister_http_payload_impl(
+            height,
+            &payload,
+            proposal_context.validation_context,
+            delivered_ids,
+        )
     }
 }
 

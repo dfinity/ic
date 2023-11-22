@@ -173,6 +173,7 @@ impl ConsensusImpl {
     ) -> Self {
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             replica_config.subnet_id,
+            replica_config.node_id,
             registry_client.clone(),
             ingress_selector.clone(),
             xnet_payload_builder,

@@ -9,7 +9,7 @@ use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload},
+    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
@@ -92,7 +92,12 @@ fn single_request_test() {
             assert_eq!(parsed_payload.responses[0].content, response);
 
             assert!(payload_builder
-                .validate_payload(Height::new(1), &payload, &[], &context)
+                .validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&context),
+                    &payload,
+                    &[],
+                )
                 .is_ok());
         });
 
@@ -226,9 +231,9 @@ fn multiple_payload_test() {
             payload_builder
                 .validate_payload(
                     Height::new(1),
+                    &test_proposal_context(&validation_context),
                     &payload,
                     &past_payloads,
-                    &validation_context,
                 )
                 .unwrap();
 
@@ -475,7 +480,12 @@ fn max_responses() {
 
         //  Make sure the response is not contained in the payload
         payload_builder
-            .validate_payload(Height::new(1), &payload, &[], &validation_context)
+            .validate_payload(
+                Height::new(1),
+                &test_proposal_context(&validation_context),
+                &payload,
+                &[],
+            )
             .unwrap();
     })
 }
@@ -628,9 +638,9 @@ fn duplicate_validation() {
 
         let validation_result = payload_builder.validate_payload(
             Height::from(1),
+            &test_proposal_context(&default_validation_context()),
             &payload,
             &past_payloads,
-            &default_validation_context(),
         );
 
         match validation_result {
@@ -675,9 +685,9 @@ fn divergence_response_validation_test() {
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
+                &test_proposal_context(&default_validation_context()),
                 &payload,
                 &[],
-                &default_validation_context(),
             );
 
             assert!(validation_result.is_ok());
@@ -695,9 +705,9 @@ fn divergence_response_validation_test() {
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
+                &test_proposal_context(&default_validation_context()),
                 &payload,
                 &[],
-                &default_validation_context(),
             );
 
             match validation_result {
@@ -732,9 +742,9 @@ fn divergence_response_validation_test() {
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
+                &test_proposal_context(&default_validation_context()),
                 &payload,
                 &[],
-                &default_validation_context(),
             );
 
             match validation_result {
@@ -931,6 +941,14 @@ pub(crate) fn test_config_with_http_feature<T>(
     })
 }
 
+/// The [`ProposalContext`] used in the validation tests
+pub(crate) fn test_proposal_context(validation_context: &ValidationContext) -> ProposalContext<'_> {
+    ProposalContext {
+        proposer: node_test_id(0),
+        validation_context,
+    }
+}
+
 /// The default validation context used in the validation tests
 pub(crate) fn default_validation_context() -> ValidationContext {
     ValidationContext {
@@ -964,6 +982,11 @@ where
         };
 
         let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
-        payload_builder.validate_payload(Height::from(1), &payload, &[], validation_context)
+        payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(validation_context),
+            &payload,
+            &[],
+        )
     })
 }

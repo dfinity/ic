@@ -8,7 +8,7 @@ use crate::consensus::{
 };
 use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
-    batch_payload::BatchPayloadBuilder,
+    batch_payload::{BatchPayloadBuilder, ProposalContext},
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
@@ -23,13 +23,14 @@ use ic_types::{
     batch::{BatchPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
     consensus::{block_maker::SubnetRecords, Payload},
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
-    Height, NumBytes, SubnetId, Time,
+    Height, NodeId, NumBytes, SubnetId, Time,
 };
 use std::sync::Arc;
 
 /// Implementation of PayloadBuilder.
 pub struct PayloadBuilderImpl {
     subnet_id: SubnetId,
+    node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
     section_builder: Vec<BatchPayloadSectionBuilder>,
     metrics: PayloadBuilderMetrics,
@@ -40,6 +41,7 @@ impl PayloadBuilderImpl {
     /// Helper to create PayloadBuilder
     pub fn new(
         subnet_id: SubnetId,
+        node_id: NodeId,
         registry_client: Arc<dyn RegistryClient>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
@@ -59,15 +61,18 @@ impl PayloadBuilderImpl {
 
         Self {
             subnet_id,
+            node_id,
             registry_client,
             section_builder,
             metrics: PayloadBuilderMetrics::new(metrics),
             logger,
         }
     }
+
     /// Helper to create PayloadBuilder for testing
     pub fn new_for_testing(
         subnet_id: SubnetId,
+        node_id: NodeId,
         registry_client: Arc<dyn RegistryClient>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
@@ -81,6 +86,7 @@ impl PayloadBuilderImpl {
 
         Self {
             subnet_id,
+            node_id,
             registry_client,
             section_builder,
             metrics: PayloadBuilderMetrics::new(metrics),
@@ -123,7 +129,10 @@ impl PayloadBuilder for PayloadBuilderImpl {
                 .build_payload(
                     &mut batch_payload,
                     height,
-                    context,
+                    &ProposalContext {
+                        proposer: self.node_id,
+                        validation_context: context,
+                    },
                     NumBytes::new(
                         max_block_payload_size
                             .get()
@@ -142,16 +151,16 @@ impl PayloadBuilder for PayloadBuilderImpl {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &Payload,
         past_payloads: &[(Height, Time, Payload)],
-        context: &ValidationContext,
     ) -> ValidationResult<PayloadValidationError> {
         let _timer = self.metrics.validate_payload_duration.start_timer();
         if payload.is_summary() {
             return Ok(());
         }
         let batch_payload = &payload.as_ref().as_data().batch;
-        let subnet_record = self.get_subnet_record(context)?;
+        let subnet_record = self.get_subnet_record(proposal_context.validation_context)?;
 
         // Retrieve max_block_payload_size from subnet
         let max_block_payload_size = self.get_max_block_payload_size_bytes(&subnet_record);
@@ -159,7 +168,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let mut accumulated_size = NumBytes::new(0);
         for builder in &self.section_builder {
             accumulated_size +=
-                builder.validate_payload(height, batch_payload, context, past_payloads)?;
+                builder.validate_payload(height, batch_payload, proposal_context, past_payloads)?;
         }
 
         // Check the combined size of the payloads using a 2x safety margin.
@@ -290,6 +299,7 @@ pub(crate) mod test {
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
+            node_test_id(0),
             registry,
             Arc::new(ingress_selector),
             Arc::new(xnet_payload_builder),

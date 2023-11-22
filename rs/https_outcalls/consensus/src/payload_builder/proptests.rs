@@ -1,6 +1,6 @@
 use crate::payload_builder::tests::{
     add_own_share_to_pool, add_received_shares_to_pool, default_validation_context,
-    metadata_to_share, metadata_to_shares, test_config_with_http_feature,
+    metadata_to_share, metadata_to_shares, test_config_with_http_feature, test_proposal_context,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
@@ -83,8 +83,12 @@ fn run_proptest(
             assert!(payload_builder.metrics.unique_responses.get() != 0);
             assert!(payload.len() <= MAX_PAYLOAD_SIZE_BYTES);
 
-            let validation_result =
-                payload_builder.validate_payload(Height::new(height), &payload, &pp, &context);
+            let validation_result = payload_builder.validate_payload(
+                Height::new(height),
+                &test_proposal_context(&context),
+                &payload,
+                &pp,
+            );
             assert!(validation_result.is_ok());
 
             past_payloads.push(payload);

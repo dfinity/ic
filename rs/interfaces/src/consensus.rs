@@ -1,5 +1,6 @@
 //! The consensus public interface.
 use crate::{
+    batch_payload::ProposalContext,
     canister_http::{
         CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
@@ -48,9 +49,9 @@ pub trait PayloadBuilder: Send + Sync {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &Payload,
         past_payloads: &[(Height, Time, Payload)],
-        context: &ValidationContext,
     ) -> ValidationResult<PayloadValidationError>;
 }
 

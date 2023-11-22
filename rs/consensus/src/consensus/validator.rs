@@ -20,6 +20,7 @@ use ic_consensus_utils::{
     RoundRobin,
 };
 use ic_interfaces::{
+    batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
     consensus_pool::*,
     dkg::DkgPool,
@@ -993,6 +994,7 @@ impl Validator {
             }
         }
 
+        let proposer = proposal.signature.signer;
         let parent = get_notarized_parent(pool_reader, proposal)?;
         self.verify_artifact(pool_reader, proposal)?;
 
@@ -1033,9 +1035,12 @@ impl Validator {
         self.payload_builder
             .validate_payload(
                 proposal.height,
+                &ProposalContext {
+                    proposer,
+                    validation_context: &proposal.context,
+                },
                 &proposal.payload,
                 &payloads,
-                &proposal.context,
             )
             .map_err(|err| {
                 err.map(
@@ -2101,7 +2106,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .withf(move |_, _, payloads, _| {
+                .withf(move |_, _, _, payloads| {
                     // Assert that payloads are from blocks between:
                     // `certified_height` and the current height (`prior_height`)
                     payloads.len() as u64 == (prior_height - certified_height).get()
@@ -2213,7 +2218,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .withf(move |_, _, payloads, _| {
+                .withf(move |_, _, _, payloads| {
                     // Assert that payloads are from blocks between:
                     // `certified_height` and the current height (`prior_height`)
                     payloads.len() as u64 == (prior_height - certified_height).get()

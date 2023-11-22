@@ -1,4 +1,5 @@
 use ic_interfaces::{
+    batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
     validation::ValidationResult,
 };
@@ -26,9 +27,9 @@ impl PayloadBuilder for MockPayloadBuilder {
     fn validate_payload(
         &self,
         _height: Height,
+        _proposal_context: &ProposalContext,
         _payload: &Payload,
         _past_payloads: &[(Height, Time, Payload)],
-        _context: &ValidationContext,
     ) -> ValidationResult<PayloadValidationError> {
         Ok(())
     }
