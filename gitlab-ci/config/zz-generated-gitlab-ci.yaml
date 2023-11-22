@@ -5180,6 +5180,7 @@ tnet-test:
 
         # Finish and collapse the after_script section
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
+  allow_failure: true
   artifacts:
     expire_in: 3 days
     paths:

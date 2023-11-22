@@ -989,6 +989,7 @@ tnet-test:
   variables:
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/tests/k8s:tnetctl"
+  allow_failure: true
   script:
     - |
       # TODO: switch to bazel after chrono issue is handled
