@@ -3,16 +3,16 @@ use std::time::Duration;
 use crate::driver::{
     test_env::TestEnv,
     test_env_api::{
-        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
+        retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+        TopologySnapshot,
     },
 };
 
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, bail, Error};
 use futures::future::join_all;
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
 use ic_utils::interfaces::ManagementCanister;
-use slog::debug;
 
 pub fn get_install_url(env: &TestEnv) -> Result<(url::Url, PrincipalId), Error> {
     let subnet = env
@@ -137,76 +137,85 @@ pub async fn set_counters_on_counter_canisters(
     agent: Agent,
     canisters: Vec<Principal>,
     counter_values: Vec<u32>,
-    max_attempts: usize,
+    backoff: Duration,
+    retry_timeout: Duration,
 ) {
-    // Perform update calls in parallel via multiple futures.
-    let mut futures = Vec::new();
-    for (idx, canister_id) in canisters.iter().enumerate() {
-        let agent = agent.clone();
-        let calls = counter_values[idx];
-        futures.push(async move {
-            for call in 1..calls + 1 {
-                let mut attempt = 1;
-                let write_result: Vec<u8> = loop {
-                    if attempt > max_attempts {
-                        panic!("write call on canister={canister_id} failed after {max_attempts} attempts");
-                    }
-                    let result = agent.update(canister_id, "write").call_and_wait().await;
-                    if let Err(err) = result {
-                        debug!(log,
-                            "write call on canister={canister_id} failed on attempt {attempt}, err: {err:?}",
-                        );
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    } else {
-                        break result.unwrap();
-                    }
-                    attempt += 1;
-                };
-                let counter = u32::from_le_bytes(
-                    write_result.as_slice()
-                        .try_into()
-                        .expect("slice with incorrect length"),
-                );
-                assert_eq!(call, counter);
-            }
-        });
+    let mut requests_all = vec![];
+    // Dispatch all write calls sequentially. As there is no polling, each call should return very fast.
+    for (idx, canister_id) in canisters.into_iter().enumerate() {
+        let mut requests = vec![];
+        let calls_count = counter_values[idx];
+        for _ in 0..calls_count {
+            let request_id = retry_async(log, retry_timeout, backoff, || async {
+                let result = agent.update(&canister_id, "write").call().await;
+                if let Ok(id) = result {
+                    Ok(id)
+                } else {
+                    bail!(
+                        "write call on canister={canister_id} failed, err: {:?}",
+                        result.unwrap_err()
+                    )
+                }
+            })
+            .await
+            .expect("write call on canister={canister_id} failed");
+
+            requests.push((canister_id, request_id));
+        }
+        requests_all.push(requests);
     }
-    join_all(futures).await;
+
+    // Poll all results sequentially.
+    // Overall polling duration should be roughly equal to a single polling duration. As all requests were submitted at nearly same time.
+    for (canister_id, request_id) in requests_all.into_iter().flatten() {
+        retry_async(log, retry_timeout, backoff, || async {
+            let result = agent.wait(request_id, canister_id).await;
+            if result.is_ok() {
+                Ok(())
+            } else {
+                bail!(
+                    "wait call on canister={canister_id} failed, err: {:?}",
+                    result.unwrap_err()
+                )
+            }
+        })
+        .await
+        .expect("wait call on canister={canister_id} failed");
+    }
 }
 
 pub async fn read_counters_on_counter_canisters(
     log: &slog::Logger,
     agent: Agent,
     canisters: Vec<Principal>,
-    max_attempts: usize,
+    backoff: Duration,
+    retry_timeout: Duration,
 ) -> Vec<u32> {
-    // Perform query calls in parallel via multiple futures.
-    let mut futures = Vec::new();
+    // Perform query read calls on canisters sequentially.
+    let mut results = vec![];
     for canister_id in canisters {
-        let agent = agent.clone();
-        futures.push(async move {
-            let mut attempt = 1;
-            let read_result: Vec<u8> = loop {
-                if attempt > max_attempts {
-                    panic!("read call on canister={canister_id} failed after {max_attempts} attempts");
-                }
-                let result = agent.query(&canister_id, "read").call().await;
-                if let Err(err) = result {
-                    debug!(log,
-                        "read call on canister={canister_id} failed on attempt {attempt}, err: {err:?}",
-                    );
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                } else {
-                    break result.unwrap();
-                }
-                attempt += 1;
-            };
-            u32::from_le_bytes(
-                read_result.as_slice()
-                    .try_into()
-                    .expect("slice with incorrect length"),
-            )
-        });
+        let read_result = retry_async(log, retry_timeout, backoff, || async {
+            let read_result = agent.query(&canister_id, "read").call().await;
+            if let Ok(bytes) = read_result {
+                Ok(bytes)
+            } else {
+                bail!(
+                    "read call on canister={canister_id} failed, err: {:?}",
+                    read_result.unwrap_err()
+                )
+            }
+        })
+        .await
+        .expect("read call on canister={canister_id} failed after {max_attempts} attempts");
+
+        let counter = u32::from_le_bytes(
+            read_result
+                .as_slice()
+                .try_into()
+                .expect("slice with incorrect length"),
+        );
+
+        results.push(counter)
     }
-    join_all(futures).await
+    results
 }

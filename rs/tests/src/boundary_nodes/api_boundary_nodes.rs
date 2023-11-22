@@ -35,8 +35,8 @@ use serde::Deserialize;
 use slog::{error, info};
 use std::{net::SocketAddrV6, time::Duration};
 use tokio::runtime::Runtime;
-const CANISTER_CALL_ATTEMPTS: usize = 5;
-
+const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
+const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
 /* tag::catalog[]
 Title:: API BN binary canister test
 
@@ -170,7 +170,8 @@ pub fn canister_routing_test(env: TestEnv) {
         bn_agent.clone(),
         canister_ids.clone(),
         canister_values.clone(),
-        CANISTER_CALL_ATTEMPTS,
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
     ));
     info!(
         log,
@@ -180,7 +181,8 @@ pub fn canister_routing_test(env: TestEnv) {
         &log,
         bn_agent,
         canister_ids,
-        CANISTER_CALL_ATTEMPTS,
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
     ));
     assert_eq!(counters, canister_values);
 }
