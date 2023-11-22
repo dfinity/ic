@@ -16,7 +16,7 @@ use ic_btc_types_internal::{
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload},
+    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     consensus::{PayloadPermanentError, PayloadValidationError},
     self_validating_payload::{
         InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
@@ -361,9 +361,9 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-        context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
         if payload.is_empty() {
             return Ok(());
@@ -378,8 +378,10 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
         })?;
         let num_responses = payload.len();
 
-        let _ = self
-            .validate_self_validating_payload_impl(&SelfValidatingPayload::new(payload), context)?;
+        let _ = self.validate_self_validating_payload_impl(
+            &SelfValidatingPayload::new(payload),
+            proposal_context.validation_context,
+        )?;
 
         if raw_payload_len as u64 > MAX_BITCOIN_PAYLOAD_IN_BYTES {
             if num_responses == 1 {

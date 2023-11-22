@@ -7,7 +7,7 @@ use ic_btc_types_internal::{
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload},
+    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
@@ -18,8 +18,10 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_test_utilities::{
-    mock_time, self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state::ReplicatedStateBuilder, types::ids::subnet_test_id,
+    mock_time,
+    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
+    state::ReplicatedStateBuilder,
+    types::ids::{node_test_id, subnet_test_id},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
@@ -97,14 +99,19 @@ fn bitcoin_payload_builder_test(
     bitcoin_testnet_adapter_client: MockBitcoinAdapterClient,
     state_manager: MockStateManager,
     registry_client: MockRegistryClient,
-    run_test: impl FnOnce(ValidationContext, BitcoinPayloadBuilder),
+    run_test: impl FnOnce(ProposalContext, BitcoinPayloadBuilder),
 ) {
     with_test_replica_logger(|log| {
         let time = mock_time();
+
         let validation_context = ValidationContext {
             registry_version: REGISTRY_VERSION,
             certified_height: CERTIFIED_HEIGHT,
             time,
+        };
+        let proposal_context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &validation_context,
         };
 
         let bitcoin_payload_builder = BitcoinPayloadBuilder::new(
@@ -118,7 +125,7 @@ fn bitcoin_payload_builder_test(
             log,
         );
 
-        run_test(validation_context, bitcoin_payload_builder);
+        run_test(proposal_context, bitcoin_payload_builder);
     });
 }
 
@@ -160,7 +167,7 @@ fn can_successfully_create_bitcoin_payload() {
         mock_adapter(),
         state_manager,
         registry_client,
-        |validation_context, bitcoin_payload_builder| {
+        |proposal_context, bitcoin_payload_builder| {
             let expected_payload = FakeSelfValidatingPayloadBuilder::new()
                 .with_responses(vec![BitcoinAdapterResponse {
                     response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
@@ -175,7 +182,7 @@ fn can_successfully_create_bitcoin_payload() {
 
             let payload = bitcoin_payload_builder
                 .get_self_validating_payload(
-                    &validation_context,
+                    proposal_context.validation_context,
                     &[],
                     SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
                 )
@@ -229,7 +236,7 @@ fn includes_responses_in_the_payload() {
         mock_adapter(),
         state_manager,
         registry_client,
-        |validation_context, bitcoin_payload_builder| {
+        |proposal_context, bitcoin_payload_builder| {
             let expected_payload = FakeSelfValidatingPayloadBuilder::new()
                 .with_responses(vec![
                     BitcoinAdapterResponse {
@@ -262,13 +269,13 @@ fn includes_responses_in_the_payload() {
                 Height::new(1),
                 SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
                 &[],
-                &validation_context,
+                proposal_context.validation_context,
             );
             let validation_result = bitcoin_payload_builder.validate_payload(
                 Height::new(1),
+                &proposal_context,
                 &payload,
                 &[],
-                &validation_context,
             );
             assert!(
                 validation_result.is_ok(),
@@ -321,7 +328,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
         bitcoin_testnet_adapter_client,
         state_manager,
         registry_client,
-        |validation_context, bitcoin_payload_builder| {
+        |proposal_context, bitcoin_payload_builder| {
             let past_payload = FakeSelfValidatingPayloadBuilder::new()
                 .with_responses(vec![BitcoinAdapterResponse {
                     response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
@@ -366,13 +373,13 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
                 Height::new(1),
                 SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
                 &past_payloads,
-                &validation_context,
+                proposal_context.validation_context,
             );
             let validation_result = bitcoin_payload_builder.validate_payload(
                 Height::new(1),
+                &proposal_context,
                 &payload,
                 &past_payloads,
-                &validation_context,
             );
             assert!(
                 validation_result.is_ok(),
@@ -420,19 +427,19 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
         bitcoin_testnet_adapter_client,
         state_manager,
         registry_client,
-        |validation_context, bitcoin_payload_builder| {
+        |proposal_context, bitcoin_payload_builder| {
             let payload = bitcoin_payload_builder.build_payload(
                 Height::new(1),
                 MAX_BLOCK_PAYLOAD_SIZE,
                 &[],
-                &validation_context,
+                proposal_context.validation_context,
             );
 
             let validation_result = bitcoin_payload_builder.validate_payload(
                 Height::new(1),
+                &proposal_context,
                 &payload,
                 &[],
-                &validation_context,
             );
             assert!(
                 validation_result.is_ok(),
