@@ -1474,7 +1474,10 @@ impl CanisterManager {
             });
         }
 
-        validate_controller(canister, &sender)?;
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
 
         canister
             .system_state
@@ -1650,7 +1653,10 @@ impl CanisterManager {
             });
         }
 
-        validate_controller(canister, &sender)?;
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
         canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
         Ok(())
     }
@@ -1665,7 +1671,10 @@ impl CanisterManager {
                 message: "Wasm chunk store not enabled".to_string(),
             });
         }
-        validate_controller(canister, &sender)?;
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
 
         let keys = canister
             .system_state
