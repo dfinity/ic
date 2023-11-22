@@ -109,24 +109,27 @@ impl PocketIc {
                 ..Default::default()
             };
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
+            let subnet_size = subnet_size(subnet_kind);
             let subnet = StateMachineBuilder::new()
                 .with_runtime(runtime.clone())
                 .with_config(Some(sm_config))
                 .with_subnet_id(subnet_id)
                 .with_subnet_list(subnet_ids.clone())
+                .with_subnet_size(subnet_size.try_into().unwrap())
                 .with_routing_table(routing_table.clone())
                 .with_registry_data_provider(registry_data_provider.clone())
                 .with_ecdsa_keys(vec![EcdsaKeyId {
                     curve: EcdsaCurve::Secp256k1,
                     name: format!("master_ecdsa_public_key_{}", subnet_id),
                 }])
+                .with_use_cost_scaling_flag(true)
                 .build_with_subnets(subnets.clone());
             subnet.set_time(SystemTime::now());
 
             // What we return to the library:
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind,
-                size: subnet_size(subnet_kind),
+                size: subnet_size,
                 canister_ranges: ranges.iter().map(|r| from_range(r)).collect(),
             };
             topology.0.insert(subnet_id.get().0, subnet_config);
