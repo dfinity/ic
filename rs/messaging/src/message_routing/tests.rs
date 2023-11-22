@@ -85,7 +85,7 @@ fn message_routing_does_not_block() {
 
         let state_manager = Arc::new(state_manager);
         let metrics_registry = MetricsRegistry::new();
-        let metrics = Arc::new(MessageRoutingMetrics::new(&metrics_registry));
+        let metrics = MessageRoutingMetrics::new(&metrics_registry);
         let mr =
             MessageRoutingImpl::from_batch_processor(state_manager, mock_box, metrics, log.clone());
         // We need to submit one extra batch because the very first one
@@ -482,11 +482,11 @@ fn make_batch_processor(
     log: ReplicaLogger,
 ) -> (
     BatchProcessorImpl,
-    Arc<MessageRoutingMetrics>,
+    MessageRoutingMetrics,
     Arc<FakeStateManager>,
     Arc<Mutex<RegistryExecutionSettings>>,
 ) {
-    let metrics = Arc::new(MessageRoutingMetrics::new(&MetricsRegistry::default()));
+    let metrics = MessageRoutingMetrics::new(&MetricsRegistry::default());
     let state_manager = Arc::new(FakeStateManager::default());
     let registry_settings = Arc::new(Mutex::new(RegistryExecutionSettings {
         max_number_of_canisters: 0,
