@@ -1,3 +1,4 @@
+use candid::Decode;
 use core::sync::atomic::Ordering;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
@@ -16,7 +17,9 @@ use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{
+    self as ic00, CanisterIdRecord, CanisterStatusResultV2, InstallCodeArgs, Method, Payload,
+};
 pub use ic_ic00_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, ECDSAPublicKeyResponse,
     EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply, UpdateSettingsArgs,
@@ -2117,6 +2120,22 @@ impl StateMachine {
             "stop_canister",
             (CanisterIdRecord::from(canister_id)).encode(),
         )
+    }
+
+    /// Calls the `canister_status` endpoint on the management canister.
+    pub fn canister_status(
+        &self,
+        canister_id: CanisterId,
+    ) -> Result<Result<CanisterStatusResultV2, String>, UserError> {
+        self.execute_ingress(
+            CanisterId::ic_00(),
+            "canister_status",
+            (CanisterIdRecord::from(canister_id)).encode(),
+        )
+        .map(|wasm_result| match wasm_result {
+            WasmResult::Reply(reply) => Ok(Decode!(&reply, CanisterStatusResultV2).unwrap()),
+            WasmResult::Reject(reject_msg) => Err(reject_msg),
+        })
     }
 
     /// Deletes the canister with the specified ID.

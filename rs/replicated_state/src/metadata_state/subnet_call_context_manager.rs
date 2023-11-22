@@ -124,6 +124,10 @@ impl StopCanisterCallManager {
         self.stop_canister_calls.remove(&call_id)
     }
 
+    fn get_time(&self, call_id: &StopCanisterCallId) -> Option<Time> {
+        self.stop_canister_calls.get(call_id).map(|x| x.time)
+    }
+
     /// Removes and returns all `StopCanisterCalls` not targeted to local canisters.
     ///
     /// Used for rejecting all calls targeting migrated canisters after a subnet
@@ -172,6 +176,10 @@ impl CanisterManagementCalls {
         call_id: StopCanisterCallId,
     ) -> Option<StopCanisterCall> {
         self.stop_canister_call_manager.remove_call(call_id)
+    }
+
+    fn get_time_for_stop_canister_call(&self, call_id: &StopCanisterCallId) -> Option<Time> {
+        self.stop_canister_call_manager.get_time(call_id)
     }
 
     pub fn install_code_calls_len(&self) -> usize {
@@ -346,6 +354,11 @@ impl SubnetCallContextManager {
     ) -> Option<StopCanisterCall> {
         self.canister_management_calls
             .remove_stop_canister_call(call_id)
+    }
+
+    pub fn get_time_for_stop_canister_call(&self, call_id: &StopCanisterCallId) -> Option<Time> {
+        self.canister_management_calls
+            .get_time_for_stop_canister_call(call_id)
     }
 
     pub fn remove_non_local_stop_canister_calls(

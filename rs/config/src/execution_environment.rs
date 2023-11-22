@@ -43,6 +43,9 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 /// The number of bytes reserved for response callback executions.
 const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
 
+/// The duration a stop_canister has to stop the canister before timing out.
+pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60); // 5 minutes
+
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
 /// is above this limit, no more canisters will be executed till the next
@@ -229,6 +232,9 @@ pub struct Config {
 
     /// Indicate whether the Wasm chunk store feature has been enabled or not.
     pub wasm_chunk_store: FlagStatus,
+
+    /// The duration a stop_canister has to stop the canister before timing out.
+    pub stop_canister_timeout_duration: Duration,
 }
 
 impl Default for Config {
@@ -294,6 +300,7 @@ impl Default for Config {
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
             query_stats_aggregation: FlagStatus::Disabled,
             wasm_chunk_store: FlagStatus::Disabled,
+            stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
         }
     }
 }

@@ -69,6 +69,7 @@ impl From<ErrorCode> for RejectCode {
             CanisterQueueNotEmpty => SysTransient,
             IngressHistoryFull => SysTransient,
             CanisterIdAlreadyExists => SysTransient,
+            StopCanisterRequestTimeout => SysTransient,
             CanisterInvalidController => CanisterError,
             CanisterNotFound => DestinationInvalid,
             CanisterMethodNotFound => DestinationInvalid,
@@ -133,6 +134,7 @@ pub enum ErrorCode {
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
     CanisterIdAlreadyExists = 205,
+    StopCanisterRequestTimeout = 206,
     CanisterNotFound = 301,
     CanisterMethodNotFound = 302,
     CanisterAlreadyInstalled = 303,
@@ -189,6 +191,7 @@ impl TryFrom<u64> for ErrorCode {
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
             205 => Ok(ErrorCode::CanisterIdAlreadyExists),
+            206 => Ok(ErrorCode::StopCanisterRequestTimeout),
             301 => Ok(ErrorCode::CanisterNotFound),
             302 => Ok(ErrorCode::CanisterMethodNotFound),
             303 => Ok(ErrorCode::CanisterAlreadyInstalled),
@@ -305,6 +308,7 @@ impl UserError {
             | ErrorCode::MaxNumberOfCanistersReached
             | ErrorCode::CanisterOutputQueueFull
             | ErrorCode::IngressMessageTimeout
+            | ErrorCode::StopCanisterRequestTimeout
             | ErrorCode::CanisterQueueNotEmpty
             | ErrorCode::CanisterNotFound
             | ErrorCode::CanisterMethodNotFound
