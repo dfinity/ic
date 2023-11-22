@@ -15,6 +15,7 @@ use ic_cketh_minter::endpoints::{
     CandidBlockTag, EthTransaction, RetrieveEthRequest, RetrieveEthStatus, TxFinalizedStatus,
     WithdrawalArg, WithdrawalError,
 };
+use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
@@ -736,7 +737,7 @@ fn should_not_overlap_when_scrapping_logs() {
         .expect_rpc_calls(&cketh);
 
     cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: second_to_block.into(),
         }]);
@@ -766,7 +767,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .expect_rpc_calls(&cketh);
 
     let cketh = cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
@@ -788,7 +789,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .expect_rpc_calls(&cketh);
 
     cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: Nat::from(to_block),
         }]);
@@ -827,7 +828,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         .expect_rpc_calls(&cketh);
 
     let cketh = cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
@@ -853,10 +854,63 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         .expect_rpc_calls(&cketh);
 
     cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: last_finalized_block.into(),
         }]);
+}
+
+#[test]
+fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
+    let safe_block_number = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 100;
+    let finalized_block_number = safe_block_number - 32;
+    let cketh = CkEthSetup::new().check_audit_logs_and_upgrade(UpgradeArg {
+        ethereum_block_height: Some(CandidBlockTag::Safe),
+        ..Default::default()
+    });
+    cketh.env.tick();
+
+    let cketh = cketh
+        .deposit(
+            DepositParams::default()
+                .with_mock_eth_get_block_by_number(move |mock| {
+                    mock.with_request_params(json!(["safe", false]))
+                        .respond_for_all_with(block_response(safe_block_number))
+                })
+                .with_mock_eth_get_logs(move |mock| {
+                    mock.with_request_params(json!([{
+                    "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                    "toBlock": BlockNumber::from(safe_block_number),
+                    "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
+                    "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+                }]))
+                }),
+        )
+        .expect_mint();
+
+    let cketh = cketh
+        .check_audit_logs_and_upgrade(UpgradeArg {
+            ethereum_block_height: Some(CandidBlockTag::Finalized),
+            ..Default::default()
+        })
+        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+            block_number: safe_block_number.into(),
+        }]);
+    cketh.env.tick();
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
+        .respond_for_all_with(block_response(finalized_block_number))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh
+        .assert_has_no_rpc_call(&JsonRpcMethod::EthGetLogs)
+        .check_audit_logs_and_upgrade(Default::default())
+        .assert_has_no_event_satisfying(|event| {
+            matches!(event, EventPayload::SyncedToBlock { block_number }
+                if block_number != &Nat::from(safe_block_number) && block_number != &Nat::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL))
+        });
 }
 
 fn assert_contains_unique_event(events: &[Event], payload: EventPayload) {
@@ -1420,20 +1474,42 @@ impl CkEthSetup {
         .unwrap()
     }
 
-    fn upgrade_minter(&self) {
+    fn upgrade_minter(&self, upgrade_arg: UpgradeArg) {
         self.env
             .upgrade_canister(
                 self.minter_id,
                 minter_wasm(),
-                Encode!(&MinterArg::UpgradeArg(Default::default())).unwrap(),
+                Encode!(&MinterArg::UpgradeArg(upgrade_arg)).unwrap(),
             )
             .unwrap();
     }
 
-    fn check_audit_logs_and_upgrade(self) -> Self {
+    fn check_audit_logs_and_upgrade(self, upgrade_arg: UpgradeArg) -> Self {
         self.check_audit_log();
         self.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
-        self.upgrade_minter();
+        self.upgrade_minter(upgrade_arg);
+        self
+    }
+
+    fn assert_has_no_rpc_call(self, method: &JsonRpcMethod) -> Self {
+        for _ in 0..MAX_TICKS {
+            if let Some(unexpected_request) = self
+                .env
+                .canister_http_request_contexts()
+                .values()
+                .map(|context| {
+                    crate::mock::JsonRpcRequest::from_str(
+                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
+                    )
+                    .expect("BUG: invalid JSON RPC method")
+                })
+                .find(|rpc_request| rpc_request.method.to_string() == method.to_string())
+            {
+                panic!("Unexpected RPC call: {:?}", unexpected_request);
+            }
+            self.env.tick();
+            self.env.advance_time(Duration::from_nanos(1));
+        }
         self
     }
 }
@@ -1472,6 +1548,16 @@ impl DepositParams {
             from_address: self.from_address,
             transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
         }
+    }
+
+    pub fn with_mock_eth_get_block_by_number<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder + 'static,
+    >(
+        mut self,
+        override_mock: F,
+    ) -> Self {
+        self.override_rpc_eth_get_block_by_number = Box::new(override_mock);
+        self
     }
 
     pub fn with_mock_eth_get_logs<
@@ -1957,7 +2043,7 @@ impl TransactionReceiptProcessWithdrawal {
     }
 
     fn check_audit_logs_and_upgrade(mut self) -> Self {
-        self.setup = self.setup.check_audit_logs_and_upgrade();
+        self.setup = self.setup.check_audit_logs_and_upgrade(Default::default());
         self
     }
 
@@ -2049,8 +2135,9 @@ mod mock {
         }
     }
 
-    struct JsonRpcRequest {
-        method: JsonRpcMethod,
+    #[derive(Debug)]
+    pub struct JsonRpcRequest {
+        pub method: JsonRpcMethod,
         id: u64,
         params: serde_json::Value,
     }
