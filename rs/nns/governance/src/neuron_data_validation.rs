@@ -1,6 +1,6 @@
 use crate::{
-    neuron_store::{get_neuron_subaccount, NeuronStore},
-    pb::v1::Topic,
+    neuron_store::NeuronStore,
+    pb::v1::{Neuron, Topic},
     storage::{with_stable_neuron_indexes, Signed32},
 };
 
@@ -338,8 +338,7 @@ trait CardinalityAndRangeValidator {
 
     /// Validates that the primary neuron data has corresponding entries in the index.
     fn validate_primary_neuron_has_corresponding_index_entries(
-        neuron_id: NeuronId,
-        neuron_store: &NeuronStore,
+        neuron: &Neuron,
     ) -> Option<ValidationIssue>;
 }
 
@@ -406,16 +405,15 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
                 return vec![];
             }
         };
+        // TODO(NNS1-2532): also validate the inactive neurons from stable storage while adjusting
+        // the batch sizes.
         neuron_store
             .heap_neurons()
             .range(next_neuron_id.id..)
             .take(Validator::NEURON_RANGE_CHUNK_SIZE)
-            .flat_map(|(neuron_id, _)| {
+            .flat_map(|(neuron_id, neuron)| {
                 self.next_neuron_id = Some(NeuronId { id: neuron_id + 1 });
-                Validator::validate_primary_neuron_has_corresponding_index_entries(
-                    NeuronId { id: *neuron_id },
-                    neuron_store,
-                )
+                Validator::validate_primary_neuron_has_corresponding_index_entries(neuron)
             })
             .collect()
     }
@@ -444,11 +442,10 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
     }
 
     fn validate_primary_neuron_has_corresponding_index_entries(
-        neuron_id: NeuronId,
-        neuron_store: &NeuronStore,
+        neuron: &Neuron,
     ) -> Option<ValidationIssue> {
-        let subaccount = get_neuron_subaccount(neuron_store, neuron_id);
-        let subaccount = match subaccount {
+        let neuron_id = neuron.id.expect("Neuron must have an id");
+        let subaccount = match neuron.subaccount() {
             Ok(subaccount) => subaccount,
             Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
         };
@@ -493,17 +490,11 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
     }
 
     fn validate_primary_neuron_has_corresponding_index_entries(
-        neuron_id: NeuronId,
-        neuron_store: &NeuronStore,
+        neuron: &Neuron,
     ) -> Option<ValidationIssue> {
-        let principal_ids = neuron_store.with_neuron(&neuron_id, |neuron| {
-            neuron.principal_ids_with_special_permissions()
-        });
-        let principal_ids = match principal_ids {
-            Ok(principal_ids) => principal_ids,
-            Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
-        };
-        let missing_principal_ids: Vec<_> = principal_ids
+        let neuron_id = neuron.id.expect("Neuron must have an id");
+        let missing_principal_ids: Vec<_> = neuron
+            .principal_ids_with_special_permissions()
             .into_iter()
             .filter(|principal_id| {
                 let pair_exists_in_index = with_stable_neuron_indexes(|indexes| {
@@ -552,16 +543,11 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
     }
 
     fn validate_primary_neuron_has_corresponding_index_entries(
-        neuron_id: NeuronId,
-        neuron_store: &NeuronStore,
+        neuron: &Neuron,
     ) -> Option<ValidationIssue> {
-        let topic_followee_pairs =
-            neuron_store.with_neuron(&neuron_id, |neuron| neuron.topic_followee_pairs());
-        let topic_followee_pairs = match topic_followee_pairs {
-            Ok(topic_followee_pairs) => topic_followee_pairs,
-            Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
-        };
-        let missing_topic_followee_pairs: Vec<_> = topic_followee_pairs
+        let neuron_id = neuron.id.expect("Neuron must have an id");
+        let missing_topic_followee_pairs: Vec<_> = neuron
+            .topic_followee_pairs()
             .into_iter()
             .filter(|(topic, followee)| {
                 let pair_exists_in_index = with_stable_neuron_indexes(|indexes| {
@@ -610,30 +596,23 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
     }
 
     fn validate_primary_neuron_has_corresponding_index_entries(
-        neuron_id: NeuronId,
-        neuron_store: &NeuronStore,
+        neuron: &Neuron,
     ) -> Option<ValidationIssue> {
-        let known_neuron_name = neuron_store.with_neuron(&neuron_id, |neuron| {
-            neuron
-                .known_neuron_data
-                .as_ref()
-                .map(|known_neuron_data| known_neuron_data.name.clone())
-        });
-        let known_neuron_name = match known_neuron_name {
+        let neuron_id = neuron.id.expect("Neuron must have an id");
+        let known_neuron_name = match &neuron.known_neuron_data {
             // Most neurons aren't known neurons.
-            Ok(None) => return None,
-            Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
-            Ok(Some(known_neuron_name)) => known_neuron_name,
+            None => return None,
+            Some(known_neuron_data) => &known_neuron_data.name,
         };
         let index_has_entry = with_stable_neuron_indexes(|indexes| {
             indexes
                 .known_neuron()
-                .contains_entry(neuron_id, &known_neuron_name)
+                .contains_entry(neuron_id, known_neuron_name)
         });
         if !index_has_entry {
             Some(ValidationIssue::KnownNeuronMissingFromIndex {
                 neuron_id,
-                known_neuron_name,
+                known_neuron_name: known_neuron_name.clone(),
             })
         } else {
             None
