@@ -148,6 +148,12 @@ MAX_TRIES=10
 
 get_guestos_version
 
+write_metric_attr "guestos_boot_action" \
+    "{successful_boot=\"true\"}" \
+    "0" \
+    "GuestOS boot action" \
+    "gauge"
+
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
     exit 0
