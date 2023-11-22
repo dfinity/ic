@@ -1188,7 +1188,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         let output_queues_stats = Self::calculate_output_queues_stats(&canister_queues);
 
         let next_input_queue =
-            match ProtoNextInputQueue::from_i32(item.next_input_queue).unwrap_or_default() {
+            match ProtoNextInputQueue::try_from(item.next_input_queue).unwrap_or_default() {
                 ProtoNextInputQueue::Unspecified | ProtoNextInputQueue::LocalSubnet => {
                     NextInputQueue::LocalSubnet
                 }

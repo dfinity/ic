@@ -380,8 +380,8 @@ fn test_hotkey_can_join_and_leave_community_fund() {
             command: Some(manage_neuron_response::Command::Error(error)),
         } => {
             assert_eq!(
-                ErrorType::from_i32(error.error_type),
-                Some(ErrorType::NotAuthorized),
+                ErrorType::try_from(error.error_type),
+                Ok(ErrorType::NotAuthorized),
                 "{:?}",
                 error
             );

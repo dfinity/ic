@@ -84,10 +84,12 @@ pub(crate) async fn get_wasm(
         .wasm
         .ok_or_else(|| "No WASM found using hash returned from SNS-WASM canister.".to_string())?;
 
-    let returned_canister_type =
-        SnsCanisterType::from_i32(wasm.canister_type).ok_or_else(|| {
-            "Could not convert response from SNS-WASM to valid SnsCanisterType".to_string()
-        })?;
+    let returned_canister_type = SnsCanisterType::try_from(wasm.canister_type).map_err(|err| {
+        format!(
+            "Could not convert response from SNS-WASM to valid SnsCanisterType: {}",
+            err
+        )
+    })?;
 
     if returned_canister_type != expected_sns_canister_type {
         return Err(format!(

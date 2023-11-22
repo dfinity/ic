@@ -91,8 +91,8 @@ impl CanisterHttpService for CanisterHttp {
             ));
         }
 
-        let method = HttpMethod::from_i32(req.method)
-            .ok_or_else(|| {
+        let method = HttpMethod::try_from(req.method)
+            .map_err(|_| {
                 Status::new(
                     tonic::Code::InvalidArgument,
                     "Failed to get HTTP method".to_string(),

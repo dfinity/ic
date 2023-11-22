@@ -294,8 +294,8 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
     // Inspect the proposal's failure_reason.
     let governance_error = proposal_data.failure_reason.unwrap();
     assert_eq!(
-        ErrorType::from_i32(governance_error.error_type),
-        Some(ErrorType::External),
+        ErrorType::try_from(governance_error.error_type),
+        Ok(ErrorType::External),
         "{:#?}",
         governance_error,
     );

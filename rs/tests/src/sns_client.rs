@@ -111,7 +111,7 @@ impl SnsClient {
         let request = sns_request_provider.get_sns_governance_mode();
         let res = sns_agent.call_and_parse(&request).await.result().unwrap();
         info!(log, "Received {res:?}");
-        let actual_mode = Mode::from_i32(res.mode.unwrap()).unwrap();
+        let actual_mode = Mode::try_from(res.mode.unwrap()).unwrap();
         assert_eq!(governance_mode, actual_mode);
     }
 

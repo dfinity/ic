@@ -470,7 +470,7 @@ pub struct SetSnsTokenSwapOpenTimeWindow {
 pub struct Proposal {
     /// Must be present (enforced at the application layer, not by PB).
     /// A brief description of what the proposal does.
-    /// Size in bytes must be in the interval [5, 256].
+    /// Size in bytes must be in the interval \[5, 256\].
     #[prost(string, optional, tag = "20")]
     pub title: ::core::option::Option<::prost::alloc::string::String>,
     /// Text providing a short description of the proposal, composed

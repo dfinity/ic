@@ -414,7 +414,7 @@ impl Firewall {
                 let rule_direction = rule
                     .direction
                     .map(|v| {
-                        FirewallRuleDirection::from_i32(v)
+                        FirewallRuleDirection::try_from(v)
                             .unwrap_or(FirewallRuleDirection::Unspecified)
                     })
                     .unwrap_or(FirewallRuleDirection::Unspecified);
@@ -453,7 +453,9 @@ impl Firewall {
                         )
                         .replace(
                             "<<ACTION>>",
-                            &Self::action_to_nftables_action(FirewallAction::from_i32(rule.action)),
+                            &Self::action_to_nftables_action(
+                                FirewallAction::try_from(rule.action).ok(),
+                            ),
                         )
                         .replace("<<COMMENT>>", &rule.comment),
                 )

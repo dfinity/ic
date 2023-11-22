@@ -179,7 +179,7 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     }
 
     // check that action is not unspecified
-    if FirewallAction::from_i32(rule.action).unwrap_or(FirewallAction::Unspecified)
+    if FirewallAction::try_from(rule.action).unwrap_or(FirewallAction::Unspecified)
         == FirewallAction::Unspecified
     {
         return Err(InvariantCheckError {
@@ -211,7 +211,7 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
 
     // Check that the direction is one of the existing enum values
     if let Some(direction) = rule.direction {
-        if FirewallRuleDirection::from_i32(direction).unwrap_or(FirewallRuleDirection::Unspecified)
+        if FirewallRuleDirection::try_from(direction).unwrap_or(FirewallRuleDirection::Unspecified)
             == FirewallRuleDirection::Unspecified
         {
             return Err(InvariantCheckError {

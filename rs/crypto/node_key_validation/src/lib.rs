@@ -340,7 +340,7 @@ impl TryFrom<PublicKey> for ValidIDkgDealingEncryptionPublicKey {
     type Error = KeyValidationError;
 
     fn try_from(public_key: PublicKey) -> Result<Self, Self::Error> {
-        let curve_type = match AlgorithmIdProto::from_i32(public_key.algorithm) {
+        let curve_type = match AlgorithmIdProto::try_from(public_key.algorithm).ok() {
             Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
             alg_id => Err(invalid_idkg_dealing_enc_pubkey_error(format!(
                 "unsupported algorithm: {:?}",

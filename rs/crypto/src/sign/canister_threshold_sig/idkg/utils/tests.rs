@@ -252,7 +252,7 @@ mod retrieve_mega_public_key_from_registry {
                 assert_matches!(
                     retrieve_mega_public_key_from_registry(&node_id, &registry_client, registry_client.get_latest_version()),
                     Err(MegaKeyFromRegistryError::UnsupportedAlgorithm { algorithm_id })
-                    if algorithm_id == AlgorithmIdProto::from_i32(wrong_algorithm_id as i32)
+                    if algorithm_id == AlgorithmIdProto::try_from(wrong_algorithm_id as i32).ok()
                 );
             });
     }

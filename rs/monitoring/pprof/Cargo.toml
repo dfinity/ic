@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 async-trait = "0.1.68"
 lazy_static = "1.4.0"
-pprof = { version = "0.12.1", default-features = false, features = [
+pprof = { version = "0.13", default-features = false, features = [
     "flamegraph",
     "prost-codec",
 ] }

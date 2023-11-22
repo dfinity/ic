@@ -1945,7 +1945,7 @@ impl Swap {
                     log!(
                         ERROR,
                         "claim_swap_neurons returned an error when claiming a batch of neurons. Err: {:?}",
-                        ClaimSwapNeuronsError::from_i32(err_code)
+                        ClaimSwapNeuronsError::try_from(err_code)
                     );
                     sweep_result.global_failures += 1;
                     return sweep_result;
@@ -2001,8 +2001,8 @@ impl Swap {
         let mut sweep_result = SweepResult::default();
 
         if let Some(neuron_id) = swap_neuron.id.as_ref() {
-            if let Some(claimed_swap_neuron_status) =
-                ClaimedSwapNeuronStatus::from_i32(swap_neuron.status)
+            if let Ok(claimed_swap_neuron_status) =
+                ClaimedSwapNeuronStatus::try_from(swap_neuron.status)
             {
                 if let Some(recipe) = claimable_neurons_index.get_mut(neuron_id) {
                     let claim_status = ClaimedStatus::from(claimed_swap_neuron_status);

@@ -458,8 +458,8 @@ ping = "0.5.0"
 pkcs8 = "0.10.2"
 pretty_assertions = "1.4.0"
 prometheus = { version = "0.13.3", features = ["process"] }
-prost = "0.11.9"
-prost-build = "0.11.9"
+prost = "0.12.3"
+prost-build = "0.12.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_bytes_repr = "0.1.5"
@@ -476,7 +476,7 @@ strum_macros = "0.24.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.32.0", features = ["full"] }
-tonic = "0.9.2"
-tonic-build = "0.9.2"
+tonic = "0.10.2"
+tonic-build = "0.10.2"
 tower = { version = "0.4.13", features = ["full"] }
 x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }

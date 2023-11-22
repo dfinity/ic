@@ -21,7 +21,7 @@ impl fmt::Display for v1::RegistryMutation {
     /// Produces a string that shows the key being mutated and the type of
     /// mutation, but not the value.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let type_opt = Type::from_i32(self.mutation_type);
+        let type_opt = Type::try_from(self.mutation_type).ok();
         let type_str = match type_opt {
             None => "unknown",
             Some(type_enum) => match type_enum {

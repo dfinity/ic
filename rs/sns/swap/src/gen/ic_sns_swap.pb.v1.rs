@@ -2050,7 +2050,7 @@ pub mod new_sale_ticket_response {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListDirectParticipantsRequest {
     /// The limit of the number of Participants returned in each page, in range
-    /// [0, 30,000].
+    /// \[0, 30,000\].
     /// If no value, or a value outside of this range is requested, 30,000 will be
     /// used.
     #[prost(uint32, optional, tag = "1")]

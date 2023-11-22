@@ -15,7 +15,7 @@ impl MigrationStatus {
 impl Migration {
     pub fn migration_status(&self) -> MigrationStatus {
         self.status
-            .and_then(MigrationStatus::from_i32)
+            .and_then(|v| MigrationStatus::try_from(v).ok())
             .unwrap_or_default()
     }
 }
