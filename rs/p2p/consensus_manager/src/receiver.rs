@@ -1349,9 +1349,10 @@ mod tests {
         });
     }
 
-    /// TODO: Is this correct?
     #[test]
-    fn double_remove_from_download() {
+    #[ignore]
+    /// Advertise same id on different slots and overwrite both slots with new ids.
+    fn duplicate_advert_on_different_slots() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1381,7 +1382,6 @@ mod tests {
                 Arc::new(mock_transport),
                 pfn_rx,
             );
-            // Add 0, remove none -> spawn download task 0 with [NODE_1]
             mgr.handle_advert_receive(
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
@@ -1391,17 +1391,17 @@ mod tests {
                 NODE_1,
                 ConnId::from(1),
             );
-            // Add 0, remove 0 -> Closes download task 0 and removes NODE_1 from peer set.
+            // Add id 0 on different slot.
             mgr.handle_advert_receive(
                 AdvertUpdate {
-                    slot_number: SlotNumber::from(1),
+                    slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(2),
                     data: Data::Advert(U64Artifact::message_to_advert(&0)),
                 },
                 NODE_1,
                 ConnId::from(1),
             );
-            // Add 1, remove 0 -> spawn download task for 1 and remove NODE_1 from download task 0 again.
+            // Overwrite id 0 on slot 1.
             mgr.handle_advert_receive(
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
@@ -1411,15 +1411,232 @@ mod tests {
                 NODE_1,
                 ConnId::from(1),
             );
-            assert_eq!(mgr.active_downloads.len(), 2);
+            // Make sure no download task closes since we still have slot entries for 0 and 1.
+            rt.block_on(async {
+                tokio::time::timeout(
+                    Duration::from_millis(100),
+                    mgr.artifact_processor_tasks.join_next(),
+                )
+                .await
+                .unwrap_err()
+            });
             assert_eq!(mgr.artifact_processor_tasks.len(), 2);
-            assert_eq!(
-                rt.block_on(mgr.artifact_processor_tasks.join_next())
-                    .unwrap()
-                    .unwrap()
-                    .1,
-                0
+            // Overwrite remaining id 0 at slot 2.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(2),
+                    commit_id: CommitId::from(4),
+                    data: Data::Advert(U64Artifact::message_to_advert(&2)),
+                },
+                NODE_1,
+                ConnId::from(1),
             );
+            // Make sure the download task for 0 closes since both entries got overwritten.
+            rt.block_on(async {
+                tokio::time::timeout(Duration::from_millis(100), async {
+                    while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
+                        assert_eq!(id.unwrap().1, 1);
+                    }
+                })
+                .await
+                .unwrap_err()
+            });
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        });
+    }
+
+    #[test]
+    #[ignore]
+    /// Advertise same id on different slots where one slot is occupied.
+    fn same_id_different_occupied_slot() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(2),
+                    commit_id: CommitId::from(2),
+                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            assert_eq!(mgr.artifact_processor_tasks.len(), 2);
+            // Make sure no download task closes since we still have slot entries for 0 and 1.
+            rt.block_on(async {
+                tokio::time::timeout(
+                    Duration::from_millis(100),
+                    mgr.artifact_processor_tasks.join_next(),
+                )
+                .await
+                .unwrap_err()
+            });
+            // Overwrite id 1 with id 0.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(2),
+                    commit_id: CommitId::from(3),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Only download task 1 closes because it got overwritten.
+            rt.block_on(async {
+                tokio::time::timeout(Duration::from_millis(100), async {
+                    while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
+                        assert_eq!(id.unwrap().1, 1);
+                    }
+                })
+                .await
+                .unwrap_err()
+            });
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        });
+    }
+
+    #[test]
+    #[ignore]
+    /// Advertise same id on same slots. This should be a noop where only the commit id and connection id get updated.
+    fn same_id_same_slot() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+            let mock_transport = MockTransport::new();
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&SlotNumber::from(1))
+                    .unwrap(),
+                &SlotEntry {
+                    conn_id: ConnId::from(1),
+                    commit_id: CommitId::from(1),
+                    id: 0,
+                }
+            );
+            // Advertise id 0 again on same slot.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(2),
+                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Make sure no download task closes since we still have entry for 0.
+            rt.block_on(async {
+                tokio::time::timeout(
+                    Duration::from_millis(100),
+                    mgr.artifact_processor_tasks.join_next(),
+                )
+                .await
+                .unwrap_err()
+            });
+            // Check that newer commit id is stored.
+            assert_eq!(mgr.slot_table.len(), 1);
+            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+            assert_eq!(
+                mgr.slot_table
+                    .get(&NODE_1)
+                    .unwrap()
+                    .get(&1.into())
+                    .unwrap()
+                    .commit_id,
+                2.into()
+            );
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+            // Overwrite id 0.
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(3),
+                    data: Data::Advert(U64Artifact::message_to_advert(&2)),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            // Make sure the download task for 0 closes since entry got overwritten.
+            rt.block_on(async {
+                tokio::time::timeout(Duration::from_millis(100), async {
+                    while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
+                        assert_eq!(id.unwrap().1, 1);
+                    }
+                })
+                .await
+                .unwrap_err()
+            });
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
         });
     }
 }
