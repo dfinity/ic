@@ -13,7 +13,7 @@ axum = "0.6.20"
 clap = { version = "4.4.0", features = ["derive"] }
 http = "0.2.9"
 itertools = { workspace = true }
-reqwest = { version = "0.11.20", features = ["stream"] }
+reqwest = { workspace = true }
 thiserror = "1.0.47"
 tokio = { workspace = true }
 url = "2.4.0"

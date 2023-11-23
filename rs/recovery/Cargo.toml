@@ -34,12 +34,7 @@ ic-state-manager = { path = "../state_manager" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-types = { path = "../types/types" }
 prost = { workspace = true }
-reqwest = { version = "0.11.1", features = [
-    "blocking",
-    "json",
-    "multipart",
-    "native-tls",
-] }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }

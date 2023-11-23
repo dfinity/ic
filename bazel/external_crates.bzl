@@ -282,6 +282,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "cloudflare": crate.spec(
                 version = "^0.9.1",
+                default_features = False,
+                features = [
+                    "rustls-tls",
+                ],
             ),
             "colored": crate.spec(
                 version = "^2.0.0",
@@ -683,12 +687,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                     "future",
                 ],
             ),
-            "native-tls": crate.spec(
-                version = "^0.2.7",
-                features = [
-                    "alpn",
-                ],
-            ),
             "nix": crate.spec(
                 version = "^0.24.3",
             ),
@@ -837,6 +835,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "prometheus-http-query": crate.spec(
                 version = "^0.6.6",
+                default_features = False,
+                features = [
+                    "rustls-tls-webpki-roots",
+                ],
             ),
             "proptest": crate.spec(
                 version = "^1.0.0",
@@ -911,13 +913,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^1.3.9",
             ),
             "reqwest": crate.spec(
-                version = "^0.11.1",
+                version = "^0.11.22",
+                default_features = False,
                 features = [
                     "blocking",
                     "json",
                     "multipart",
-                    "native-tls",
-                    "rustls-tls",
+                    "rustls-tls-webpki-roots",
                     "stream",
                 ],
             ),

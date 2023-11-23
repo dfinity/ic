@@ -11,7 +11,7 @@ serde_json = { workspace = true }
 libusb = "0.3"
 tempfile = "3.1"
 vsock = "0.3"
-reqwest = { version = "0.11.1", features = ["blocking"] }
+reqwest = { workspace = true }
 regex = "^1.3"
 sha2 = "0.10"
 anyhow = "1"
