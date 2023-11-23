@@ -400,7 +400,7 @@ impl fmt::Display for Manifest {
 
 /// Serializes the manifest into a byte array.
 pub fn encode_manifest(manifest: &Manifest) -> Vec<u8> {
-    pb::Manifest::proxy_encode(manifest.clone()).expect("Failed to serialize manifest.")
+    pb::Manifest::proxy_encode(manifest.clone())
 }
 
 /// Deserializes the manifest from a byte array.
@@ -411,7 +411,6 @@ pub fn decode_manifest(bytes: &[u8]) -> Result<Manifest, String> {
 
 pub fn encode_meta_manifest(meta_manifest: &MetaManifest) -> Vec<u8> {
     pb::MetaManifest::proxy_encode(meta_manifest.clone())
-        .expect("Failed to serialize meta-manifest.")
 }
 
 pub fn decode_meta_manifest(bytes: &[u8]) -> Result<MetaManifest, String> {

@@ -38,8 +38,7 @@ pub fn fuzz_mutator(data: &mut [u8], size: usize, max_size: usize, seed: u32) ->
         Err(_) | Ok(_) /*if matches!(tree, LabeledTree::Leaf(_))*/ => {
             let seed = [0u8; CHACHA_SEED_LEN];
             let encoded_tree =
-                ProtobufLabeledTree::proxy_encode(LabeledTree::<Vec<u8>>::SubTree(flatmap!()))
-                    .expect("failed to serialize an empty labeled tree");
+                ProtobufLabeledTree::proxy_encode(LabeledTree::<Vec<u8>>::SubTree(flatmap!()));
             let bytes: Vec<_> = seed.into_iter().chain(encoded_tree.into_iter()).collect();
             let new_size = bytes.len();
             if new_size <= max_size {
@@ -75,8 +74,7 @@ pub fn fuzz_mutator(data: &mut [u8], size: usize, max_size: usize, seed: u32) ->
     };
 
     if data_size_changed {
-        let encoded_tree = ProtobufLabeledTree::proxy_encode(tree)
-            .expect("failed to serialize the labeled tree {tree}");
+        let encoded_tree = ProtobufLabeledTree::proxy_encode(tree);
         let new_size = CHACHA_SEED_LEN + encoded_tree.len();
         if new_size <= max_size {
             data[CHACHA_SEED_LEN..new_size].copy_from_slice(&encoded_tree[..]);

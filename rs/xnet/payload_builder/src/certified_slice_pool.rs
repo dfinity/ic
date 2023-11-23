@@ -747,7 +747,6 @@ impl From<Payload> for Vec<u8> {
             Some(payload.header.into()),
             payload.messages.map(|m| m.into()),
         ))
-        .expect("failed to serialize a labeled tree")
     }
 }
 
@@ -904,8 +903,7 @@ impl UnpackedStreamSlice {
     fn pack(self) -> CertifiedStreamSlice {
         CertifiedStreamSlice {
             payload: self.payload.into(),
-            merkle_proof: v1::Witness::proxy_encode(self.merkle_proof)
-                .expect("failed to serialize a witness"),
+            merkle_proof: v1::Witness::proxy_encode(self.merkle_proof),
             certification: self.certification,
         }
     }

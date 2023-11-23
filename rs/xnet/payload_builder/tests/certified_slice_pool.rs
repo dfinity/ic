@@ -240,7 +240,7 @@ proptest! {
             let mut adjusted = slice.clone();
             let mut tree = v1::LabeledTree::proxy_decode(slice.payload.as_slice()).unwrap();
             f(&mut tree);
-            adjusted.payload = v1::LabeledTree::proxy_encode(tree).unwrap();
+            adjusted.payload = v1::LabeledTree::proxy_encode(tree);
             adjusted
         }
 

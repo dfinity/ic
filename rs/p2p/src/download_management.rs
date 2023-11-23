@@ -715,7 +715,7 @@ impl GossipImpl {
             .start_timer();
         let channel_id = self.transport_channel_mapper.map(&message);
         let message_label: &'static str = (&message).into();
-        let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
+        let message = TransportPayload(pb::GossipMessage::proxy_encode(message));
         match self.transport.send(&peer_id, channel_id, message) {
             Ok(()) => self
                 .metrics
