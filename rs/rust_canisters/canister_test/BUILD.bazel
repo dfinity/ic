@@ -16,7 +16,6 @@ DEPENDENCIES = [
     "@crate_index//:cargo_metadata",
     "@crate_index//:escargot",
     "@crate_index//:rand",
-    "@crate_index//:reqwest",
     "@crate_index//:tokio",
     "@crate_index//:wasmprinter",
     "@crate_index//:wat",

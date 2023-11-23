@@ -2733,7 +2733,6 @@ dependencies = [
  "mio 0.7.14",
  "mockall",
  "moka",
- "native-tls",
  "nix 0.24.3",
  "nonblock",
  "notify",

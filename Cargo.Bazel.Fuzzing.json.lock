@@ -1,5 +1,5 @@
 {
-  "checksum": "738b56a3dc56cafce3df1a59611774b7d0421713ea55145bd3b905845b9a713a",
+  "checksum": "f2dbe55e6a8192185d960c39a7d22b607ea6f57bd32f26c5b31e7faca64655e5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8948,8 +8948,7 @@
         ],
         "crate_features": {
           "common": [
-            "default",
-            "default-tls"
+            "rustls-tls"
           ],
           "selects": {}
         },
@@ -13852,10 +13851,6 @@
             {
               "id": "moka 0.12.1",
               "target": "moka"
-            },
-            {
-              "id": "native-tls 0.2.11",
-              "target": "native_tls"
             },
             {
               "id": "nix 0.24.3",
@@ -30531,12 +30526,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "alpn"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -38306,7 +38295,7 @@
         ],
         "crate_features": {
           "common": [
-            "default"
+            "rustls-tls-webpki-roots"
           ],
           "selects": {}
         },
@@ -41889,7 +41878,6 @@
             "json",
             "mime_guess",
             "multipart",
-            "native-tls",
             "native-tls-crate",
             "rustls",
             "rustls-pemfile",
@@ -44842,7 +44830,6 @@
         "crate_features": {
           "common": [
             "OSX_10_9",
-            "alpn",
             "default"
           ],
           "selects": {}

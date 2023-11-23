@@ -720,7 +720,6 @@ pub async fn agent_with_identity_mapping(
 ) -> Result<Agent, AgentError> {
     let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_hostnames(true)
         .danger_accept_invalid_certs(true);
 
     let builder = match (
