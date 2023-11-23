@@ -62,11 +62,13 @@ use dfn_core::println;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, SECONDS_PER_DAY,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -4049,6 +4051,12 @@ impl Governance {
         let rewards = self.get_monthly_node_provider_rewards().await?.rewards;
         let _ = self.reward_node_providers(rewards.clone()).await;
         self.update_most_recent_monthly_node_provider_rewards(rewards);
+
+        let _unused_canister_status_response =
+            ic_nervous_system_clients::canister_status::canister_status::<DfnRuntime>(
+                CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
+            )
+            .await;
 
         Ok(())
     }
