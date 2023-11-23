@@ -176,7 +176,7 @@ pub fn stream_slice_partial_tree(
 }
 
 pub fn encode_tree(t: LabeledTree<Vec<u8>>) -> Vec<u8> {
-    v1::LabeledTree::proxy_encode(t).expect("failed to serialize a labeled tree")
+    v1::LabeledTree::proxy_encode(t)
 }
 
 /// Decodes a stream slice and the subnet it came from from a serialized

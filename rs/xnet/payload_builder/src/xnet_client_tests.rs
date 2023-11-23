@@ -25,7 +25,7 @@ where
     M: ProtoProxy<R>,
 {
     use std::str::FromStr;
-    let buf = M::proxy_encode(r).expect("Could not serialize response");
+    let buf = M::proxy_encode(r);
 
     fn header(text: &str) -> tiny_http::Header {
         tiny_http::Header::from_str(text).unwrap()

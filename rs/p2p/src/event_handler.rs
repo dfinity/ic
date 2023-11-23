@@ -530,7 +530,7 @@ pub mod tests {
     ) {
         for i in 0..count {
             let message = GossipMessage::Advert(make_gossip_advert(i as u64));
-            let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
+            let message = TransportPayload(pb::GossipMessage::proxy_encode(message));
             let _ = handler
                 .call(TransportEvent::Message(TransportMessage {
                     peer_id,

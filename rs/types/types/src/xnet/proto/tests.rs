@@ -26,7 +26,7 @@ fn idkg_id_roundtrip() {
     let idkg_id = dkg_id_for_test();
     assert_eq!(
         idkg_id.clone(),
-        NiDkgIdProto::proxy_decode(&NiDkgIdProto::proxy_encode(idkg_id).unwrap()).unwrap()
+        NiDkgIdProto::proxy_decode(&NiDkgIdProto::proxy_encode(idkg_id)).unwrap()
     );
 }
 
@@ -35,8 +35,7 @@ fn threshold_signature_roundtrip() {
     let sig = threshold_signature_for_test();
     assert_eq!(
         sig.clone(),
-        v1::ThresholdSignature::proxy_decode(&v1::ThresholdSignature::proxy_encode(sig).unwrap())
-            .unwrap()
+        v1::ThresholdSignature::proxy_decode(&v1::ThresholdSignature::proxy_encode(sig)).unwrap()
     );
 }
 
@@ -45,10 +44,8 @@ fn certification_content_roundtrip() {
     let content = certification_content_for_test();
     assert_eq!(
         content.clone(),
-        v1::CertificationContent::proxy_decode(
-            &v1::CertificationContent::proxy_encode(content).unwrap()
-        )
-        .unwrap()
+        v1::CertificationContent::proxy_decode(&v1::CertificationContent::proxy_encode(content))
+            .unwrap()
     );
 }
 
@@ -57,8 +54,7 @@ fn certification_roundtrip() {
     let certification = certification_for_test();
     assert_eq!(
         certification.clone(),
-        v1::Certification::proxy_decode(&v1::Certification::proxy_encode(certification).unwrap())
-            .unwrap()
+        v1::Certification::proxy_decode(&v1::Certification::proxy_encode(certification)).unwrap()
     );
 }
 
@@ -67,9 +63,9 @@ fn certified_stream_slice_roundtrip() {
     let certified_stream_slice = certified_stream_slice_for_test();
     assert_eq!(
         certified_stream_slice.clone(),
-        v1::CertifiedStreamSlice::proxy_decode(
-            &v1::CertifiedStreamSlice::proxy_encode(certified_stream_slice).unwrap()
-        )
+        v1::CertifiedStreamSlice::proxy_decode(&v1::CertifiedStreamSlice::proxy_encode(
+            certified_stream_slice
+        ))
         .unwrap()
     );
 }
@@ -88,7 +84,7 @@ fn error_invalid_principal_id() {
     let mut idkg_id_proto: NiDkgIdProto = idkg_id.into();
     // A PrincipalId that's much too long.
     idkg_id_proto.dealer_subnet = vec![13; 169];
-    let idkg_id_vec = NiDkgIdProto::proxy_encode(idkg_id_proto).unwrap();
+    let idkg_id_vec = NiDkgIdProto::proxy_encode(idkg_id_proto);
 
     assert_matches!(
         <NiDkgIdProto as ProtoProxy<NiDkgId>>::proxy_decode(&idkg_id_vec),
@@ -102,7 +98,7 @@ fn error_missing_field() {
     let mut sig_proto: v1::ThresholdSignature = sig.into();
     // Clear the signer field.
     sig_proto.signer = None;
-    let sig_vec = v1::ThresholdSignature::proxy_encode(sig_proto).unwrap();
+    let sig_vec = v1::ThresholdSignature::proxy_encode(sig_proto);
 
     assert_matches!(
         <v1::ThresholdSignature as ProtoProxy<ThresholdSignature<CertificationContent>>>::proxy_decode(&sig_vec),

@@ -53,7 +53,7 @@ fn success() {
         payload: Blob(vec![1, 2, 3]),
     };
 
-    let bytes: Vec<u8> = pb::Block::proxy_encode(b.clone()).unwrap();
+    let bytes: Vec<u8> = pb::Block::proxy_encode(b.clone());
     assert_eq!(b, pb::Block::proxy_decode(&bytes).unwrap());
 }
 

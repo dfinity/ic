@@ -9,7 +9,7 @@ use proptest::prelude::*;
 proptest! {
     #[test]
     fn encoding_roundtrip(t in arbitrary_mixed_hash_tree()) {
-        prop_assert_eq!(t.clone(), PbTree::proxy_decode(&PbTree::proxy_encode(t).unwrap()).unwrap())
+        prop_assert_eq!(t.clone(), PbTree::proxy_decode(&PbTree::proxy_encode(t)).unwrap())
     }
 }
 
