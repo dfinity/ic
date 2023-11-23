@@ -78,16 +78,20 @@ where
     <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
     <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
 {
-    let id: Artifact::Id = bincode::deserialize(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-
-    let jh =
-        tokio::task::spawn_blocking(move || pool.read().unwrap().get_validated_by_identifier(&id));
-    let msg = jh
+    let jh = tokio::task::spawn_blocking(move || {
+        let id: Artifact::Id =
+            bincode::deserialize(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+        Ok::<_, StatusCode>(
+            pool.read()
+                .unwrap()
+                .get_validated_by_identifier(&id)
+                .map(|msg| Bytes::from(bincode::serialize(&msg).unwrap())),
+        )
+    });
+    let bytes = jh
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??
         .ok_or(StatusCode::NO_CONTENT)?;
-
-    let bytes = Bytes::from(bincode::serialize(&msg).unwrap());
 
     Ok(bytes)
 }
