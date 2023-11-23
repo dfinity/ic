@@ -3614,6 +3614,10 @@ dependencies = [
 name = "fees-and-limits"
 version = "0.1.0"
 dependencies = [
+ "candid",
+ "clap 3.2.25",
+ "eyre",
+ "ic-agent",
  "ic-config",
  "ic-embedders",
  "ic-replicated-state",
@@ -3621,6 +3625,7 @@ dependencies = [
  "ic-types",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
