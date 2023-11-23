@@ -192,7 +192,7 @@ fn test_create_canister_with_id() {
 }
 
 #[test]
-fn test_create_canister_after_create_canister_with_id_occupied_next_canister_id() {
+fn test_create_canister_after_create_canister_with_id() {
     let pic = PocketIcBuilder::new().with_nns_subnet().build();
 
     let canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
@@ -205,35 +205,20 @@ fn test_create_canister_after_create_canister_with_id_occupied_next_canister_id(
 }
 
 #[test]
-#[should_panic(expected = "only supported for Bitcoin, Fiduciary, II, SNS and NNS subnets")]
-fn test_create_canister_with_id_on_app_subnet_fails() {
-    let pic = PocketIc::new();
-
-    let valid_canister_id = pic.create_canister();
-    let _ = pic
-        .create_canister_with_id(None, None, valid_canister_id)
-        .unwrap();
-}
-
-#[test]
-#[should_panic(expected = "only supported for Bitcoin, Fiduciary, II, SNS and NNS subnets")]
-fn test_create_canister_with_id_on_system_subnet_fails() {
-    let pic = PocketIcBuilder::new().with_system_subnet().build();
-
-    let valid_canister_id = pic.create_canister();
-    let _ = pic
-        .create_canister_with_id(None, None, valid_canister_id)
-        .unwrap();
-}
-
-#[test]
-#[should_panic(expected = "CanisterAlreadyInstalled")]
-fn test_create_canister_with_used_id_should_panic() {
+fn test_create_canister_with_used_id_fails() {
     let pic = PocketIcBuilder::new().with_nns_subnet().build();
-
     let canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
-    let _ = pic.create_canister_with_id(None, None, canister_id);
-    let _ = pic.create_canister_with_id(None, None, canister_id);
+    let res = pic.create_canister_with_id(None, None, canister_id);
+    assert!(res.is_ok());
+    let res = pic.create_canister_with_id(None, None, canister_id);
+    assert!(res.is_err());
+}
+
+#[test]
+#[should_panic(expected = "not contained on any subnet")]
+fn test_create_canister_with_not_contained_id_panics() {
+    let pic = PocketIc::new();
+    let _ = pic.create_canister_with_id(None, None, Principal::anonymous());
 }
 
 #[test]
@@ -571,9 +556,14 @@ fn test_new_pocket_ic_without_subnets_panics() {
 fn test_canister_exists() {
     let pic = PocketIc::new();
     let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
     assert!(pic.canister_exists(canister_id));
-    let nonexistent_canister_id = Principal::anonymous();
-    assert!(!pic.canister_exists(nonexistent_canister_id));
+    pic.stop_canister(canister_id, None).unwrap();
+    pic.delete_canister(canister_id, None).unwrap();
+    assert!(!pic.canister_exists(canister_id));
+
+    let pic = PocketIc::new();
+    assert!(!pic.canister_exists(canister_id));
 }
 
 #[test]

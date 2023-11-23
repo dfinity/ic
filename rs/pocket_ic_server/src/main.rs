@@ -41,7 +41,7 @@ const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 /// The PocketIC server hosts and manages IC instances.
 #[derive(Parser)]
-#[clap(version = "2.0.0")]
+#[clap(version = "2.0.1")]
 struct Args {
     /// If you use PocketIC from the command line, you should not use this flag.
     /// Client libraries use this flag to provide a common identifier (the process ID of the test
