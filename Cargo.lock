@@ -14338,7 +14338,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
@@ -14360,7 +14360,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "axum",
  "base64 0.13.1",

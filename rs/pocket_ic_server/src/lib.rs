@@ -138,12 +138,11 @@ mod tests {
 
         match res {
             UpdateReply::Output(OpOut::CanisterResult(Ok(WasmResult::Reply(bytes)))) => {
-                println!("wasm result bytes {:?}", bytes);
                 let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
-                println!("result: {}", canister_id);
+                assert!(!canister_id.to_text().is_empty());
             }
             UpdateReply::Output(OpOut::CanisterResult(Ok(WasmResult::Reject(x)))) => {
-                println!("wasm reject {:?}", x);
+                panic!("unexpected reject: {:?}", x);
             }
             e => {
                 panic!("unexpected result: {:?}", e);

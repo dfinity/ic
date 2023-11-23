@@ -125,7 +125,7 @@ use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::Serialize;
 pub use slog::Level;
-use std::collections::{hash_map::DefaultHasher, HashMap};
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::stderr;
 use std::ops::RangeInclusive;
@@ -441,14 +441,14 @@ impl IngressPoolSelect for PocketIngressPool {
 struct PocketXNetSlicePoolImpl {
     /// Association of subnet IDs to their corresponding `StateMachine`s
     /// from which the XNet messages are fetched.
-    subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     /// Subnet ID of the `StateMachine` containing the pool.
     own_subnet_id: SubnetId,
 }
 
 impl PocketXNetSlicePoolImpl {
     fn new(
-        subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+        subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
         own_subnet_id: SubnetId,
     ) -> Self {
         Self {
@@ -773,7 +773,7 @@ impl StateMachineBuilder {
     /// in the provided association of subnet IDs and `StateMachine`s.
     pub fn build_with_subnets(
         self,
-        subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+        subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     ) -> Arc<StateMachine> {
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let subnet_id = self.subnet_id;
