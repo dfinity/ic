@@ -1014,3 +1014,7 @@ cc_library(
     strip_prefix = "core-ec77b2817a0e360b1893affe4cfa44d19391efc7",
     urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
 )
+
+load("//rs/tests:kubeconfig.bzl", "kubeconfig")
+
+kubeconfig()
