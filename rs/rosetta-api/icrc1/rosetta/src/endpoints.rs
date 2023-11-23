@@ -12,6 +12,7 @@ use ic_icrc_rosetta::{
     AppState,
 };
 use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_rosetta_api::models::MempoolResponse;
 use serde_bytes::ByteBuf;
 
 const ROSETTA_VERSION: &str = "1.4.13";
@@ -219,4 +220,12 @@ pub async fn block_transaction(
         .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
 
     Ok(Json(response))
+}
+
+pub async fn mempool(
+    State(state): State<Arc<AppState>>,
+    request: Json<NetworkRequest>,
+) -> Result<Json<MempoolResponse>> {
+    verify_network_id(&request.network_identifier, &state)?;
+    Ok(Json(MempoolResponse::new(vec![])))
 }

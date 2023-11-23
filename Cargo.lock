@@ -7718,6 +7718,7 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-rosetta-api",
  "ic-starter-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-agent",
@@ -7751,6 +7752,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ic-icrc-rosetta",
+ "ic-rosetta-api",
  "reqwest",
  "url",
 ]
