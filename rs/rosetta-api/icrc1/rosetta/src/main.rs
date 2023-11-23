@@ -27,7 +27,7 @@ use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{debug, error_span, info, Level, Span};
 use url::Url;
 
-use crate::endpoints::block_transaction;
+use crate::endpoints::{block_transaction, mempool};
 
 mod endpoints;
 
@@ -312,6 +312,7 @@ async fn main() -> Result<()> {
         .route("/network/status", post(network_status))
         .route("/block", post(block))
         .route("/block/transaction", post(block_transaction))
+        .route("/mempool", post(mempool))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())
