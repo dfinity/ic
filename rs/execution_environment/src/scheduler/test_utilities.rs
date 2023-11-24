@@ -188,21 +188,13 @@ impl SchedulerTest {
         )
     }
 
-    pub fn create_canister_with_id(&mut self, canister_id: CanisterId) {
-        self.create_canister_with_settings(
-            canister_id,
-            self.initial_canister_cycles,
-            ComputeAllocation::zero(),
-            MemoryAllocation::BestEffort,
-            None,
-            None,
-            None,
-        );
-    }
-
-    fn create_canister_with_settings(
+    /// Creates a canister with the given balance and allocations.
+    /// The `system_task` parameter can be used to optionally enable the
+    /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
+    /// In that case the heartbeat execution must be specified before each
+    /// round using `expect_heartbeat()`.
+    pub fn create_canister_with(
         &mut self,
-        canister_id: CanisterId,
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
@@ -210,6 +202,7 @@ impl SchedulerTest {
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
     ) -> CanisterId {
+        let canister_id = self.next_canister_id();
         let wasm_source = system_task
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or_default();
@@ -242,32 +235,6 @@ impl SchedulerTest {
             .unwrap()
             .put_canister_state(canister_state);
         canister_id
-    }
-
-    /// Creates a canister with the given balance and allocations.
-    /// The `system_task` parameter can be used to optionally enable the
-    /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
-    /// In that case the heartbeat execution must be specified before each
-    /// round using `expect_heartbeat()`.
-    pub fn create_canister_with(
-        &mut self,
-        cycles: Cycles,
-        compute_allocation: ComputeAllocation,
-        memory_allocation: MemoryAllocation,
-        system_task: Option<SystemMethod>,
-        time_of_last_allocation_charge: Option<Time>,
-        status: Option<CanisterStatusType>,
-    ) -> CanisterId {
-        let canister_id = self.next_canister_id();
-        self.create_canister_with_settings(
-            canister_id,
-            cycles,
-            compute_allocation,
-            memory_allocation,
-            system_task,
-            time_of_last_allocation_charge,
-            status,
-        )
     }
 
     pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) -> MessageId {
