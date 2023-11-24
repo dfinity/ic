@@ -64,7 +64,7 @@ impl From<ErrorCode> for RejectCode {
         match err {
             SubnetOversubscribed => SysFatal,
             MaxNumberOfCanistersReached => SysFatal,
-            CanisterOutputQueueFull => SysTransient,
+            CanisterQueueFull => SysTransient,
             IngressMessageTimeout => SysTransient,
             CanisterQueueNotEmpty => SysTransient,
             IngressHistoryFull => SysTransient,
@@ -129,7 +129,7 @@ impl From<ErrorCode> for RejectCode {
 pub enum ErrorCode {
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
-    CanisterOutputQueueFull = 201,
+    CanisterQueueFull = 201,
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
@@ -186,7 +186,7 @@ impl TryFrom<u64> for ErrorCode {
         match err {
             101 => Ok(ErrorCode::SubnetOversubscribed),
             102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
-            201 => Ok(ErrorCode::CanisterOutputQueueFull),
+            201 => Ok(ErrorCode::CanisterQueueFull),
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
@@ -306,7 +306,7 @@ impl UserError {
             ErrorCode::CanisterWasmEngineError | ErrorCode::QueryCallGraphInternal => true,
             ErrorCode::SubnetOversubscribed
             | ErrorCode::MaxNumberOfCanistersReached
-            | ErrorCode::CanisterOutputQueueFull
+            | ErrorCode::CanisterQueueFull
             | ErrorCode::IngressMessageTimeout
             | ErrorCode::StopCanisterRequestTimeout
             | ErrorCode::CanisterQueueNotEmpty

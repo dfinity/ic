@@ -248,7 +248,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterContractViolation => "Canister Contract Violation",
         CanisterInvalidWasm => "Canister Invalid WASM",
         CanisterDidNotReply => "Canister Did Not Reply",
-        CanisterOutputQueueFull => "Canister Output Queue Full",
+        CanisterQueueFull => "Canister Queue Full",
         CanisterQueueNotEmpty => "Canister Queues Not Empty",
         CanisterOutOfMemory => "Canister Out Of Memory",
         CanisterStopped => "Canister Stopped",
