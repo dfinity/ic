@@ -326,17 +326,17 @@ pub fn add_transport_to_sim<F>(
                 None
             };
 
-            let transport = Arc::new(QuicTransport::build(
+            let transport = Arc::new(QuicTransport::start(
                 &log,
                 &MetricsRegistry::default(),
-                tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
                 node_crypto_clone,
                 registry_client,
                 sev_handshake_clone,
                 peer,
                 topology_watcher_clone.clone(),
                 Either::Right(custom_udp),
-                router,
+                router.unwrap_or_default(),
             ));
 
             consensus_builder.run(transport.clone(), topology_watcher_clone.clone());

@@ -9416,6 +9416,7 @@ dependencies = [
  "serde_bytes",
  "slog",
  "socket2 0.5.3",
+ "thiserror",
  "tokio",
  "tokio-metrics",
  "tokio-rustls",
