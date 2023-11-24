@@ -77,6 +77,10 @@ pub struct ListenConfig {
     #[clap(long, default_value = "600")]
     pub http_timeout: u64,
 
+    /// Timeout for the whole HTTP request in seconds when doing health checks
+    #[clap(long, default_value = "3")]
+    pub http_timeout_check: u64,
+
     /// Timeout for the HTTP connect phase in seconds
     #[clap(long, default_value = "2")]
     pub http_timeout_connect: u64,
@@ -108,10 +112,6 @@ pub struct HealthChecksConfig {
     /// How many attempts to do when checking a node
     #[clap(long, default_value = "3")]
     pub check_retries: u32,
-
-    /// How long to wait between retries in seconds
-    #[clap(long, default_value = "1")]
-    pub check_retry_interval: u64,
 
     /// Minimum registry version snapshot to process
     #[clap(long, default_value = "0")]

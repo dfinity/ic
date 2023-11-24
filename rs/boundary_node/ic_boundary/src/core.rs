@@ -371,13 +371,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         MetricParamsPersist::new(&registry),
     );
 
-    let checker = Checker::new(http_client);
-    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&registry));
-    let checker = WithRetryLimited(
-        checker,
-        cli.health.check_retries,
-        Duration::from_secs(cli.health.check_retry_interval),
+    let checker = Checker::new(
+        http_client,
+        Duration::from_secs(cli.listen.http_timeout_check),
     );
+    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&registry));
+    let checker = WithRetryLimited(checker, cli.health.check_retries, Duration::ZERO);
 
     let check_runner = CheckRunner::new(
         Arc::clone(&registry_snapshot),
