@@ -120,7 +120,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.sign(algorithm_id, &msg, key_id);
+        let job = move || vault.sign(algorithm_id, msg.into_vec(), key_id);
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 
@@ -142,7 +142,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.multi_sign(algorithm_id, &message, key_id);
+        let job = move || vault.multi_sign(algorithm_id, message.into_vec(), key_id);
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 
@@ -164,7 +164,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.threshold_sign(algorithm_id, &message, key_id);
+        let job = move || vault.threshold_sign(algorithm_id, message.into_vec(), key_id);
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 
@@ -208,7 +208,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 dealer_index,
                 threshold,
                 epoch,
-                &receiver_keys,
+                receiver_keys,
                 maybe_resharing_secret,
             )
         };
@@ -254,7 +254,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         key_id: KeyId,
     ) -> Result<bool, CspSecretKeyStoreContainsError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.sks_contains(&key_id);
+        let job = move || vault.sks_contains(key_id);
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 
@@ -321,7 +321,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         key_id: KeyId,
     ) -> Result<CspSignature, CspTlsSignError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.tls_sign(&message, &key_id);
+        let job = move || vault.tls_sign(message.into_vec(), key_id);
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 
@@ -479,9 +479,9 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         let vault = self.local_csp_vault;
         let job = move || {
             vault.ecdsa_sign_share(
-                &derivation_path,
-                &hashed_message,
-                &nonce,
+                derivation_path,
+                hashed_message.into_vec(),
+                nonce,
                 key_raw,
                 kappa_unmasked_raw,
                 lambda_masked_raw,

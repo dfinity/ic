@@ -32,7 +32,7 @@ impl ThresholdSignerInternal {
         let csp_signature = threshold_sig_csp_client
             .threshold_sign(
                 AlgorithmId::from(&pub_coeffs),
-                message.as_signed_bytes().as_slice(),
+                message.as_signed_bytes(),
                 pub_coeffs,
             )
             .map_err(|error| map_threshold_sign_error_or_panic(error, dkg_id))?;

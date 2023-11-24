@@ -262,7 +262,7 @@ mod rpc_connection {
         key_id: KeyId,
         client: &RemoteCspVault,
     ) -> Result<CspSignature, CspBasicSignatureError> {
-        client.sign(AlgorithmId::Ed25519, &vec![0_u8; number_of_bytes], key_id)
+        client.sign(AlgorithmId::Ed25519, vec![0_u8; number_of_bytes], key_id)
     }
 
     /// Activate [tracing](https://github.com/tokio-rs/tracing) used by the
@@ -309,13 +309,13 @@ mod basic_signature_csp_vault {
                 .expect_sign()
                 .times(1)
                 .withf(move |algorithm_id_, message_, key_id_| {
-                    *algorithm_id_ == algorithm_id && message_ == expected_message && *key_id_ == key_id
+                    *algorithm_id_ == algorithm_id && message_ == &expected_message && *key_id_ == key_id
                 })
                 .return_const(expected_result.clone());
             let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
             let remote_vault = env.new_vault_client();
 
-            let result = remote_vault.sign(algorithm_id, &message, key_id);
+            let result = remote_vault.sign(algorithm_id, message, key_id);
 
             prop_assert_eq!(result, expected_result);
         }
@@ -356,7 +356,7 @@ mod basic_signature_csp_vault {
         let signature = remote_vault
             .sign(
                 AlgorithmId::Ed25519,
-                &message,
+                message.clone(),
                 KeyId::try_from(&node_signing_public_key).unwrap(),
             )
             .expect("could not sign large message");
@@ -396,13 +396,13 @@ mod multi_signature_csp_vault {
                 .expect_multi_sign()
                 .times(1)
                 .withf(move |algorithm_id_, message_, key_id_| {
-                    *algorithm_id_ == algorithm_id && message_ == expected_message && *key_id_ == key_id
+                    *algorithm_id_ == algorithm_id && message_ == &expected_message && *key_id_ == key_id
                 })
                 .return_const(expected_result.clone());
             let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
             let remote_vault = env.new_vault_client();
 
-            let result = remote_vault.multi_sign(algorithm_id, &message, key_id);
+            let result = remote_vault.multi_sign(algorithm_id, message, key_id);
 
             prop_assert_eq!(result, expected_result);
         }
@@ -451,13 +451,13 @@ mod threshold_signature_csp_vault {
                 .expect_threshold_sign()
                 .times(1)
                 .withf(move |algorithm_id_, message_, key_id_| {
-                    *algorithm_id_ == algorithm_id && message_ == expected_message && *key_id_ == key_id
+                    *algorithm_id_ == algorithm_id && message_ == &expected_message && *key_id_ == key_id
                 })
                 .return_const(expected_result.clone());
             let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
             let remote_vault = env.new_vault_client();
 
-            let result = remote_vault.threshold_sign(algorithm_id, &message, key_id);
+            let result = remote_vault.threshold_sign(algorithm_id, message, key_id);
 
             prop_assert_eq!(result, expected_result);
         }
@@ -487,7 +487,7 @@ mod secret_key_store_csp_vault {
             let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
             let remote_vault = env.new_vault_client();
 
-            let result = remote_vault.sks_contains(&key_id);
+            let result = remote_vault.sks_contains(key_id);
 
             prop_assert_eq!(result, expected_result);
         }
@@ -739,7 +739,7 @@ mod tls_handshake_csp_vault {
             let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
             let remote_vault = env.new_vault_client();
 
-            let result = remote_vault.tls_sign(&message, &key_id);
+            let result = remote_vault.tls_sign(message, key_id);
 
             prop_assert_eq!(result, expected_result);
         }

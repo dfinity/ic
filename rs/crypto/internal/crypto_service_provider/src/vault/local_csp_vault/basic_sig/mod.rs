@@ -24,11 +24,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let start_time = self.metrics.now();
-        let result = self.sign_internal(algorithm_id, message, key_id);
+        let result = self.sign_internal(algorithm_id, &message[..], key_id);
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
             MetricsScope::Local,

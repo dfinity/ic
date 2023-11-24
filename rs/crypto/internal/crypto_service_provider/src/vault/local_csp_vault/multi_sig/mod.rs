@@ -24,11 +24,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let start_time = self.metrics.now();
-        let result = self.multi_sign_internal(algorithm_id, message, key_id);
+        let result = self.multi_sign_internal(algorithm_id, &message[..], key_id);
         self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
             MetricsScope::Local,

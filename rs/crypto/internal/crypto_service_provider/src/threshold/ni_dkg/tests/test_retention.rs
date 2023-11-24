@@ -60,7 +60,7 @@ fn test_retention() {
         // Verify that the key is there:
         csp.threshold_sign(
             AlgorithmId::ThresBls12_381,
-            &b"Here's a howdyedo!"[..],
+            b"Here's a howdyedo!".to_vec(),
             internal_public_coefficients.clone(),
         )
         .expect("The key should be there initially");
@@ -76,7 +76,7 @@ fn test_retention() {
         // The key should still be there:
         csp.threshold_sign(
             AlgorithmId::ThresBls12_381,
-            &b"Here's a state of things!"[..],
+            b"Here's a state of things!".to_vec(),
             internal_public_coefficients.clone(),
         )
         .expect("The key should have been retained");
@@ -97,7 +97,7 @@ fn test_retention() {
         // The key should be unavailable
         csp.threshold_sign(
             AlgorithmId::ThresBls12_381,
-            &b"To her life she clings!"[..],
+            b"To her life she clings!".to_vec(),
             internal_public_coefficients.clone(),
         )
         .expect_err("The key should have been removed");
@@ -117,7 +117,7 @@ fn test_retention() {
         // Verify that the threshold key has been reloaded:
         csp.threshold_sign(
             AlgorithmId::ThresBls12_381,
-            &b"Here's a howdyedo!"[..],
+            b"Here's a howdyedo!".to_vec(),
             internal_public_coefficients,
         )
         .expect("The key should be there initially");

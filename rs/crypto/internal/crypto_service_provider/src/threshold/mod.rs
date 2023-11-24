@@ -23,7 +23,7 @@ impl ThresholdSignatureCspClient for Csp {
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         public_coefficients: CspPublicCoefficients,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let key_id = KeyId::from(&public_coefficients);

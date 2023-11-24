@@ -249,7 +249,7 @@ impl BasicSignatureCspVault for RemoteCspVault {
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         self.tokio_block_on(self.tarpc_csp_client.sign(
@@ -282,7 +282,7 @@ impl MultiSignatureCspVault for RemoteCspVault {
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         self.tokio_block_on(self.tarpc_csp_client.multi_sign(
@@ -317,7 +317,7 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         self.tokio_block_on(self.tarpc_csp_client.threshold_sign(
@@ -335,10 +335,10 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
 }
 
 impl SecretKeyStoreCspVault for RemoteCspVault {
-    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
+    fn sks_contains(&self, key_id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
         self.tokio_block_on(
             self.tarpc_csp_client
-                .sks_contains(context_with_timeout(self.rpc_timeout), *key_id),
+                .sks_contains(context_with_timeout(self.rpc_timeout), key_id),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspSecretKeyStoreContainsError::TransientInternalError {
@@ -460,7 +460,7 @@ impl NiDkgCspVault for RemoteCspVault {
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
-        receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         maybe_resharing_secret: Option<KeyId>,
     ) -> Result<CspNiDkgDealing, CspDkgCreateReshareDealingError> {
         self.tokio_block_on(self.tarpc_csp_client.create_dealing(
@@ -469,7 +469,7 @@ impl NiDkgCspVault for RemoteCspVault {
             dealer_index,
             threshold,
             epoch,
-            receiver_keys.clone(),
+            receiver_keys,
             maybe_resharing_secret,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
@@ -537,7 +537,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
         })
     }
 
-    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+    fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
         // Here we cannot call `block_on` directly but have to wrap it in
         // `block_in_place` because this method here is called via a Rustls
         // callback (via our implementation of the `rustls::sign::Signer`
@@ -549,7 +549,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
             self.tokio_block_on(self.tarpc_csp_client.tls_sign(
                 context_with_timeout(self.rpc_timeout),
                 ByteBuf::from(message),
-                *key_id,
+                key_id,
             ))
             .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
                 Err(CspTlsSignError::TransientInternalError {
@@ -716,9 +716,9 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
     #[inline]
     fn ecdsa_sign_share(
         &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
+        derivation_path: ExtendedDerivationPath,
+        hashed_message: Vec<u8>,
+        nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         kappa_unmasked_raw: IDkgTranscriptInternalBytes,
         lambda_masked_raw: IDkgTranscriptInternalBytes,
@@ -728,9 +728,9 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
         self.tokio_block_on(self.tarpc_csp_client.ecdsa_sign_share(
             context_with_timeout(self.rpc_timeout),
-            derivation_path.clone(),
+            derivation_path,
             ByteBuf::from(hashed_message),
-            *nonce,
+            nonce,
             key_raw,
             kappa_unmasked_raw,
             lambda_masked_raw,

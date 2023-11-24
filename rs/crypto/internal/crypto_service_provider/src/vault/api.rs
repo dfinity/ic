@@ -433,7 +433,7 @@ pub trait BasicSignatureCspVault {
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError>;
 
@@ -474,7 +474,7 @@ pub trait MultiSignatureCspVault {
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError>;
 
@@ -517,7 +517,7 @@ pub trait ThresholdSignatureCspVault {
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError>;
 }
@@ -578,7 +578,7 @@ pub trait NiDkgCspVault {
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
-        receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         maybe_resharing_secret: Option<KeyId>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError>;
 
@@ -629,7 +629,7 @@ pub trait SecretKeyStoreCspVault {
     ///
     /// # Arguments
     /// * `key_id` identifies the key whose presence should be checked.
-    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
+    fn sks_contains(&self, key_id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
 }
 
 /// Operations of `CspVault` related to querying the public key store.
@@ -739,7 +739,7 @@ pub trait TlsHandshakeCspVault: Send + Sync {
     /// The method takes the full message as an argument (rather than
     /// just message digest) to be consistent with
     /// `BasicSignatureCspVault::sign()`-method.
-    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;
+    fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError>;
 }
 
 /// Operations of `CspVault` related to I-DKG (cf. `CspIDkgProtocol`).
@@ -834,9 +834,9 @@ pub trait ThresholdEcdsaSignerCspVault {
     #[allow(clippy::too_many_arguments)]
     fn ecdsa_sign_share(
         &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
+        derivation_path: ExtendedDerivationPath,
+        hashed_message: Vec<u8>,
+        nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         kappa_unmasked_raw: IDkgTranscriptInternalBytes,
         lambda_masked_raw: IDkgTranscriptInternalBytes,

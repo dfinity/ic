@@ -23,7 +23,7 @@ pub trait CspSigner {
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
-        msg: &[u8],
+        msg: Vec<u8>,
         key_id: KeyId,
     ) -> CryptoResult<CspSignature>;
 
