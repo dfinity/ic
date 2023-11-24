@@ -34,19 +34,17 @@ use tracing_subscriber::filter::EnvFilter;
 const TTL_SEC: u64 = 60;
 // axum logs rejections from built-in extractors with the `axum::rejection`
 // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
-// XXX: UPDATE CLI-ARGS IF YOU CHANGE THIS!
 const DEFAULT_LOG_LEVELS: &str = "pocket_ic_server=info,tower_http=info,axum::rejection=trace";
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
-/// The PocketIC server hosts and manages IC instances.
 #[derive(Parser)]
 #[clap(version = "2.0.1")]
 struct Args {
     /// If you use PocketIC from the command line, you should not use this flag.
     /// Client libraries use this flag to provide a common identifier (the process ID of the test
-    /// process) such that the server is only started once and the individual tests in a test
-    /// run can (re-)use the same server.
+    /// process) such that the server is only started once and the individual tests can (re-)use
+    /// the same server.
     #[clap(long)]
     pid: Option<u32>,
     /// The port under which the PocketIC server should be started
@@ -74,7 +72,7 @@ async fn start(runtime: Arc<Runtime>) {
 
     // If PocketIC was started with the `--pid` flag, create a port file to communicate the port back to
     // the parent process (e.g., the `cargo test` invocation). Other tests can then see this port file
-    // as well and reuse the same PocketIC server.
+    // and reuse the same PocketIC server.
     let use_port_file = args.pid.is_some();
     let mut port_file_path = None;
     let mut ready_file_path = None;

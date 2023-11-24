@@ -41,8 +41,8 @@ fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) 
 * Import PocketIC with `use pocket_ic::PocketIc`, and create a new PocketIC instance with `let pic = PocketIc::new()` in your Rust code and start testing!
 
 ### Examples
-For a simple but complete example with the counter canister, see [here](tests/tests.rs#L491).
-For an example with cross canister calls on two different subnets with the ledger canister, see [here](tests/tests.rs#L19).
+For a simple but complete example with the counter canister, see [here](tests/tests.rs#L19).
+For an example with cross canister calls on two different subnets with the ledger canister, see [here](tests/tests.rs#L57).
 
 For larger test suites with more complex test setups, consider the [OpenChat](https://github.com/open-chat-labs/open-chat/tree/master/backend/integration_tests/src) integration test suite.
 Note that instances are shared among test cases there, which is not recommended in general.
