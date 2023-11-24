@@ -827,6 +827,38 @@ where
     })
 }
 
+/// Call a canister candid update method, anonymous.
+pub fn update_candid<Input, Output>(
+    env: &PocketIc,
+    canister_id: CanisterId,
+    method: &str,
+    input: Input,
+) -> Result<Output, CallError>
+where
+    Input: ArgumentEncoder,
+    Output: for<'a> ArgumentDecoder<'a>,
+{
+    update_candid_as(env, canister_id, Principal::anonymous(), method, input)
+}
+
+/// Call a canister candid update method, authenticated. The sender can be impersonated (i.e., the
+/// signature is not verified).
+pub fn update_candid_as<Input, Output>(
+    env: &PocketIc,
+    canister_id: CanisterId,
+    sender: Principal,
+    method: &str,
+    input: Input,
+) -> Result<Output, CallError>
+where
+    Input: ArgumentEncoder,
+    Output: for<'a> ArgumentDecoder<'a>,
+{
+    with_candid(input, |bytes| {
+        env.update_call(canister_id, sender, method, bytes)
+    })
+}
+
 /// A helper function that we use to implement both [`call_candid`] and
 /// [`query_candid`].
 pub fn with_candid<Input, Output>(
