@@ -37,7 +37,7 @@ pub fn retain_keys_for_transcripts<C: CspIDkgProtocol>(
             })
         })
         .collect();
-    csp_client.idkg_retain_active_keys(&internal_transcripts?, oldest_public_key)
+    csp_client.idkg_retain_active_keys(internal_transcripts?, oldest_public_key)
 }
 
 fn oldest_public_key<C: CspIDkgProtocol>(

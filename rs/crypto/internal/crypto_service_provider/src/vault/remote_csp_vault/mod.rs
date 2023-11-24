@@ -3,13 +3,14 @@ use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
-    CspTlsKeygenError, CspTlsSignError, PksAndSksContainsErrors, ValidatePksAndSksError,
+    CspTlsKeygenError, CspTlsSignError, IDkgCreateDealingVaultError, PksAndSksContainsErrors,
+    ValidatePksAndSksError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternalBytes,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptInternalBytes, MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -19,12 +20,13 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::ReplicaLogger;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
+    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingBytes},
+    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
     ExtendedDerivationPath,
 };
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
@@ -162,14 +164,14 @@ pub trait TarpcCspVault {
         context_data: ByteBuf,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
-        receiver_keys: Vec<MEGaPublicKey>,
-        transcript_operation: IDkgTranscriptOperationInternal,
-    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
+        receiver_keys: Vec<PublicKey>,
+        transcript_operation: IDkgTranscriptOperation,
+    ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_verify_dealing_private`
     async fn idkg_verify_dealing_private(
         algorithm_id: AlgorithmId,
-        dealing: IDkgDealingBytes,
+        dealing: IDkgDealingInternalBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
@@ -207,7 +209,7 @@ pub trait TarpcCspVault {
 
     // Corresponds to `IDkgProtocolCspVault.idkg_open_dealing`
     async fn idkg_open_dealing(
-        dealing: IDkgDealingInternal,
+        dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: ByteBuf,
         opener_index: NodeIndex,

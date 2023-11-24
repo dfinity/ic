@@ -10,6 +10,7 @@ mod tests;
 use crate::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
 };
+use crate::vault::api::IDkgCreateDealingVaultError;
 use crate::{Csp, KeyId};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
@@ -26,15 +27,16 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 };
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
-    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
-    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    IDkgRetainKeysError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
+    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingBytes},
+    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
     ExtendedDerivationPath, ThresholdEcdsaSigInputs,
 };
 use ic_types::crypto::AlgorithmId;
@@ -52,12 +54,12 @@ impl CspIDkgProtocol for Csp {
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
-        receiver_keys: &[MEGaPublicKey],
-        transcript_operation: &IDkgTranscriptOperationInternal,
-    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
+        receiver_keys: Vec<PublicKey>,
+        transcript_operation: IDkgTranscriptOperation,
+    ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
 
         self.csp_vault.idkg_create_dealing(
@@ -73,15 +75,15 @@ impl CspIDkgProtocol for Csp {
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
-        dealing: IDkgDealingBytes,
+        dealing: IDkgDealingInternalBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
-        receiver_public_key: &MEGaPublicKey,
-        context_data: &[u8],
+        receiver_public_key: MEGaPublicKey,
+        context_data: Vec<u8>,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
 
-        let receiver_key_id = key_id_from_mega_public_key_or_panic(receiver_public_key);
+        let receiver_key_id = key_id_from_mega_public_key_or_panic(&receiver_public_key);
 
         self.csp_vault.idkg_verify_dealing_private(
             algorithm_id,
@@ -160,44 +162,44 @@ impl CspIDkgProtocol for Csp {
 
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-        context_data: &[u8],
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        public_key: &MEGaPublicKey,
+        public_key: MEGaPublicKey,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_load_transcript");
 
-        let key_id = key_id_from_mega_public_key_or_panic(public_key);
+        let key_id = key_id_from_mega_public_key_or_panic(&public_key);
 
         self.csp_vault.idkg_load_transcript(
             dealings,
             context_data,
             receiver_index,
-            &key_id,
+            key_id,
             transcript,
         )
     }
 
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: &[u8],
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        public_key: &MEGaPublicKey,
+        public_key: MEGaPublicKey,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_load_transcript_with_openings");
 
-        let key_id = key_id_from_mega_public_key_or_panic(public_key);
+        let key_id = key_id_from_mega_public_key_or_panic(&public_key);
 
         self.csp_vault.idkg_load_transcript_with_openings(
             dealings,
             openings,
             context_data,
             receiver_index,
-            &key_id,
+            key_id,
             transcript,
         )
     }
@@ -231,22 +233,22 @@ impl CspIDkgProtocol for Csp {
 
     fn idkg_open_dealing(
         &self,
-        dealing: IDkgDealingInternal,
+        dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         opener_index: NodeIndex,
-        opener_public_key: &MEGaPublicKey,
+        opener_public_key: MEGaPublicKey,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_open_dealing");
 
-        let opener_key_id = key_id_from_mega_public_key_or_panic(opener_public_key);
+        let opener_key_id = key_id_from_mega_public_key_or_panic(&opener_public_key);
 
         self.csp_vault.idkg_open_dealing(
             dealing,
             dealer_index,
             context_data,
             opener_index,
-            &opener_key_id,
+            opener_key_id,
         )
     }
 
@@ -267,7 +269,7 @@ impl CspIDkgProtocol for Csp {
 
     fn idkg_retain_active_keys(
         &self,
-        active_transcripts: &BTreeSet<IDkgTranscriptInternal>,
+        active_transcripts: BTreeSet<IDkgTranscriptInternal>,
         oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainKeysError> {
         debug!(self.logger; crypto.method_name => "idkg_retain_active_keys");
@@ -302,13 +304,13 @@ impl CspThresholdEcdsaSigner for Csp {
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
         debug!(self.logger; crypto.method_name => "ecdsa_sign_share");
 
-        let key = inputs.key_transcript().transcript_as_bytebuf();
+        let key = inputs.key_transcript().transcript_to_bytebuf();
 
         let q = inputs.presig_quadruple();
-        let kappa_unmasked = q.kappa_unmasked().transcript_as_bytebuf();
-        let lambda_masked = q.lambda_masked().transcript_as_bytebuf();
-        let kappa_times_lambda = q.kappa_times_lambda().transcript_as_bytebuf();
-        let key_times_lambda = q.key_times_lambda().transcript_as_bytebuf();
+        let kappa_unmasked = q.kappa_unmasked().transcript_to_bytebuf();
+        let lambda_masked = q.lambda_masked().transcript_to_bytebuf();
+        let kappa_times_lambda = q.kappa_times_lambda().transcript_to_bytebuf();
+        let key_times_lambda = q.key_times_lambda().transcript_to_bytebuf();
 
         self.csp_vault.ecdsa_sign_share(
             inputs.derivation_path(),

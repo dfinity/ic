@@ -6882,6 +6882,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-node-key-validation",
  "ic-crypto-tls-interfaces",
+ "ic-protobuf",
  "ic-types",
  "mockall",
 ]
@@ -6916,6 +6917,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-node-key-validation",
  "ic-crypto-tls-interfaces",
+ "ic-protobuf",
  "ic-types",
  "mockall",
  "serde_bytes",

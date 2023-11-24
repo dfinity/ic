@@ -946,7 +946,7 @@ impl IDkgTranscript {
 
     /// Returns a copy of the raw internal transcript as `serde_bytes::ByteBuf`.
     #[inline]
-    pub fn transcript_as_bytebuf(&self) -> ByteBuf {
+    pub fn transcript_to_bytebuf(&self) -> ByteBuf {
         ByteBuf::from(self.internal_transcript_raw.clone())
     }
 }
@@ -987,8 +987,8 @@ pub struct IDkgDealing {
 impl IDkgDealing {
     /// Returns a copy of the internal dealing as `serde_bytes::ByteBuf`.
     #[inline]
-    pub fn dealing_as_bytebuf(&self) -> IDkgDealingBytes {
-        IDkgDealingBytes::from(self.internal_dealing_raw.clone())
+    pub fn dealing_to_bytebuf(&self) -> IDkgDealingInternalBytes {
+        IDkgDealingInternalBytes::from(self.internal_dealing_raw.clone())
     }
 }
 
@@ -1017,7 +1017,7 @@ impl SignedBytesWithoutDomainSeparator for IDkgDealing {
     }
 }
 
-pub type IDkgDealingBytes = serde_bytes::ByteBuf;
+pub type IDkgDealingInternalBytes = serde_bytes::ByteBuf;
 
 /// The signed dealing sent by dealers
 ///

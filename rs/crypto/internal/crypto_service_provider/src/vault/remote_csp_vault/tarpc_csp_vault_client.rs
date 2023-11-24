@@ -4,11 +4,11 @@ use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
-    CspSecretKeyStoreContainsError, CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault,
-    MultiSignatureCspVault, NiDkgCspVault, PksAndSksContainsErrors,
-    PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
-    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSignatureCspVault, ValidatePksAndSksError,
+    CspSecretKeyStoreContainsError, CspTlsKeygenError, CspTlsSignError,
+    IDkgCreateDealingVaultError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
+    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault,
+    PublicRandomSeedGenerator, PublicRandomSeedGeneratorError, SecretKeyStoreCspVault,
+    ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault, ValidatePksAndSksError,
 };
 use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{
@@ -23,8 +23,8 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternalBytes,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptInternalBytes, MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -35,12 +35,13 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::{debug, new_logger, ReplicaLogger};
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
+    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingBytes},
+    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
     ExtendedDerivationPath,
 };
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
@@ -563,36 +564,36 @@ impl IDkgProtocolCspVault for RemoteCspVault {
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
-        receiver_keys: &[MEGaPublicKey],
-        transcript_operation: &IDkgTranscriptOperationInternal,
-    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
+        receiver_keys: Vec<PublicKey>,
+        transcript_operation: IDkgTranscriptOperation,
+    ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_create_dealing(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
             ByteBuf::from(context_data),
             dealer_index,
             reconstruction_threshold,
-            receiver_keys.to_vec(),
-            transcript_operation.clone(),
+            receiver_keys,
+            transcript_operation,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgCreateDealingError::TransientInternalError {
-                internal_error: rpc_error.to_string(),
-            })
+            Err(IDkgCreateDealingVaultError::TransientInternalError(
+                rpc_error.to_string(),
+            ))
         })
     }
 
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
-        dealing: IDkgDealingBytes,
+        dealing: IDkgDealingInternalBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
-        context_data: &[u8],
+        context_data: Vec<u8>,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_verify_dealing_private(
             context_with_timeout(self.rpc_timeout),
@@ -612,19 +613,19 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-        context_data: &[u8],
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        key_id: &KeyId,
+        key_id: KeyId,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript(
             context_with_timeout(self.rpc_timeout),
-            dealings.clone(),
+            dealings,
             ByteBuf::from(context_data),
             receiver_index,
-            *key_id,
-            transcript.clone(),
+            key_id,
+            transcript,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(IDkgLoadTranscriptError::TransientInternalError {
@@ -635,21 +636,21 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: &[u8],
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        key_id: &KeyId,
+        key_id: KeyId,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript_with_openings(
             context_with_timeout(self.rpc_timeout),
-            dealings.clone(),
-            openings.clone(),
+            dealings,
+            openings,
             ByteBuf::from(context_data),
             receiver_index,
-            *key_id,
-            transcript.clone(),
+            key_id,
+            transcript,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(IDkgLoadTranscriptError::TransientInternalError {
@@ -689,11 +690,11 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 
     fn idkg_open_dealing(
         &self,
-        dealing: IDkgDealingInternal,
+        dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         opener_index: NodeIndex,
-        opener_key_id: &KeyId,
+        opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_open_dealing(
             context_with_timeout(self.rpc_timeout),
@@ -701,7 +702,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             dealer_index,
             ByteBuf::from(context_data),
             opener_index,
-            *opener_key_id,
+            opener_key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(IDkgOpenTranscriptError::TransientInternalError {

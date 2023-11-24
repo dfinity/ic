@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/tls_interfaces",
+    "//rs/protobuf",
     "@crate_index//:mockall",
 ]
 
