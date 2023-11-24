@@ -1,12 +1,11 @@
 pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 3] = [
     RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
-    RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
+    RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
     RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare),
 ];
 
-pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 3] = [
+pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 2] = [
     RpcNodeProvider::Sepolia(SepoliaProvider::Ankr),
-    RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
     RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
 ];
 
@@ -29,8 +28,8 @@ impl RpcNodeProvider {
 pub(crate) enum EthereumProvider {
     // https://www.ankr.com/rpc/
     Ankr,
-    // https://public.blockpi.io/
-    BlockPi,
+    // https://publicnode.com/
+    PublicNode,
     // https://developers.cloudflare.com/web3/ethereum-gateway/
     Cloudflare,
 }
@@ -39,7 +38,7 @@ impl EthereumProvider {
     fn ethereum_mainnet_endpoint_url(&self) -> &str {
         match self {
             EthereumProvider::Ankr => "https://rpc.ankr.com/eth",
-            EthereumProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
+            EthereumProvider::PublicNode => "https://ethereum.publicnode.com",
             EthereumProvider::Cloudflare => "https://cloudflare-eth.com",
         }
     }
@@ -49,8 +48,6 @@ impl EthereumProvider {
 pub(crate) enum SepoliaProvider {
     // https://www.ankr.com/rpc/
     Ankr,
-    // https://public.blockpi.io/
-    BlockPi,
     // https://publicnode.com/
     PublicNode,
 }
@@ -59,7 +56,6 @@ impl SepoliaProvider {
     fn ethereum_sepolia_endpoint_url(&self) -> &str {
         match self {
             SepoliaProvider::Ankr => "https://rpc.ankr.com/eth_sepolia",
-            SepoliaProvider::BlockPi => "https://ethereum-sepolia.blockpi.network/v1/rpc/public",
             SepoliaProvider::PublicNode => "https://ethereum-sepolia.publicnode.com",
         }
     }
