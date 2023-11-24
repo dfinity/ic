@@ -15506,6 +15506,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
  "ic-ic00-types",
