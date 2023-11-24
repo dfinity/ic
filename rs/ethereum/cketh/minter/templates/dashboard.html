@@ -188,6 +188,14 @@
                         <th>Last synced block number</th>
                         <td>{% call etherscan_block_link(last_synced_block) %}</td>
                     </tr>
+                    {% if !skipped_blocks.is_empty() -%}
+                    <tr id="skipped-blocks">
+                        <th>Skipped blocks</th>
+                        <td>{% for block in skipped_blocks -%}
+                            {% call etherscan_block_link(block) %}{% if !loop.last %}, {% endif %}
+                            {%- endfor %}</td>
+                    </tr>
+                    {%- endif %}
                     <tr id="first-synced-block-number">
                         <th>First synced block number</th>
                         <td>{% call etherscan_block_link(first_synced_block) %}</td>

@@ -100,6 +100,7 @@ rust_test(
     },
     deps = [
         ":minter",
+        "@crate_index//:maplit",
         "@crate_index//:scraper",
     ],
 )
