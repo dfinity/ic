@@ -758,6 +758,7 @@ fn state_equivalence() {
         active_tasks: Default::default(),
         http_request_counter: 100,
         eth_balance: Default::default(),
+        skipped_blocks: Default::default(),
     };
 
     assert_eq!(

@@ -90,6 +90,9 @@ pub enum EventType {
     /// The minter successfully reimbursed a failed withdrawal.
     #[n(12)]
     ReimbursedEthWithdrawal(#[n(0)] Reimbursed),
+    /// The minter could not scrap the logs for that block.
+    #[n(13)]
+    SkippedBlock(#[n(0)] BlockNumber),
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq)]

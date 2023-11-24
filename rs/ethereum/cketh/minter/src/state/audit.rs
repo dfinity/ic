@@ -79,6 +79,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 .eth_transactions
                 .record_finalized_reimbursement(*withdrawal_id, *reimbursed_in_block);
         }
+        EventType::SkippedBlock(block_number) => {
+            state.record_skipped_block(*block_number);
+        }
     }
 }
 

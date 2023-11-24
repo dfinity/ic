@@ -283,5 +283,8 @@ pub mod events {
             reimbursed_amount: Nat,
             transaction_hash: Option<String>,
         },
+        SkippedBlock {
+            block_number: Nat,
+        },
     }
 }

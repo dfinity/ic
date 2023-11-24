@@ -427,6 +427,9 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     reimbursed_amount: reimbursed_amount.into(),
                     transaction_hash: transaction_hash.map(|h| h.to_string()),
                 },
+                EventType::SkippedBlock(block_number) => EP::SkippedBlock {
+                    block_number: block_number.into(),
+                },
             },
         }
     }
@@ -475,6 +478,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_last_processed_block",
                     s.last_scraped_block_number.as_f64(),
                     "The last Ethereum block the ckETH minter checked for deposits.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_skipped_blocks",
+                    s.skipped_blocks.len() as f64,
+                    "Total count of Ethereum blocks that were skipped for deposits.",
                 )?;
 
                 w.gauge_vec(
