@@ -707,4 +707,287 @@ mod tests {
             )
         );
     }
+
+    mod ecdsa_signing_subnet_lists {
+        use super::*;
+        use ic_base_types::{subnet_id_into_protobuf, SubnetId};
+        use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
+        use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
+        use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord};
+        use ic_registry_transport::pb::v1::RegistryMutation;
+        use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+        use rand::Rng;
+
+        #[test]
+        fn should_succeed_for_valid_snapshot() {
+            let setup = Setup::builder()
+                .with_default_curve_and_key_id_and_subnet_record_ecdsa_config()
+                .build();
+
+            assert_matches!(check_node_crypto_keys_invariants(&setup.snapshot), Ok(()));
+        }
+
+        #[test]
+        fn should_fail_subnet_existence_check_for_funky_key_id_lengths_and_characters_but_without_subnet_record(
+        ) {
+            const NUM_KEY_IDS: usize = 100;
+            let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
+            for _ in 0..NUM_KEY_IDS {
+                let len = rng.gen_range(1..100);
+                let key_id: String = rng
+                    .sample_iter::<char, _>(rand::distributions::Standard)
+                    .take(len)
+                    .collect();
+                let ecdsa_key_id = format!("{:?}:{}", EcdsaCurve::Secp256k1, key_id);
+                let setup = Setup::builder()
+                    .with_custom_curve_and_key_id(ecdsa_key_id.clone())
+                    .without_subnet_record()
+                    .build();
+
+                assert_matches!(
+                    check_node_crypto_keys_invariants(&setup.snapshot),
+                    Err(InvariantCheckError{msg: error_message, source: _})
+                    if error_message.contains(format!(
+                        "A non-existent subnet {} was set as the holder of a key_id key_id_{}",
+                        setup.subnet_id, ecdsa_key_id).as_str()
+                    )
+                );
+            }
+        }
+
+        #[test]
+        fn should_fail_if_same_key_configured_for_multiple_subnets() {
+            let setup = Setup::builder()
+                .with_default_curve_and_key_id_and_subnet_record_ecdsa_config()
+                .with_same_key_on_additional_subnet(subnet_test_id(2))
+                .build();
+
+            assert_matches!(
+                check_node_crypto_keys_invariants(&setup.snapshot),
+                Err(InvariantCheckError{msg: error_message, source: _})
+                if error_message.contains(format!(
+                    "key_id {}{} ended up with more than one ECDSA signing subnet",
+                    ic_registry_keys::ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
+                    setup.key_id.expect("a valid EcdsaKeyId should be set")
+                ).as_str())
+            );
+        }
+
+        #[test]
+        fn should_fail_if_key_id_specifies_invalid_ecdsa_curve() {
+            let key_id = "some_key1";
+            let invalid_curves = vec!["bogus_curve", ""];
+            for invalid_curve in invalid_curves {
+                let ecdsa_key_id_string = format!("{}:{}", invalid_curve, key_id);
+                let setup = Setup::builder()
+                    .with_custom_curve_and_key_id(ecdsa_key_id_string)
+                    .without_subnet_record()
+                    .build();
+
+                assert_matches!(
+                    check_node_crypto_keys_invariants(&setup.snapshot),
+                    Err(InvariantCheckError{msg: error_message, source: _})
+                    if error_message.contains(format!("{} is not a recognized ECDSA curve", invalid_curve).as_str())
+                );
+            }
+        }
+
+        #[test]
+        fn should_fail_if_key_id_does_not_contain_curve_and_id_separator() {
+            let invalid_key_ids = vec!["bogus_curve_no_separator_some_key1", ""];
+            for invalid_key_id in invalid_key_ids {
+                let ecdsa_key_id_string = String::from(invalid_key_id);
+                let setup = Setup::builder()
+                    .with_custom_curve_and_key_id(ecdsa_key_id_string.clone())
+                    .without_subnet_record()
+                    .build();
+
+                assert_matches!(
+                    check_node_crypto_keys_invariants(&setup.snapshot),
+                    Err(InvariantCheckError{msg: error_message, source: _})
+                    if error_message.contains(
+                        format!("ECDSA key id {} does not contain a ':'", ecdsa_key_id_string).as_str()
+                    )
+                );
+            }
+        }
+
+        #[test]
+        fn should_fail_if_no_subnet_record_is_configured() {
+            let setup = Setup::builder()
+                .with_default_curve_and_key_id_and_subnet_record_ecdsa_config()
+                .without_subnet_record()
+                .build();
+
+            assert_matches!(
+                check_node_crypto_keys_invariants(&setup.snapshot),
+                Err(InvariantCheckError{msg: error_message, source: _})
+                if error_message.contains(format!(
+                    "A non-existent subnet {} was set as the holder of a key_id {}{}",
+                    setup.subnet_id,
+                    ic_registry_keys::ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
+                    setup.key_id.expect("a valid EcdsaKeyId should be set")
+                ).as_str())
+            );
+        }
+
+        #[test]
+        fn should_fail_if_subnet_record_does_not_contain_an_ecdsa_config() {
+            let setup = Setup::builder()
+                .with_default_curve_and_key_id_and_subnet_record_ecdsa_config()
+                .without_subnet_record_ecdsa_config()
+                .build();
+
+            assert_matches!(
+                check_node_crypto_keys_invariants(&setup.snapshot),
+                Err(InvariantCheckError{msg: error_message, source: _})
+                if error_message.contains(format!(
+                    "The subnet {} does not have an ECDSA config",
+                    setup.subnet_id
+                ).as_str())
+            );
+        }
+
+        #[test]
+        fn should_fail_if_expected_key_id_is_not_included_in_ecdsa_config_of_subnet_record() {
+            let setup = Setup::builder()
+                .with_default_curve_and_key_id_and_subnet_record_ecdsa_config()
+                .with_subnet_record_ecdsa_config_key_ids(vec![EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "key2".to_string(),
+                }])
+                .build();
+
+            assert_matches!(
+                check_node_crypto_keys_invariants(&setup.snapshot),
+                Err(InvariantCheckError{msg: error_message, source: _})
+                if error_message.contains(format!(
+                    "The subnet {} does not have the key with {}{} in its ecdsa configurations",
+                    setup.subnet_id,
+                    ic_registry_keys::ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
+                    setup.key_id.expect("a valid EcdsaKeyId should be set")
+                ).as_str())
+            );
+        }
+
+        struct Setup {
+            snapshot: RegistrySnapshot,
+            key_id: Option<EcdsaKeyId>,
+            subnet_id: SubnetId,
+        }
+
+        impl Setup {
+            fn builder() -> SetupBuilder {
+                SetupBuilder {
+                    custom_curve_and_key_id: None,
+                    default_curve_and_key_id: None,
+                    additional_subnet_id: None,
+                    with_subnet_record: true,
+                    with_subnet_record_ecdsa_config: true,
+                    subnet_record_ecdsa_config_key_ids: None,
+                }
+            }
+        }
+
+        struct SetupBuilder {
+            custom_curve_and_key_id: Option<String>,
+            default_curve_and_key_id: Option<EcdsaKeyId>,
+            additional_subnet_id: Option<SubnetId>,
+            with_subnet_record: bool,
+            with_subnet_record_ecdsa_config: bool,
+            subnet_record_ecdsa_config_key_ids: Option<Vec<EcdsaKeyId>>,
+        }
+
+        impl SetupBuilder {
+            fn with_custom_curve_and_key_id(mut self, curve_and_key_id: String) -> Self {
+                self.custom_curve_and_key_id = Some(curve_and_key_id);
+                self
+            }
+
+            fn with_default_curve_and_key_id_and_subnet_record_ecdsa_config(mut self) -> Self {
+                let default_ecdsa_key_id = EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "key1".to_string(),
+                };
+                self.default_curve_and_key_id = Some(default_ecdsa_key_id.clone());
+                self.subnet_record_ecdsa_config_key_ids = Some(vec![default_ecdsa_key_id]);
+                self
+            }
+
+            fn with_subnet_record_ecdsa_config_key_ids(mut self, key_ids: Vec<EcdsaKeyId>) -> Self {
+                self.subnet_record_ecdsa_config_key_ids = Some(key_ids);
+                self
+            }
+
+            fn with_same_key_on_additional_subnet(mut self, subnet_id: SubnetId) -> Self {
+                self.additional_subnet_id = Some(subnet_id);
+                self
+            }
+
+            fn without_subnet_record(mut self) -> Self {
+                self.with_subnet_record = false;
+                self
+            }
+
+            fn without_subnet_record_ecdsa_config(mut self) -> Self {
+                self.with_subnet_record_ecdsa_config = false;
+                self
+            }
+
+            fn build(self) -> Setup {
+                let mut snapshot = RegistrySnapshot::new();
+                let ecdsa_signing_subnet_list_key = format!(
+                    "{}{}",
+                    ic_registry_keys::ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
+                    self.default_curve_and_key_id.as_ref().map_or_else(
+                        || self.custom_curve_and_key_id
+                            .expect("either a valid EcdsaKeyId, or an invalid (curve, key_id) shall be specified"),
+                        |key_id| key_id.to_string()
+                        )
+                );
+                let subnet_id = subnet_test_id(1);
+                let mut subnets = vec![subnet_id_into_protobuf(subnet_id)];
+                if let Some(another_subnet_id) = self.additional_subnet_id {
+                    subnets.push(subnet_id_into_protobuf(another_subnet_id));
+                }
+                let mut mutations: Vec<RegistryMutation> = vec![];
+                let subnets_value = EcdsaSigningSubnetList { subnets };
+                mutations.push(ic_registry_transport::insert(
+                    ecdsa_signing_subnet_list_key,
+                    encode_or_panic(&subnets_value),
+                ));
+                let node_id = node_test_id(1);
+                if self.with_subnet_record {
+                    let ecdsa_config =
+                        self.with_subnet_record_ecdsa_config
+                            .then_some(EcdsaConfig::from(
+                                ic_registry_subnet_features::EcdsaConfig {
+                                    key_ids: self
+                                        .subnet_record_ecdsa_config_key_ids
+                                        .expect("subnet_record_ecdsa_config_key_ids should be set"),
+                                    ..Default::default()
+                                },
+                            ));
+                    let subnet_record = SubnetRecord {
+                        membership: vec![node_id.get().into_vec()],
+                        ecdsa_config,
+                        ..Default::default()
+                    };
+                    mutations.push(ic_registry_transport::insert(
+                        make_subnet_record_key(subnet_id),
+                        encode_or_panic(&subnet_record),
+                    ));
+                }
+                for m in mutations {
+                    snapshot.insert(m.key, m.value);
+                }
+
+                Setup {
+                    snapshot,
+                    key_id: self.default_curve_and_key_id,
+                    subnet_id,
+                }
+            }
+        }
+    }
 }
