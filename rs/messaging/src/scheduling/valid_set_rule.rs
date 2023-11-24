@@ -16,7 +16,7 @@ use ic_replicated_state::{
     replicated_state::{
         LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
         LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
-        LABEL_VALUE_INVALID_SUBNET_PAYLOAD, LABEL_VALUE_QUEUE_FULL,
+        LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
         LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
     },
     ReplicatedState, StateError,
@@ -88,7 +88,7 @@ impl VsrMetrics {
             LABEL_VALUE_SUCCESS,
             LABEL_VALUE_DUPLICATE,
             LABEL_VALUE_CANISTER_NOT_FOUND,
-            LABEL_VALUE_QUEUE_FULL,
+            LABEL_VALUE_INGRESS_HISTORY_FULL,
             LABEL_VALUE_CANISTER_STOPPED,
             LABEL_VALUE_CANISTER_STOPPING,
             LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
@@ -172,29 +172,15 @@ impl ValidSetRuleImpl {
                 LABEL_VALUE_SUCCESS
             }
             Err(err) => {
-                let error_code = match err {
-                    StateError::CanisterNotFound(canister_id) => {
-                        error!(
-                            self.log,
-                            "Failed to induct message: canister does not exist";
-                            messaging.message_id => format!("{}", message_id),
-                            messaging.canister_id => format!("{}", canister_id),
-                        );
-                        ErrorCode::CanisterNotFound
-                    }
-                    StateError::CanisterStopped(_) => ErrorCode::CanisterStopped,
-                    StateError::CanisterStopping(_) => ErrorCode::CanisterStopping,
-                    StateError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
-                    StateError::UnknownSubnetMethod(_) => ErrorCode::CanisterOutOfCycles,
-                    StateError::InvalidSubnetPayload => ErrorCode::InvalidManagementPayload,
-                    StateError::QueueFull { .. } => ErrorCode::IngressHistoryFull,
-                    StateError::OutOfMemory { .. }
-                    | StateError::InvariantBroken { .. }
-                    | StateError::NonMatchingResponse { .. }
-                    | StateError::BitcoinNonMatchingResponse { .. } => {
-                        unreachable!("Unexpected error: {}", err)
-                    }
-                };
+                if let StateError::CanisterNotFound(canister_id) = &err {
+                    error!(
+                        self.log,
+                        "Failed to induct message: canister does not exist";
+                        messaging.message_id => format!("{}", message_id),
+                        messaging.canister_id => format!("{}", canister_id),
+                    );
+                }
+                let error_code = ErrorCode::from(&err);
                 self.ingress_history_writer.set_status(
                     state,
                     message_id,
@@ -261,7 +247,7 @@ impl ValidSetRuleImpl {
         if state.metadata.own_subnet_type != SubnetType::System
             && state.metadata.ingress_history.len() >= self.ingress_history_max_messages
         {
-            return Err(StateError::QueueFull {
+            return Err(StateError::IngressHistoryFull {
                 capacity: self.ingress_history_max_messages,
             });
         }
