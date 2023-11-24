@@ -360,11 +360,7 @@ pub fn get_call_context_and_callback(
 
     let callback_id = response.originator_reply_callback;
 
-    debug_assert!(
-        call_context_manager.peek_callback(callback_id).is_some()
-            // [EXC-1510] Ignore callbacks with ID `u64::MAX`.
-            || callback_id.get() == u64::MAX
-    );
+    debug_assert!(call_context_manager.peek_callback(callback_id).is_some());
     let callback = match call_context_manager.peek_callback(callback_id) {
         Some(callback) => callback.clone(),
         None => {
