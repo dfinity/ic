@@ -16,6 +16,44 @@ use std::{collections::HashMap, io::Read, time::SystemTime};
 const INIT_CYCLES: u128 = 2_000_000_000_000;
 
 #[test]
+fn test_counter_canister() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the counter canister wasm file on the canister.
+    let counter_wasm = counter_wasm();
+    pic.install_canister(can_id, counter_wasm, vec![], None);
+
+    // Make some calls to the canister.
+    let reply = call_counter_can(&pic, can_id, "read");
+    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 0]));
+    let reply = call_counter_can(&pic, can_id, "write");
+    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
+    let reply = call_counter_can(&pic, can_id, "write");
+    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
+    let reply = call_counter_can(&pic, can_id, "read");
+    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
+}
+
+fn counter_wasm() -> Vec<u8> {
+    let wasm_path = std::env::var_os("COUNTER_WASM").expect("Missing counter wasm file");
+    std::fs::read(wasm_path).unwrap()
+}
+
+fn call_counter_can(ic: &PocketIc, can_id: CanisterId, method: &str) -> WasmResult {
+    ic.update_call(
+        can_id,
+        Principal::anonymous(),
+        method,
+        encode_one(()).unwrap(),
+    )
+    .expect("Failed to call counter canister")
+}
+
+#[test]
 fn test_xnet_ledger_canister() {
     // Set up PocketIC with two subnets: the NNS and an application subnet.
     let pic = PocketIcBuilder::new()
@@ -511,27 +549,6 @@ fn test_create_and_drop_instances() {
 }
 
 #[test]
-fn test_counter_canister() {
-    let pic = PocketIc::new();
-
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
-
-    // Open a wasm file and install it on the canister
-    let counter_wasm = counter_wasm();
-    pic.install_canister(can_id, counter_wasm, vec![], None);
-
-    let reply = call_counter_can(&pic, can_id, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 0]));
-    let reply = call_counter_can(&pic, can_id, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
-    let reply = call_counter_can(&pic, can_id, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
-    let reply = call_counter_can(&pic, can_id, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
-}
-
-#[test]
 fn test_tick() {
     let pic = PocketIc::new();
     pic.tick();
@@ -582,6 +599,18 @@ fn test_get_subnet_of_canister() {
     let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
     let subnet_id = pic.get_subnet(canister_id);
     assert_eq!(subnet_id.unwrap(), app_subnet);
+
+    let pic = PocketIc::new();
+    let canister_id = pic.create_canister();
+    let app_subnet = pic.topology().get_app_subnets()[0];
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    assert_eq!(subnet_id, app_subnet);
+
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.stop_canister(canister_id, None).unwrap();
+    pic.delete_canister(canister_id, None).unwrap();
+    let subnet_id = pic.get_subnet(canister_id);
+    assert!(subnet_id.is_none());
 }
 
 #[test]
@@ -617,19 +646,4 @@ fn test_set_and_get_stable_memory_compressed() {
 
     let read_data = pic.get_stable_memory(canister_id);
     assert_eq!(data, read_data[..8]);
-}
-
-fn counter_wasm() -> Vec<u8> {
-    let wasm_path = std::env::var_os("COUNTER_WASM").expect("Missing counter wasm file");
-    std::fs::read(wasm_path).unwrap()
-}
-
-fn call_counter_can(ic: &PocketIc, can_id: CanisterId, method: &str) -> WasmResult {
-    ic.update_call(
-        can_id,
-        Principal::anonymous(),
-        method,
-        encode_one(()).unwrap(),
-    )
-    .expect("Failed to call counter canister")
 }
