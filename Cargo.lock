@@ -11722,7 +11722,11 @@ name = "icrc-ledger-agent"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "ciborium",
+ "hex",
  "ic-agent",
+ "ic-cbor",
+ "ic-certification 1.2.0",
  "icrc-ledger-types",
 ]
 

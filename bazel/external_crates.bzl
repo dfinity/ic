@@ -528,6 +528,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "ic-canister-log": crate.spec(
                 version = "0.2.0",
             ),
+            "ic-cbor": crate.spec(
+                version = "^1.2.0",
+            ),
             "ic-cdk": crate.spec(
                 version = "^0.10.0",
             ),
@@ -539,6 +542,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
+            ),
+            "ic-certification": crate.spec(
+                version = "^1.2.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
