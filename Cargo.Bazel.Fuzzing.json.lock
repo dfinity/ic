@@ -1,5 +1,5 @@
 {
-  "checksum": "20012f004cc2f4835d4e5ec74fb34cf42f3e03c2ba9c8872d8af199fa54bef9b",
+  "checksum": "660bc7d54de747b0947e42a283a08bd58e65e3fd81080fd51cc13fb2fb9d0711",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13673,12 +13673,20 @@
               "target": "ic_canister_log"
             },
             {
+              "id": "ic-cbor 1.2.0",
+              "target": "ic_cbor"
+            },
+            {
               "id": "ic-cdk 0.10.0",
               "target": "ic_cdk"
             },
             {
               "id": "ic-cdk-timers 0.4.0",
               "target": "ic_cdk_timers"
+            },
+            {
+              "id": "ic-certification 1.2.0",
+              "target": "ic_certification"
             },
             {
               "id": "ic-certified-map 0.3.4",
