@@ -661,7 +661,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
-                rev = "0394778a3c4608842670674aca40a0feaea01059",
+                rev = "c18f6ad2639b448968d461096abc76af8a069980",
             ),
             "minicbor": crate.spec(
                 version = "^0.19.1",
