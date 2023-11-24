@@ -49,6 +49,7 @@ pub(crate) enum StableMemoryHandling {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum InstallCodeStep {
     ValidateInput,
+    BumpCanisterVersion,
     ReplaceExecutionStateAndAllocations {
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
@@ -118,6 +119,7 @@ impl InstallCodeHelper {
     }
 
     pub fn bump_canister_version(&mut self) {
+        self.steps.push(InstallCodeStep::BumpCanisterVersion);
         self.canister.system_state.canister_version += 1;
     }
 
@@ -700,6 +702,10 @@ impl InstallCodeHelper {
     ) -> Result<(), CanisterManagerError> {
         match step {
             InstallCodeStep::ValidateInput => self.validate_input(original, round, round_limits),
+            InstallCodeStep::BumpCanisterVersion => {
+                self.bump_canister_version();
+                Ok(())
+            }
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state,
