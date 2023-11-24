@@ -188,7 +188,7 @@ fn should_block_deposit_from_blocked_address() {
 #[test]
 fn should_not_mint_when_logs_inconsistent() {
     let deposit_params = DepositParams::default();
-    let (ankr_logs, block_pi_logs) = {
+    let (ankr_logs, public_node_logs) = {
         let ankr_log_entry = deposit_params.eth_log_entry();
         let mut cloudflare_log_entry = ankr_log_entry.clone();
         cloudflare_log_entry.amount += 1;
@@ -197,12 +197,12 @@ fn should_not_mint_when_logs_inconsistent() {
             vec![ethers_core::types::Log::from(cloudflare_log_entry)],
         )
     };
-    assert_ne!(ankr_logs, block_pi_logs);
+    assert_ne!(ankr_logs, public_node_logs);
 
     CkEthSetup::new()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
-                .respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
+                .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
                 .respond_with(JsonRpcProvider::Cloudflare, ankr_logs.clone())
         }))
         .expect_no_mint();
@@ -315,7 +315,7 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
                     },
                 )
                 .modify_response(
-                    JsonRpcProvider::BlockPi,
+                    JsonRpcProvider::PublicNode,
                     &mut |response: &mut ethers_core::types::TransactionReceipt| {
                         response.status = Some(1.into())
                     },
@@ -353,7 +353,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
                 },
             )
             .modify_response(
-                JsonRpcProvider::BlockPi,
+                JsonRpcProvider::PublicNode,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740743_u64.into()
                 },
@@ -767,7 +767,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
-        .respond_with(JsonRpcProvider::BlockPi, json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
+        .respond_with(JsonRpcProvider::PublicNode, json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
         .build()
         .expect_rpc_calls(&cketh);
 
@@ -2288,7 +2288,7 @@ mod mock {
     pub enum JsonRpcProvider {
         //order is top-to-bottom and must match order used in production
         Ankr,
-        BlockPi,
+        PublicNode,
         Cloudflare,
     }
 
@@ -2296,7 +2296,7 @@ mod mock {
         fn url(&self) -> &str {
             match self {
                 JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
-                JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
+                JsonRpcProvider::PublicNode => "https://ethereum.publicnode.com",
                 JsonRpcProvider::Cloudflare => "https://cloudflare-eth.com",
             }
         }
