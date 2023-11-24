@@ -1,5 +1,5 @@
 {
-  "checksum": "afbbc898c6405c4353f911bc289d294cac93508df7483b37522c0121496406b6",
+  "checksum": "fc5277ae1b377848bc6494b3f0e31d92d9f11ea57c623a49c8038dbe38d5b5ab",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21958,61 +21958,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "hyper-tls 0.5.0": {
-      "name": "hyper-tls",
-      "version": "0.5.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/hyper-tls/0.5.0/download",
-          "sha256": "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hyper_tls",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "hyper_tls",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.5.0",
-              "target": "bytes"
-            },
-            {
-              "id": "hyper 0.14.27",
-              "target": "hyper"
-            },
-            {
-              "id": "native-tls 0.2.11",
-              "target": "native_tls"
-            },
-            {
-              "id": "tokio 1.32.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-native-tls 0.3.1",
-              "target": "tokio_native_tls"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.5.0"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "ic-agent 0.30.2": {
       "name": "ic-agent",
       "version": "0.30.2",
@@ -29129,7 +29074,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/metrics-proxy.git",
           "commitish": {
-            "Rev": "0394778a3c4608842670674aca40a0feaea01059"
+            "Rev": "c18f6ad2639b448968d461096abc76af8a069980"
           }
         }
       },
@@ -29158,6 +29103,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "rustls-tls-native-roots"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -30387,117 +30339,6 @@
         ],
         "edition": "2015",
         "version": "0.8.3"
-      },
-      "license": "MIT/Apache-2.0"
-    },
-    "native-tls 0.2.11": {
-      "name": "native-tls",
-      "version": "0.2.11",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/native-tls/0.2.11/download",
-          "sha256": "07226173c32f2926027b63cce4bcd8076c3552846cbe7925f3aaffeac0a3b92e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "native_tls",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "native_tls",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "native-tls 0.2.11",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {
-            "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
-              {
-                "id": "lazy_static 1.4.0",
-                "target": "lazy_static"
-              },
-              {
-                "id": "libc 0.2.150",
-                "target": "libc"
-              },
-              {
-                "id": "security-framework 2.9.1",
-                "target": "security_framework"
-              },
-              {
-                "id": "security-framework-sys 2.9.0",
-                "target": "security_framework_sys"
-              },
-              {
-                "id": "tempfile 3.6.0",
-                "target": "tempfile"
-              }
-            ],
-            "cfg(not(any(target_os = \"windows\", target_os = \"macos\", target_os = \"ios\")))": [
-              {
-                "id": "log 0.4.19",
-                "target": "log"
-              },
-              {
-                "id": "openssl 0.10.55",
-                "target": "openssl"
-              },
-              {
-                "id": "openssl-probe 0.1.5",
-                "target": "openssl_probe"
-              },
-              {
-                "id": "openssl-sys 0.9.90",
-                "target": "openssl_sys"
-              }
-            ],
-            "cfg(target_os = \"windows\")": [
-              {
-                "id": "schannel 0.1.22",
-                "target": "schannel"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.2.11"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "link_deps": {
-          "common": [],
-          "selects": {
-            "cfg(not(any(target_os = \"windows\", target_os = \"macos\", target_os = \"ios\")))": [
-              {
-                "id": "openssl-sys 0.9.90",
-                "target": "openssl_sys"
-              }
-            ]
-          }
-        }
       },
       "license": "MIT/Apache-2.0"
     },
@@ -41458,21 +41299,18 @@
             "__rustls",
             "__tls",
             "blocking",
-            "default",
-            "default-tls",
             "hyper-rustls",
-            "hyper-tls",
             "json",
             "mime_guess",
             "multipart",
-            "native-tls-crate",
             "rustls",
+            "rustls-native-certs",
             "rustls-pemfile",
             "rustls-tls",
+            "rustls-tls-native-roots",
             "rustls-tls-webpki-roots",
             "serde_json",
             "stream",
-            "tokio-native-tls",
             "tokio-rustls",
             "tokio-util",
             "wasm-streams",
@@ -41550,10 +41388,6 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-tls 0.5.0",
-                "target": "hyper_tls"
-              },
-              {
                 "id": "ipnet 2.8.0",
                 "target": "ipnet"
               },
@@ -41564,11 +41398,6 @@
               {
                 "id": "mime 0.3.17",
                 "target": "mime"
-              },
-              {
-                "id": "native-tls 0.2.11",
-                "target": "native_tls",
-                "alias": "native_tls_crate"
               },
               {
                 "id": "once_cell 1.18.0",
@@ -41587,16 +41416,16 @@
                 "target": "rustls"
               },
               {
+                "id": "rustls-native-certs 0.6.3",
+                "target": "rustls_native_certs"
+              },
+              {
                 "id": "rustls-pemfile 1.0.3",
                 "target": "rustls_pemfile"
               },
               {
                 "id": "tokio 1.32.0",
                 "target": "tokio"
-              },
-              {
-                "id": "tokio-native-tls 0.3.1",
-                "target": "tokio_native_tls"
               },
               {
                 "id": "tokio-rustls 0.24.1",
@@ -44582,8 +44411,7 @@
         ],
         "crate_features": {
           "common": [
-            "OSX_10_9",
-            "default"
+            "OSX_10_9"
           ],
           "selects": {}
         },
@@ -51518,49 +51346,6 @@
         },
         "edition": "2021",
         "version": "0.3.0"
-      },
-      "license": "MIT"
-    },
-    "tokio-native-tls 0.3.1": {
-      "name": "tokio-native-tls",
-      "version": "0.3.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-native-tls/0.3.1/download",
-          "sha256": "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tokio_native_tls",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "tokio_native_tls",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "native-tls 0.2.11",
-              "target": "native_tls"
-            },
-            {
-              "id": "tokio 1.32.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.1"
       },
       "license": "MIT"
     },
@@ -61245,30 +61030,6 @@
       "s390x-unknown-linux-gnu",
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
-      "x86_64-fuchsia",
-      "x86_64-linux-android",
-      "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu",
-      "x86_64-unknown-none"
-    ],
-    "cfg(not(any(target_os = \"windows\", target_os = \"macos\", target_os = \"ios\")))": [
-      "aarch64-fuchsia",
-      "aarch64-linux-android",
-      "aarch64-unknown-linux-gnu",
-      "arm-unknown-linux-gnueabi",
-      "armv7-linux-androideabi",
-      "armv7-unknown-linux-gnueabi",
-      "i686-linux-android",
-      "i686-unknown-freebsd",
-      "i686-unknown-linux-gnu",
-      "powerpc-unknown-linux-gnu",
-      "riscv32imc-unknown-none-elf",
-      "riscv64gc-unknown-none-elf",
-      "s390x-unknown-linux-gnu",
-      "thumbv7em-none-eabi",
-      "thumbv8m.main-none-eabi",
-      "wasm32-unknown-unknown",
-      "wasm32-wasi",
       "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
