@@ -86,6 +86,7 @@ impl TryFrom<InitArg> for State {
             ecdsa_public_key: None,
             invalid_events: Default::default(),
             eth_balance: Default::default(),
+            skipped_blocks: Default::default(),
             active_tasks: Default::default(),
             http_request_counter: 0,
         };

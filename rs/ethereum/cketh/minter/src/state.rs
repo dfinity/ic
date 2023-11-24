@@ -54,6 +54,7 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, String>,
     pub eth_transactions: EthTransactions,
+    pub skipped_blocks: BTreeSet<BlockNumber>,
 
     /// Current balance of ETH held by minter.
     /// Computed based on audit events.
@@ -224,6 +225,14 @@ impl State {
                 self.eth_balance.total_effective_tx_fees_add(tx_fee);
             }
         }
+    }
+
+    pub fn record_skipped_block(&mut self, block_number: BlockNumber) {
+        assert!(
+            self.skipped_blocks.insert(block_number),
+            "BUG: block {} was already skipped",
+            block_number
+        );
     }
 
     pub const fn ethereum_network(&self) -> EthereumNetwork {

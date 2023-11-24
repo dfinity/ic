@@ -528,6 +528,19 @@ pub enum HttpOutcallError {
     },
 }
 
+impl HttpOutcallError {
+    pub fn is_response_too_large(&self) -> bool {
+        match self {
+            Self::IcError { code, message } => is_response_too_large(code, message),
+            _ => false,
+        }
+    }
+}
+
+pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
+    code == &RejectionCode::SysFatal && message.contains("size limit")
+}
+
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
 pub fn are_errors_consistent<T: PartialEq>(
@@ -650,9 +663,7 @@ where
         .await
         {
             Ok((response,)) => response,
-            Err((code, message))
-                if code == RejectionCode::SysFatal && message.contains("size limit") =>
-            {
+            Err((code, message)) if is_response_too_large(&code, &message) => {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
                     return Err(HttpOutcallError::IcError { code, message });
@@ -667,7 +678,8 @@ where
 
         log!(
             TRACE_HTTP,
-            "Got response: {} from url: {} with status: {}",
+            "Got response (with {} bytes): {} from url: {} with status: {}",
+            response.body.len(),
             String::from_utf8_lossy(&response.body),
             url,
             response.status

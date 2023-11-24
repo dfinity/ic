@@ -94,7 +94,7 @@ use ic_types::crypto::{
     CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::messages::{CallbackId, Certificate, Response};
+use ic_types::messages::{CallbackId, Certificate, RejectContext, Response};
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::xnet::CertifiedStreamSlice;
@@ -121,6 +121,7 @@ use ic_xnet_payload_builder::{
     XNetSlicePool,
 };
 
+pub use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::Serialize;
@@ -2596,6 +2597,22 @@ impl PayloadBuilder {
             originator_reply_callback: id,
             refund: Cycles::zero(),
             response_payload: MsgPayload::Data(payload.encode()),
+        });
+        self
+    }
+
+    pub fn http_response_failure(
+        mut self,
+        id: CallbackId,
+        code: RejectCode,
+        message: impl ToString,
+    ) -> Self {
+        self.consensus_responses.push(Response {
+            originator: CanisterId::ic_00(),
+            respondent: CanisterId::ic_00(),
+            originator_reply_callback: id,
+            refund: Cycles::zero(),
+            response_payload: MsgPayload::Reject(RejectContext::new(code, message)),
         });
         self
     }

@@ -281,6 +281,25 @@ pub enum MultiCallError<T> {
     InconsistentResults(MultiCallResults<T>),
 }
 
+impl<T> MultiCallError<T> {
+    pub fn has_http_outcall_error_matching<P: Fn(&HttpOutcallError) -> bool>(
+        &self,
+        predicate: P,
+    ) -> bool {
+        match self {
+            MultiCallError::ConsistentHttpOutcallError(error) => predicate(error),
+            MultiCallError::ConsistentJsonRpcError { .. } => false,
+            MultiCallError::InconsistentResults(results) => {
+                results.results.values().any(|result| match result {
+                    Ok(JsonRpcResult::Result(_)) => false,
+                    Ok(JsonRpcResult::Error { .. }) => false,
+                    Err(error) => predicate(error),
+                })
+            }
+        }
+    }
+}
+
 impl<T: Debug + PartialEq> MultiCallResults<T> {
     pub fn reduce_with_equality(self) -> Result<T, MultiCallError<T>> {
         let mut results = self.all_ok()?.into_iter();

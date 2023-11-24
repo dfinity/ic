@@ -430,6 +430,74 @@ mod multi_call_results {
             }
         }
     }
+
+    mod has_http_outcall_error_matching {
+        use super::*;
+        use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
+        use ic_cdk::api::call::RejectionCode;
+        use proptest::prelude::any;
+        use proptest::proptest;
+
+        proptest! {
+            #[test]
+            fn should_not_match_when_consistent_json_rpc_error(code in any::<i64>(), message in ".*") {
+                let error: MultiCallError<String> = MultiCallError::ConsistentJsonRpcError {
+                    code,
+                    message,
+                };
+                let always_true = |_outcall_error: &HttpOutcallError| true;
+
+                assert!(!error.has_http_outcall_error_matching(always_true));
+            }
+        }
+
+        #[test]
+        fn should_match_when_consistent_http_outcall_error() {
+            let error: MultiCallError<String> =
+                MultiCallError::ConsistentHttpOutcallError(HttpOutcallError::IcError {
+                    code: RejectionCode::SysTransient,
+                    message: "message".to_string(),
+                });
+            let always_true = |_outcall_error: &HttpOutcallError| true;
+            let always_false = |_outcall_error: &HttpOutcallError| false;
+
+            assert!(error.has_http_outcall_error_matching(always_true));
+            assert!(!error.has_http_outcall_error_matching(always_false));
+        }
+
+        #[test]
+        fn should_match_on_single_inconsistent_result_with_outcall_error() {
+            let always_true = |_outcall_error: &HttpOutcallError| true;
+            let error_with_no_outcall_error =
+                MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(1))),
+                    (
+                        BLOCK_PI,
+                        Ok(JsonRpcResult::Error {
+                            code: -32700,
+                            message: "error".to_string(),
+                        }),
+                    ),
+                    (PUBLIC_NODE, Ok(JsonRpcResult::Result(1))),
+                ]));
+            assert!(!error_with_no_outcall_error.has_http_outcall_error_matching(always_true));
+
+            let error_with_outcall_error =
+                MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(1))),
+                    (
+                        BLOCK_PI,
+                        Err(HttpOutcallError::IcError {
+                            code: RejectionCode::SysTransient,
+                            message: "message".to_string(),
+                        }),
+                    ),
+                    (PUBLIC_NODE, Ok(JsonRpcResult::Result(1))),
+                ]));
+            assert!(error_with_outcall_error.has_http_outcall_error_matching(always_true));
+        }
+    }
 }
 
 mod eth_get_transaction_receipt {
