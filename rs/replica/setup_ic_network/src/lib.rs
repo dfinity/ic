@@ -365,7 +365,12 @@ pub fn setup_consensus_and_p2p(
 
             None
         }
-        P2PStateSyncClient::TestClient() => None,
+        P2PStateSyncClient::TestClient() => {
+            p2p_router = Some(p2p_router.unwrap_or_default().merge(
+                axum::Router::new().route("/foo", axum::routing::get(|| async { unreachable!() })),
+            ));
+            None
+        }
     };
 
     let sev_handshake = Arc::new(Sev::new(node_id, registry_client.clone()));
@@ -385,17 +390,17 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
-    let quic_transport = Arc::new(ic_quic_transport::QuicTransport::build(
+    let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         log,
         metrics_registry,
-        rt_handle.clone(),
+        rt_handle,
         tls_config,
         registry_client.clone(),
         sev_handshake.clone(),
         node_id,
         topology_watcher.clone(),
         Either::<_, DummyUdpSocket>::Left(transport_addr),
-        p2p_router,
+        p2p_router.unwrap_or_default(),
     ));
 
     if let Some((state_sync_client, state_sync_manager_rx)) = state_sync_client {
