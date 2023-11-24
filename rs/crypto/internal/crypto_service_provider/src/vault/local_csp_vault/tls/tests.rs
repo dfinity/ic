@@ -46,7 +46,7 @@ mod keygen {
             .expect("Generation of TLS keys failed.");
         let key_id = KeyId::try_from(&cert).unwrap();
 
-        assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
+        assert!(csp_vault.sks_contains(key_id).expect("SKS call failed"));
         assert_eq!(
             csp_vault
                 .current_node_public_keys()
@@ -441,8 +441,8 @@ mod sign {
 
         assert!(csp_vault
             .tls_sign(
-                &random_message(rng),
-                &KeyId::try_from(&public_key_cert).expect("Cannot instantiate KeyId")
+                random_message(rng),
+                KeyId::try_from(&public_key_cert).expect("Cannot instantiate KeyId")
             )
             .is_ok());
     }
@@ -461,8 +461,8 @@ mod sign {
 
         let sig = csp_vault
             .tls_sign(
-                &msg,
-                &KeyId::try_from(&public_key_cert).expect("cannot instantiate KeyId"),
+                msg.clone(),
+                KeyId::try_from(&public_key_cert).expect("cannot instantiate KeyId"),
             )
             .expect("failed to generate signature");
 
@@ -477,7 +477,7 @@ mod sign {
         let csp_vault = LocalCspVault::builder_for_test().build();
         let non_existent_key_id = KeyId::from(b"non-existent-key-id-000000000000".to_owned());
 
-        let result = csp_vault.tls_sign(b"message", &non_existent_key_id);
+        let result = csp_vault.tls_sign(b"message".to_vec(), non_existent_key_id);
 
         assert_eq!(
             result.expect_err("Unexpected success."),
@@ -498,7 +498,7 @@ mod sign {
             .expect("failed to generate keys");
         let msg = random_message(rng);
 
-        let result = csp_vault.tls_sign(&msg, &KeyId::try_from(&wrong_csp_pub_key).unwrap());
+        let result = csp_vault.tls_sign(msg, KeyId::try_from(&wrong_csp_pub_key).unwrap());
 
         assert_eq!(
             result.expect_err("Unexpected success."),
@@ -519,8 +519,8 @@ mod sign {
             .with_rng(ChaCha20Rng::from_seed(rng.gen()))
             .build();
 
-        assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
-        let result = csp_vault.tls_sign(&random_message(rng), &key_id);
+        assert!(csp_vault.sks_contains(key_id).expect("SKS call failed"));
+        let result = csp_vault.tls_sign(random_message(rng), key_id);
         assert_matches!(result, Err(CspTlsSignError::MalformedSecretKey { error })
             if error.starts_with("Failed to convert TLS secret key DER from key store to Ed25519 secret key")
         );
@@ -538,7 +538,7 @@ mod sign {
             .with_rng(ChaCha20Rng::from_seed(rng.gen()))
             .build();
 
-        let result = csp_vault.tls_sign(&random_message(rng), &key_id);
+        let result = csp_vault.tls_sign(random_message(rng), key_id);
         assert_matches!(result, Err(CspTlsSignError::MalformedSecretKey { error })
             if error.starts_with("Failed to convert TLS secret key DER from key store to Ed25519 secret key")
         );

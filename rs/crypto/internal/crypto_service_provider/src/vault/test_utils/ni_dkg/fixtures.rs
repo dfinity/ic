@@ -95,7 +95,7 @@ impl MockNode {
                 dealer_index,
                 threshold,
                 epoch,
-                &receiver_keys,
+                receiver_keys,
                 maybe_reshared_secret_id,
             )
             .map_err(ni_dkg_errors::CspDkgCreateReshareDealingError::from)

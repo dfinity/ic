@@ -103,7 +103,7 @@ impl NiDkgCspClient for Csp {
             dealer_index,
             threshold,
             epoch,
-            &receiver_keys,
+            receiver_keys,
             None,
         )?)
     }
@@ -125,7 +125,7 @@ impl NiDkgCspClient for Csp {
             dealer_resharing_index,
             threshold,
             epoch,
-            &receiver_keys,
+            receiver_keys,
             Some(key_id),
         )
     }

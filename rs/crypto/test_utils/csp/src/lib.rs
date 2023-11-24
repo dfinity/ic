@@ -60,7 +60,7 @@ mock! {
         fn sign(
             &self,
             algorithm_id: AlgorithmId,
-            msg: &[u8],
+            msg: Vec<u8>,
             key_id: KeyId,
         ) -> CryptoResult<CspSignature>;
 
@@ -120,7 +120,7 @@ mock! {
         fn threshold_sign(
             &self,
             _algorithm_id: AlgorithmId,
-            _message: &[u8],
+            _message: Vec<u8>,
             _public_coefficients: CspPublicCoefficients,
         ) -> Result<CspSignature, CspThresholdSignError>;
 

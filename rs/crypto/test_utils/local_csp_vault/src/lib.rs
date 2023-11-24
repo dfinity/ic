@@ -59,7 +59,7 @@ mock! {
         fn sign(
             &self,
             algorithm_id: AlgorithmId,
-            message: &[u8],
+            message: Vec<u8>,
             key_id: KeyId,
         ) -> Result<CspSignature, CspBasicSignatureError>;
 
@@ -70,7 +70,7 @@ mock! {
         fn multi_sign(
             &self,
             algorithm_id: AlgorithmId,
-            message: &[u8],
+            message: Vec<u8>,
             key_id: KeyId,
         ) -> Result<CspSignature, CspMultiSignatureError>;
 
@@ -83,7 +83,7 @@ mock! {
         fn threshold_sign(
             &self,
             algorithm_id: AlgorithmId,
-            message: &[u8],
+            message: Vec<u8>,
             key_id: KeyId,
         ) -> Result<CspSignature, CspThresholdSignError>;
     }
@@ -107,7 +107,7 @@ mock! {
             dealer_index: NodeIndex,
             threshold: NumberOfNodes,
             epoch: Epoch,
-            receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+            receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
             maybe_resharing_secret: Option<KeyId>,
         ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError>;
 
@@ -187,9 +187,9 @@ mock! {
     impl ThresholdEcdsaSignerCspVault for LocalCspVault {
         fn ecdsa_sign_share(
             &self,
-            derivation_path: &ExtendedDerivationPath,
-            hashed_message: &[u8],
-            nonce: &Randomness,
+            derivation_path: ExtendedDerivationPath,
+            hashed_message: Vec<u8>,
+            nonce: Randomness,
             key_raw: IDkgTranscriptInternalBytes,
             kappa_unmasked_raw: IDkgTranscriptInternalBytes,
             lambda_masked_raw: IDkgTranscriptInternalBytes,
@@ -200,7 +200,7 @@ mock! {
     }
 
     impl SecretKeyStoreCspVault for LocalCspVault{
-        fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
+        fn sks_contains(&self, key_id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
     }
 
     impl PublicAndSecretKeyStoreCspVault for LocalCspVault{
@@ -218,7 +218,7 @@ mock! {
             node: NodeId,
         ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
 
-        fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError>;
+        fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError>;
     }
 
     impl PublicRandomSeedGenerator for LocalCspVault {

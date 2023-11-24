@@ -124,11 +124,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let start_time = self.metrics.now();
-        let result = self.threshold_sign_internal(algorithm_id, message, key_id);
+        let result = self.threshold_sign_internal(algorithm_id, &message[..], key_id);
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,
             MetricsScope::Local,

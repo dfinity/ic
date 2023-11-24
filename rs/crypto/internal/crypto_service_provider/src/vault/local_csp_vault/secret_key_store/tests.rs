@@ -18,11 +18,11 @@ fn key_should_be_present_only_after_generation() {
         .expect("Test setup failed: Failed to generate keys");
     let key_id1 = KeyId::try_from(&public_key1).unwrap();
     assert!(
-        csp_vault1.sks_contains(&key_id1).expect("SKS call failed"),
+        csp_vault1.sks_contains(key_id1).expect("SKS call failed"),
         "Key should be present after generation."
     );
     assert!(
-        !csp_vault2.sks_contains(&key_id1).expect("SKS call failed"),
+        !csp_vault2.sks_contains(key_id1).expect("SKS call failed"),
         "Key should be absent if not generated in the CSP."
     );
 
@@ -35,15 +35,15 @@ fn key_should_be_present_only_after_generation() {
         "Test failure: Key IDs from different CSPs were the same.  Check random number generation."
     );
     assert!(
-        csp_vault2.sks_contains(&key_id2).expect("SKS call failed"),
+        csp_vault2.sks_contains(key_id2).expect("SKS call failed"),
         "Key should be present in the CSP that generated it."
     );
     assert!(
-        !csp_vault2.sks_contains(&key_id1).expect("SKS call failed"),
+        !csp_vault2.sks_contains(key_id1).expect("SKS call failed"),
         "The second CSP should not contain the keys of the first."
     );
     assert!(
-        !csp_vault1.sks_contains(&key_id2).expect("SKS call failed"),
+        !csp_vault1.sks_contains(key_id2).expect("SKS call failed"),
         "Key first CSP should not contain the keys of the second."
     );
 }
@@ -57,11 +57,11 @@ fn tls_key_should_be_present_only_after_generation() {
         .expect("error generating TLS key pair");
     let key_id1 = KeyId::try_from(&public_key_cert1).unwrap();
     assert!(
-        csp_vault1.sks_contains(&key_id1).expect("SKS call failed"),
+        csp_vault1.sks_contains(key_id1).expect("SKS call failed"),
         "TLS key should be present after generation."
     );
     assert!(
-        !csp_vault2.sks_contains(&key_id1).expect("SKS call failed"),
+        !csp_vault2.sks_contains(key_id1).expect("SKS call failed"),
         "TLS key should be absent if not generated in the CSP."
     );
 
@@ -74,15 +74,15 @@ fn tls_key_should_be_present_only_after_generation() {
         "Test failure: Key IDs from different CSPs were the same.  Check random number generation."
     );
     assert!(
-        csp_vault2.sks_contains(&key_id2).expect("SKS call failed"),
+        csp_vault2.sks_contains(key_id2).expect("SKS call failed"),
         "TLS key should be present in the CSP that generated it."
     );
     assert!(
-        !csp_vault2.sks_contains(&key_id1).expect("SKS call failed"),
+        !csp_vault2.sks_contains(key_id1).expect("SKS call failed"),
         "The second CSP should not contain the TLS keys of the first."
     );
     assert!(
-        !csp_vault1.sks_contains(&key_id2).expect("SKS call failed"),
+        !csp_vault1.sks_contains(key_id2).expect("SKS call failed"),
         "Key first CSP should not contain the TLS keys of the second."
     );
 }

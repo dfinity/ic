@@ -38,9 +38,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
         result
     }
 
-    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+    fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
         let start_time = self.metrics.now();
-        let result = self.tls_sign_internal(message, key_id);
+        let result = self.tls_sign_internal(&message[..], &key_id);
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
             MetricsScope::Local,

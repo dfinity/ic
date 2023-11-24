@@ -313,9 +313,9 @@ impl CspThresholdEcdsaSigner for Csp {
         let key_times_lambda = q.key_times_lambda().transcript_to_bytebuf();
 
         self.csp_vault.ecdsa_sign_share(
-            inputs.derivation_path(),
-            inputs.hashed_message(),
-            inputs.nonce(),
+            inputs.derivation_path().clone(),
+            inputs.hashed_message().to_vec(),
+            *inputs.nonce(),
             key,
             kappa_unmasked,
             lambda_masked,

@@ -13,7 +13,7 @@ mod tests;
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     SecretKeyStoreCspVault for LocalCspVault<R, S, C, P>
 {
-    fn sks_contains(&self, id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
-        Ok(self.sks_read_lock().contains(id))
+    fn sks_contains(&self, id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
+        Ok(self.sks_read_lock().contains(&id))
     }
 }

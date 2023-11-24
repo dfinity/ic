@@ -81,7 +81,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
-        receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         maybe_resharing_secret_key_id: Option<KeyId>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
         debug!(self.logger; crypto.method_name => "create_dealing", crypto.dkg_epoch => epoch.get());
@@ -91,7 +91,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             dealer_index,
             threshold,
             epoch,
-            receiver_keys,
+            &receiver_keys,
             maybe_resharing_secret_key_id,
         );
         self.metrics.observe_duration_seconds(

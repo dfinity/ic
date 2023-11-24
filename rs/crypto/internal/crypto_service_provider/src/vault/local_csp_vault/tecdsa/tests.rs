@@ -453,9 +453,9 @@ mod ecdsa_sign_share {
             vault: &V,
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
             vault.ecdsa_sign_share(
-                &self.derivation_path,
-                &self.hashed_message,
-                &self.nonce,
+                self.derivation_path.clone(),
+                self.hashed_message.clone(),
+                self.nonce,
                 ByteBuf::from(self.key.serialize().expect("should serialize successfully")),
                 ByteBuf::from(
                     self.kappa_unmasked
