@@ -1341,9 +1341,9 @@ pub fn icrc1_balance(machine: &StateMachine, ledger_id: CanisterId, account: Acc
     Tokens::from_e8s(Decode!(&result, Nat).unwrap().0.to_u64().unwrap())
 }
 
-pub fn icrc1_fee(machine: &StateMachine, ledger_id: CanisterId) -> Tokens {
+pub fn icrc1_fee(machine: &StateMachine, ledger_id: CanisterId) -> Nat {
     let result = query(machine, ledger_id, "icrc1_fee", Encode!().unwrap()).unwrap();
-    Tokens::from_e8s(Decode!(&result, Nat).unwrap().0.to_u64().unwrap())
+    Decode!(&result, Nat).unwrap()
 }
 
 pub fn icrc1_transfer(

@@ -193,6 +193,11 @@ impl SnsTestsInitPayloadBuilder {
         self
     }
 
+    pub fn with_ledger_transfer_fee(&mut self, fee: impl Into<Nat>) -> &mut Self {
+        self.ledger.transfer_fee = fee.into();
+        self
+    }
+
     pub fn with_governance_init_payload(
         &mut self,
         governance_init_payload_builder: GovernanceCanisterInitPayloadBuilder,
