@@ -1313,7 +1313,6 @@ mod tests {
             sns_initialization_parameters: "".to_string(),
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
-            mlp_pending_upgrade: None,
         }
     }
 
