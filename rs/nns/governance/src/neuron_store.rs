@@ -192,6 +192,8 @@ pub struct NeuronStore {
     /// evaluated this way):
     /// - computing cached entries: when it involves neurons, it mostly cares about stake, maturity
     ///   and NF fund.
+    /// - validating indexes by checking whether each neuron in the heap has corresponding entires
+    ///   in the indexes.
     /// - `Governance::validate`: soon to be deprecated since we have subaccount index.
     /// - `voting_eligible_neurons()`: inactive neurons have been dissolved for 14 days, so it
     ///   cannot be voting eligible.

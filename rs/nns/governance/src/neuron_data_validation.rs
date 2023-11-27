@@ -413,6 +413,8 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
             .take(Validator::NEURON_RANGE_CHUNK_SIZE)
             .flat_map(|(neuron_id, neuron)| {
                 self.next_neuron_id = Some(NeuronId { id: neuron_id + 1 });
+                // Since we are within a loop, we cannot call `with_neuron` to read the neuron again
+                // which can potentially read from stable storage.
                 Validator::validate_primary_neuron_has_corresponding_index_entries(neuron)
             })
             .collect()
