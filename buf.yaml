@@ -22,6 +22,8 @@ breaking:
   ignore:
     - ic_sns_swap/pb/v1/swap.proto
     - ic_nns_governance/pb/v1/governance.proto
+    # Temporarily disabling to work around buf limitation. Remove ASAP after merge.
+    - messaging/xnet/v1/certification.proto
   use:
     - WIRE
   except:
