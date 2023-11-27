@@ -8,7 +8,7 @@ use crate::driver::ic::VmResources;
 #[derive(Clone, Deserialize, Serialize, Default, Debug)]
 pub struct GroupSetup {
     pub group_base_name: String,
-    pub farm_group_name: String,
+    pub infra_group_name: String,
     /// For now, the group timeout strictly translates to the corresponding group
     /// TTL.
     pub group_timeout: Duration,
@@ -33,8 +33,8 @@ impl GroupSetup {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("bad things")
             .as_millis();
-        res.farm_group_name = format!("{}--{:?}", group_base_name, time);
-        // GROUP_TTL should be enough for the setup task to allocate the group on Farm
+        res.infra_group_name = format!("{}--{:?}", group_base_name, time);
+        // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
         // Afterwards, the group's TTL should be bumped via a keepalive task
         res.group_timeout = GROUP_TTL;
         res
@@ -44,5 +44,17 @@ impl GroupSetup {
 impl TestEnvAttribute for GroupSetup {
     fn attribute_name() -> String {
         "group_setup".to_string()
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+pub enum InfraProvider {
+    Farm,
+    K8s,
+}
+
+impl TestEnvAttribute for InfraProvider {
+    fn attribute_name() -> String {
+        "infra_provider".to_string()
     }
 }

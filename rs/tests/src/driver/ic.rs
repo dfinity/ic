@@ -198,7 +198,7 @@ impl InternetComputer {
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
         let group_setup = GroupSetup::read_attribute(env);
-        let group_name: String = group_setup.farm_group_name;
+        let group_name: String = group_setup.infra_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);

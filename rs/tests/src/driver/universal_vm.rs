@@ -110,7 +110,7 @@ impl UniversalVm {
         let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
         let res_request =
-            get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.farm_group_name)?;
+            get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.infra_group_name)?;
         let resource_group = allocate_resources(&farm, &res_request)?;
         let vm = resource_group
             .vms
@@ -173,13 +173,13 @@ impl UniversalVm {
         }
 
         farm.attach_disk_images(
-            &pot_setup.farm_group_name,
+            &pot_setup.infra_group_name,
             &self.name,
             "usb-storage",
             image_ids,
         )?;
 
-        farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
+        farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
         Ok(())
     }
 }

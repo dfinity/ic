@@ -44,13 +44,13 @@ pub const GROUP_TTL: Duration = Duration::from_secs(90);
 
 pub const LOG_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 
-fn node_logs(farm_group_name: &str) -> String {
-    format!("/app/discover#/?_g=(time:(from:now-1y,to:now))&_a=(columns:!(host.name,message,level),filters:!(('$state':(store:appState),query:(match_phrase:(tags:{farm_group_name})))),grid:(columns:(host.name:(width:513))),index:'35c5ba4b-6db5-42f6-a760-39ca89a177fe',interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))")
+fn node_logs(infra_group_name: &str) -> String {
+    format!("/app/discover#/?_g=(time:(from:now-1y,to:now))&_a=(columns:!(host.name,message,level),filters:!(('$state':(store:appState),query:(match_phrase:(tags:{infra_group_name})))),grid:(columns:(host.name:(width:513))),index:'35c5ba4b-6db5-42f6-a760-39ca89a177fe',interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))")
 }
 const KIBANA_BASE_URL: &str = "https://kibana.testnet.dfinity.network";
 
-pub fn kibana_link(farm_group_name: &str) -> String {
-    format!("{}{}", KIBANA_BASE_URL, node_logs(farm_group_name))
+pub fn kibana_link(infra_group_name: &str) -> String {
+    format!("{}{}", KIBANA_BASE_URL, node_logs(infra_group_name))
 }
 
 pub const PANIC_LOG_PREFIX: &str = "[Function panicked]: ";

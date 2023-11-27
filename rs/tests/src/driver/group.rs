@@ -106,6 +106,9 @@ pub struct CliArgs {
     )]
     pub filter_tests: Option<String>,
 
+    #[clap(long = "k8s", help = "Use k8s as infra provider instead of Farm.")]
+    pub k8s: bool,
+
     #[clap(long = "group-base-name", help = "Group base name.")]
     pub group_base_name: String,
 
@@ -621,7 +624,7 @@ impl SystemTestGroup {
                                 if let Ok(group_setup) = GroupSetup::try_read_attribute(&env) {
                                     let farm_url = env.get_farm_url().unwrap();
                                     let farm = Farm::new(farm_url.clone(), env.logger());
-                                    let group_name = group_setup.farm_group_name;
+                                    let group_name = group_setup.infra_group_name;
                                     if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
                                         panic!(
                                             "{}",
@@ -942,7 +945,7 @@ impl SystemTestGroup {
         let group_setup = GroupSetup::read_attribute(&env);
         let farm_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_url, env.logger());
-        let group_name = group_setup.farm_group_name;
+        let group_name = group_setup.infra_group_name;
         farm.delete_group(&group_name);
     }
 }

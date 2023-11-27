@@ -70,7 +70,7 @@ def summarize(root, working_dir: str, pot_setup_file: str, pot_setup_result_file
             group_name_file = all_pots_setup_files[search_idx]
             with open(group_name_file) as file:
                 data = json.load(file)
-                group_name = data["farm_group_name"]
+                group_name = data["infra_group_name"]
         except Exception:
             print(f"Couldn't establish `group_name` of the pot {p.name}.")
         if verbose or pot_result == "Failed":
