@@ -15,8 +15,8 @@ use common::increase_dissolve_delay_raw;
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use dfn_protobuf::ToProto;
 use fixtures::{
-    new_motion_proposal, principal, NNSBuilder, NNSStateChange, NeuronBuilder,
-    ProposalNeuronBehavior, NNS,
+    environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
+    NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
 };
 use futures::future::{join_all, FutureExt};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
@@ -170,6 +170,13 @@ fn check_proposal_status_after_voting_and_after_expiration_new(
         after_voting
     );
 
+    nns.push_mocked_canister_reply(CanisterCallReply::Response(
+        Encode!(
+            &"get_build_metadata returns a string for consumption by humans, not machines."
+                .to_string()
+        )
+        .unwrap(),
+    ));
     nns.advance_time_by(expiration_seconds - 1)
         .run_periodic_tasks();
     // The proposal should still be open for voting, so nothing should have changed
@@ -180,6 +187,13 @@ fn check_proposal_status_after_voting_and_after_expiration_new(
 
     // One more second brings us to proposal expiration
     nns.advance_time_by(1);
+    nns.push_mocked_canister_reply(CanisterCallReply::Response(
+        Encode!(
+            &"get_build_metadata returns a string for consumption by humans, not machines."
+                .to_string()
+        )
+        .unwrap(),
+    ));
     nns.governance.run_periodic_tasks().now_or_never();
     let after_expiration = nns.governance.get_proposal_data(pid).unwrap();
 
