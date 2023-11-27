@@ -27,6 +27,16 @@ pub fn config_system_verified_application_subnets(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
+pub fn config_system_verified_application_subnets_with_specified_ids(env: TestEnv) {
+    InternetComputer::new()
+        .use_specified_ids_allocation_range()
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
 pub fn config_system_verified_subnets(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))

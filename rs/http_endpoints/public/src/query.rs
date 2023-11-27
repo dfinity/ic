@@ -148,14 +148,13 @@ impl Service<Request<Bytes>> for QueryService {
 
         let effective_canister_id = CanisterId::unchecked_from_principal(effective_principal_id);
 
-        // Reject requests where `canister_id` != `effective_canister_id`. In comparison to update
-        // requests we don't need to check for the mgmt canister since all mgmt canister calls are updated calls.
+        // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
         // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
         // in the url and the replica processes the request based on the `canister_id`.
         // If this is not enforced, a blocked canisters can still be accessed by specifying
         // a non-blocked `effective_canister_id` and a blocked `canister_id`.
         let canister_id = request.content().canister_id();
-        if canister_id != effective_canister_id {
+        if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
             let res = make_plaintext_response(
                 StatusCode::BAD_REQUEST,
                 format!(
