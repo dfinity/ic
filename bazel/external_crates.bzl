@@ -668,6 +668,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
                 rev = "c18f6ad2639b448968d461096abc76af8a069980",
+                default_features = False,
+                features = [
+                    "rustls-tls-webpki-roots",
+                ],
             ),
             "minicbor": crate.spec(
                 version = "^0.19.1",
@@ -736,12 +740,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "openssh-keys": crate.spec(
                 version = "^0.5.0",
-            ),
-            "openssl": crate.spec(
-                version = "^0.10.55",
-            ),
-            "openssl-sys": crate.spec(
-                version = "0.9",
             ),
             "opentelemetry_0_18_0": crate.spec(
                 package = "opentelemetry",
@@ -1200,9 +1198,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "tokio-metrics": crate.spec(
                 version = "^0.3.0",
-            ),
-            "tokio-openssl": crate.spec(
-                version = "^0.6.1",
             ),
             "tokio-rustls": crate.spec(
                 version = "^0.24.0",
