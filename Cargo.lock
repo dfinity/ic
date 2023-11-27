@@ -3163,6 +3163,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
+name = "drawille"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e64e461c3f1e69d99372620640b3fd5f0309eeda2e26e4af69f6760c0e1df845"
+dependencies = [
+ "colored",
+ "fnv",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8685,6 +8695,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-neurons-fund-audit"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "colored",
+ "csv",
+ "ic-agent",
+ "ic-nervous-system-common-test-keys",
+ "ic-neurons-fund",
+ "ic-nns-common",
+ "ic-nns-governance",
+ "ic-sns-governance",
+ "ic-sns-swap",
+ "rgb",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "textplots",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nns-common"
 version = "0.9.0"
 dependencies = [
@@ -10182,6 +10214,28 @@ dependencies = [
  "tokio",
  "url",
  "xnet-test",
+]
+
+[[package]]
+name = "ic-sns-audit"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "colored",
+ "csv",
+ "ic-agent",
+ "ic-nervous-system-common-test-keys",
+ "ic-neurons-fund",
+ "ic-nns-common",
+ "ic-nns-governance",
+ "ic-sns-governance",
+ "ic-sns-swap",
+ "rgb",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "textplots",
+ "tokio",
 ]
 
 [[package]]
@@ -15585,9 +15639,9 @@ dependencies = [
 
 [[package]]
 name = "rgb"
-version = "0.8.36"
+version = "0.8.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20ec2d3e3fc7a92ced357df9cebd5a10b6fb2aa1ee797bf7e9ce2f17dffc8f59"
+checksum = "05aaa8004b64fd573fc9d002f4e632d51ad4f026c2b5ba95fcb6c2f32c2c47d8"
 dependencies = [
  "bytemuck",
 ]
@@ -17490,6 +17544,16 @@ dependencies = [
  "walkdir",
  "wat",
  "xnet-test",
+]
+
+[[package]]
+name = "textplots"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2171116bd71c738068fe42091b1509d70135a768443c9afd6c179b83dc6cdc79"
+dependencies = [
+ "drawille",
+ "rgb",
 ]
 
 [[package]]
