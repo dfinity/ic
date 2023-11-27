@@ -192,7 +192,7 @@ impl Farm {
             drives: image_specs,
         };
         let rb = Self::json(req, &attach_drives_req);
-        let _resp = self.retry_until_success(rb)?;
+        let _resp = self.retry_until_success_long(rb)?;
         Ok(())
     }
 
