@@ -554,6 +554,7 @@ fn test_feature_flags() {
         .initial_values(initial_balances)
         .transfer_fee(Tokens::from_e8s(10_000))
         .token_symbol_and_name("ICP", "Internet Computer")
+        .feature_flags(FeatureFlags { icrc2: false })
         .build()
         .unwrap();
     let canister_id = env
@@ -586,7 +587,7 @@ fn test_feature_flags() {
         Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
             maximum_number_of_accounts: None,
             icrc1_minting_account: None,
-            feature_flags: None,
+            feature_flags: Some(FeatureFlags { icrc2: false }),
         })))
         .unwrap(),
     )

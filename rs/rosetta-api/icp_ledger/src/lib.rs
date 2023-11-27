@@ -1242,7 +1242,7 @@ pub struct FeatureFlags {
 
 impl FeatureFlags {
     const fn const_default() -> Self {
-        Self { icrc2: false }
+        Self { icrc2: true }
     }
 }
 
