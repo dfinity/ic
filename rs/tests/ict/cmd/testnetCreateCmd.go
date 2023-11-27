@@ -26,7 +26,7 @@ var FARM_GROUP_KEEPALIVE_TTL_SEC = 90
 var KEEPALIVE_PERIOD = 30 * time.Second
 
 // This restriction is defined in an ad-hoc way to avoid accidental resources abuse.
-var MAX_TESTNET_LIFETIME_MINS = 1440
+var MAX_TESTNET_LIFETIME_MINS = 1440 * 7
 
 // All output files are saved in this folder, if output-dir is not provided explicitly.
 var DEFAULT_RESULTS_DIR = "ict_testnets"
