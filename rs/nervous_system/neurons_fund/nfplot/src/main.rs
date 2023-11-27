@@ -82,6 +82,7 @@ async fn main() -> Result<(), String> {
 
     let agent = Agent::builder()
         .with_url(nns_url)
+        .with_verify_query_signatures(false)
         .build()
         .map_err(|e| e.to_string())?;
 
