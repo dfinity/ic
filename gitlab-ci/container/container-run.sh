@@ -102,12 +102,18 @@ if podman version | grep -qE 'Version:\s+4.'; then
     )
 fi
 
+if [ "$(id -u)" = "1000" ]; then
+    CTR_HOME="/home/ubuntu"
+else
+    CTR_HOME="/ic"
+fi
+
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
     --mount type=bind,source="${HOME}",target="${HOME}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="/home/ubuntu/.cache"
-    --mount type=bind,source="${HOME}/.ssh",target="/home/ubuntu/.ssh"
-    --mount type=bind,source="${HOME}/.aws",target="/home/ubuntu/.aws"
+    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
     --mount type=tmpfs,destination=/var/sysimage
 )
