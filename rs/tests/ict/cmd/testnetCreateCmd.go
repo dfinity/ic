@@ -41,7 +41,7 @@ var DATE_TIME_FORMAT = "2006-01-02_15-04-05.000"
 const MAX_TOKEN_CAPACITY = 1024 * 1024
 
 // These events are collected from test-driver logs during the testnet deployment.
-const FARM_GROUP_NAME_CREATED_EVENT = "farm_group_name_created_event"
+const INFRA_GROUP_NAME_CREATED_EVENT = "infra_group_name_created_event"
 const KIBANA_URL_CREATED_EVENT = "kibana_url_created_event"
 const FARM_VM_CREATED_EVENT = "farm_vm_created_event"
 const BN_AAAA_RECORDS_CREATED_EVENT = "bn_aaaa_records_created_event"
@@ -108,7 +108,7 @@ func (summary *Summary) add_event(event *TestDriverEvent) {
 		summary.IcProgressClock = event.Body
 	} else if event.EventName == FARM_VM_CREATED_EVENT {
 		summary.FarmVMs = append(summary.FarmVMs, event.Body)
-	} else if event.EventName == FARM_GROUP_NAME_CREATED_EVENT {
+	} else if event.EventName == INFRA_GROUP_NAME_CREATED_EVENT {
 		summary.FarmGroup = event.Body
 	} else if event.EventName == KIBANA_URL_CREATED_EVENT {
 		summary.KibanaUrl = event.Body
@@ -386,7 +386,7 @@ func ExtractFarmGroup(summary *Summary) (string, error) {
 	if val, ok := jsonMap["group"]; ok {
 		return val.(string), nil
 	}
-	return "", fmt.Errorf("couldn't extract Farm group from %s", FARM_GROUP_NAME_CREATED_EVENT)
+	return "", fmt.Errorf("couldn't extract infra group from %s", INFRA_GROUP_NAME_CREATED_EVENT)
 }
 
 func GetTestnetExpiration(group string) (string, error) {

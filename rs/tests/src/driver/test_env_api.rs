@@ -197,7 +197,7 @@ const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
-const FARM_GROUP_CREATED_EVENT_NAME: &str = "farm_group_name_created_event";
+const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
@@ -1152,7 +1152,10 @@ impl HasGroupSetup for TestEnv {
         let log = self.logger();
         if self.get_json_path(GroupSetup::attribute_name()).exists() {
             let group_setup = GroupSetup::read_attribute(self);
-            info!(log, "Group {} already set up.", group_setup.farm_group_name);
+            info!(
+                log,
+                "Group {} already set up.", group_setup.infra_group_name
+            );
         } else {
             let group_setup = GroupSetup::new(group_base_name);
             let farm_base_url = FarmBaseUrl::read_attribute(self);
@@ -1165,7 +1168,7 @@ impl HasGroupSetup for TestEnv {
             };
             farm.create_group(
                 &group_setup.group_base_name,
-                &group_setup.farm_group_name,
+                &group_setup.infra_group_name,
                 group_setup.group_timeout,
                 group_spec,
                 self,
@@ -1173,8 +1176,8 @@ impl HasGroupSetup for TestEnv {
             .unwrap();
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
-            emit_group_event(&log, &group_setup.farm_group_name);
-            emit_kibana_url_event(&log, &kibana_link(&group_setup.farm_group_name));
+            emit_group_event(&log, &group_setup.infra_group_name);
+            emit_kibana_url_event(&log, &kibana_link(&group_setup.infra_group_name));
         }
     }
 }
@@ -1865,7 +1868,7 @@ where
         let farm = Farm::new(farm_base_url, env.logger());
         Box::new(FarmHostedVm {
             farm,
-            group_name: pot_setup.farm_group_name,
+            group_name: pot_setup.infra_group_name,
             vm_name: self.vm_name(),
         })
     }
@@ -2092,7 +2095,7 @@ where
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
-        let group_name = group_setup.farm_group_name;
+        let group_name = group_setup.infra_group_name;
         farm.create_dns_records(&group_name, dns_records)
             .expect("Failed to create DNS records")
     }
@@ -2117,7 +2120,7 @@ where
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
-        let group_name = group_setup.farm_group_name;
+        let group_name = group_setup.infra_group_name;
         farm.create_playnet_dns_records(&group_name, dns_records)
             .expect("Failed to create playnet DNS records")
     }
@@ -2139,7 +2142,7 @@ where
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
-        let group_name = group_setup.farm_group_name;
+        let group_name = group_setup.infra_group_name;
         farm.acquire_playnet_certificate(&group_name)
             .expect("Failed to acquire a certificate for a playnet")
     }
@@ -2207,7 +2210,7 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         group: String,
     }
     let event = log_events::LogEvent::new(
-        FARM_GROUP_CREATED_EVENT_NAME.to_string(),
+        INFRA_GROUP_CREATED_EVENT_NAME.to_string(),
         GroupName {
             message: "Created new Farm group".to_string(),
             group: group.to_string(),
