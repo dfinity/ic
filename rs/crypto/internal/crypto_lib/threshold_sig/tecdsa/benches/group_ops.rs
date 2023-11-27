@@ -216,6 +216,27 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
             );
         }
 
+        {
+            // fixed 2 arguments for special-purpose functions with a fixed number of arguments
+            let num_args = 2;
+            group.bench_with_input(
+                BenchmarkId::new("consttime_pedersen", num_args),
+                &num_args,
+                |b, _size| {
+                    b.iter_batched_ref(
+                        || {
+                            (
+                                random_scalar(curve_type, rng),
+                                random_scalar(curve_type, rng),
+                            )
+                        },
+                        |(x, y)| EccPoint::pedersen(x, y),
+                        BatchSize::SmallInput,
+                    )
+                },
+            );
+        }
+
         // range of arguments for generic functions
         for num_args in [2, 4, 8, 16, 32, 64, 128].iter() {
             group.bench_with_input(
