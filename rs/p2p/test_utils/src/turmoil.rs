@@ -163,6 +163,21 @@ where
     Ok(())
 }
 
+/// Runs the tokio simulation for the provided duration.
+/// If Ok(true) is returned all clients have completed.
+pub fn run_simulation_for(sim: &mut Sim, timeout: Duration) -> turmoil::Result {
+    let now = sim.elapsed();
+    loop {
+        if sim.elapsed() > timeout + now {
+            break;
+        }
+        if sim.step()? {
+            panic!("Simulation finished while checking condition");
+        }
+    }
+    Ok(())
+}
+
 /// Runs the tokio simulation until the timeout is reached.
 /// Panics if simulation finishes or condition evaluates to true.
 pub fn wait_for_timeout<F>(sim: &mut Sim, f: F, timeout: Duration) -> turmoil::Result

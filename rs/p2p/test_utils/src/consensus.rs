@@ -140,6 +140,15 @@ impl TestConsensus<U64Artifact> {
             .is_some_and(|&count| count == 1)
     }
 
+    pub fn received_advert_count(&self, id: u64) -> u16 {
+        self.received_unvalidated_count
+            .lock()
+            .unwrap()
+            .get(&id)
+            .copied()
+            .unwrap_or(0)
+    }
+
     pub fn received_remove_once(&self, id: u64) -> bool {
         self.received_remove_count
             .lock()
