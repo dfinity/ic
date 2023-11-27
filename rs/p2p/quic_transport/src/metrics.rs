@@ -53,6 +53,7 @@ pub struct QuicTransportMetrics {
     pub connection_handle_errors_total: IntCounterVec,
     // Quinn
     quinn_path_rtt_duration: GaugeVec,
+    quinn_path_congestion_window: GaugeVec,
 }
 
 impl QuicTransportMetrics {
@@ -159,13 +160,24 @@ impl QuicTransportMetrics {
                 "Estimated rtt of this connection.",
                 &[PEER_ID_LABEL],
             ),
+            quinn_path_congestion_window: metrics_registry.gauge_vec(
+                "quic_transport_quinn_path_congestion_window",
+                "Congestion window of this connection.",
+                &[PEER_ID_LABEL],
+            ),
         }
     }
 
     pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, peer_id: &NodeId) {
         let stats = conn.stats();
+        let peer_id_label: [&str; 1] = [&peer_id.to_string()];
+
         self.quinn_path_rtt_duration
-            .with_label_values(&[&peer_id.to_string()])
+            .with_label_values(&peer_id_label)
             .set(stats.path.rtt.as_secs_f64());
+
+        self.quinn_path_congestion_window
+            .with_label_values(&peer_id_label)
+            .set(stats.path.cwnd as f64);
     }
 }
