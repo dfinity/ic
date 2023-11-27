@@ -1057,6 +1057,12 @@ impl NNSBuilder {
         self
     }
 
+    pub fn push_mock_reply(mut self, canister_call_reply: CanisterCallReply) -> Self {
+        self.environment_builder
+            .push_mock_reply(canister_call_reply);
+        self
+    }
+
     pub fn set_economics(mut self, econ: NetworkEconomics) -> Self {
         self.governance.economics = Some(econ);
         self

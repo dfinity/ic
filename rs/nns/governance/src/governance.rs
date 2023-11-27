@@ -6485,6 +6485,15 @@ impl Governance {
     /// process.
     pub async fn run_periodic_tasks(&mut self) {
         self.process_proposals();
+        // Commit whatever changes were just made by process_proposals by making a canister call.
+        let _unused_canister_status_response = self
+            .env
+            .call_canister_method(
+                GOVERNANCE_CANISTER_ID,
+                "get_build_metadata",
+                Encode!().unwrap_or_default(),
+            )
+            .await;
 
         // First try to mint node provider rewards (once per month).
         if self.is_time_to_mint_monthly_node_provider_rewards() {
