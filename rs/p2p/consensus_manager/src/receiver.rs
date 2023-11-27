@@ -119,6 +119,55 @@ where
     Ok(())
 }
 
+#[derive(Debug)]
+pub struct PeerCounter(HashMap<NodeId, u32>);
+
+impl PeerCounter {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn peers(&self) -> impl Iterator<Item = &NodeId> {
+        self.0.keys()
+    }
+
+    /// Returns true if value is newly inserted
+    pub fn insert(&mut self, node: NodeId) -> bool {
+        match self.0.entry(node) {
+            Entry::Occupied(mut entry) => {
+                *entry.get_mut() += 1;
+                false
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(1);
+                true
+            }
+        }
+    }
+
+    /// Returns true if removed key was present and counter got to zero
+    pub fn remove(&mut self, node: NodeId) -> bool {
+        match self.0.entry(node) {
+            Entry::Occupied(mut entry) => {
+                assert!(*entry.get() != 0);
+
+                if *entry.get() == 1 {
+                    entry.remove();
+                    true
+                } else {
+                    *entry.get_mut() -= 1;
+                    false
+                }
+            }
+            Entry::Vacant(_) => false,
+        }
+    }
+}
+
 #[allow(unused)]
 pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, ReceivedAdvert> {
     log: ReplicaLogger,
@@ -135,11 +184,11 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, Receive
     sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<Artifact::Id>>>,
-    active_downloads: HashMap<Artifact::Id, watch::Sender<HashSet<NodeId>>>,
+    active_downloads: HashMap<Artifact::Id, watch::Sender<PeerCounter>>,
 
     #[allow(clippy::type_complexity)]
     artifact_processor_tasks: JoinSet<(
-        watch::Receiver<HashSet<NodeId>>,
+        watch::Receiver<PeerCounter>,
         Artifact::Id,
         Artifact::Attribute,
     )>,
@@ -259,7 +308,7 @@ where
 
     pub(crate) fn handle_artifact_processor_joined(
         &mut self,
-        peer_rx: watch::Receiver<HashSet<NodeId>>,
+        peer_rx: watch::Receiver<PeerCounter>,
         id: Artifact::Id,
         attr: Artifact::Attribute,
     ) {
@@ -351,9 +400,11 @@ where
                 None => {
                     self.metrics.download_task_started_total.inc();
 
-                    let (tx, rx) = watch::channel(HashSet::new());
+                    let mut peer_counter = PeerCounter::new();
+                    let (tx, rx) = watch::channel(peer_counter);
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_downloads.insert(id.clone(), tx);
+
                     self.artifact_processor_tasks.spawn_on(
                         Self::process_advert(
                             id.clone(),
@@ -379,7 +430,7 @@ where
                 .get_mut(&to_remove)
                 .expect("Sender should always be present for slots in use");
             self.metrics.slot_table_removals_total.inc();
-            sender.send_if_modified(|h| h.remove(&peer_id));
+            sender.send_if_modified(|h| h.remove(peer_id));
         }
     }
     /// Downloads a given artifact.
@@ -394,7 +445,7 @@ where
         attr: &Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact::Message, NodeId)>,
-        mut peer_rx: &mut watch::Receiver<HashSet<NodeId>>,
+        mut peer_rx: &mut watch::Receiver<PeerCounter>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
@@ -443,7 +494,7 @@ where
                     .start_timer();
                 let mut rng = SmallRng::from_entropy();
                 while let Some(peer) = {
-                    let peer = peer_rx.borrow().iter().choose(&mut rng).copied();
+                    let peer = peer_rx.borrow().peers().choose(&mut rng).copied();
                     peer
                 } {
                     let request = build_rpc_handler_request(Artifact::TAG.into(), &id);
@@ -492,13 +543,13 @@ where
         attr: Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact::Message, NodeId)>,
-        mut peer_rx: watch::Receiver<HashSet<NodeId>>,
+        mut peer_rx: watch::Receiver<PeerCounter>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
         sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
     ) -> (
-        watch::Receiver<HashSet<NodeId>>,
+        watch::Receiver<PeerCounter>,
         Artifact::Id,
         Artifact::Attribute,
     ) {
@@ -552,7 +603,7 @@ where
     fn handle_topology_update(&mut self) {
         self.metrics.topology_updates_total.inc();
         let new_topology = self.topology_watcher.borrow().clone();
-        let mut nodes_leaving_topology: HashSet<NodeId> = HashSet::new();
+        let mut nodes_leaving_topology = HashSet::new();
 
         self.slot_table.retain(|node_id, _| {
             if !new_topology.is_member(node_id) {
@@ -570,7 +621,7 @@ where
             peers_sender.send_if_modified(|set| {
                 nodes_leaving_topology
                     .iter()
-                    .map(|n| set.remove(n))
+                    .map(|n| set.remove(*n))
                     .any(|r| r)
             });
         }
@@ -630,8 +681,11 @@ mod tests {
     use ic_types::RegistryVersion;
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
+    use tokio::time::timeout;
 
     use super::*;
+
+    const PROCESS_ARTIFACT_TIMEOUT: Duration = Duration::from_millis(100);
 
     fn create_receive_manager(
         log: ReplicaLogger,
@@ -892,7 +946,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
                 },
                 NODE_1,
                 ConnId::from(2),
@@ -907,19 +961,27 @@ mod tests {
                 &SlotEntry {
                     conn_id: ConnId::from(2),
                     commit_id: CommitId::from(0),
-                    id: 0,
+                    id: 1,
                 }
             );
             assert_eq!(mgr.slot_table.len(), 1);
             assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+
+            let joined_artifact_processor = rt.block_on(async {
+                timeout(
+                    PROCESS_ARTIFACT_TIMEOUT,
+                    mgr.artifact_processor_tasks.join_next(),
+                )
+                .await
+            });
+
+            let result = joined_artifact_processor
+                .expect("Joining artifact processor join-set timed out")
+                .expect("Joining artifact processor task failed")
+                .expect("Artifact processor task panicked");
+
             // Check that download task for first advert closes.
-            assert_eq!(
-                rt.block_on(mgr.artifact_processor_tasks.join_next())
-                    .unwrap()
-                    .unwrap()
-                    .1,
-                0
-            );
+            assert_eq!(result.1, 0);
         });
     }
 
@@ -1354,7 +1416,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     /// Advertise same id on different slots and overwrite both slots with new ids.
     fn duplicate_advert_on_different_slots() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -1386,6 +1447,7 @@ mod tests {
                 Arc::new(mock_transport),
                 pfn_rx,
             );
+            // Add id 0 on slot 1.
             mgr.handle_advert_receive(
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
@@ -1395,7 +1457,7 @@ mod tests {
                 NODE_1,
                 ConnId::from(1),
             );
-            // Add id 0 on different slot.
+            // Add id 0 on slot 2.
             mgr.handle_advert_receive(
                 AdvertUpdate {
                     slot_number: SlotNumber::from(2),
@@ -1418,39 +1480,48 @@ mod tests {
             // Make sure no download task closes since we still have slot entries for 0 and 1.
             rt.block_on(async {
                 tokio::time::timeout(
-                    Duration::from_millis(100),
+                    PROCESS_ARTIFACT_TIMEOUT,
                     mgr.artifact_processor_tasks.join_next(),
                 )
                 .await
                 .unwrap_err()
             });
+
             assert_eq!(mgr.artifact_processor_tasks.len(), 2);
             // Overwrite remaining id 0 at slot 2.
             mgr.handle_advert_receive(
                 AdvertUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(4),
-                    data: Data::Advert(U64Artifact::message_to_advert(&2)),
+                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
                 },
                 NODE_1,
                 ConnId::from(1),
             );
+
             // Make sure the download task for 0 closes since both entries got overwritten.
-            rt.block_on(async {
-                tokio::time::timeout(Duration::from_millis(100), async {
-                    while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
-                        assert_eq!(id.unwrap().1, 1);
-                    }
-                })
+            let joined_artifact_processor = rt.block_on(async {
+                timeout(
+                    PROCESS_ARTIFACT_TIMEOUT,
+                    mgr.artifact_processor_tasks.join_next(),
+                )
                 .await
-                .unwrap_err()
             });
+
+            let result = joined_artifact_processor
+                .expect("Joining artifact processor join-set timed out")
+                .expect("Joining artifact processor task failed")
+                .expect("Artifact processor task panicked");
+
+            assert_eq!(
+                result.1, 0,
+                "Expected artifact processor task for id 0 to closed"
+            );
             assert_eq!(mgr.artifact_processor_tasks.len(), 1);
         });
     }
 
     #[test]
-    #[ignore]
     /// Advertise same id on different slots where one slot is occupied.
     fn same_id_different_occupied_slot() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -1535,7 +1606,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     /// Advertise same id on same slots. This should be a noop where only the commit id and connection id get updated.
     fn same_id_same_slot() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -1598,15 +1668,22 @@ mod tests {
                 NODE_1,
                 ConnId::from(1),
             );
+
             // Make sure no download task closes since we still have entry for 0.
-            rt.block_on(async {
-                tokio::time::timeout(
-                    Duration::from_millis(100),
+            let joined_artifact_processor = rt.block_on(async {
+                timeout(
+                    PROCESS_ARTIFACT_TIMEOUT,
                     mgr.artifact_processor_tasks.join_next(),
                 )
                 .await
-                .unwrap_err()
             });
+
+            assert!(
+                joined_artifact_processor.is_err(),
+                "Artifact task should not close when overwriting with same artifact id."
+            );
+            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+
             // Check that newer commit id is stored.
             assert_eq!(mgr.slot_table.len(), 1);
             assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
@@ -1620,6 +1697,7 @@ mod tests {
                 2.into()
             );
             assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+
             // Overwrite id 0.
             mgr.handle_advert_receive(
                 AdvertUpdate {
@@ -1630,16 +1708,25 @@ mod tests {
                 NODE_1,
                 ConnId::from(1),
             );
-            // Make sure the download task for 0 closes since entry got overwritten.
-            rt.block_on(async {
-                tokio::time::timeout(Duration::from_millis(100), async {
-                    while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
-                        assert_eq!(id.unwrap().1, 1);
-                    }
-                })
+
+            // Make sure the download task for 0 closes.
+            let joined_artifact_processor = rt.block_on(async {
+                timeout(
+                    PROCESS_ARTIFACT_TIMEOUT,
+                    mgr.artifact_processor_tasks.join_next(),
+                )
                 .await
-                .unwrap_err()
             });
+
+            let result = joined_artifact_processor
+                .expect("Joining artifact processor join-set timed out")
+                .expect("Joining artifact processor task failed")
+                .expect("Artifact processor task panicked");
+
+            assert_eq!(
+                result.1, 0,
+                "Expected artifact processor task for id 0 to closed"
+            );
             assert_eq!(mgr.artifact_processor_tasks.len(), 1);
         });
     }
