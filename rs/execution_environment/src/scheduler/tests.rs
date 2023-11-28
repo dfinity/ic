@@ -1389,8 +1389,8 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     // limit is set to 400 instructions.
     // The test expects that subnet messages use about a 1/16 of the round limit
     // and the input messages get the full round limit. More specifically:
-    // - 3 subnet messages should run (using 30 out of 100 instructions).
-    // - 10 input messages should run (using 100 out of 100 instructions).
+    // - 3 subnet messages should run (using 30 out of 400 instructions).
+    // - 10 input messages should run (using 100 out of 400 instructions).
 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
@@ -2498,16 +2498,16 @@ fn execution_round_metrics_are_recorded() {
         13
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 3);
-    assert_eq!(1, metrics.round_subnet_queue.duration.get_sample_count());
+    assert_eq!(3, metrics.round_subnet_queue.duration.get_sample_count());
     assert_eq!(
-        1,
+        3,
         metrics.round_subnet_queue.instructions.get_sample_count()
     );
     assert_eq!(
         30,
         metrics.round_subnet_queue.instructions.get_sample_sum() as u64,
     );
-    assert_eq!(1, metrics.round_subnet_queue.messages.get_sample_count());
+    assert_eq!(3, metrics.round_subnet_queue.messages.get_sample_count());
     assert_eq!(
         3,
         metrics.round_subnet_queue.messages.get_sample_sum() as u64,
@@ -3932,6 +3932,73 @@ fn dts_long_execution_completes() {
         assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::CanisterDidNotReply,
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_execution
+            .get_sample_sum(),
+        9.0
+    );
+}
+
+#[test]
+fn cannot_execute_management_message_for_targeted_long_execution_canister() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister = test.create_canister();
+    let message_id = test.send_ingress(canister, ingress(1000));
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    for _ in 1..3 {
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+
+    // Subnet message directed to canister which has a long running message.
+    let arg = Encode!(&CanisterIdRecord::from(canister)).unwrap();
+    test.inject_call_to_ic00(
+        Method::CanisterStatus,
+        arg,
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+
+    // Subnet message will not be picked up because of the long execution.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_paused_execution
+            .get_sample_sum(),
+        3.0
+    );
+
+    // Finish the long execution. The subnet message will also be processed.
+    for _ in 1..7 {
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     assert_eq!(
         test.ingress_error(&message_id).code(),
         ErrorCode::CanisterDidNotReply,
