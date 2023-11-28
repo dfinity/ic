@@ -271,6 +271,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                         .zstd(true)
                         .deflate(true),
                 )
+                .layer(middleware::from_fn(routes::pre_compression))
                 .set_x_request_id(MakeRequestUuid)
                 .layer(middleware::from_fn_with_state(
                     HttpMetricParams::new(&registry, "http_request_in"),

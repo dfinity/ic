@@ -17,7 +17,7 @@ use ic_types::messages::{
 };
 use prometheus::Registry;
 use tower::{Service, ServiceBuilder};
-use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
+use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
 
 use crate::{
     management::btc_mw,
@@ -329,6 +329,8 @@ async fn test_all_call_types() -> Result<(), Error> {
             ServiceBuilder::new()
                 .layer(middleware::from_fn(validate_request))
                 .layer(middleware::from_fn(postprocess_response))
+                .layer(CompressionLayer::new())
+                .layer(middleware::from_fn(pre_compression))
                 .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()
                 .layer(middleware::from_fn_with_state(
