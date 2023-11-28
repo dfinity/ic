@@ -33,6 +33,9 @@ pub struct Cli {
 
     #[command(flatten, next_help_heading = "cache")]
     pub cache: CacheConfig,
+
+    #[command(flatten, next_help_heading = "retry")]
+    pub retry: RetryConfig,
 }
 
 #[derive(Args)]
@@ -186,4 +189,17 @@ pub struct CacheConfig {
     /// Whether to cache non-anonymous requests
     #[clap(long, default_value = "false")]
     pub cache_non_anonymous: bool,
+}
+
+#[derive(Args)]
+pub struct RetryConfig {
+    /// How many times to retry a failed request.
+    /// Should be in range [0..10], value of 0 disables the retries.
+    /// If there are less healthy nodes in the subnet - then less retries would be done.
+    #[clap(long, default_value = "2", value_parser = clap::value_parser!(u8).range(0..11))]
+    pub retry_count: u8,
+
+    /// Whether to retry update calls
+    #[clap(long, default_value = "false")]
+    pub retry_update_call: bool,
 }

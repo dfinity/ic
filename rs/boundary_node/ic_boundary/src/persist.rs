@@ -4,10 +4,12 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
+use rand::seq::SliceRandom;
 use tracing::{error, info};
 
 use crate::{
     metrics::{MetricParamsPersist, WithMetricsPersist},
+    routes::ErrorCause,
     snapshot::{Node, Subnet},
 };
 
@@ -50,6 +52,22 @@ pub struct RouteSubnet {
     pub range_start: u256,
     pub range_end: u256,
     pub nodes: Vec<Node>,
+}
+
+impl RouteSubnet {
+    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Node>, ErrorCause> {
+        let nodes = self
+            .nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
+        }
+
+        Ok(nodes)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

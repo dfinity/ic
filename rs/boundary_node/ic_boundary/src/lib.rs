@@ -12,6 +12,7 @@ mod metrics;
 mod nns;
 mod persist;
 mod rate_limiting;
+mod retry;
 mod routes;
 mod snapshot;
 mod tls_verify;

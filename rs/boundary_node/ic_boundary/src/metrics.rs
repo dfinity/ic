@@ -34,6 +34,7 @@ use tracing::info;
 use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
+    retry::RetryResult,
     routes::{ErrorCause, RequestContext},
     snapshot::{Node, RegistrySnapshot},
 };
@@ -476,6 +477,7 @@ pub struct HttpMetricParams {
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
     pub cache_counter: IntCounterVec,
+    pub retry_counter: IntCounterVec,
 }
 
 impl HttpMetricParams {
@@ -530,6 +532,14 @@ impl HttpMetricParams {
                 format!("{action}_cache"),
                 format!("Counts cache results"),
                 &["cache_status", "cache_bypass"],
+                registry
+            )
+            .unwrap(),
+
+            retry_counter: register_int_counter_vec_with_registry!(
+                format!("{action}_retry"),
+                format!("Counts per-subnet retry results"),
+                &["subnet_id", "success"],
                 registry
             )
             .unwrap(),
@@ -600,6 +610,7 @@ pub async fn metrics_middleware(
         .unwrap_or_default();
 
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
+    let retry_result = response.extensions().get::<RetryResult>().cloned();
     let canister_id = response.extensions().get::<CanisterId>().cloned();
     let node = response.extensions().get::<Node>().cloned();
     let cache_status = response
@@ -622,6 +633,7 @@ pub async fn metrics_middleware(
         request_sizer,
         response_sizer,
         cache_counter,
+        retry_counter,
     } = metric_params;
 
     // Closure that gets called when the response body is fully read (or an error occurs)
@@ -673,6 +685,15 @@ pub async fn metrics_middleware(
             .observe(response_size as f64);
         cache_counter.with_label_values(labels_cache).inc();
 
+        let retry_result = retry_result.clone();
+
+        // Count the retry if one happened
+        if let Some(v) = &retry_result {
+            retry_counter
+                .with_label_values(&[subnet_id_lbl.as_str(), if v.success { "yes" } else { "no" }])
+                .inc();
+        }
+
         info!(
             action,
             request_id,
@@ -690,6 +711,8 @@ pub async fn metrics_middleware(
             full_duration,
             request_size = ctx.request_size,
             response_size,
+            retry_count = &retry_result.as_ref().map(|x| x.retries),
+            retry_success = &retry_result.map(|x| x.success.to_string()),
             body_error = body_result.err(),
             %cache_status,
             cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),

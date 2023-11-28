@@ -11,16 +11,12 @@ use axum::{
 };
 use http::header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH};
 use http::{response, Version};
-use http_body::combinators::UnsyncBoxBody;
 use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
 use crate::{
-    http::read_streaming_body,
+    http::{read_streaming_body, AxumResponse},
     routes::{ApiError, ErrorCause, RequestContext},
 };
-
-// Standard response used to pass between middlewares
-type AxumResponse = Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>;
 
 // A list of possible Cache-Control directives that ask us not to cache the response
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];
