@@ -47,3 +47,12 @@ curl -X POST 'https://ethereum-sepolia.publicnode.com' \
         "id":1
     }'
 ```
+
+
+## Deploying the index
+
+### Mainnet
+
+```
+dfx deploy --network ic index --argument '(opt variant {Init = record { ledger_id = principal "apia6-jaaaa-aaaar-qabma-cai" }})' --mode reinstall --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```
