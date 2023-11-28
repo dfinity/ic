@@ -53,7 +53,7 @@ pub fn pre_master_config(env: TestEnv) {
             Subnet::fast(SubnetType::System, NNS_PRE_MASTER)
                 .with_dkg_interval_length(Height::from(NNS_PRE_MASTER as u64 * 2)),
         )
-        .with_unassigned_nodes(APP_PRE_MASTER as i32)
+        .with_unassigned_nodes(APP_PRE_MASTER)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     env.topology_snapshot().subnets().for_each(|subnet| {

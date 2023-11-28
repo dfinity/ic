@@ -125,7 +125,7 @@ impl InternetComputer {
     /// Add the given number of unassigned nodes to the IC.
     ///
     /// The nodes inherit the VM resources of the IC.
-    pub fn with_unassigned_nodes(mut self, no_of_nodes: i32) -> Self {
+    pub fn with_unassigned_nodes(mut self, no_of_nodes: usize) -> Self {
         for _ in 0..no_of_nodes {
             self.unassigned_nodes.push(Node::new_with_settings(
                 self.default_vm_resources,

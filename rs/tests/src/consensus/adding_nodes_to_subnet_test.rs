@@ -60,7 +60,7 @@ pub fn setup(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(INITIAL_APP_NODES_COUNT),
         )
-        .with_unassigned_nodes((TERMINAL_APP_NODES_COUNT - INITIAL_APP_NODES_COUNT) as i32)
+        .with_unassigned_nodes(TERMINAL_APP_NODES_COUNT - INITIAL_APP_NODES_COUNT)
         .setup_and_start(&env)
         .expect("Should be able to set up IC under test");
 
