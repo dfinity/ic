@@ -252,8 +252,6 @@ impl ProposeToCreateSubnetCmd {
             subnet_configuration::get_default_config_params(self.subnet_type, self.node_ids.len());
         let gossip_config = p2p::build_default_gossip_config();
         // set subnet params
-        self.ingress_bytes_per_block_soft_cap
-            .get_or_insert(subnet_config.ingress_bytes_per_block_soft_cap);
         self.max_ingress_bytes_per_message
             .get_or_insert(subnet_config.max_ingress_bytes_per_message);
         self.max_ingress_messages_per_block
@@ -996,10 +994,6 @@ struct ProposeToCreateSubnetCmd {
     pub subnet_id_override: Option<PrincipalId>,
 
     #[clap(long)]
-    /// Maximum amount of bytes per block. This is a soft cap.
-    pub ingress_bytes_per_block_soft_cap: Option<u64>,
-
-    #[clap(long)]
     /// Maximum amount of bytes per message. This is a hard cap.
     pub max_ingress_bytes_per_message: Option<u64>,
 
@@ -1247,7 +1241,7 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
         CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
-            ingress_bytes_per_block_soft_cap: self.ingress_bytes_per_block_soft_cap.unwrap(),
+            ingress_bytes_per_block_soft_cap: Default::default(),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap(),
             max_block_payload_size: self.max_block_payload_size.unwrap(),

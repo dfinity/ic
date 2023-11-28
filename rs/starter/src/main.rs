@@ -118,7 +118,6 @@ fn main() -> Result<()> {
                 None,
                 None,
                 None,
-                None,
                 config.unit_delay,
                 config.initial_notary_delay,
                 config.dkg_interval_length,

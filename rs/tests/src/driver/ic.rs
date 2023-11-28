@@ -312,7 +312,6 @@ pub struct Subnet {
     pub required_host_features: Vec<HostFeature>,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
-    pub ingress_bytes_per_block_soft_cap: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     pub unit_delay: Option<Duration>,
@@ -342,7 +341,6 @@ impl Subnet {
             required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay: None,
@@ -473,11 +471,6 @@ impl Subnet {
         self
     }
 
-    pub fn with_ingress_bytes_per_block_soft_cap(mut self, limit: u64) -> Self {
-        self.ingress_bytes_per_block_soft_cap = Some(limit);
-        self
-    }
-
     pub fn with_unit_delay(mut self, unit_delay: Duration) -> Self {
         self.unit_delay = Some(unit_delay);
         self
@@ -544,7 +537,6 @@ impl Default for Subnet {
             required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay: Some(Duration::from_millis(200)),

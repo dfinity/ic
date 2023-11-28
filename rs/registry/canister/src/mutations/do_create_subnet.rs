@@ -239,6 +239,7 @@ pub struct CreateSubnetPayload {
 
     pub subnet_id_override: Option<PrincipalId>,
 
+    // Unused.
     pub ingress_bytes_per_block_soft_cap: u64,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
