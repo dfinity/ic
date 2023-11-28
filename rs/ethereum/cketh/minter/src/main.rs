@@ -480,7 +480,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The last Ethereum block the ckETH minter checked for deposits.",
                 )?;
 
-                w.encode_gauge(
+                w.encode_counter(
                     "cketh_minter_skipped_blocks",
                     s.skipped_blocks.len() as f64,
                     "Total count of Ethereum blocks that were skipped for deposits.",
