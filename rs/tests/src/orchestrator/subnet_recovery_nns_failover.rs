@@ -66,7 +66,7 @@ pub fn setup(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(1),
         )
-        .with_unassigned_nodes(SUBNET_SIZE as i32)
+        .with_unassigned_nodes(SUBNET_SIZE)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 

@@ -48,12 +48,12 @@ use slog::info;
 use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
-const APP_NODES: i32 = 3;
-const UNASSIGNED_NODES: i32 = 3;
+const APP_NODES: usize = 3;
+const UNASSIGNED_NODES: usize = 3;
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
-pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
+pub fn setup(app_nodes: usize, unassigned_nodes: usize, env: TestEnv) {
     let mut ic = InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
@@ -64,7 +64,7 @@ pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(app_nodes.try_into().unwrap()),
+                .add_nodes(app_nodes),
         );
     }
 
@@ -128,7 +128,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     ));
 
     let root_subnet_id = topology_snapshot.root_subnet_id();
-    let subnet_size = APP_NODES.try_into().unwrap();
+    let subnet_size = APP_NODES;
 
     let create_new_subnet = !topology_snapshot
         .subnets()

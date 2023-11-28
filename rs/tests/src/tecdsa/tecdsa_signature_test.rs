@@ -128,7 +128,7 @@ pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(NUMBER_OF_NODES),
         )
-        .with_unassigned_nodes(NUMBER_OF_NODES as i32)
+        .with_unassigned_nodes(NUMBER_OF_NODES)
         .setup_and_start(&test_env)
         .expect("Could not start IC!");
     test_env.topology_snapshot().subnets().for_each(|subnet| {
@@ -173,7 +173,7 @@ pub fn config(test_env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(NUMBER_OF_NODES),
         )
-        .with_unassigned_nodes(NUMBER_OF_NODES as i32)
+        .with_unassigned_nodes(NUMBER_OF_NODES)
         .setup_and_start(&test_env)
         .expect("Could not start IC!");
     test_env.topology_snapshot().subnets().for_each(|subnet| {
