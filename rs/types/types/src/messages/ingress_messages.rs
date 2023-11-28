@@ -21,6 +21,7 @@ use ic_protobuf::{
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
+use prost::bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::{
@@ -187,6 +188,21 @@ impl AsRef<HttpRequest<SignedIngressContent>> for SignedIngress {
 impl From<SignedIngress> for SignedIngressContent {
     fn from(ingress: SignedIngress) -> SignedIngressContent {
         ingress.signed.take_content()
+    }
+}
+
+impl From<SignedIngress> for Bytes {
+    fn from(value: SignedIngress) -> Self {
+        Self::copy_from_slice(value.binary().as_ref())
+    }
+}
+
+impl TryFrom<Bytes> for SignedIngress {
+    type Error = ProxyDecodeError;
+    fn try_from(value: Bytes) -> Result<Self, Self::Error> {
+        SignedRequestBytes::from(value.to_vec())
+            .try_into()
+            .map_err(|e| ProxyDecodeError::CborDecodeError(Box::new(e)))
     }
 }
 

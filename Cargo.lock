@@ -5869,7 +5869,6 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "backoff 0.3.0",
- "bincode",
  "bytes",
  "crossbeam-channel",
  "futures",
@@ -5880,6 +5879,7 @@ dependencies = [
  "ic-metrics",
  "ic-p2p-test-utils",
  "ic-peer-manager",
+ "ic-protobuf",
  "ic-quic-transport",
  "ic-test-utilities-logger",
  "ic-types",
@@ -5888,7 +5888,6 @@ dependencies = [
  "phantom_newtype",
  "prometheus",
  "rand 0.8.5",
- "serde",
  "slog",
  "tokio",
  "turmoil",

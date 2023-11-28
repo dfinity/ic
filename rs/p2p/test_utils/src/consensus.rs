@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::{
     collections::{HashSet, VecDeque},
     sync::{Arc, Mutex},
@@ -23,9 +24,17 @@ impl ArtifactKind for U64Artifact {
     // Does not matter
     const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
     // Id==Message
+    type PbMessage = u64;
+    type PbIdError = Infallible;
+    type PbMessageError = Infallible;
+    type PbAttributeError = Infallible;
+    type PbFilterError = Infallible;
     type Message = u64;
+    type PbId = u64;
     type Id = u64;
+    type PbAttribute = ();
     type Attribute = ();
+    type PbFilter = ();
     type Filter = ();
 
     /// The function converts a U64ArtifactMessage to an advert for a

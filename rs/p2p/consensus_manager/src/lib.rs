@@ -1,7 +1,4 @@
-use std::{
-    hash::Hash,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use crate::metrics::ConsensusManagerMetrics;
 use axum::Router;
@@ -13,14 +10,17 @@ use ic_interfaces::p2p::{
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
+use ic_protobuf::{
+    p2p::v1 as pb,
+    proxy::{try_from_option_field, ProtoProxy, ProxyDecodeError},
+};
 use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{Advert, ArtifactKind, UnvalidatedArtifactMutation};
+use ic_types::artifact::{ArtifactKind, UnvalidatedArtifactMutation};
 use ic_types::NodeId;
 use phantom_newtype::AmountOf;
 use receiver::build_axum_router;
 use receiver::ConsensusManagerReceiver;
 use sender::ConsensusManagerSender;
-use serde::{Deserialize, Serialize};
 use tokio::{
     runtime::Handle,
     sync::{mpsc::Receiver, watch},
@@ -64,11 +64,7 @@ impl<'r> ConsensusManagerBuilder<'r> {
         sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
     ) where
         Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-        Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-        <Artifact as ArtifactKind>::Id:
-            Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-        <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-        <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
+        Artifact: ArtifactKind,
     {
         let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone(), raw_pool.clone());
 
@@ -126,11 +122,7 @@ fn start_consensus_manager<Artifact, Pool>(
     topology_watcher: watch::Receiver<SubnetTopology>,
 ) where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
+    Artifact: ArtifactKind,
 {
     let metrics = ConsensusManagerMetrics::new::<Artifact>(metrics_registry);
 
@@ -156,28 +148,60 @@ fn start_consensus_manager<Artifact, Pool>(
     );
 }
 
-// TODO: Consider creating a types.rs file and move these there:
-#[derive(Deserialize, Serialize)]
-pub enum Data<Artifact: ArtifactKind>
-where
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Message: Serialize,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a>,
-{
-    Artifact(Artifact::Message),
-    Advert(Advert<Artifact>),
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct AdvertUpdate<Artifact: ArtifactKind>
-where
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a>,
-{
+pub(crate) struct AdvertUpdate<Artifact: ArtifactKind> {
     slot_number: SlotNumber,
     commit_id: CommitId,
-    data: Data<Artifact>,
+    update: Update<Artifact>,
+}
+
+pub(crate) enum Update<Artifact: ArtifactKind> {
+    Artifact(Artifact::Message),
+    Advert((Artifact::Id, Artifact::Attribute)),
+}
+
+impl<Artifact: ArtifactKind> From<AdvertUpdate<Artifact>> for pb::AdvertUpdate {
+    fn from(
+        AdvertUpdate {
+            slot_number,
+            commit_id,
+            update,
+        }: AdvertUpdate<Artifact>,
+    ) -> Self {
+        Self {
+            commit_id: commit_id.get(),
+            slot_id: slot_number.get(),
+            update: Some(match update {
+                Update::Artifact(artifact) => {
+                    pb::advert_update::Update::Artifact(Artifact::PbMessage::proxy_encode(artifact))
+                }
+                Update::Advert((id, attribute)) => pb::advert_update::Update::Advert(pb::Advert {
+                    id: Artifact::PbId::proxy_encode(id),
+                    attribute: Artifact::PbAttribute::proxy_encode(attribute),
+                }),
+            }),
+        }
+    }
+}
+
+impl<Artifact: ArtifactKind> TryFrom<pb::AdvertUpdate> for AdvertUpdate<Artifact> {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::AdvertUpdate) -> Result<Self, Self::Error> {
+        Ok(Self {
+            slot_number: SlotNumber::from(value.slot_id),
+            commit_id: CommitId::from(value.commit_id),
+            update: match try_from_option_field(value.update, "update")? {
+                pb::advert_update::Update::Artifact(artifact) => {
+                    Update::Artifact(Artifact::PbMessage::proxy_decode(&artifact)?)
+                }
+                pb::advert_update::Update::Advert(pb::Advert { id, attribute }) => {
+                    Update::Advert((
+                        Artifact::PbId::proxy_decode(&id)?,
+                        Artifact::PbAttribute::proxy_decode(&attribute)?,
+                    ))
+                }
+            },
+        })
+    }
 }
 
 struct SlotNumberTag;

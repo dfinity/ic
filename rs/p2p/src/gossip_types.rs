@@ -107,7 +107,7 @@ impl From<GossipChunkRequest> for pb::GossipChunkRequest {
     /// equivalent.
     fn from(gossip_chunk_request: GossipChunkRequest) -> Self {
         Self {
-            artifact_id: Some((&gossip_chunk_request.artifact_id).into()),
+            artifact_id: Some(gossip_chunk_request.artifact_id.into()),
             chunk_id: gossip_chunk_request.chunk_id.get(),
             integrity_hash: gossip_chunk_request.integrity_hash.0,
         }
@@ -122,7 +122,7 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
     fn try_from(gossip_chunk_request: pb::GossipChunkRequest) -> Result<Self, Self::Error> {
         Ok(Self {
             artifact_id: try_from_option_field(
-                gossip_chunk_request.artifact_id.as_ref(),
+                gossip_chunk_request.artifact_id,
                 "GossipChunkRequest",
             )?,
             chunk_id: ChunkId::from(gossip_chunk_request.chunk_id),

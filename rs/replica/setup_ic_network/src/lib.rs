@@ -71,6 +71,7 @@ use ic_types::{
 };
 use std::{
     collections::HashMap,
+    convert::Infallible,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
@@ -921,9 +922,20 @@ pub type TestArtifactId = FileTreeSyncId;
 /// `TestArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for TestArtifact {
     const TAG: ArtifactTag = ArtifactTag::FileTreeSyncArtifact;
+    type PbMessageError = Infallible;
+    type PbMessage = ic_protobuf::types::v1::FileTreeSyncArtifact;
     type Message = TestArtifactMessage;
+
+    type PbId = String;
+    type PbIdError = Infallible;
     type Id = TestArtifactId;
+
+    type PbAttributeError = Infallible;
+    type PbAttribute = ();
     type Attribute = ();
+
+    type PbFilterError = Infallible;
+    type PbFilter = ();
     type Filter = ();
 
     /// The function converts a TestArtifactMessage to an advert for a

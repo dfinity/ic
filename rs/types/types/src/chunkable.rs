@@ -66,7 +66,7 @@ impl From<ArtifactChunk> for pb::ArtifactChunk {
     fn from(chunk: ArtifactChunk) -> Self {
         let data: pb::artifact_chunk::Data = match chunk.artifact_chunk_data {
             ArtifactChunkData::UnitChunkData(artifact) => {
-                pb::artifact_chunk::Data::Artifact((&artifact).into())
+                pb::artifact_chunk::Data::Artifact(artifact.into())
             }
             ArtifactChunkData::SemiStructuredChunkData(chunk_data) => {
                 pb::artifact_chunk::Data::Chunk(chunk_data)

@@ -16,6 +16,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_types::{
     artifact::{
         Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncFilter,
@@ -26,7 +27,10 @@ use ic_types::{
     state_sync::FileGroupChunks,
     Height,
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    convert::Infallible,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Clone)]
 pub struct StateSync {
@@ -73,9 +77,18 @@ pub struct StateSyncArtifact;
 
 impl ArtifactKind for StateSyncArtifact {
     const TAG: ArtifactTag = ArtifactTag::StateSyncArtifact;
+    // No wire type since it is never sent over the wire.
+    type PbId = ic_protobuf::p2p::v1::StateSyncId;
+    type PbIdError = Infallible;
     type Id = StateSyncArtifactId;
+    type PbMessage = ();
+    type PbMessageError = Infallible;
     type Message = StateSyncMessage;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
     type Attribute = ();
+    type PbFilter = pb::StateSyncFilter;
+    type PbFilterError = ProxyDecodeError;
     type Filter = StateSyncFilter;
 
     fn message_to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
