@@ -1071,6 +1071,14 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
+            Ok(Ic00Method::NodeMetricsHistory) => Some((
+                Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "Node metrics history API is not yet implemented.",
+                )),
+                msg.take_cycles(),
+            )),
+
             Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => Some((
                 Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
