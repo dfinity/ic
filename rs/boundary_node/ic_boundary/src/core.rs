@@ -53,6 +53,7 @@ use crate::{
     nns::{Load, Loader},
     persist,
     rate_limiting::RateLimit,
+    retry::{retry_request, RetryParams},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     snapshot::{Runner as SnapshotRunner, SnapshotPersister},
     tls_verify::TlsVerifier,
@@ -280,7 +281,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .layer(middleware::from_fn(management::btc_mw))
                 .layer(middleware::from_fn_with_state(
                     lookup.clone(),
-                    routes::lookup_node,
+                    routes::lookup_subnet,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    RetryParams {
+                        retry_count: cli.retry.retry_count as usize,
+                        retry_update_call: cli.retry.retry_update_call,
+                    },
+                    retry_request,
                 )),
         );
 

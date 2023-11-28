@@ -131,7 +131,7 @@ impl Runner {
     }
 
     // Creates a snapshot of the registry for given version
-    fn get_snapshot(&mut self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
+    fn get_snapshot(&self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
         let routing_table = self
             .registry_client

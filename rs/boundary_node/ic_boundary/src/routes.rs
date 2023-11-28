@@ -27,7 +27,6 @@ use ic_types::{
     CanisterId,
 };
 use lazy_static::lazy_static;
-use rand::seq::SliceRandom;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tower_governor::errors::GovernorError;
@@ -47,7 +46,8 @@ use crate::{
     cache::CacheStatus,
     core::MAX_REQUEST_BODY_SIZE,
     http::{read_streaming_body, reqwest_error_infer, HttpClient},
-    persist::Routes,
+    persist::{RouteSubnet, Routes},
+    retry::RetryResult,
     snapshot::{Node, RegistrySnapshot},
 };
 
@@ -79,6 +79,8 @@ const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-n
 const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
@@ -173,6 +175,16 @@ impl ErrorCause {
             Self::ReplicaErrorOther(x) => Some(x.clone()),
             _ => None,
         }
+    }
+
+    pub fn retriable(&self) -> bool {
+        matches!(
+            self,
+            Self::ReplicaErrorDNS(_)
+                | Self::ReplicaErrorConnect
+                | Self::ReplicaTLSErrorOther(_)
+                | Self::ReplicaTLSErrorCert(_)
+        )
     }
 }
 
@@ -288,7 +300,7 @@ pub trait Proxy: Sync + Send {
 
 #[async_trait]
 pub trait Lookup: Sync + Send {
-    async fn lookup(&self, id: &CanisterId) -> Result<Node, ErrorCause>;
+    async fn lookup_subnet(&self, id: &CanisterId) -> Result<Arc<RouteSubnet>, ErrorCause>;
 }
 
 #[async_trait]
@@ -368,7 +380,10 @@ impl Proxy for ProxyRouter {
 
 #[async_trait]
 impl Lookup for ProxyRouter {
-    async fn lookup(&self, canister_id: &CanisterId) -> Result<Node, ErrorCause> {
+    async fn lookup_subnet(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<Arc<RouteSubnet>, ErrorCause> {
         let subnet = self
             .published_routes
             .load_full()
@@ -376,14 +391,7 @@ impl Lookup for ProxyRouter {
             .lookup(canister_id.get_ref().0)
             .ok_or(ErrorCause::SubnetNotFound)?; // Requested canister route wasn't found
 
-        // Pick random node
-        let node = subnet
-            .nodes
-            .choose(&mut rand::thread_rng())
-            .ok_or(ErrorCause::NoHealthyNodes)? // No healhy nodes in subnet
-            .clone();
-
-        Ok(node)
+        Ok(subnet)
     }
 }
 
@@ -554,7 +562,7 @@ pub async fn preprocess_request(
     };
 
     // Reconstruct request back from parts
-    let mut request = Request::from_parts(parts, hyper::Body::from(body));
+    let mut request = Request::from_parts(parts, Body::from(body));
 
     // Inject variables into the request
     request.extensions_mut().insert(ctx.clone());
@@ -574,24 +582,24 @@ pub async fn preprocess_request(
     Ok(response)
 }
 
-// Middleware: looks up the node in the routing table
-pub async fn lookup_node(
+// Middleware: looks up the target subnet in the routing table
+pub async fn lookup_subnet(
     State(lk): State<Arc<dyn Lookup>>,
     Extension(canister_id): Extension<CanisterId>,
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Try to look up a target node using the canister id
-    let node = lk.lookup(&canister_id).await?;
+    // Try to look up a target subnet using the canister id
+    let subnet = lk.lookup_subnet(&canister_id).await?;
 
-    // Inject node into request
-    request.extensions_mut().insert(node.clone());
+    // Inject subnet into request
+    request.extensions_mut().insert(Arc::clone(&subnet));
 
     // Pass request to the next processor
     let mut response = next.run(request).await;
 
-    // Inject node into the response for access by other middleware
-    response.extensions_mut().insert(node);
+    // Inject subnet into the response for access by other middleware
+    response.extensions_mut().insert(subnet);
 
     Ok(response)
 }
@@ -669,6 +677,14 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
                 HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
             )
         });
+    }
+
+    let retry_result = response.extensions().get::<RetryResult>().cloned();
+    if let Some(v) = retry_result {
+        response.headers_mut().insert(
+            HEADER_IC_RETRIES,
+            HeaderValue::from_maybe_shared(Bytes::from(v.retries.to_string())).unwrap(),
+        );
     }
 
     response
