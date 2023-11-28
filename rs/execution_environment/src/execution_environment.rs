@@ -205,7 +205,7 @@ pub fn as_num_instructions(a: RoundInstructions) -> NumInstructions {
 /// inspect message, benchmarks, tests also have to initialize the round limits.
 /// In such cases the "round" should be considered as a trivial round consisting
 /// of a single message.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     pub instructions: RoundInstructions,
