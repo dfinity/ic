@@ -362,13 +362,39 @@ fn install_xrc_mock_canister(
     )
     .unwrap();
 
+    let subnet_url = new_subnet_node.get_public_url();
+
+    // Trick dfx into believing the candid UI canister has already been installed.
+    // Without this dfx is going to try install the candid UI canister and will fail.
+    //
+    // Sanitize the URL
+    // from: http://[2a00:fb01:400:42:506f:4cff:fe07:400a]:8080/
+    // to:   http____2a00_fb01_400_42_506f_4cff_fe07_400a__8080_
+    let sanitized_subnet_url = subnet_url
+        .to_string()
+        .replace(|c: char| !c.is_ascii_alphanumeric(), "_");
     let dfx_json_path = env.get_path("dfx.json");
-    fs::write(dfx_json_path, "{}").unwrap();
+    fs::write(
+        dfx_json_path,
+        r#"{
+            "canisters": {
+                "__Candid_UI": {
+                    "candid": "fake",
+                    "wasm": "fake",
+                    "type": "custom",
+                    "remote": {
+                        "id": { "<URL>": "aaaaa-aa" }
+                    }
+                }
+            }
+        }"#
+        .replace("<URL>", &sanitized_subnet_url),
+    )
+    .unwrap();
 
     let logger: Logger = env.logger();
     let dfx_path: PathBuf =
         fs::canonicalize(env.clone().get_dependency_path("external/dfx/dfx")).unwrap();
-    let subnet_url = new_subnet_node.get_public_url();
     let home = fs::canonicalize(env.base_path()).unwrap();
     let mut cmd = Command::new(dfx_path.clone());
     cmd.env("HOME", home.clone())
