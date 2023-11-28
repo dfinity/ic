@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+bit-vec = "0.6.3"
 cvt = "0.1.1"
 ic-btc-interface = { workspace = true }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
@@ -21,6 +22,7 @@ ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
@@ -29,6 +31,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
+itertools = "0.10"
 lazy_static = "1.4.0"
 libc = "0.2.91"
 maplit = "1.0.2"
@@ -36,12 +39,14 @@ nix = { workspace = true }
 rand = "0.8.4"
 rand_chacha = "0.3.0"
 phantom_newtype = { path = "../phantom_newtype" }
+prometheus = { workspace = true }
 serde = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-prometheus = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tempfile = "3.1.0"
 uuid = { version = "1.2.1", features = ["v4", "serde"] }
 
@@ -51,7 +56,6 @@ criterion = "0.5"
 criterion-time = { path = "../criterion_time" }
 ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
 ic-test-utilities = { path = "../test_utilities" }
-ic-metrics = { path = "../monitoring/metrics" }
 maplit = "1.0.2"
 serde_cbor = { workspace = true }
 proptest = "1.0"
