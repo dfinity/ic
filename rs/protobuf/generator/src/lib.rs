@@ -407,7 +407,10 @@ fn build_crypto_proto(def: &Path, out: &Path) {
 fn build_p2p_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "p2p");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    let files = [def.join("p2p/v1/state_sync_manager.proto")];
+    let files = [
+        def.join("p2p/v1/state_sync_manager.proto"),
+        def.join("p2p/v1/consensus_manager.proto"),
+    ];
     compile_protos(config, def, &files);
 }
 

@@ -3,7 +3,7 @@ use crate::{
         ConsensusManagerMetrics, DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED,
         DOWNLOAD_TASK_RESULT_COMPLETED, DOWNLOAD_TASK_RESULT_DROP,
     },
-    AdvertUpdate, CommitId, Data, SlotNumber,
+    AdvertUpdate, CommitId, SlotNumber, Update,
 };
 use axum::{
     extract::State,
@@ -16,14 +16,13 @@ use crossbeam_channel::Sender as CrossbeamSender;
 use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
 use ic_logger::ReplicaLogger;
 use ic_peer_manager::SubnetTopology;
+use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
-use ic_types::artifact::{Advert, ArtifactKind, Priority, PriorityFn, UnvalidatedArtifactMutation};
+use ic_types::artifact::{ArtifactKind, Priority, PriorityFn, UnvalidatedArtifactMutation};
 use ic_types::NodeId;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    hash::Hash,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -48,14 +47,7 @@ type ReceivedAdvertSender<A> = Sender<(AdvertUpdate<A>, NodeId, ConnId)>;
 pub fn build_axum_router<Artifact: ArtifactKind>(
     log: ReplicaLogger,
     pool: ValidatedPoolReaderRef<Artifact>,
-) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>)
-where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-{
+) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>) {
     let (update_tx, update_rx) = tokio::sync::mpsc::channel(100);
     let endpoint: &'static str = Artifact::TAG.into();
     let router = Router::new()
@@ -70,22 +62,15 @@ where
 async fn rpc_handler<Artifact: ArtifactKind>(
     State(pool): State<ValidatedPoolReaderRef<Artifact>>,
     payload: Bytes,
-) -> Result<Bytes, StatusCode>
-where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
-{
+) -> Result<Bytes, StatusCode> {
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
-            bincode::deserialize(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+            Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
         Ok::<_, StatusCode>(
             pool.read()
                 .unwrap()
                 .get_validated_by_identifier(&id)
-                .map(|msg| Bytes::from(bincode::serialize(&msg).unwrap())),
+                .map(|msg| Bytes::from(Artifact::PbMessage::proxy_encode(msg))),
         )
     });
     let bytes = jh
@@ -101,15 +86,9 @@ async fn update_handler<Artifact: ArtifactKind>(
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
-) -> Result<(), StatusCode>
-where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a> + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Sync,
-{
+) -> Result<(), StatusCode> {
     let update: AdvertUpdate<Artifact> =
-        bincode::deserialize(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+        pb::AdvertUpdate::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     sender
         .send((update, peer, conn_id))
@@ -201,11 +180,7 @@ impl<Artifact, Pool>
     ConsensusManagerReceiver<Artifact, Pool, (AdvertUpdate<Artifact>, NodeId, ConnId)>
 where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
+    Artifact: ArtifactKind,
 {
     pub(crate) fn run(
         log: ReplicaLogger,
@@ -348,16 +323,21 @@ where
         let AdvertUpdate {
             slot_number,
             commit_id,
-            data,
+            update,
         } = advert_update;
-        let (advert, artifact) = match data {
-            Data::Artifact(artifact) => {
-                self.metrics.slot_table_updates_with_artifact_total.inc();
-                (Artifact::message_to_advert(&artifact), Some(artifact))
+
+        let (id, attribute, artifact) = match update {
+            Update::Artifact(artifact) => {
+                let advert = Artifact::message_to_advert(&artifact);
+                (advert.id, advert.attribute, Some(artifact))
             }
-            Data::Advert(advert) => (advert, None),
+            Update::Advert((id, attribute)) => (id, attribute, None),
         };
-        let Advert { id, attribute, .. } = advert;
+
+        if artifact.is_some() {
+            self.metrics.slot_table_updates_with_artifact_total.inc();
+        }
+
         let new_slot_entry: SlotEntry<Artifact::Id> = SlotEntry {
             commit_id,
             conn_id: connection_id,
@@ -497,14 +477,17 @@ where
                     let peer = peer_rx.borrow().peers().choose(&mut rng).copied();
                     peer
                 } {
-                    let request = build_rpc_handler_request(Artifact::TAG.into(), &id);
+                    let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
+                    let request = Request::builder()
+                        .uri(format!("/{}/rpc", Artifact::TAG.to_string().to_lowercase()))
+                        .body(bytes)
+                        .unwrap();
 
                     let next_request_at = Instant::now() + ARTIFACT_RPC_TIMEOUT;
                     match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
                         Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                            if let Ok(message) =
-                                bincode::deserialize::<Artifact::Message>(response.body())
-                            {
+                            let body = response.into_body();
+                            if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
                                 result = DownloadResult::Completed(message, peer);
                                 break;
                             }
@@ -632,13 +615,6 @@ where
     }
 }
 
-fn build_rpc_handler_request<T: Serialize>(uri_prefix: &str, id: &T) -> Request<Bytes> {
-    Request::builder()
-        .uri(format!("/{}/rpc", uri_prefix))
-        .body(Bytes::from(bincode::serialize(id).unwrap()))
-        .unwrap()
-}
-
 enum DownloadResult<T> {
     Completed(T, NodeId),
     AllPeersDeletedTheArtifact,
@@ -762,7 +738,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -788,7 +764,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -811,7 +787,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(0),
@@ -834,7 +810,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(10),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(0),
@@ -857,7 +833,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(0),
@@ -919,7 +895,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -946,7 +922,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
-                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                    update: Update::Advert((1, ())),
                 },
                 NODE_1,
                 ConnId::from(2),
@@ -1022,7 +998,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1032,7 +1008,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_2,
                 ConnId::from(1),
@@ -1082,7 +1058,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1092,7 +1068,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(2),
-                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                    update: Update::Advert((1, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1107,7 +1083,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(3),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_2,
                 ConnId::from(1),
@@ -1163,7 +1139,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1179,7 +1155,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(2),
-                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                    update: Update::Advert((1, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1222,7 +1198,9 @@ mod tests {
             let mut mock_transport = MockTransport::new();
             mock_transport.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
-                    .body(Bytes::from(bincode::serialize(&0_u64).unwrap()))
+                    .body(Bytes::from(
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                    ))
                     .unwrap())
             });
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
@@ -1244,7 +1222,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1299,7 +1277,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1308,7 +1286,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_2,
                 ConnId::from(1),
@@ -1389,7 +1367,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1452,7 +1430,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1462,7 +1440,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(2),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1472,7 +1450,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(3),
-                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                    update: Update::Advert((1, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1493,7 +1471,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(4),
-                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                    update: Update::Advert((1, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1557,7 +1535,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1566,7 +1544,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(2),
-                    data: Data::Advert(U64Artifact::message_to_advert(&1)),
+                    update: Update::Advert((1, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1586,7 +1564,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(3),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1641,7 +1619,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1663,7 +1641,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(2),
-                    data: Data::Advert(U64Artifact::message_to_advert(&0)),
+                    update: Update::Advert((0, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
@@ -1703,7 +1681,7 @@ mod tests {
                 AdvertUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(3),
-                    data: Data::Advert(U64Artifact::message_to_advert(&2)),
+                    update: Update::Advert((2, ())),
                 },
                 NODE_1,
                 ConnId::from(1),
