@@ -75,6 +75,8 @@ pub enum Method {
     BitcoinSendTransactionInternal, // API for sending transactions to the network.
     BitcoinGetSuccessors,           // API for fetching blocks from the network.
 
+    NodeMetricsHistory,
+
     // These methods are only available on test IC instances where there is a
     // need to fabricate cycles without burning ICP first.
     ProvisionalCreateCanisterWithCycles,
@@ -2165,6 +2167,21 @@ pub enum QueryMethod {
     BitcoinGetUtxosQuery,
     BitcoinGetBalanceQuery,
 }
+
+/// `CandidType` for `NodeMetricsHistoryArgs`
+/// ```text
+/// record {
+///     subnet_id: principal;
+///     start_at_timestamp_nanos: nat64;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct NodeMetricsHistoryArgs {
+    pub subnet_id: PrincipalId,
+    pub start_at_timestamp_nanos: u64,
+}
+
+impl Payload<'_> for NodeMetricsHistoryArgs {}
 
 /// Struct used for encoding/decoding
 /// `(record {

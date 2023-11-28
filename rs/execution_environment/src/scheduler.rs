@@ -2180,6 +2180,7 @@ fn get_instructions_limits_for_subnet_message(
             | BitcoinSendTransactionInternal
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
+            | NodeMetricsHistory
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister
             | UploadChunk

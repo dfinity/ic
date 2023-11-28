@@ -8,8 +8,9 @@ use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
-    SignWithECDSAArgs, StoredChunksArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    InstallCodeArgsV2, Method as Ic00Method, NodeMetricsHistoryArgs, Payload,
+    ProvisionalTopUpCanisterArgs, SignWithECDSAArgs, StoredChunksArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -172,6 +173,9 @@ pub(super) fn resolve_destination(
                 network_topology,
                 own_subnet,
             ))
+        }
+        Ok(Ic00Method::NodeMetricsHistory) => {
+            Ok(NodeMetricsHistoryArgs::decode(payload)?.subnet_id)
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;
