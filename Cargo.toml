@@ -442,7 +442,7 @@ ic-utils = { version = "0.30.2", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c" }
 indexmap = "2.1.0"
 itertools = "0.10.5"
-k256 = { version = "0.13", default_features = false, features = [
+k256 = { version = "0.13.2", default_features = false, features = [
   "arithmetic",
   "ecdsa",
   "pem",
