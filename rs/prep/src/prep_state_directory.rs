@@ -146,7 +146,6 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
                 SubnetType::System,
                 None,
                 None,

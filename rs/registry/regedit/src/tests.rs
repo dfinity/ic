@@ -152,7 +152,6 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             None,
             None,
             None,
-            None,
             SubnetType::System,
             None,
             None,

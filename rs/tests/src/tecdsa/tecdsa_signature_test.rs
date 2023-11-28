@@ -429,7 +429,7 @@ pub(crate) async fn create_new_subnet_with_keys(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
-        ingress_bytes_per_block_soft_cap: config.ingress_bytes_per_block_soft_cap,
+        ingress_bytes_per_block_soft_cap: Default::default(),
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,

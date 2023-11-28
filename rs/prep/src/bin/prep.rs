@@ -202,7 +202,6 @@ fn main() -> Result<()> {
             *subnet_id,
             nodes.to_owned(),
             valid_args.replica_version_id.clone(),
-            None,
             valid_args.max_ingress_bytes_per_message,
             None,
             None,

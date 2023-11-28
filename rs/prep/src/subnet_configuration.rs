@@ -53,11 +53,6 @@ pub struct SubnetConfig {
     /// The node ids that belong to this subnetwork.
     pub membership: BTreeMap<NodeIndex, NodeConfiguration>,
 
-    /// soft cap on the maximum size of a block, i.e. if the total size of a
-    /// block exceeds `max_ingress_bytes_per_block`, no more messages can be
-    /// added.
-    pub ingress_bytes_per_block_soft_cap: u64,
-
     /// maximum size of an ingress message
     pub max_ingress_bytes_per_message: u64,
 
@@ -145,7 +140,6 @@ pub struct SubnetConfigParams {
     pub initial_notary_delay: Duration,
     pub dkg_interval_length: Height,
     pub max_ingress_bytes_per_message: u64,
-    pub ingress_bytes_per_block_soft_cap: u64,
     pub max_ingress_messages_per_block: u64,
     pub max_block_payload_size: u64,
     pub dkg_dealings_per_block: usize,
@@ -195,7 +189,6 @@ pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> S
         initial_notary_delay: dynamic_config.initial_notary_delay,
         dkg_interval_length: dynamic_config.dkg_interval_length,
         max_ingress_bytes_per_message: dynamic_config.max_ingress_bytes_per_message,
-        ingress_bytes_per_block_soft_cap: constants::INGRESS_BYTES_PER_BLOCK_SOFT_CAP,
         max_ingress_messages_per_block: constants::MAX_INGRESS_MESSAGES_PER_BLOCK,
         max_block_payload_size: constants::MAX_BLOCK_PAYLOAD_SIZE,
         dkg_dealings_per_block: constants::DKG_DEALINGS_PER_BLOCK,
@@ -208,7 +201,6 @@ impl SubnetConfig {
         subnet_index: SubnetIndex,
         membership: BTreeMap<NodeIndex, NodeConfiguration>,
         replica_version_id: Option<ReplicaVersion>,
-        ingress_bytes_per_block_soft_cap: Option<u64>,
         max_ingress_bytes_per_message: Option<u64>,
         max_ingress_messages_per_block: Option<u64>,
         max_block_payload_size: Option<u64>,
@@ -236,8 +228,6 @@ impl SubnetConfig {
             subnet_index,
             membership,
             replica_version_id: replica_version_id.unwrap_or_default(),
-            ingress_bytes_per_block_soft_cap: ingress_bytes_per_block_soft_cap
-                .unwrap_or(config.ingress_bytes_per_block_soft_cap),
             max_ingress_bytes_per_message: max_ingress_bytes_per_message
                 .unwrap_or(config.max_ingress_bytes_per_message),
             max_ingress_messages_per_block: max_ingress_messages_per_block
