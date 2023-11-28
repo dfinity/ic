@@ -12012,6 +12012,19 @@ lazy_static! {
             ..Default::default()
         }).unwrap())
     );
+
+    static ref FAILING_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
+        ExpectedCallCanisterMethodCallArguments {
+            target: SNS_WASM_CANISTER_ID,
+            method_name: "deploy_new_sns",
+            request: Encode!(&DeployNewSnsRequest {
+                sns_init_payload: Some(SNS_INIT_PAYLOAD.clone())
+            }).unwrap(),
+        },
+        Err((
+            None, "deploy_new_sns failed for no apparent reason.".to_string()
+        ))
+    );
 }
 
 const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 61 * E8;
@@ -12606,6 +12619,102 @@ async fn test_create_service_nervous_system_settles_community_fund_commit() {
         "Calls that should have been made, but were not: {:#?}",
         expected_call_canister_method_calls,
     );
+}
+
+#[tokio::test]
+async fn test_create_service_nervous_system_failure_due_to_swap_deployment_error() {
+    // Step 1: Prepare the world.
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: SWAP_ID_TO_NEURON.clone(),
+        ..Default::default()
+    };
+
+    let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
+        [
+            // Called during proposal execution
+            FAILING_DEPLOY_NEW_SNS_CALL.clone(),
+        ]
+        .into(),
+    ));
+
+    let driver = fake::FakeDriver::default().with_ledger_accounts(vec![]); // Initialize the minting account
+    let mut gov = Governance::new(
+        governance_proto,
+        Box::new(MockEnvironment {
+            expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
+        }),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Run code under test. This is done indirectly via proposal. The
+    // proposal is executed right away, because of the "passage of time", as
+    // experienced via the MockEnvironment in gov.
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        &principal(1),
+        &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
+    )
+    .await
+    .unwrap();
+
+    // Step 3: Inspect results.
+
+    // Step 3.1: Inspect the proposal. In particular, look at its execution status.
+    assert_eq!(
+        gov.heap_data.proposals.len(),
+        1,
+        "{:#?}",
+        gov.heap_data.proposals
+    );
+    let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
+    let (_id, proposal) = proposals.pop().unwrap();
+    assert_eq!(
+        proposal.proposal.as_ref().unwrap().title.as_ref().unwrap(),
+        "Create a Service Nervous System",
+        "{:#?}",
+        proposal.proposal.as_ref().unwrap()
+    );
+    assert_eq!(proposal.executed_timestamp_seconds, 0, "{:#?}", proposal);
+    assert_eq!(proposal.sns_token_swap_lifecycle, None);
+    assert_eq!(
+        proposal.failed_timestamp_seconds, DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+        "{:#?}",
+        proposal
+    );
+    assert_matches!(proposal.failure_reason, Some(_), "{:#?}", proposal);
+    assert_eq!(proposal.derived_proposal_information, None);
+
+    assert_eq!(proposal.cf_participants, vec![]);
+    assert_eq!(
+        proposal.neurons_fund_data,
+        *NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
+    );
+
+    // Assert that maturity of (all) Neurons' Fund neurons has been restored.
+    let reserved_neurons_portions = NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
+        .as_ref()
+        .unwrap()
+        .initial_neurons_fund_participation
+        .as_ref()
+        .unwrap()
+        .neurons_fund_reserves
+        .as_ref()
+        .unwrap()
+        .neurons_fund_neuron_portions
+        .clone();
+    for portion in reserved_neurons_portions {
+        let current_neuron = gov
+            .neuron_store
+            .with_neuron(&portion.nns_neuron_id.unwrap(), |neuron| neuron.clone())
+            .unwrap();
+        assert_eq!(
+            Some(current_neuron.maturity_e8s_equivalent),
+            portion.maturity_equivalent_icp_e8s
+        );
+    }
 }
 
 #[tokio::test]

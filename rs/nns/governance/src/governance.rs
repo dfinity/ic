@@ -4715,100 +4715,39 @@ impl Governance {
         };
 
         // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
-        let request = DeployNewSnsRequest {
-            sns_init_payload: Some(sns_init_payload),
-        };
-        let request = match Encode!(&request) {
-            Ok(ok) => ok,
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Failed to encode request for deploy_new_sns Candid \
-                             method call: {}\nrequest: {:#?}",
-                        err, request,
-                    ),
-                ));
-            }
-        };
-        let deploy_new_sns_result = self
-            .env
-            .call_canister_method(SNS_WASM_CANISTER_ID, "deploy_new_sns", request)
-            .await;
+        // Do NOT return Err right away using the ? operator, because we must refund maturity to the
+        // Neurons' Fund before returning.
+        let mut deploy_new_sns_response: Result<DeployNewSnsResponse, GovernanceError> =
+            call_deploy_new_sns(&mut self.env, sns_init_payload).await;
 
-        // Step 3: Inspect call result.
-        let deploy_new_sns_response: Vec<u8> = match deploy_new_sns_result {
-            Ok(ok) => ok,
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Failed to send deploy_new_sns request to SNS_WASM canister: {:?}",
-                        err,
-                    ),
-                ));
-            }
-        };
-
-        // Step 4: Decode response.
-        let deploy_new_sns_response = match Decode!(&deploy_new_sns_response, DeployNewSnsResponse)
-        {
-            Ok(ok) => ok,
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Failed to send deploy_new_sns request to SNS_WASM canister: {}",
-                        err,
-                    ),
-                ));
-            }
-        };
+        // Step 3: React to response from deploy_new_sns (Ok or Err).
 
         let proposal_id = ProposalId {
             id: executed_create_service_nervous_system_proposal.proposal_id,
         };
-        if deploy_new_sns_response.error.is_some() {
-            if is_matched_neurons_fund_participation_enabled {
-                if let Some(initial_neurons_fund_participation_snapshot) =
-                    initial_neurons_fund_participation_snapshot
-                {
-                    let refund_outcome = self.refund_maturity_to_neurons_fund(
-                        &proposal_id,
-                        initial_neurons_fund_participation_snapshot,
-                    );
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "deploy_new_sns response contained an error: {:#?}. refund_outcome = {:#?}",
-                            deploy_new_sns_response, refund_outcome
-                        ),
-                    ));
-                } else {
-                    // Nothing to refund
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "deploy_new_sns response contained an error: {:#?}.",
-                            deploy_new_sns_response
-                        ),
-                    ));
-                }
-            } else {
-                let failed_refunds = refund_community_fund_maturity(
+
+        // Step 3.1: If the call was not successful, issue refunds (and then, return).
+        if let Err(ref mut err) = &mut deploy_new_sns_response {
+            if !is_matched_neurons_fund_participation_enabled {
+                let refund_result = refund_community_fund_maturity(
                     &mut self.neuron_store,
                     &executed_create_service_nervous_system_proposal.neurons_fund_participants,
                 );
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "deploy_new_sns response contained an error: {:#?}. failed_refunds = {:#?}",
-                        deploy_new_sns_response, failed_refunds,
-                    ),
-                ));
-            };
+                err.error_message += &format!(" refund_result: {:#?}", refund_result);
+            } else if let Some(initial_neurons_fund_participation_snapshot) =
+                initial_neurons_fund_participation_snapshot
+            {
+                let refund_result = self.refund_maturity_to_neurons_fund(
+                    &proposal_id,
+                    initial_neurons_fund_participation_snapshot,
+                );
+                err.error_message += &format!(" refund result: {:#?}", refund_result);
+            }
         }
-        // Creation of an SNS was a success. Record this fact for latter settlement.
+        let deploy_new_sns_response = deploy_new_sns_response?;
+
+        // Step 3.2: Otherwise, deploy_new_sns was successful. Record this fact for latter
+        // settlement.
         let proposal_data = self.mut_proposal_data_or_fail(
             &proposal_id,
             "in execute_create_service_nervous_system_proposal",
@@ -8061,6 +8000,82 @@ impl Governance {
 
     pub fn neuron_data_validation_summary(&self) -> NeuronDataValidationSummary {
         self.neuron_data_validator.summary()
+    }
+}
+
+/// Does what the name says: calls the deploy_new_sns method on the sns-wasm canister.
+///
+/// Currently, Err is returned in the following cases:
+///
+///   * Fail to encode request. Not sure how this can happen. I guess if the input is too big, and
+///     we run out of memory? If that's right, this won't happen if the input is not excessively
+///     large.
+///
+///   * Fail to make call. This could be the result of sns-wasm being stopped, deleted, or something
+///     like that. Currently, there is no intention to ever do those things (except during an
+///     upgrade).
+///
+///   * Fail to decode reply. This would most likely result from sns-wasm sending a response that
+///     lacks a required field (presumably, the result of a non-backwards compatible interface
+///     change). It might be possible to avoid this case by upgrading governance. Ideally, upgrading
+///     governance would have been done before sns-wasm was upgraded (that is, upgrading the client
+///     before the server), but late is better than never.
+///
+///   * DeployNewSnsResponse.error is populated. See documentation for the deploy_new_sns Candid
+///     method supplied by sns-wasm.
+///
+/// All of these are of type External.
+///
+/// If Ok is returned, it can be assumed that the error field is not populated.
+async fn call_deploy_new_sns(
+    env: &mut Box<dyn Environment>,
+    sns_init_payload: SnsInitPayload,
+) -> Result<DeployNewSnsResponse, GovernanceError> {
+    // Step 2.1: Construct request
+    let request = DeployNewSnsRequest {
+        sns_init_payload: Some(sns_init_payload),
+    };
+    let request = Encode!(&request).map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::External,
+            format!(
+                "Failed to encode request for deploy_new_sns Candid \
+                     method call: {}\nrequest: {:#?}",
+                err, request,
+            ),
+        )
+    })?;
+
+    // Step 2.2: Send the request and wait for reply..
+    let deploy_new_sns_response = env
+        .call_canister_method(SNS_WASM_CANISTER_ID, "deploy_new_sns", request)
+        .await
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Failed to send deploy_new_sns request to SNS_WASM canister: {:?}",
+                    err,
+                ),
+            )
+        })?;
+
+    // Step 2.3; Decode the response.
+    let deploy_new_sns_response =
+        Decode!(&deploy_new_sns_response, DeployNewSnsResponse).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Failed to decode deploy_new_sns response: {}", err),
+            )
+        })?;
+
+    // Step 2.4: Convert to Result (from DeployNewSnsResponse).
+    match deploy_new_sns_response.error {
+        Some(err) => Err(GovernanceError::new_with_message(
+            ErrorType::External,
+            format!("Error in deploy_new_sns response: {:?}", err),
+        )),
+        None => Ok(deploy_new_sns_response),
     }
 }
 
