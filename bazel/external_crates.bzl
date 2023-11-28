@@ -616,7 +616,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.4.1",
             ),
             "k256": crate.spec(
-                version = "^0.13.1",
+                version = "^0.13.2",
                 features = [
                     "arithmetic",
                     "ecdsa",

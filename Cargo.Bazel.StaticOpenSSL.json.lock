@@ -1,5 +1,5 @@
 {
-  "checksum": "d1669ce043781b5c42d89b3186e03dbe371f4e7e734b1eb9d5bc6b87cfa08365",
+  "checksum": "f2205d60a2a2cf16d2c0c1b3c1afd161d0ab8399f3f574975cadc4ded62d6472",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4800,7 +4800,7 @@
               "target": "hmac"
             },
             {
-              "id": "k256 0.13.1",
+              "id": "k256 0.13.2",
               "target": "k256"
             },
             {
@@ -4828,7 +4828,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -8045,7 +8045,7 @@
               "target": "poly1305"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -8337,7 +8337,7 @@
               "target": "inout"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -11464,7 +11464,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -11825,7 +11825,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -11888,7 +11888,7 @@
               "alias": "subtle"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -12432,7 +12432,7 @@
               "target": "pem_rfc7468"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -13642,7 +13642,7 @@
               "target": "json5"
             },
             {
-              "id": "k256 0.13.1",
+              "id": "k256 0.13.2",
               "target": "k256"
             },
             {
@@ -14379,7 +14379,7 @@
               "target": "yansi"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             },
             {
@@ -15095,13 +15095,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "ecdsa 0.16.7": {
+    "ecdsa 0.16.9": {
       "name": "ecdsa",
-      "version": "0.16.7",
+      "version": "0.16.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ecdsa/0.16.7/download",
-          "sha256": "0997c976637b606099b9985693efa3581e84e41f5c11ba5255f88711058ad428"
+          "url": "https://crates.io/api/v1/crates/ecdsa/0.16.9/download",
+          "sha256": "ee27f32b5c5292967d2d4a9d7f1e0b0aed2c15daded5a60300e4abb9d8020bca"
         }
       },
       "targets": [
@@ -15148,7 +15148,7 @@
               "target": "digest"
             },
             {
-              "id": "elliptic-curve 0.13.5",
+              "id": "elliptic-curve 0.13.8",
               "target": "elliptic_curve"
             },
             {
@@ -15167,7 +15167,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.16.7"
+        "version": "0.16.9"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -15233,7 +15233,7 @@
               "target": "thiserror"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -15384,13 +15384,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "elliptic-curve 0.13.5": {
+    "elliptic-curve 0.13.8": {
       "name": "elliptic-curve",
-      "version": "0.13.5",
+      "version": "0.13.8",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/elliptic-curve/0.13.5/download",
-          "sha256": "968405c8fdc9b3bf4df0a6638858cc0b52462836ab6b1c87377785dd09cf1c0b"
+          "url": "https://crates.io/api/v1/crates/elliptic-curve/0.13.8/download",
+          "sha256": "b5e6043086bf7973472e0c7dff2142ea0b680d30e18d9cc40f267efbf222bd47"
         }
       },
       "targets": [
@@ -15476,14 +15476,14 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.13.5"
+        "version": "0.13.8"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -16495,7 +16495,7 @@
               "target": "chrono"
             },
             {
-              "id": "elliptic-curve 0.13.5",
+              "id": "elliptic-curve 0.13.8",
               "target": "elliptic_curve"
             },
             {
@@ -16511,7 +16511,7 @@
               "target": "hex"
             },
             {
-              "id": "k256 0.13.1",
+              "id": "k256 0.13.2",
               "target": "k256"
             },
             {
@@ -18919,7 +18919,7 @@
               "target": "typenum"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -21970,7 +21970,7 @@
               "target": "ic_verify_bls_signature"
             },
             {
-              "id": "k256 0.13.1",
+              "id": "k256 0.13.2",
               "target": "k256"
             },
             {
@@ -23324,7 +23324,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -25547,13 +25547,13 @@
       },
       "license": "CC0-1.0"
     },
-    "k256 0.13.1": {
+    "k256 0.13.2": {
       "name": "k256",
-      "version": "0.13.1",
+      "version": "0.13.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/k256/0.13.1/download",
-          "sha256": "cadb76004ed8e97623117f3df85b17aaa6626ab0b0831e6573f104df16cd1bcc"
+          "url": "https://crates.io/api/v1/crates/k256/0.13.2/download",
+          "sha256": "3f01b677d82ef7a676aa37e099defd83a28e15687112cafdd112d60236b6115b"
         }
       },
       "targets": [
@@ -25599,12 +25599,12 @@
               "target": "cfg_if"
             },
             {
-              "id": "ecdsa 0.16.7",
+              "id": "ecdsa 0.16.9",
               "target": "ecdsa",
               "alias": "ecdsa_core"
             },
             {
-              "id": "elliptic-curve 0.13.5",
+              "id": "elliptic-curve 0.13.8",
               "target": "elliptic_curve"
             },
             {
@@ -25623,7 +25623,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.13.1"
+        "version": "0.13.2"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -31235,7 +31235,7 @@
               "target": "smallvec"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -33646,12 +33646,12 @@
         "deps": {
           "common": [
             {
-              "id": "ecdsa 0.16.7",
+              "id": "ecdsa 0.16.9",
               "target": "ecdsa",
               "alias": "ecdsa_core"
             },
             {
-              "id": "elliptic-curve 0.13.5",
+              "id": "elliptic-curve 0.13.8",
               "target": "elliptic_curve"
             },
             {
@@ -33715,12 +33715,12 @@
         "deps": {
           "common": [
             {
-              "id": "ecdsa 0.16.7",
+              "id": "ecdsa 0.16.9",
               "target": "ecdsa",
               "alias": "ecdsa_core"
             },
             {
-              "id": "elliptic-curve 0.13.5",
+              "id": "elliptic-curve 0.13.8",
               "target": "elliptic_curve"
             },
             {
@@ -36718,7 +36718,7 @@
         "deps": {
           "common": [
             {
-              "id": "elliptic-curve 0.13.5",
+              "id": "elliptic-curve 0.13.8",
               "target": "elliptic_curve"
             }
           ],
@@ -40385,7 +40385,7 @@
               "target": "yasna"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -42009,7 +42009,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -43847,7 +43847,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.6.0",
+              "id": "zeroize 1.7.0",
               "target": "zeroize"
             }
           ],
@@ -59964,13 +59964,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "zeroize 1.6.0": {
+    "zeroize 1.7.0": {
       "name": "zeroize",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zeroize/1.6.0/download",
-          "sha256": "2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9"
+          "url": "https://crates.io/api/v1/crates/zeroize/1.7.0/download",
+          "sha256": "525b4ec142c6b68a2d10f01f7bbf6755599ca3f81ea53b8431b7dd348f5fdb2d"
         }
       },
       "targets": [
@@ -60007,7 +60007,7 @@
           ],
           "selects": {}
         },
-        "version": "1.6.0"
+        "version": "1.7.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
