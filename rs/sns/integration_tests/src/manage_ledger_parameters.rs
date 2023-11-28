@@ -1,10 +1,8 @@
 use candid::{Decode, Encode};
 use candid::{Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
-use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::{add_wasm_via_proposal, build_ledger_sns_wasm},
@@ -146,9 +144,7 @@ fn test_manage_ledger_parameters_change_fee_collector() {
 
     // choose a new fee_collector
     let new_fee_collector = Account {
-        owner: Sender::from_keypair(&TEST_USER1_KEYPAIR)
-            .get_principal_id()
-            .0,
+        owner: PrincipalId::new_user_test_id(2000).0,
         subaccount: None,
     };
 
@@ -264,11 +260,13 @@ fn test_manage_ledger_parameters_change_fee_collector() {
         sns_canisters.ledger_canister_id,
     );
 
+    let previous_fee_collector = new_fee_collector;
+
     // make sure a transfer-fee does not go to the previous fee-collector.
-    let fee_collector_balance_before_unset = icrc1_balance(
+    let previous_fee_collector_balance_before_transfer = icrc1_balance(
         &state_machine,
         sns_canisters.ledger_canister_id,
-        new_fee_collector,
+        previous_fee_collector,
     );
 
     icrc1_transfer(
@@ -293,9 +291,9 @@ fn test_manage_ledger_parameters_change_fee_collector() {
         icrc1_balance(
             &state_machine,
             sns_canisters.ledger_canister_id,
-            new_fee_collector
+            previous_fee_collector
         ),
-        fee_collector_balance_before_unset
+        previous_fee_collector_balance_before_transfer
     );
 }
 
