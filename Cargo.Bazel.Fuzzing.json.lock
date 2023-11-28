@@ -1,5 +1,5 @@
 {
-  "checksum": "b662a444af3468173718e516f5c0d19f8b8c5dfd4f3d1b188419f2882eceb527",
+  "checksum": "6ffa54979bcf28c48d69b052d43bb564e72f76aaafbe0613a05e2742995c0b88",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -43148,11 +43148,6 @@
               }
             ],
             "cfg(all(not(rustix_use_libc), not(miri), target_os = \"linux\", target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"))))": [
-              {
-                "id": "errno 0.3.5",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
               {
                 "id": "linux-raw-sys 0.4.10",
                 "target": "linux_raw_sys"
