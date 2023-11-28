@@ -2,9 +2,10 @@ use super::{
     checkpoint::{Checkpoint, MappingSerialization},
     page_allocator::PageAllocatorSerialization,
     Buffer, FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex,
-    PageMap, PageMapSerialization, PersistDestination, TestPageAllocatorFileDescriptorImpl,
-    WRITE_BUCKET_PAGES,
+    PageMap, PageMapSerialization, PersistDestination, StorageMetrics,
+    TestPageAllocatorFileDescriptorImpl, WRITE_BUCKET_PAGES,
 };
+use ic_metrics::MetricsRegistry;
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
@@ -109,6 +110,7 @@ fn persisted_map_is_equivalent_to_the_original() {
         pagemap: &mut PageMap,
         heap_file: &Path,
         pages_to_update: &[(PageIndex, [u8; PAGE_SIZE])],
+        metrics: &StorageMetrics,
     ) -> PageMap {
         pagemap.update(
             &pages_to_update
@@ -117,7 +119,10 @@ fn persisted_map_is_equivalent_to_the_original() {
                 .collect::<Vec<_>>(),
         );
         pagemap
-            .persist_delta(PersistDestination::BaseFile(heap_file.to_path_buf()))
+            .persist_delta(
+                PersistDestination::BaseFile(heap_file.to_path_buf()),
+                metrics,
+            )
             .unwrap();
         let persisted_map = PageMap::open(
             heap_file,
@@ -139,6 +144,7 @@ fn persisted_map_is_equivalent_to_the_original() {
 
     let base_page = [42u8; PAGE_SIZE];
     let base_data = vec![&base_page; 50];
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
     let mut pagemap = persist_check_eq_and_load(
         &mut PageMap::new_for_testing(),
         &heap_file,
@@ -147,6 +153,7 @@ fn persisted_map_is_equivalent_to_the_original() {
             .enumerate()
             .map(|(i, page)| (PageIndex::new(i as u64), **page))
             .collect::<Vec<_>>(),
+        &metrics,
     );
 
     let mut pagemap = persist_check_eq_and_load(
@@ -160,23 +167,27 @@ fn persisted_map_is_equivalent_to_the_original() {
             (PageIndex::new(63), [63u8; PAGE_SIZE]),
             (PageIndex::new(100), [100u8; PAGE_SIZE]),
         ],
+        &metrics,
     );
 
     let mut pagemap = persist_check_eq_and_load(
         &mut pagemap,
         &heap_file,
         &[(PageIndex::new(1), [255u8; PAGE_SIZE])],
+        &metrics,
     );
     // Check that it's possible to serialize without reloading.
     persist_check_eq_and_load(
         &mut pagemap,
         &heap_file,
         &[(PageIndex::new(104), [104u8; PAGE_SIZE])],
+        &metrics,
     );
     persist_check_eq_and_load(
         &mut pagemap,
         &heap_file,
         &[(PageIndex::new(103), [103u8; PAGE_SIZE])],
+        &metrics,
     );
     assert_eq!(105 * PAGE_SIZE as u64, heap_file.metadata().unwrap().len());
 }
@@ -190,8 +201,12 @@ fn can_persist_and_load_an_empty_page_map() {
     let heap_file = tmp.path().join("heap");
 
     let original_map = PageMap::new_for_testing();
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
     original_map
-        .persist_delta(PersistDestination::BaseFile(heap_file.clone()))
+        .persist_delta(
+            PersistDestination::BaseFile(heap_file.to_path_buf()),
+            &metrics,
+        )
         .unwrap();
     let persisted_map = PageMap::open(
         &heap_file,
@@ -424,9 +439,12 @@ fn get_memory_instructions_returns_deltas() {
         },
         page_map.get_memory_instructions(range.clone(), range.clone(), 0)
     );
-
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
     page_map
-        .persist_delta(PersistDestination::BaseFile(heap_file.clone()))
+        .persist_delta(
+            PersistDestination::BaseFile(heap_file.to_path_buf()),
+            &metrics,
+        )
         .unwrap();
 
     let mut page_map = PageMap::open(
@@ -484,7 +502,10 @@ fn get_memory_instructions_returns_deltas() {
 
     // No trailing zero pages are serialized.
     page_map
-        .persist_delta(PersistDestination::BaseFile(heap_file.clone()))
+        .persist_delta(
+            PersistDestination::BaseFile(heap_file.to_path_buf()),
+            &metrics,
+        )
         .unwrap();
     assert_eq!(25 * PAGE_SIZE as u64, heap_file.metadata().unwrap().len());
 }

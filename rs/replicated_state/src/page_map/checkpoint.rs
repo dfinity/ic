@@ -1,4 +1,6 @@
-use crate::page_map::{FileDescriptor, PageIndex, PersistenceError};
+use crate::page_map::{
+    FileDescriptor, FileOffset, MemoryInstructions, MemoryMapOrData, PageIndex, PersistenceError,
+};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_sys::{page_bytes_from_ptr, PageBytes};
 use lazy_static::lazy_static;
@@ -8,8 +10,6 @@ use std::os::unix::io::AsRawFd;
 use std::os::unix::prelude::FromRawFd;
 use std::path::Path;
 use std::sync::Arc;
-
-use super::{FileOffset, MemoryInstructions, MemoryMapOrData};
 
 lazy_static! {
     static ref ZEROED_PAGE: Box<PageBytes> = Box::new([0; PAGE_SIZE]);
@@ -25,14 +25,16 @@ pub(crate) struct Checkpoint {
     mapping: Option<Arc<Mapping>>,
 }
 
-struct Mapping {
+/// A memory map of a (section of a) file containing pages of size `PAGE_SIZE`.
+/// The memory map is read-only and most functions are helper functions to read pages.
+pub(crate) struct Mapping {
     mmap: ScopedMmap,
     _file: File, // It is not used but it keeps the `file_descriptor` alive.
     file_descriptor: FileDescriptor,
 }
 
 impl Mapping {
-    fn new(
+    pub(crate) fn new(
         file: File,
         len: usize,
         path: Option<&Path>,
@@ -90,7 +92,7 @@ impl Mapping {
     }
 
     /// Returns a serialization-friendly representation of `Mapping`.
-    fn serialize(&self) -> MappingSerialization {
+    pub(crate) fn serialize(&self) -> MappingSerialization {
         MappingSerialization {
             file_descriptor: self.file_descriptor.clone(),
             file_len: self.mmap.len() as FileOffset,
@@ -98,7 +100,7 @@ impl Mapping {
     }
 
     /// Creates `Mapping` from the given serialization-friendly representation.
-    fn deserialize(
+    pub(crate) fn deserialize(
         serialized_mapping: MappingSerialization,
     ) -> Result<Option<Mapping>, PersistenceError> {
         // SAFETY: the file descriptor is valid because `serialized_mapping` is
@@ -107,7 +109,7 @@ impl Mapping {
         Mapping::new(file, serialized_mapping.file_len as usize, None)
     }
 
-    fn get_page(&self, page_index: PageIndex) -> &PageBytes {
+    pub(crate) fn get_page(&self, page_index: PageIndex) -> &PageBytes {
         let num_pages = self.mmap.len() / PAGE_SIZE;
         if page_index.get() < num_pages as u64 {
             let page_start = (page_index.get() as usize * PAGE_SIZE) as isize;
@@ -135,6 +137,10 @@ impl Mapping {
 
     pub fn num_pages(&self) -> usize {
         self.mmap.len() / PAGE_SIZE
+    }
+
+    pub(crate) fn file_descriptor(&self) -> &FileDescriptor {
+        &self.file_descriptor
     }
 }
 

@@ -24,6 +24,7 @@ use ic_state_manager::{DirtyPageMap, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
+    io::{make_mutable, make_readonly, write_all_at},
     mock_time,
     state::{arb_stream, arb_stream_slice, canister_ids},
     types::{
@@ -68,32 +69,6 @@ pub mod common;
 use common::*;
 
 const NUM_THREADS: u32 = 3;
-
-fn make_mutable(path: &Path) -> std::io::Result<()> {
-    let mut perms = std::fs::metadata(path)?.permissions();
-    #[allow(clippy::permissions_set_readonly_false)]
-    perms.set_readonly(false);
-    std::fs::set_permissions(path, perms)?;
-    Ok(())
-}
-
-fn make_readonly(path: &Path) -> std::io::Result<()> {
-    let mut perms = std::fs::metadata(path)?.permissions();
-    perms.set_readonly(true);
-    std::fs::set_permissions(path, perms)?;
-    Ok(())
-}
-
-fn write_all_at(path: &Path, buf: &[u8], offset: u64) -> std::io::Result<()> {
-    use std::os::unix::fs::FileExt;
-
-    let f = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(path)?;
-    f.write_all_at(buf, offset)?;
-    Ok(())
-}
 
 fn tree_payload(t: MixedHashTree) -> LabeledTree<Vec<u8>> {
     t.try_into().unwrap()

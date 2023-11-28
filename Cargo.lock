@@ -10026,6 +10026,7 @@ name = "ic-replicated-state"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "bit-vec",
  "criterion",
  "criterion-time",
  "cvt",
@@ -10053,6 +10054,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-wasm-types",
+ "itertools",
  "lazy_static",
  "libc",
  "maplit",
@@ -10068,6 +10070,8 @@ dependencies = [
  "serde_cbor",
  "slog",
  "static_assertions 0.3.4",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "uuid 1.6.1",
 ]
