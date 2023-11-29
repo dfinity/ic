@@ -9065,7 +9065,6 @@ dependencies = [
  "ic-xrc-types",
  "icp-ledger",
  "lazy_static",
- "libsecp256k1",
  "lifeline",
  "maplit",
  "on_wire",
