@@ -64,20 +64,23 @@ DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
 CANISTERS_MAX_SIZE_E5_BYTES = {
     "cycles-minting-canister.wasm": "25",
     "genesis-token-canister.wasm": "25",
-    "governance-canister.wasm": "31",
-    "governance-canister_test.wasm": "32",
     "governance-mem-test-canister.wasm": "25",
     "ic-ckbtc-minter.wasm": "19",
     "ic-icrc1-ledger.wasm": "19",
     "ledger-canister.wasm": "19",
     "ledger-canisternotify-method.wasm": "19",
-    "registry-canister.wasm": "35",
     "root-canister.wasm": "15",
     "sns-canister.wasm": "15",
     "sns-governance-canister.wasm": "19",
     "sns-governance-canister_test.wasm": "19",
     "sns-root-canister.wasm": "15",
     "sns-swap-canister.wasm": "15",
+}
+
+CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
+    "governance-canister.wasm.gz": "21",
+    "governance-canister_test.wasm.gz": "21",
+    "registry-canister.wasm.gz": "21",
 }
 
 [
@@ -102,6 +105,23 @@ CANISTERS_MAX_SIZE_E5_BYTES = {
         },
     )
     for (name, target) in CANISTERS.items()
+    if name + ".gz" not in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES
+]
+
+[
+    sh_test(
+        name = name + "_compressed_size_test",
+        srcs = ["file_size_test.sh"],
+        data = [name],
+        env = {
+            "FILE": "$(rootpath " + name + ")",
+            "MAX_SIZE": CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.get(
+                name,
+                DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
+            ) + "00000",
+        },
+    )
+    for (name, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()
 ]
 
 COMPRESSED_CANISTERS = {
