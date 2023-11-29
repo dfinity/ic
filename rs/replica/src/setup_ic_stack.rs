@@ -21,7 +21,7 @@ use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
-use ic_replica_setup_ic_network::{setup_consensus_and_p2p, P2PStateSyncClient};
+use ic_replica_setup_ic_network::setup_consensus_and_p2p;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
 use ic_types::{
@@ -291,7 +291,7 @@ pub fn construct_ic_stack(
         Arc::clone(&state_manager) as Arc<_>,
         consensus_pool,
         catch_up_package,
-        P2PStateSyncClient::Client(state_sync),
+        Arc::new(state_sync),
         xnet_payload_builder,
         self_validating_payload_builder,
         query_stats_payload_builder,
