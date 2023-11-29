@@ -8,7 +8,6 @@ pragma solidity 0.8.18;
  */
 contract CkEthDeposit {
     address payable private immutable cketh_minter_main_address;
-    uint256 private event_counter;
 
     event ReceivedEth(address indexed from, uint256 value, bytes32 indexed principal);
 
