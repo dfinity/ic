@@ -235,7 +235,7 @@ pub fn setup_and_start_vms(
         nodes_info.insert(node.node_id, malicious_behaviour.clone());
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(&ic_name, &node, malicious_behaviour, &t_env, &group_name)?;
-            let image_id = upload_config_disk_image(&node, &t_farm)?;
+            let image_id = upload_config_disk_image(&group_name, &node, &t_farm)?;
             // delete uncompressed file
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
             std::fs::remove_file(conf_img_path)?;
@@ -284,8 +284,11 @@ pub fn setup_and_start_nested_vms(
             let configured_image =
                 configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key)?;
 
-            let configured_image_id =
-                t_farm.upload_file(configured_image, NESTED_CONFIGURED_IMAGE_PATH)?;
+            let configured_image_id = t_farm.upload_file(
+                &t_group_name,
+                configured_image,
+                NESTED_CONFIGURED_IMAGE_PATH,
+            )?;
             t_farm.attach_disk_images(
                 &t_group_name,
                 &t_vm_name,
@@ -310,10 +313,14 @@ pub fn setup_and_start_nested_vms(
     result
 }
 
-pub fn upload_config_disk_image(node: &InitializedNode, farm: &Farm) -> FarmResult<FileId> {
+pub fn upload_config_disk_image(
+    group_name: &str,
+    node: &InitializedNode,
+    farm: &Farm,
+) -> FarmResult<FileId> {
     let compressed_img_path = mk_compressed_img_path();
     let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
-    let image_id = farm.upload_file(target_file, &compressed_img_path)?;
+    let image_id = farm.upload_file(group_name, target_file, &compressed_img_path)?;
     info!(farm.logger, "Uploaded image: {}", image_id);
     Ok(image_id)
 }

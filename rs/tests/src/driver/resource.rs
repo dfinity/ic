@@ -210,7 +210,7 @@ pub fn get_resource_request_for_nested_nodes(
     let empty_image_name = "empty.img.tar.gz";
     let tmp_dir = tempfile::tempdir().unwrap();
     let empty_image = build_empty_image(tmp_dir.path(), empty_image_name)?;
-    let image_id = farm.upload_file(empty_image, empty_image_name)?;
+    let image_id = farm.upload_file(group_name, empty_image, empty_image_name)?;
 
     // Add a VM request for each node.
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, default_url, default_image_sha256);

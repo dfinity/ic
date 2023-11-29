@@ -141,8 +141,8 @@ impl Farm {
         Ok(created_vm)
     }
 
-    pub fn claim_file(&self, file_id: &FileId) -> FarmResult<ClaimResult> {
-        let path = format!("file/{}", file_id);
+    pub fn claim_file(&self, group_name: &str, file_id: &FileId) -> FarmResult<ClaimResult> {
+        let path = format!("group/{}/file/{}", group_name, file_id);
         let rb = self.put(&path);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         match self.retry_until_success(rbb) {
@@ -156,9 +156,14 @@ impl Farm {
     }
 
     /// uploads an image an returns the image id
-    pub fn upload_file<P: AsRef<Path>>(&self, path: P, filename: &str) -> FarmResult<FileId> {
+    pub fn upload_file<P: AsRef<Path>>(
+        &self,
+        group_name: &str,
+        path: P,
+        filename: &str,
+    ) -> FarmResult<FileId> {
         let rb = self
-            .post("file")
+            .post(&format!("group/{}/file", group_name))
             .timeout(TIMEOUT_SETTINGS_LONG.max_http_timeout);
         let path = (&path).to_owned();
         let rbb = || {
