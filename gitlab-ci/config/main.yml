@@ -247,10 +247,14 @@ bazel-test-all:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going $BAZEL_EXTRA_ARGS_RULES"
   timeout: 80 minutes
 
+# TODO(IDX-3048): Delete when confirmed it is not required anymore.
 linux-openssl-static-binaries:
   extends:
     - .bazel-test-all
-    - .bazel-rules-pipeline-no-merge-train
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
   variables:
     DFINITY_OPENSSL_STATIC: 1
     BAZEL_COMMAND: "build"
@@ -344,10 +348,14 @@ bazel-test-macos:
     BAZEL_TARGETS: "//rs/... //publish/binaries/..."
   timeout: 90 minutes
 
+# TODO(IDX-3048): Delete when confirmed it is not required anymore.
 macos-openssl-static-binaries:
   extends:
     - .bazel-test-all
-    - .bazel-rules-pipeline-no-merge-train
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
   tags:
     - macos
   variables:
@@ -575,7 +583,7 @@ check-bins-linux:
     - .build-k8s
     - .rules-master-pipeline-no-merge-train
   needs:
-    - job: linux-openssl-static-binaries
+    - job: bazel-test-all
       artifacts: false
   image:
     # 21.04
@@ -583,7 +591,7 @@ check-bins-linux:
   before_script: /bin/true
   after_script: /bin/true
   variables:
-    ARTIFACT_PREFIX: openssl-static-binaries/x86_64-linux
+    ARTIFACT_PREFIX: binaries/x86_64-linux
   script:
     - |
       set -exuo pipefail

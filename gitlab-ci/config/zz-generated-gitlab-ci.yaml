@@ -3147,7 +3147,7 @@ check-bins-linux:
     name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
   needs:
     - artifacts: false
-      job: linux-openssl-static-binaries
+      job: bazel-test-all
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
@@ -3182,7 +3182,7 @@ check-bins-linux:
   tags:
     - dfinity-ic
   variables:
-    ARTIFACT_PREFIX: openssl-static-binaries/x86_64-linux
+    ARTIFACT_PREFIX: binaries/x86_64-linux
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -3756,17 +3756,13 @@ linux-openssl-static-binaries:
     when: always
   extends:
     - ".bazel-test-all"
-    - ".bazel-rules-pipeline-no-merge-train"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:7deec1cbe9df4360bae3a8c648cce063b11c8241b811b6012fc906e53d356379
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
+    - allow_failure: true
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
@@ -3906,17 +3902,13 @@ macos-openssl-static-binaries:
     when: always
   extends:
     - ".bazel-test-all"
-    - ".bazel-rules-pipeline-no-merge-train"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:7deec1cbe9df4360bae3a8c648cce063b11c8241b811b6012fc906e53d356379
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
+    - allow_failure: true
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
   script:
     - - "./gitlab-ci/src/bazel-ci/main.sh"
     - |
