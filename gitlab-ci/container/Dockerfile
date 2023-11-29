@@ -69,6 +69,8 @@ RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_default_node_version}
 
 RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
+# needed for github actions runner
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier
 
 # CI before script requires sudo
 RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
