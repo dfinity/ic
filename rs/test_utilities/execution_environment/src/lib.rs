@@ -1235,7 +1235,10 @@ impl ExecutionTest {
     pub fn execute_message(&mut self, canister_id: CanisterId) {
         self.execute_slice(canister_id);
         self.state.as_mut().unwrap().metadata.batch_time += std::time::Duration::from_secs(1);
-        while self.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
+        while self.canister_state(canister_id).next_execution() == NextExecution::ContinueLong
+            || self.canister_state(canister_id).next_execution()
+                == NextExecution::ContinueInstallCode
+        {
             self.execute_slice(canister_id);
             self.state.as_mut().unwrap().metadata.batch_time += std::time::Duration::from_secs(1);
         }
