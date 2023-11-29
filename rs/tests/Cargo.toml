@@ -501,6 +501,10 @@ name = "ic-systest-subnet-recovery-app-no-upgrade-with-tecdsa"
 path = "consensus/orchestrator/sr_app_no_upgrade_with_tecdsa_test.rs"
 
 [[bin]]
+name = "ic-systest-subnet-recovery-app-large-with-tecdsa"
+path = "consensus/orchestrator/sr_app_large_with_tecdsa_test.rs"
+
+[[bin]]
 name = "ic-systest-subnet-recovery-nns-same-nodes"
 path = "consensus/orchestrator/sr_nns_same_nodes_test.rs"
 

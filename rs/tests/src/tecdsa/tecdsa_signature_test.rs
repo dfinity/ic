@@ -210,10 +210,11 @@ fn scale_cycles(cycles: Cycles) -> Cycles {
     }
 }
 
-pub(crate) async fn get_public_key_with_logger(
+pub(crate) async fn get_public_key_with_retries(
     key_id: EcdsaKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
+    retries: u64,
 ) -> Result<VerifyingKey, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
@@ -238,9 +239,9 @@ pub(crate) async fn get_public_key_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 20 {
+                if count < retries {
                     debug!(logger, "ecdsa_public_key returns {}, try again...", err);
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
                 } else {
                     return Err(err);
                 }
@@ -249,6 +250,14 @@ pub(crate) async fn get_public_key_with_logger(
     };
     info!(logger, "ecdsa_public_key returns {:?}", public_key);
     Ok(VerifyingKey::from_sec1_bytes(&public_key).expect("Response is not a valid public key"))
+}
+
+pub(crate) async fn get_public_key_with_logger(
+    key_id: EcdsaKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+) -> Result<VerifyingKey, AgentError> {
+    get_public_key_with_retries(key_id, msg_can, logger, 10).await
 }
 
 pub(crate) async fn execute_update_subnet_proposal(
@@ -376,7 +385,7 @@ pub(crate) async fn add_ecdsa_key_with_timeout_and_rotation_period(
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
         ecdsa_config: Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
+            quadruples_to_create_in_advance: 5,
             key_ids: vec![key_id],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),

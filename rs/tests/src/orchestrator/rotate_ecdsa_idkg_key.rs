@@ -103,7 +103,6 @@ pub fn test(env: TestEnv) {
         &nns_canister,
         root_subnet_id,
         Some(delta),
-        true,
         &logger,
     );
 

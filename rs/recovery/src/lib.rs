@@ -680,7 +680,7 @@ impl Recovery {
         })?;
 
         let mut cup_present = false;
-        for i in 0..20 {
+        for i in 0..30 {
             let maybe_cup = match block_on(get_catchup_content(&node_url)) {
                 Ok(res) => res,
                 Err(e) => {
