@@ -49,11 +49,19 @@ pub(crate) enum StableMemoryHandling {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum InstallCodeStep {
     ValidateInput,
-    BumpCanisterVersion,
     ReplaceExecutionStateAndAllocations {
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
         stable_memory_handling: StableMemoryHandling,
+    },
+    ClearCertifiedData,
+    DeactivateGlobalTimer,
+    BumpCanisterVersion,
+    AddCanisterChange {
+        timestamp_nanos: Time,
+        origin: CanisterChangeOrigin,
+        mode: CanisterInstallModeV2,
+        module_hash: WasmHash,
     },
     HandleWasmExecution {
         canister_state_changes: Option<CanisterStateChanges>,
@@ -111,10 +119,12 @@ impl InstallCodeHelper {
     }
 
     pub fn clear_certified_data(&mut self) {
+        self.steps.push(InstallCodeStep::ClearCertifiedData);
         self.canister.system_state.certified_data = Vec::new();
     }
 
     pub fn deactivate_global_timer(&mut self) {
+        self.steps.push(InstallCodeStep::DeactivateGlobalTimer);
         self.canister.system_state.global_timer = CanisterTimer::Inactive;
     }
 
@@ -130,11 +140,16 @@ impl InstallCodeHelper {
         mode: CanisterInstallModeV2,
         module_hash: WasmHash,
     ) {
-        self.canister.system_state.add_canister_change(
+        self.steps.push(InstallCodeStep::AddCanisterChange {
             timestamp_nanos,
-            origin,
-            CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice()),
-        );
+            origin: origin.clone(),
+            mode,
+            module_hash: module_hash.clone(),
+        });
+        let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
+        self.canister
+            .system_state
+            .add_canister_change(timestamp_nanos, origin, details);
     }
 
     pub fn execution_parameters(&self) -> &ExecutionParameters {
@@ -702,10 +717,6 @@ impl InstallCodeHelper {
     ) -> Result<(), CanisterManagerError> {
         match step {
             InstallCodeStep::ValidateInput => self.validate_input(original, round, round_limits),
-            InstallCodeStep::BumpCanisterVersion => {
-                self.bump_canister_version();
-                Ok(())
-            }
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state,
@@ -716,6 +727,27 @@ impl InstallCodeHelper {
                 stable_memory_handling,
                 original,
             ),
+            InstallCodeStep::ClearCertifiedData => {
+                self.clear_certified_data();
+                Ok(())
+            }
+            InstallCodeStep::DeactivateGlobalTimer => {
+                self.deactivate_global_timer();
+                Ok(())
+            }
+            InstallCodeStep::BumpCanisterVersion => {
+                self.bump_canister_version();
+                Ok(())
+            }
+            InstallCodeStep::AddCanisterChange {
+                timestamp_nanos,
+                origin,
+                mode,
+                module_hash,
+            } => {
+                self.add_canister_change(timestamp_nanos, origin, mode, module_hash);
+                Ok(())
+            }
             InstallCodeStep::HandleWasmExecution {
                 canister_state_changes,
                 output,

@@ -1,15 +1,17 @@
 use ic00::CanisterSettingsArgsBuilder;
+use ic_config::execution_environment;
+use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    IngressState, IngressStatus, PrincipalId, StateMachine, StateMachineBuilder, UserError,
+    IngressState, IngressStatus, PrincipalId, StateMachine, StateMachineBuilder,
+    StateMachineConfig, UserError,
 };
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
-use std::time::Duration;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -63,8 +65,21 @@ fn execute_ingress_with_dts(
 fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bool) {
     let test_canister = wat::parse_str(wat).expect("invalid WAT");
 
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig {
+        scheduler_config: SchedulerConfig {
+            max_instructions_per_install_code_slice: 100_000.into(),
+            max_instructions_per_slice: 100_000.into(),
+            install_code_rate_limit: 1_000_000_000_000_000.into(),
+            ..subnet_config.scheduler_config
+        },
+        ..subnet_config
+    };
+    let config = StateMachineConfig::new(subnet_config, execution_environment::Config::default());
+
     // set up StateMachine
     let env = StateMachineBuilder::new()
+        .with_config(Some(config))
         .with_subnet_type(SubnetType::Application)
         .build();
 
@@ -120,12 +135,6 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
     // check canister_version
     assert_eq!(get_canister_version(&env, canister_id), 1);
 
-    // prevent install_code rate-limiting
-    env.set_time((env.get_time() + Duration::from_secs(5 * 60)).into());
-    for _ in 0..100 {
-        env.tick();
-    }
-
     if mode != CanisterInstallMode::Install {
         let dts = match mode {
             CanisterInstallMode::Reinstall => dts_install,
@@ -161,9 +170,9 @@ fn canister_wat(b1: Option<bool>, b2: Option<bool>, b3: Option<bool>, b4: Option
         i64.const 1
         i64.add
         local.set $i
-        ;; loop if $i is less than 500_000_000
+        ;; loop if $i is less than 100_000
         local.get $i
-        i64.const 500_000_000
+        i64.const 100_000
         i64.lt_s
         br_if $my_loop
       )
