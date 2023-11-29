@@ -108,6 +108,7 @@ members = [
   "rs/crypto/tree_hash",
   "rs/crypto/tree_hash/test_utils",
   "rs/crypto/utils/basic_sig",
+  "rs/crypto/utils/ni_dkg",
   "rs/crypto/utils/threshold_sig",
   "rs/crypto/utils/threshold_sig_der",
   "rs/crypto/utils/tls",
