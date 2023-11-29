@@ -188,7 +188,9 @@ fn main() {
         .unwrap();
 
     // Upload config image
-    let image_id = farm.upload_file(&config_path, filename).unwrap();
+    let image_id = farm
+        .upload_file(&group_name, &config_path, filename)
+        .unwrap();
 
     // Attach image
     farm.attach_disk_images(&group_name, vm_name, "usb-storage", vec![image_id])

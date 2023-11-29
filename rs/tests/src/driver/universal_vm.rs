@@ -127,7 +127,11 @@ impl UniversalVm {
         setup_ssh(env, config_ssh_dir.clone())?;
         let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
         create_universal_vm_config_image(env, &config_ssh_dir, &config_ssh_img, "SSH")?;
-        let ssh_config_img_file_id = farm.upload_file(config_ssh_img, CONF_SSH_IMG_FNAME)?;
+        let ssh_config_img_file_id = farm.upload_file(
+            &pot_setup.infra_group_name,
+            config_ssh_img,
+            CONF_SSH_IMG_FNAME,
+        )?;
         let mut image_ids = vec![ssh_config_img_file_id];
 
         // Setup config image
@@ -143,7 +147,7 @@ impl UniversalVm {
             };
             let mut file_id = id_of_file(config_img.clone())?;
 
-            let upload = match farm.claim_file(&file_id)? {
+            let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
                 ClaimResult::FileClaimed(file_expiration) => {
                     if let Some(expiration) = file_expiration.expiration {
                         let now = Utc::now();
@@ -161,7 +165,8 @@ impl UniversalVm {
             };
 
             if upload {
-                file_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
+                file_id =
+                    farm.upload_file(&pot_setup.infra_group_name, config_img, CONF_IMG_FNAME)?;
                 info!(env.logger(), "Uploaded image: {}", file_id);
             } else {
                 info!(
