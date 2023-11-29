@@ -41,8 +41,6 @@ use crate::nns::{
 
 use crate::util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister};
 
-const NNS_SUBNET_SIZE: usize = 40;
-const APP_SUBNET_SIZE: usize = 34; // f*3+1 with f=11
 const NNS_PRE_MASTER: usize = 4;
 const APP_PRE_MASTER: usize = 4;
 
@@ -196,8 +194,8 @@ pub fn test(env: TestEnv) {
     info!(
         log,
         "Successfully created an app subnet of size {} from an NNS subnet of size {}",
-        APP_SUBNET_SIZE,
-        NNS_SUBNET_SIZE
+        APP_PRE_MASTER,
+        NNS_PRE_MASTER
     );
 }
 
