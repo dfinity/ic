@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = "1.0.58"
 arc-swap = "1.6.0"
-async-scoped = { version = "0.7", features = ["use-tokio"] }
+async-scoped = { workspace = true }
 async-trait = "0.1.56"
 axum = "0.6.1"
 bytes = { workspace = true }

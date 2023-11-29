@@ -417,6 +417,10 @@ opt-level = 3
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
 [workspace.dependencies]
+arrayvec = "0.7.4"
+askama = { version = "0.12.1", features = ["serde-json"] }
+async-recursion = "1.0.5"
+async-scoped = { version = "0.8", features = ["use-tokio"] }
 base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "83b9ae07d0624db04675a71ae4179c4a17e99f77" }

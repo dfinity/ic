@@ -178,11 +178,11 @@ pub mod ni_dkg_groth20_bls12_381 {
         type Error = ();
 
         fn try_from(item: ZKProofDecHelper) -> Result<Self, Self::Error> {
-            let first_move_b: ArrayVec<[G1Bytes; NUM_ZK_REPETITIONS]> =
+            let first_move_b: ArrayVec<G1Bytes, NUM_ZK_REPETITIONS> =
                 item.first_move_b.into_iter().collect();
-            let first_move_c: ArrayVec<[G1Bytes; NUM_ZK_REPETITIONS]> =
+            let first_move_c: ArrayVec<G1Bytes, NUM_ZK_REPETITIONS> =
                 item.first_move_c.into_iter().collect();
-            let response_z_s: ArrayVec<[FrBytes; NUM_ZK_REPETITIONS]> =
+            let response_z_s: ArrayVec<FrBytes, NUM_ZK_REPETITIONS> =
                 item.response_z_s.into_iter().collect();
             Ok(ZKProofDec {
                 first_move_y0: item.first_move_y0,
