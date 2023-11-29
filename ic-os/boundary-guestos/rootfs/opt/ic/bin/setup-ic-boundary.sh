@@ -48,7 +48,6 @@ function generate_config() {
     # Generate Configuration
     cat >"${ENV_FILE}" <<EOF
 NNS_URL=${NNS_URL}
-RPS_LIMIT_SUBNET=300
 CACHE_SIZE=1073741824
 CACHE_ITEM_MAX_SIZE=65536
 CACHE_TTL=1
