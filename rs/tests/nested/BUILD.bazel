@@ -6,6 +6,9 @@ package(default_visibility = ["//visibility:public"])
 system_test(
     name = "registration",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_setupos_dev = True,
@@ -16,6 +19,9 @@ system_test(
 system_test(
     name = "upgrade",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
