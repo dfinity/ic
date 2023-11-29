@@ -1,5 +1,5 @@
 {
-  "checksum": "3478acb7e684d9c4c547f37101d0df8a5b063ef8412ac668662aae797d69bb6b",
+  "checksum": "bb0234668e06df5535dd86a5bb43dcf2a25456b92bd3de2b538543134a31c710",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -27680,23 +27680,29 @@
         ],
         "crate_features": {
           "common": [
-            "elf",
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl"
             ],
             "arm-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl"
             ],
             "armv7-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl"
             ],
             "i686-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl"
             ],
             "powerpc-unknown-linux-gnu": [
@@ -27706,6 +27712,8 @@
               "prctl"
             ],
             "x86_64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl"
             ]
           }
