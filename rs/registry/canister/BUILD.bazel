@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
+    "//rs/crypto/utils/ni_dkg",
     "//rs/nervous_system/common",
     "//rs/nns/cmc",
     "//rs/nns/common",
@@ -56,12 +57,12 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "//rs/crypto/test_utils/ni-dkg",
-    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/rust_canisters/canister_test",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
+    "//rs/crypto/test_utils/ni-dkg",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",
@@ -72,6 +73,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",
+    "//rs/types/types_test_utils",
 ]
 
 MACRO_DEPENDENCIES = [

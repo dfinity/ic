@@ -2,15 +2,19 @@
 
 use assert_matches::assert_matches;
 use canister_test::Canister;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
 use ic_nns_common::registry::encode_or_panic;
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -36,6 +40,7 @@ use ic_registry_transport::{
     serialize_get_value_request, Error,
 };
 use ic_test_utilities::types::ids::{subnet_test_id, user_test_id};
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
 use ic_types::{
     crypto::{CurrentNodePublicKeys, KeyPurpose},
     p2p::build_default_gossip_config,
@@ -44,6 +49,7 @@ use ic_types::{
 use maplit::btreemap;
 use on_wire::bytes;
 use prost::Message;
+use rand::RngCore;
 use registry_canister::mutations::{
     common::decode_registry_value,
     node_management::{
@@ -51,6 +57,7 @@ use registry_canister::mutations::{
         do_add_node::{connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload},
     },
 };
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
 /// ID used in multiple tests.
@@ -355,7 +362,7 @@ pub fn new_current_node_crypto_keys_mutations(
 
 pub fn new_node_crypto_keys_mutations(
     node_id: NodeId,
-    npks: ValidNodePublicKeys,
+    npks: &ValidNodePublicKeys,
 ) -> Vec<RegistryMutation> {
     let current_npks = CurrentNodePublicKeys {
         node_signing_public_key: Some(npks.node_signing_key().clone()),
@@ -559,10 +566,137 @@ pub fn prepare_registry_with_two_node_sets(
     // Nodes (both assigned and unassigned)
     let mut mutations = invariant_compliant_mutation(INITIAL_MUTATION_ID);
     let mut node_mutations = Vec::<RegistryMutation>::default();
-    let node_ids: Vec<NodeId> = (0..num_nodes_in_subnet2 + num_nodes_in_subnet1)
+    let node_ids_and_dkg_keys_subnet_1 = generate_node_keys_and_add_node_record_and_key_mutations(
+        &mut mutations,
+        &mut node_mutations,
+        0,
+        num_nodes_in_subnet1,
+    );
+    let node_ids_and_dkg_keys_subnet_2 = generate_node_keys_and_add_node_record_and_key_mutations(
+        &mut mutations,
+        &mut node_mutations,
+        num_nodes_in_subnet1,
+        num_nodes_in_subnet2,
+    );
+
+    let replica_version = ReplicaVersion::default();
+
+    // Subnet record 1
+    let subnet_record = SubnetRecord {
+        replica_version_id: replica_version.to_string(),
+        membership: node_ids_and_dkg_keys_subnet_1
+            .keys()
+            .map(|id| id.get().into_vec())
+            .collect(),
+        unit_delay_millis: 600,
+        gossip_config: Some(build_default_gossip_config()),
+        ..Default::default()
+    };
+    let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(17));
+    mutations.push(insert(
+        make_subnet_record_key(subnet_id).as_bytes(),
+        encode_or_panic(&subnet_record),
+    ));
+
+    let dealer_subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(187));
+    let registry_version = RegistryVersion::new(1);
+    let rng = &mut ReproducibleRng::new();
+    let subnet_transcript = generate_nidkg_initial_transcript(
+        &node_ids_and_dkg_keys_subnet_1,
+        dealer_subnet_id,
+        NiDkgTag::HighThreshold,
+        registry_version,
+        rng,
+    );
+    let subnet_threshold_sig_pk =
+        extract_threshold_sig_public_key(&subnet_transcript.internal_csp_transcript)
+            .expect("error extracting threshold sig public key from internal CSP transcript");
+
+    mutations.push(insert(
+        make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
+        encode_or_panic(&PublicKey::from(subnet_threshold_sig_pk)),
+    ));
+
+    // Subnet list record
+    let mut subnet_list = decode_registry_value::<SubnetListRecord>(mutations.remove(0).value);
+    subnet_list.subnets.push(subnet_id.get().to_vec());
+
+    let mut subnet2_id_option = None;
+    if assign_nodes_to_subnet2 {
+        // Subnet record 2
+        let subnet2_record = SubnetRecord {
+            replica_version_id: replica_version.to_string(),
+            membership: node_ids_and_dkg_keys_subnet_2
+                .keys()
+                .map(|id| id.get().into_vec())
+                .collect(),
+            unit_delay_millis: 600,
+            gossip_config: Some(build_default_gossip_config()),
+            ..Default::default()
+        };
+        let subnet2_id = SubnetId::new(PrincipalId::new_subnet_test_id(18));
+        subnet2_id_option = Some(subnet2_id);
+        mutations.push(insert(
+            make_subnet_record_key(subnet2_id).as_bytes(),
+            encode_or_panic(&subnet2_record),
+        ));
+
+        let subnet2_transcript = generate_nidkg_initial_transcript(
+            &node_ids_and_dkg_keys_subnet_2,
+            dealer_subnet_id,
+            NiDkgTag::HighThreshold,
+            registry_version,
+            rng,
+        );
+        let subnet2_threshold_sig_pk =
+            extract_threshold_sig_public_key(&subnet2_transcript.internal_csp_transcript)
+                .expect("error extracting threshold sig public key from internal CSP transcript");
+
+        mutations.push(insert(
+            make_crypto_threshold_signing_pubkey_key(subnet2_id).as_bytes(),
+            encode_or_panic(&PublicKey::from(subnet2_threshold_sig_pk)),
+        ));
+
+        subnet_list.subnets.push(subnet2_id.get().to_vec());
+    }
+
+    mutations.push(insert(
+        make_subnet_list_record_key().as_bytes(),
+        encode_or_panic(&subnet_list),
+    ));
+
+    // CUP contents
+    add_cup_to_mutations(&mut mutations, subnet_id, subnet_transcript);
+
+    let mutate_request = RegistryAtomicMutateRequest {
+        mutations,
+        preconditions: vec![],
+    };
+
+    (
+        mutate_request,
+        subnet_id,
+        subnet2_id_option,
+        node_ids_and_dkg_keys_subnet_2.keys().cloned().collect(),
+        node_mutations,
+    )
+}
+
+/// Generates node keys for `num_nodes_in_subnet` nodes, with node IDs starting at `node_id_offset`.
+/// Also add the node record and node key mutations to the provided `mutations` and `node_mutations`
+/// `RegistryMutation` vectors.
+///
+/// Returns a `BTreeMap` with the node IDs and the DKG dealing encryption keys of the nodes.
+fn generate_node_keys_and_add_node_record_and_key_mutations(
+    mutations: &mut Vec<RegistryMutation>,
+    node_mutations: &mut Vec<RegistryMutation>,
+    node_id_offset: usize,
+    num_nodes_in_subnet: usize,
+) -> BTreeMap<NodeId, PublicKey> {
+    (node_id_offset..(node_id_offset + num_nodes_in_subnet))
         .map(|id| {
             let (node_pks, node_id) = new_node_keys_and_node_id();
-            let mut crypto_keys_mutations = new_node_crypto_keys_mutations(node_id, node_pks);
+            let mut crypto_keys_mutations = new_node_crypto_keys_mutations(node_id, &node_pks);
             mutations.append(&mut crypto_keys_mutations.clone());
             node_mutations.append(&mut crypto_keys_mutations);
             let node_key = make_node_record_key(node_id);
@@ -585,93 +719,45 @@ pub fn prepare_registry_with_two_node_sets(
             };
             mutations.push(insert(node_key.as_bytes(), encode_or_panic(&node_record)));
             node_mutations.push(insert(node_key.as_bytes(), encode_or_panic(&node_record)));
-            node_id
+            (node_id, node_pks.dkg_dealing_encryption_key().clone())
         })
-        .collect();
-    let nodes_in_subnet1_ids = &node_ids[num_nodes_in_subnet2..];
-    let nodes_in_subnet2_ids = &node_ids[..num_nodes_in_subnet2];
+        .collect()
+}
 
-    let replica_version = ReplicaVersion::default();
-
-    // Subnet record 1
-    let subnet_record = SubnetRecord {
-        replica_version_id: replica_version.to_string(),
-        membership: nodes_in_subnet1_ids
-            .iter()
-            .map(|id| id.get().into_vec())
-            .collect(),
-        unit_delay_millis: 600,
-        gossip_config: Some(build_default_gossip_config()),
+fn add_cup_to_mutations(
+    mutations: &mut Vec<RegistryMutation>,
+    subnet_id: SubnetId,
+    transcript: NiDkgTranscript,
+) {
+    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+            transcript,
+        )),
         ..Default::default()
     };
-    let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(17));
-    mutations.push(insert(
-        make_subnet_record_key(subnet_id).as_bytes(),
-        encode_or_panic(&subnet_record),
-    ));
+    mutations.push(insert(cup_contents_key, encode_or_panic(&cup_contents)));
+}
 
-    mutations.push(insert(
-        make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
-        encode_or_panic(&vec![]),
-    ));
-
-    // Subnet list record
-    let mut subnet_list = decode_registry_value::<SubnetListRecord>(mutations.remove(0).value);
-    subnet_list.subnets.push(subnet_id.get().to_vec());
-
-    let mut subnet2_id_option = None;
-    if assign_nodes_to_subnet2 {
-        // Subnet record 2
-        let subnet2_record = SubnetRecord {
-            replica_version_id: replica_version.to_string(),
-            membership: nodes_in_subnet2_ids
-                .iter()
-                .map(|id| id.get().into_vec())
-                .collect(),
-            unit_delay_millis: 600,
-            gossip_config: Some(build_default_gossip_config()),
-            ..Default::default()
-        };
-        let subnet2_id = SubnetId::new(PrincipalId::new_subnet_test_id(18));
-        subnet2_id_option = Some(subnet2_id);
-        mutations.push(insert(
-            make_subnet_record_key(subnet2_id).as_bytes(),
-            encode_or_panic(&subnet2_record),
-        ));
-
-        mutations.push(insert(
-            make_crypto_threshold_signing_pubkey_key(subnet2_id).as_bytes(),
-            encode_or_panic(&vec![]),
-        ));
-
-        subnet_list.subnets.push(subnet2_id.get().to_vec());
-    }
-
-    mutations.push(insert(
-        make_subnet_list_record_key().as_bytes(),
-        encode_or_panic(&subnet_list),
-    ));
-
-    // CUP contents
-    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
-    let default_cup_contents = CatchUpPackageContents::default();
-    mutations.push(insert(
-        cup_contents_key,
-        encode_or_panic(&default_cup_contents),
-    ));
-
-    let mutate_request = RegistryAtomicMutateRequest {
-        mutations,
-        preconditions: vec![],
-    };
-
-    (
-        mutate_request,
-        subnet_id,
-        subnet2_id_option,
-        nodes_in_subnet2_ids.to_vec(),
-        node_mutations,
-    )
+pub fn generate_nidkg_initial_transcript(
+    receiver_keys: &BTreeMap<NodeId, PublicKey>,
+    dealer_subnet_id: SubnetId,
+    dkg_tag: NiDkgTag,
+    registry_version: RegistryVersion,
+    rng: &mut ReproducibleRng,
+) -> NiDkgTranscript {
+    let mut target_id_bytes = [0u8; 32];
+    rng.fill_bytes(&mut target_id_bytes);
+    let target_id = NiDkgTargetId::new(target_id_bytes);
+    let nodes_set: BTreeSet<NodeId> = receiver_keys.keys().cloned().collect();
+    let initial_dkg_config = InitialNiDkgConfig::new(
+        &nodes_set,
+        dealer_subnet_id,
+        dkg_tag,
+        target_id,
+        registry_version,
+    );
+    initial_dkg_transcript(initial_dkg_config, receiver_keys, rng)
 }
 
 /// Prepares all the payloads to add a new node, for tests.

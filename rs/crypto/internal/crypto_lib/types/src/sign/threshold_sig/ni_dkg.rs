@@ -1,6 +1,7 @@
 //! Data types for non-interactive distributed key generation (NI-DKG).
 pub use crate::encrypt::forward_secure::{CspFsEncryptionPop, CspFsEncryptionPublicKey};
 use crate::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -77,6 +78,17 @@ impl CspNiDkgTranscript {
                 CspPublicCoefficients::Bls12_381(transcript.public_coefficients.clone())
             }
         }
+    }
+}
+
+impl TryFrom<&InitialNiDkgTranscriptRecord> for CspNiDkgTranscript {
+    type Error = String;
+
+    fn try_from(
+        initial_ni_dkg_transcript_record: &InitialNiDkgTranscriptRecord,
+    ) -> Result<Self, Self::Error> {
+        serde_cbor::from_slice(&initial_ni_dkg_transcript_record.internal_csp_transcript)
+            .map_err(|e| format!("Error deserializing CspNiDkgTranscript: {}", e))
     }
 }
 

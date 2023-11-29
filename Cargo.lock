@@ -7118,6 +7118,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-utils-ni-dkg"
+version = "0.8.0"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "ic-crypto-internal-types",
+ "ic-crypto-node-key-generation",
+ "ic-crypto-node-key-validation",
+ "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-protobuf",
+ "ic-types",
+ "ic-types-test-utils",
+ "serde_cbor",
+]
+
+[[package]]
 name = "ic-crypto-utils-threshold-sig"
 version = "0.9.0"
 dependencies = [
@@ -9105,6 +9122,9 @@ dependencies = [
  "ic-crypto-node-key-generation",
  "ic-crypto-node-key-validation",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-utils-ni-dkg",
  "ic-ic00-types",
  "ic-icrc1",
  "ic-nervous-system-clients",
@@ -9139,6 +9159,7 @@ dependencies = [
  "on_wire",
  "prometheus-parse",
  "prost",
+ "rand 0.8.5",
  "registry-canister",
  "serde",
  "tokio",
@@ -15503,6 +15524,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
+ "ic-crypto-utils-ni-dkg",
  "ic-ic00-types",
  "ic-interfaces-registry",
  "ic-metrics-encoder",
@@ -15526,6 +15548,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-compare-dirs",
  "ic-types",
+ "ic-types-test-utils",
  "ipnet",
  "itertools",
  "lazy_static",
