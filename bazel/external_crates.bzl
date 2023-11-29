@@ -104,17 +104,14 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "arc-swap": crate.spec(
                 version = "^1",
             ),
-            "atomic-counter": crate.spec(
-                version = "^1.0.1",
-            ),
             "anyhow": crate.spec(
                 version = "^1",
             ),
             "arrayvec": crate.spec(
-                version = "^0.5.1",
+                version = "^0.7.4",
             ),
             "askama": crate.spec(
-                version = "^0.11.1",
+                version = "^0.12.1",
                 features = [
                     "serde-json",
                 ],
@@ -123,16 +120,16 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^2.0.1",
             ),
             "assert_cmd": crate.spec(
-                version = "^0.12",
+                version = "^2.0.12",
             ),
             "assert_matches": crate.spec(
                 version = "^1.5.0",
             ),
             "async-recursion": crate.spec(
-                version = "^0.3.2",
+                version = "^1.0.5",
             ),
             "async-scoped": crate.spec(
-                version = "^0.7.1",
+                version = "^0.8.0",
                 features = [
                     "use-tokio",
                 ],
@@ -1173,10 +1170,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "tiny_http": crate.spec(
                 version = "^0.10.0",
-            ),
-            "tiny-keccak": crate.spec(
-                version = "^2.0.0",
-                features = ["keccak"],
             ),
             "time": crate.spec(
                 version = "^0.3.20",

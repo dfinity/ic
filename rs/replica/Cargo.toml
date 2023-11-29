@@ -83,7 +83,7 @@ tower = { workspace = true }
 ic-backtrace = { path = "../monitoring/backtrace" }
 
 [dev-dependencies]
-assert_cmd = "0.12"
+assert_cmd = "2.0.12"
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = "0.5"
 ic-ic00-types = { path = "../types/ic00_types" }

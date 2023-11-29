@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-askama = "0.11"
+askama = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = "0.4.3"
