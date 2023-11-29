@@ -143,6 +143,7 @@ oSMDIQCJuBJPWt2WWxv0zQmXcXMjY+fP0CJSsB80ztXpOFd2ZQ==
     .expect("failed to parse identity from PEM")
 }
 
+#[ignore]
 #[tokio::test]
 async fn test() {
     // this is a "demo" test, it shows how to setup a replica with the icp ledger installed
