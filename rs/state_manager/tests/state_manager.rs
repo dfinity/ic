@@ -5,7 +5,6 @@ use ic_crypto_tree_hash::{
 };
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::certification::Verifier;
-use ic_interfaces::p2p::artifact_manager::{ArtifactClient, ArtifactProcessor};
 use ic_interfaces::p2p::consensus::ChangeResult;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
@@ -267,7 +266,6 @@ fn rejoining_node_doesnt_accumulate_states() {
                 let mut state = src_state_manager.take_tip().1;
                 insert_dummy_canister(&mut state, canister_test_id(100 + i));
                 src_state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
-                let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
                 let hash = wait_for_checkpoint(&*src_state_manager, height(i));
                 let id = StateSyncArtifactId {
@@ -280,13 +278,10 @@ fn rejoining_node_doesnt_accumulate_states() {
 
                 let chunkable = dst_state_sync.create_chunkable_state(&id);
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(
-                    time_source.as_ref(),
-                    vec![UnvalidatedArtifactMutation::Insert((
-                        dst_msg,
-                        node_test_id(0),
-                    ))],
-                );
+                dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                    dst_msg,
+                    node_test_id(0),
+                ))]);
 
                 assert_eq!(
                     src_state_manager.get_latest_state().take(),
@@ -1787,7 +1782,6 @@ fn encode_stream_index_is_checked() {
 fn delivers_state_adverts_once() {
     state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         let (_height, state) = state_manager.take_tip();
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*state_manager, height(1));
@@ -1796,14 +1790,12 @@ fn delivers_state_adverts_once() {
             hash,
         };
 
-        let ChangeResult { adverts, .. } =
-            state_sync.process_changes(time_source.as_ref(), Default::default());
+        let ChangeResult { adverts, .. } = state_sync.process_changes(Default::default());
         assert_eq!(adverts.len(), 1);
         assert_eq!(adverts[0].id, id);
         assert!(state_sync.has_artifact(&id));
 
-        let ChangeResult { adverts, .. } =
-            state_sync.process_changes(time_source.as_ref(), Default::default());
+        let ChangeResult { adverts, .. } = state_sync.process_changes(Default::default());
         assert_eq!(adverts.len(), 0);
         assert!(state_sync.has_artifact(&id));
     });
@@ -1965,7 +1957,6 @@ fn can_do_simple_state_sync_transfer() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -1986,13 +1977,10 @@ fn can_do_simple_state_sync_transfer() {
             let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2096,8 +2084,6 @@ fn can_state_sync_from_cache() {
             .page_map
             .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
 
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
-
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
@@ -2190,13 +2176,10 @@ fn can_state_sync_from_cache() {
 
                 // Download chunk 1
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(
-                    time_source.as_ref(),
-                    vec![UnvalidatedArtifactMutation::Insert((
-                        dst_msg,
-                        node_test_id(0),
-                    ))],
-                );
+                dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                    dst_msg,
+                    node_test_id(0),
+                ))]);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -2226,13 +2209,10 @@ fn can_state_sync_from_cache() {
                 let _res = pipe_meta_manifest(&msg, &mut *chunkable, false);
                 let dst_msg = pipe_manifest(&msg, &mut *chunkable, false).unwrap();
 
-                dst_state_sync.process_changes(
-                    time_source.as_ref(),
-                    vec![UnvalidatedArtifactMutation::Insert((
-                        dst_msg,
-                        node_test_id(0),
-                    ))],
-                );
+                dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                    dst_msg,
+                    node_test_id(0),
+                ))]);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(3))
@@ -2267,8 +2247,6 @@ fn can_state_sync_after_aborting_in_prep_phase() {
         for id in 100..(100 + num_canisters) {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
-
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -2332,13 +2310,10 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                 assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
 
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(
-                    time_source.as_ref(),
-                    vec![UnvalidatedArtifactMutation::Insert((
-                        dst_msg,
-                        node_test_id(0),
-                    ))],
-                );
+                dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                    dst_msg,
+                    node_test_id(0),
+                ))]);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -2369,8 +2344,6 @@ fn state_sync_can_reject_invalid_chunks() {
         for id in 100..(100 + num_canisters) {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
-
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -2449,13 +2422,10 @@ fn state_sync_can_reject_invalid_chunks() {
 
             // Provide correct chunks to dst
             let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2481,7 +2451,6 @@ fn can_state_sync_into_existing_checkpoint() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -2507,13 +2476,10 @@ fn can_state_sync_into_existing_checkpoint() {
             );
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
 
             assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
@@ -2526,7 +2492,6 @@ fn can_group_small_files_in_state_sync() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         let num_canisters = 200;
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
         for id in 100..(100 + num_canisters) {
             insert_canister_with_many_controllers(&mut state, canister_test_id(id), 400);
         }
@@ -2586,13 +2551,10 @@ fn can_group_small_files_in_state_sync() {
 
             let dst_msg = pipe_state_sync(msg, chunkable);
 
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2614,7 +2576,6 @@ fn can_commit_after_prev_state_is_gone() {
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
         src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, tip) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
@@ -2643,13 +2604,10 @@ fn can_commit_after_prev_state_is_gone() {
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
 
             dst_state_manager.remove_states_below(height(2));
 
@@ -2678,7 +2636,6 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
         src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, tip) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
@@ -2705,13 +2662,10 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
             let (tip_height, tip) = dst_state_manager.take_tip();
@@ -2730,7 +2684,6 @@ fn can_state_sync_based_on_old_checkpoint() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
@@ -2757,13 +2710,10 @@ fn can_state_sync_based_on_old_checkpoint() {
             let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -2830,7 +2780,6 @@ fn can_recover_from_corruption_on_state_sync() {
         let (_height, mut state) = src_state_manager.take_tip();
         populate_original_state(&mut state);
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
 
@@ -2950,13 +2899,10 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -2979,7 +2925,6 @@ fn can_commit_below_state_sync() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let (_height, state) = src_state_manager.take_tip();
@@ -3002,13 +2947,10 @@ fn can_commit_below_state_sync() {
             assert_eq!(tip_height, height(0));
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
             dst_state_manager.flush_tip_channel();
@@ -3030,7 +2972,6 @@ fn can_state_sync_below_commit() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -3060,13 +3001,10 @@ fn can_state_sync_below_commit() {
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))],
-            );
+            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
+                dst_msg,
+                node_test_id(0),
+            ))]);
             assert_eq!(
                 dst_state_manager.checkpoint_heights(),
                 vec![height(1), height(2)]

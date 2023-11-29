@@ -6,15 +6,7 @@ use crate::{
     NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_base_types::NodeId;
-use ic_interfaces::{
-    p2p::{
-        artifact_manager::{ArtifactClient, ArtifactProcessor},
-        consensus::ChangeResult,
-        state_sync::StateSyncClient,
-    },
-    time_source::{SysTimeSource, TimeSource},
-};
-use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
+use ic_interfaces::p2p::{consensus::ChangeResult, state_sync::StateSyncClient};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_types::{
@@ -31,46 +23,6 @@ use std::{
     convert::Infallible,
     sync::{Arc, Mutex},
 };
-
-#[derive(Clone)]
-pub struct StateSync {
-    state_manager: Arc<StateManagerImpl>,
-    state_sync_refs: StateSyncRefs,
-    log: ReplicaLogger,
-}
-
-impl StateSync {
-    pub fn new(state_manager: Arc<StateManagerImpl>, log: ReplicaLogger) -> Self {
-        Self {
-            state_manager,
-            state_sync_refs: StateSyncRefs::new(log.clone()),
-            log,
-        }
-    }
-    /// Returns requested state as a Chunkable artifact for StateSync.
-    pub fn create_chunkable_state(
-        &self,
-        id: &StateSyncArtifactId,
-    ) -> Box<dyn Chunkable + Send + Sync> {
-        info!(self.log, "Starting state sync @{}", id.height);
-
-        Box::new(crate::state_sync::chunkable::IncompleteState::new(
-            self.log.clone(),
-            id.height,
-            id.hash.clone(),
-            self.state_manager.state_layout.clone(),
-            self.state_manager.latest_manifest(),
-            self.state_manager.metrics.clone(),
-            self.state_manager.own_subnet_type,
-            Arc::new(Mutex::new(scoped_threadpool::Pool::new(
-                NUMBER_OF_CHECKPOINT_THREADS,
-            ))),
-            self.state_sync_refs.clone(),
-            self.state_manager.get_fd_factory(),
-            self.state_manager.malicious_flags.clone(),
-        ))
-    }
-}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct StateSyncArtifact;
@@ -110,8 +62,46 @@ impl ArtifactKind for StateSyncArtifact {
     }
 }
 
-impl ArtifactClient<StateSyncArtifact> for StateSync {
-    fn get_validated_by_identifier(
+#[derive(Clone)]
+pub struct StateSync {
+    state_manager: Arc<StateManagerImpl>,
+    state_sync_refs: StateSyncRefs,
+    log: ReplicaLogger,
+}
+
+impl StateSync {
+    pub fn new(state_manager: Arc<StateManagerImpl>, log: ReplicaLogger) -> Self {
+        Self {
+            state_manager,
+            state_sync_refs: StateSyncRefs::new(log.clone()),
+            log,
+        }
+    }
+    /// Returns requested state as a Chunkable artifact for StateSync.
+    pub fn create_chunkable_state(
+        &self,
+        id: &StateSyncArtifactId,
+    ) -> Box<dyn Chunkable + Send + Sync> {
+        info!(self.log, "Starting state sync @{}", id.height);
+
+        Box::new(crate::state_sync::chunkable::IncompleteState::new(
+            self.log.clone(),
+            id.height,
+            id.hash.clone(),
+            self.state_manager.state_layout.clone(),
+            self.state_manager.latest_manifest(),
+            self.state_manager.metrics.clone(),
+            self.state_manager.own_subnet_type,
+            Arc::new(Mutex::new(scoped_threadpool::Pool::new(
+                NUMBER_OF_CHECKPOINT_THREADS,
+            ))),
+            self.state_sync_refs.clone(),
+            self.state_manager.get_fd_factory(),
+            self.state_manager.malicious_flags.clone(),
+        ))
+    }
+
+    pub fn get_validated_by_identifier(
         &self,
         msg_id: &StateSyncArtifactId,
     ) -> Option<StateSyncMessage> {
@@ -167,7 +157,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         state_sync_message
     }
 
-    fn has_artifact(&self, msg_id: &StateSyncArtifactId) -> bool {
+    pub fn has_artifact(&self, msg_id: &StateSyncArtifactId) -> bool {
         self.state_manager
             .states
             .read()
@@ -220,7 +210,8 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
             .collect()
     }
 
-    fn get_priority_function(
+    #[allow(clippy::type_complexity)]
+    pub fn get_priority_function(
         &self,
     ) -> Box<dyn Fn(&StateSyncArtifactId, &()) -> Priority + Send + Sync + 'static> {
         use ic_interfaces_state_manager::StateReader;
@@ -292,34 +283,15 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         })
     }
 
-    /// Get StateSync Filter for re-transmission purpose.
-    ///
-    /// Anything below or equal to the filter represents what the local
-    /// state_manager already has.
-    ///
-    /// Return the highest certified height as the filter.
-    fn get_filter(&self) -> StateSyncFilter {
-        StateSyncFilter {
-            height: *self
-                .state_manager
-                .list_state_heights(CERT_CERTIFIED)
-                .last()
-                .unwrap_or(&Height::from(0)),
-        }
-    }
-
     /// Returns requested state as a Chunkable artifact for StateSync.
     fn get_chunk_tracker(&self, id: &StateSyncArtifactId) -> Box<dyn Chunkable + Send + Sync> {
         self.create_chunkable_state(id)
     }
-}
 
-impl ArtifactProcessor<StateSyncArtifact> for StateSync {
     // Returns the states checkpointed since the last time process_changes was
     // called.
-    fn process_changes(
+    pub fn process_changes(
         &self,
-        _time_source: &dyn TimeSource,
         artifact_events: Vec<UnvalidatedArtifactMutation<StateSyncArtifact>>,
     ) -> ChangeResult<StateSyncArtifact> {
         // Processes received state sync artifacts.
@@ -411,9 +383,6 @@ impl StateSyncClient for StateSync {
 
     /// Blocking. Makes synchronous file system calls.
     fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
-        let _ = self.process_changes(
-            &SysTimeSource::new(),
-            vec![UnvalidatedArtifactMutation::Insert((msg, peer_id))],
-        );
+        let _ = self.process_changes(vec![UnvalidatedArtifactMutation::Insert((msg, peer_id))]);
     }
 }
