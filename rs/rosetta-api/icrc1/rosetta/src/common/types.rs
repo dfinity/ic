@@ -8,116 +8,13 @@ use super::storage::types::RosettaBlock;
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use rosetta_core::identifiers::NetworkIdentifier;
-use rosetta_core::objects::Object;
+use rosetta_core::objects::Currency;
+use rosetta_core::objects::ObjectMap;
 use serde::Serialize;
 use serde_json::Number;
 
 // Generated from the [Rosetta API specification v1.4.13](https://github.com/coinbase/rosetta-specifications/blob/v1.4.13/api.json)
 // Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkOptionsResponse {
-    pub version: Version,
-
-    pub allow: Allow,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Version {
-    pub rosetta_version: String,
-
-    pub node_version: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub middleware_version: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Allow {
-    pub operation_statuses: Vec<OperationStatus>,
-
-    pub operation_types: Vec<String>,
-
-    pub errors: Vec<Error>,
-
-    pub historical_balance_lookup: bool,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp_start_index: Option<i64>,
-
-    pub call_methods: Vec<String>,
-
-    pub balance_exemptions: Vec<BalanceExemption>,
-
-    pub mempool_coins: bool,
-
-    #[serde(
-        default,
-        with = "::serde_with::rust::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub block_hash_case: Option<Option<Case>>,
-
-    #[serde(
-        default,
-        with = "::serde_with::rust::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub transaction_hash_case: Option<Option<Case>>,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub struct BalanceExemption {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_account_address: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub currency: Option<Box<Currency>>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exemption_type: Option<ExemptionType>,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Currency {
-    pub symbol: String,
-
-    pub decimals: u8,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum ExemptionType {
-    GreaterOrEqual,
-    LessOrEqual,
-    Dynamic,
-}
-
-impl Default for ExemptionType {
-    fn default() -> ExemptionType {
-        Self::GreaterOrEqual
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub enum Case {
-    UpperCase,
-    LowerCase,
-    CaseSensitive,
-    Null,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct OperationStatus {
-    pub status: String,
-
-    pub successful: bool,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
@@ -201,14 +98,6 @@ impl Error {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkRequest {
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct BlockIdentifier {
     pub index: u64,
     pub hash: String,
@@ -272,7 +161,7 @@ pub struct Transaction {
     pub transaction_identifier: TransactionIdentifier,
     pub operations: Vec<Operation>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl Transaction {
@@ -294,7 +183,7 @@ pub struct Operation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -350,7 +239,7 @@ pub struct ApproveMetadata {
     pub expires_at: Option<u64>,
 }
 
-impl From<ApproveMetadata> for Object {
+impl From<ApproveMetadata> for ObjectMap {
     fn from(m: ApproveMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(serde_json::Value::Object(o)) => o,
@@ -404,7 +293,7 @@ impl TransactionBuilder {
         let mut push_operation = |r#type: OperationType,
                                   account: AccountIdentifier,
                                   amount: Option<String>,
-                                  metadata: Option<Object>| {
+                                  metadata: Option<ObjectMap>| {
             operations.push(Operation {
                 operation_identifier: OperationIdentifier {
                     index: operations.len() as u64,
@@ -504,7 +393,7 @@ impl TransactionBuilder {
             }
         };
 
-        let mut metadata = Object::new();
+        let mut metadata = ObjectMap::new();
         if let Some(created_at_time) = transaction.created_at_time() {
             metadata.insert(
                 "created_at_time".to_string(),
@@ -712,7 +601,7 @@ mod test {
     fn currency_strategy() -> impl Strategy<Value = Currency> {
         (decimals_strategy(), symbol_strategy()).prop_map(|(decimals, symbol)| Currency {
             symbol,
-            decimals,
+            decimals: decimals.into(),
             metadata: None,
         })
     }
@@ -860,7 +749,7 @@ mod test {
             }
         };
 
-        let mut metadata = Object::new();
+        let mut metadata = ObjectMap::new();
         if let Some(memo) = &transaction.memo {
             let value = serde_json::Value::Array(
                 memo.0

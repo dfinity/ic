@@ -9,13 +9,14 @@ mod construction_submit;
 
 use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
-use crate::models::{CallResponse, NetworkIdentifier, Object};
+use crate::models::{CallResponse, NetworkIdentifier};
 use crate::request_types::GetProposalInfo;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
+use rosetta_core::objects::ObjectMap;
 
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
@@ -172,12 +173,14 @@ impl RosettaRequestHandler {
                     .proposal_info(get_proposal_info_object.proposal_id)
                     .await?;
                 let proposal_info_response = ProposalInfoResponse::from(proposal_info);
-                Ok(CallResponse::new(Object::from(proposal_info_response)))
+                Ok(CallResponse::new(ObjectMap::from(proposal_info_response)))
             }
             "get_pending_proposals" => {
                 let pending_proposals = self.ledger.pending_proposals().await?;
                 let pending_proposals_response = PendingProposalsResponse::from(pending_proposals);
-                Ok(CallResponse::new(Object::from(pending_proposals_response)))
+                Ok(CallResponse::new(ObjectMap::from(
+                    pending_proposals_response,
+                )))
             }
             _ => Err(ApiError::InvalidRequest(
                 false,
@@ -235,7 +238,10 @@ impl RosettaRequestHandler {
 
     /// Get All Mempool Transactions
     pub async fn mempool(&self, msg: models::NetworkRequest) -> Result<MempoolResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.into(),
+        )?;
         Ok(MempoolResponse::new(vec![]))
     }
 
@@ -265,7 +271,10 @@ impl RosettaRequestHandler {
         &self,
         msg: models::NetworkRequest,
     ) -> Result<NetworkOptionsResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.into(),
+        )?;
 
         Ok(NetworkOptionsResponse::new(
             Version::new(
@@ -309,7 +318,9 @@ impl RosettaRequestHandler {
                     for e in errs.iter_mut() {
                         e.0.details = Default::default();
                     }
-                    errs
+                    errs.into_iter()
+                        .map(|err| err.0)
+                        .collect::<Vec<rosetta_core::objects::Error>>()
                 },
                 true,
             ),
@@ -321,7 +332,10 @@ impl RosettaRequestHandler {
         &self,
         msg: models::NetworkRequest,
     ) -> Result<NetworkStatusResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.into(),
+        )?;
         let blocks = self.ledger.read_blocks().await;
         let first = blocks.get_first_verified_hashed_block()?;
         let tip = blocks.get_latest_verified_hashed_block()?;

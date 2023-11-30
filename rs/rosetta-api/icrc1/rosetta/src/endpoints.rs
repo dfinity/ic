@@ -4,17 +4,21 @@ use std::time::Duration;
 use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_icrc_rosetta::{
     common::types::{
-        Allow, BlockIdentifier, BlockRequest, BlockResponse, BlockTransactionRequest,
-        BlockTransactionResponse, Currency, Error, NetworkOptionsResponse, NetworkRequest,
-        NetworkStatusResponse, Version,
+        BlockIdentifier, BlockRequest, BlockResponse, BlockTransactionRequest,
+        BlockTransactionResponse, Error, NetworkStatusResponse,
     },
     AppState,
 };
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::models::MempoolResponse;
 use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::objects::Currency;
 use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::request_types::NetworkRequest;
+use rosetta_core::response_types::Allow;
 use rosetta_core::response_types::NetworkListResponse;
+use rosetta_core::response_types::NetworkOptionsResponse;
+use rosetta_core::response_types::Version;
 use serde_bytes::ByteBuf;
 
 const ROSETTA_VERSION: &str = "1.4.13";
@@ -65,7 +69,8 @@ pub async fn network_options(
             errors: vec![Error::invalid_network_id(&NetworkIdentifier::new(
                 DEFAULT_BLOCKCHAIN.to_owned(),
                 state.ledger_id.to_string(),
-            ))],
+            ))
+            .into()],
             historical_balance_lookup: true,
             timestamp_start_index: None,
             call_methods: vec![],
@@ -165,7 +170,7 @@ pub async fn block(
 
     let currency = Currency {
         symbol: state.metadata.symbol.clone(),
-        decimals: state.metadata.decimals,
+        decimals: state.metadata.decimals.into(),
         ..Default::default()
     };
 
@@ -207,7 +212,7 @@ pub async fn block_transaction(
 
     let currency = Currency {
         symbol: state.metadata.symbol.clone(),
-        decimals: state.metadata.decimals,
+        decimals: state.metadata.decimals.into(),
         ..Default::default()
     };
 

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-pub type Object = serde_json::map::Map<String, serde_json::Value>;
+pub type Object = serde_json::Value;
+pub type ObjectMap = serde_json::map::Map<String, Object>;
 
 /// Instead of utilizing HTTP status codes to describe node errors (which often
 /// do not have a good analog), rich errors are returned using this object.
@@ -40,7 +41,7 @@ pub struct Error {
     /// caused the error (i.e. a sample of the stack trace or impacted account)
     /// in addition to the standard error message.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<Object>,
+    pub details: Option<ObjectMap>,
 }
 
 impl Display for Error {
@@ -51,5 +52,32 @@ impl Display for Error {
             serde_json::to_string(self)
                 .expect("This should be impossible, all errors must be serializable")
         )
+    }
+}
+
+/// Currency is composed of a canonical Symbol and Decimals. This Decimals value is used to convert an Amount.
+/// Value from atomic units (Satoshis) to standard units (Bitcoins).
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Currency {
+    /// Canonical symbol associated with a currency.
+    pub symbol: String,
+
+    /// Number of decimal places in the standard unit representation of the amount. For example, BTC has 8 decimals.
+    /// Note that it is not possible to represent the value of some currency in atomic units that is not base 10.
+    pub decimals: u32,
+
+    /// Any additional information related to the currency itself. For example, it would be useful to populate this
+    /// object with the contract address of an ERC-20 token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Object>,
+}
+
+impl Currency {
+    pub fn new(symbol: String, decimals: u32) -> Currency {
+        Currency {
+            symbol,
+            decimals,
+            metadata: None,
+        }
     }
 }

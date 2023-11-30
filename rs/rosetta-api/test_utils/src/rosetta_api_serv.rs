@@ -3,6 +3,7 @@ use ic_rosetta_api::models::*;
 use ic_types::CanisterId;
 
 use icp_ledger::{AccountIdentifier, BlockIndex};
+use rosetta_core::request_types::NetworkRequest;
 use slog::info;
 
 use crate::store_threshold_sig_pk;
@@ -382,7 +383,7 @@ impl RosettaApiHandle {
     pub async fn network_status(
         &self,
     ) -> Result<Result<NetworkStatusResponse, RosettaError>, String> {
-        let req = NetworkRequest::new(self.network_id());
+        let req = NetworkRequest::new(self.network_id().into());
         to_rosetta_response(
             self.post_json_request(
                 &format!("http://{}/network/status", self.api_url),

@@ -1,9 +1,7 @@
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
-use crate::{
-    convert,
-    models::{Error, Object},
-};
+use crate::{convert, models::Error};
+use rosetta_core::objects::ObjectMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -149,7 +147,7 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
         ),
         ApiError::ICError(e) => (740, "Internet Computer error", e.retriable, e.into()),
         ApiError::TransactionRejected(r, d) => (750, "Transaction rejected", *r, d.into()),
-        ApiError::TransactionExpired => (760, "Transaction expired", false, Object::default()),
+        ApiError::TransactionExpired => (760, "Transaction expired", false, ObjectMap::default()),
         ApiError::OperationsErrors(e, token_name) => {
             match TransactionOperationResults::from_transaction_results(e.clone(), token_name) {
                 Ok(o) => (770, "Operation failed", e.retriable(), o.into()),
@@ -157,7 +155,7 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
                     700,
                     "Internal server error",
                     false,
-                    Object::from(&Details::from(
+                    ObjectMap::from(&Details::from(
                         "Could not convert TransactionResults to TransactionOperationResults",
                     )),
                 ),
@@ -289,19 +287,19 @@ impl From<ICError> for ApiError {
     }
 }
 
-impl From<&ICError> for Object {
+impl From<&ICError> for ObjectMap {
     fn from(e: &ICError) -> Self {
         match serde_json::to_value(e) {
             Ok(Value::Object(o)) => o,
-            _ => Object::default(),
+            _ => ObjectMap::default(),
         }
     }
 }
 
-impl TryFrom<Option<Object>> for ICError {
+impl TryFrom<Option<ObjectMap>> for ICError {
     type Error = ApiError;
 
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse ICError from details JSON object: {}",
@@ -323,7 +321,7 @@ pub struct Details {
     /// Arbitrary fields that will be included in the details object.
     /// The entries will be flattened when serializing.
     #[serde(flatten)]
-    extra_fields: Object,
+    extra_fields: ObjectMap,
 }
 
 #[test]
@@ -348,7 +346,7 @@ impl From<&str> for Details {
     fn from(error_message: &str) -> Self {
         Self {
             error_message: Some(error_message.to_owned()),
-            extra_fields: Object::default(),
+            extra_fields: ObjectMap::default(),
         }
     }
 }
@@ -357,22 +355,22 @@ impl From<String> for Details {
     fn from(error_message: String) -> Self {
         Self {
             error_message: Some(error_message),
-            extra_fields: Object::default(),
+            extra_fields: ObjectMap::default(),
         }
     }
 }
 
-impl From<&Details> for Object {
+impl From<&Details> for ObjectMap {
     fn from(d: &Details) -> Self {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => o,
-            _ => Object::default(),
+            _ => ObjectMap::default(),
         }
     }
 }
 
-impl From<Object> for Details {
-    fn from(o: Object) -> Self {
+impl From<ObjectMap> for Details {
+    fn from(o: ObjectMap) -> Self {
         serde_json::from_value(serde_json::Value::Object(o))
             .ok()
             .unwrap_or_default()
@@ -383,8 +381,8 @@ impl From<Object> for Details {
 fn to_from_details_test() {
     let d = Details {
         error_message: Some("foo".to_owned()),
-        extra_fields: Object::default(),
+        extra_fields: ObjectMap::default(),
     };
-    let o: Object = (&d).into();
+    let o: ObjectMap = (&d).into();
     assert_eq!(d, o.into());
 }
