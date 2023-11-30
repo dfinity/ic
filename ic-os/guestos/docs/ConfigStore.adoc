@@ -61,7 +61,9 @@ Must be a file of key/value pairs separated by "=" (one per line) with the follo
 
 - *ipv6_gateway*: The default IPv6 gateway, only meaningful if ipv6_address is also provided.
 
-- *name_servers*: The name servers to be used. If multiple servers are needed, separate them with spaces. This key is only meaningful if DHCP or SLAAC is not used.
+- *name_servers*: The ipv6 name servers to be used. If multiple servers are needed, separate them with spaces. This key is only meaningful if DHCP or SLAAC is not used.
+
+- *ipv4_name_servers*: The ipv4 name servers to be used. If multiple servers are needed, separate them with spaces. This key is only meaningful if DHCP or SLAAC is not used.
 
 - *hostname*: The hostname, which can be any text in principle but is generally derived from the ID of the physical host (e.g., MAC address).
 

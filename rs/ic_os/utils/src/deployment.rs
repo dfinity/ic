@@ -33,6 +33,7 @@ pub struct Nns {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Dns {
     pub name_servers: String,
+    pub ipv4_name_servers: String,
 }
 
 #[serde_as]
@@ -65,7 +66,8 @@ mod test {
     "url": "https://dfinity.org/"
   },
   "dns": {
-    "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
+    "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844",
+    "ipv4_name_servers": "1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4"
   },
   "resources": {
     "memory": "490"
@@ -77,7 +79,7 @@ mod test {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
             nns: Nns { url: Url::parse("https://dfinity.org").unwrap() },
-            dns: Dns { name_servers: "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844".to_string() },
+            dns: Dns { name_servers: "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844".to_string(), ipv4_name_servers: "1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4".to_string()},
             resources: Resources { memory: 490, cpu: None },
         }
     });
@@ -93,7 +95,8 @@ mod test {
     "url": "https://dfinity.org/"
   },
   "dns": {
-    "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
+    "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844",
+    "ipv4_name_servers": "1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4"
   },
   "resources": {
     "memory": "490",
@@ -106,7 +109,7 @@ mod test {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
             nns: Nns { url: Url::parse("https://dfinity.org").unwrap() },
-            dns: Dns { name_servers: "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844".to_string() },
+            dns: Dns { name_servers: "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844".to_string(), ipv4_name_servers: "1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4".to_string() },
             resources: Resources { memory: 490, cpu: Some("qemu".to_string()) },
         }
     });
