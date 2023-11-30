@@ -23,6 +23,7 @@ system_test(
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_dev = True,
