@@ -98,6 +98,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                     "idna",
                 ],
             ),
+            "aide": crate.spec(
+                version = "0.12.0",
+                features = [
+                    "axum",
+                ],
+            ),
             "arbitrary": crate.spec(
                 version = "^1.3.0",
             ),
@@ -980,6 +986,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "rusty-fork": crate.spec(
                 version = "^0.3.0",
+            ),
+            "schemars": crate.spec(
+                version = "0.8.16",
             ),
             "scoped_threadpool": crate.spec(
                 version = "0.1.*",

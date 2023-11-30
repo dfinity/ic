@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:schemars",
     "@crate_index//:reqwest",
     "@crate_index//:ic-cdk",
     "@crate_index//:candid",

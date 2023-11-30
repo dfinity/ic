@@ -1,5 +1,5 @@
 {
-  "checksum": "7b18fce97a48b570032eff7cb7f53a311d0b62894bdc5b90dc101e4639dbef4f",
+  "checksum": "5dc9348d9a50fed2e0454241086b00347eaa4cf6475f6daed43814db85a4ef2d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1423,6 +1423,106 @@
         "version": "1.0.2"
       },
       "license": "Unlicense OR MIT"
+    },
+    "aide 0.12.0": {
+      "name": "aide",
+      "version": "0.12.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/aide/0.12.0/download",
+          "sha256": "f0b9ab2c8531a5ac6bcc579cc4c308d1b4bd5b9910a0f08bf4e65b3452407400"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "aide",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "aide",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "axum",
+            "bytes",
+            "http"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "axum 0.6.20",
+              "target": "axum"
+            },
+            {
+              "id": "bytes 1.5.0",
+              "target": "bytes"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "indexmap 1.9.3",
+              "target": "indexmap"
+            },
+            {
+              "id": "schemars 0.8.16",
+              "target": "schemars"
+            },
+            {
+              "id": "serde 1.0.190",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.108",
+              "target": "serde_json"
+            },
+            {
+              "id": "thiserror 1.0.43",
+              "target": "thiserror"
+            },
+            {
+              "id": "tower-layer 0.3.2",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "derive_more 0.99.17",
+              "target": "derive_more"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.12.0"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "alloc-no-stdlib 2.0.4": {
       "name": "alloc-no-stdlib",
@@ -13164,6 +13264,10 @@
               "target": "addr"
             },
             {
+              "id": "aide 0.12.0",
+              "target": "aide"
+            },
+            {
               "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
@@ -14036,6 +14140,10 @@
             {
               "id": "rusty-fork 0.3.0",
               "target": "rusty_fork"
+            },
+            {
+              "id": "schemars 0.8.16",
+              "target": "schemars"
             },
             {
               "id": "scoped_threadpool 0.1.9",
@@ -23957,6 +24065,8 @@
         ],
         "crate_features": {
           "common": [
+            "serde",
+            "serde-1",
             "std"
           ],
           "selects": {}
@@ -23970,6 +24080,10 @@
             {
               "id": "indexmap 1.9.3",
               "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.190",
+              "target": "serde"
             }
           ],
           "selects": {}
@@ -43617,6 +43731,145 @@
       },
       "license": "MIT"
     },
+    "schemars 0.8.16": {
+      "name": "schemars",
+      "version": "0.8.16",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/schemars/0.8.16/download",
+          "sha256": "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "schemars",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "schemars",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "derive",
+            "impl_json_schema",
+            "indexmap",
+            "schemars_derive"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "dyn-clone 1.0.14",
+              "target": "dyn_clone"
+            },
+            {
+              "id": "indexmap 1.9.3",
+              "target": "indexmap"
+            },
+            {
+              "id": "schemars 0.8.16",
+              "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.190",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.108",
+              "target": "serde_json"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "schemars_derive 0.8.16",
+              "target": "schemars_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.8.16"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT"
+    },
+    "schemars_derive 0.8.16": {
+      "name": "schemars_derive",
+      "version": "0.8.16",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/schemars_derive/0.8.16/download",
+          "sha256": "c767fd6fa65d9ccf9cf026122c1b555f2ef9a4f0cea69da4d7dbc3e258d30967"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "schemars_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "schemars_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.31",
+              "target": "quote"
+            },
+            {
+              "id": "serde_derive_internals 0.26.0",
+              "target": "serde_derive_internals"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.8.16"
+      },
+      "license": "MIT"
+    },
     "scoped-tls 1.0.1": {
       "name": "scoped-tls",
       "version": "1.0.1",
@@ -44881,6 +45134,53 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "serde_derive_internals 0.26.0": {
+      "name": "serde_derive_internals",
+      "version": "0.26.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/serde_derive_internals/0.26.0/download",
+          "sha256": "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_derive_internals",
+            "crate_root": "lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "serde_derive_internals",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.31",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.26.0"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "serde_json 1.0.108": {
       "name": "serde_json",
       "version": "1.0.108",
@@ -45037,6 +45337,62 @@
         "version": "0.1.14"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "serde_qs 0.12.0": {
+      "name": "serde_qs",
+      "version": "0.12.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/serde_qs/0.12.0/download",
+          "sha256": "0431a35568651e363364210c91983c1da5eb29404d9f0928b67d4ebcfa7d330c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_qs",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "serde_qs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "axum 0.6.20",
+              "target": "axum",
+              "alias": "axum_framework"
+            },
+            {
+              "id": "futures 0.3.28",
+              "target": "futures"
+            },
+            {
+              "id": "percent-encoding 2.3.0",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "serde 1.0.190",
+              "target": "serde"
+            },
+            {
+              "id": "thiserror 1.0.43",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.12.0"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "serde_qs 0.4.6": {
       "name": "serde_qs",
