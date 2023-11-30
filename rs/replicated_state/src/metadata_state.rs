@@ -2076,12 +2076,19 @@ impl BlockmakerMetricsTimeSeries {
         Ok(())
     }
 
+    /// Returns a reference to the running stats (if any).
+    pub fn running_stats(&self) -> Option<(&Time, &BlockmakerStatsMap)> {
+        self.0.last_key_value()
+    }
+
     /// Returns an iterator pointing at the first element of a chronologically sorted time series
-    /// whose timestamp is above or equal to the given time.
+    /// whose timestamp is above or equal to the given time (excluding the running stats for today).
     pub fn metrics_since(&self, time: Time) -> impl Iterator<Item = (&Time, &BlockmakerStatsMap)> {
-        use std::ops::Bound;
+        // TODO(MR-524): This could be made simpler if the internal data representation would be different. Consider changing this.
         self.0
-            .range((Bound::Included(&time), Bound::Unbounded))
+            .iter()
+            .take(self.0.len().saturating_sub(1))
+            .filter(move |(batch_time, _)| *batch_time >= &time)
             .take(BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS)
     }
 }
