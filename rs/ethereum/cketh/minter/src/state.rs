@@ -205,30 +205,26 @@ impl State {
         receipt: &TransactionReceipt,
     ) {
         let tx_fee = receipt.effective_transaction_fee();
-        match receipt.status {
-            TransactionStatus::Success => {
-                let tx = self
-                    .eth_transactions
-                    .finalized_tx
-                    .get_alt(withdrawal_id)
-                    .expect("BUG: missing finalized transaction");
-                let debited_amount = tx
-                    .transaction()
-                    .amount
-                    .checked_add(tx_fee)
-                    .expect("BUG: debited amount always fits into U256");
-                let charged_tx_fee = tx.transaction_price().max_transaction_fee();
-                let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect("BUG: charged transaction fee MUST always be at least the effective transaction fee");
-
-                self.eth_balance.eth_balance_sub(debited_amount);
-                self.eth_balance.total_effective_tx_fees_add(tx_fee);
-                self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
-            }
-            TransactionStatus::Failure => {
-                self.eth_balance.eth_balance_sub(tx_fee);
-                self.eth_balance.total_effective_tx_fees_add(tx_fee);
-            }
-        }
+        let tx = self
+            .eth_transactions
+            .finalized_tx
+            .get_alt(withdrawal_id)
+            .expect("BUG: missing finalized transaction");
+        let charged_tx_fee = tx.transaction_price().max_transaction_fee();
+        let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect(
+            "BUG: charged transaction fee MUST always be at least the effective transaction fee",
+        );
+        let debited_amount = match receipt.status {
+            TransactionStatus::Success => tx
+                .transaction()
+                .amount
+                .checked_add(tx_fee)
+                .expect("BUG: debited amount always fits into U256"),
+            TransactionStatus::Failure => tx_fee,
+        };
+        self.eth_balance.eth_balance_sub(debited_amount);
+        self.eth_balance.total_effective_tx_fees_add(tx_fee);
+        self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
     }
 
     pub fn record_skipped_block(&mut self, block_number: BlockNumber) {

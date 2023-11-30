@@ -1149,7 +1149,8 @@ mod eth_transactions {
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, dummy_signature, expect_panic_with_message,
             transaction_price, transaction_receipt, withdrawal_request_with_index,
-            DEFAULT_RECIPIENT_ADDRESS, DEFAULT_WITHDRAWAL_AMOUNT,
+            DEFAULT_CREATED_AT, DEFAULT_PRINCIPAL, DEFAULT_RECIPIENT_ADDRESS, DEFAULT_SUBACCOUNT,
+            DEFAULT_WITHDRAWAL_AMOUNT,
         };
         use crate::state::transactions::{
             Address, EthTransactions, EthWithdrawalRequest, ReimbursementRequest, Subaccount,
@@ -1263,19 +1264,12 @@ mod eth_transactions {
             assert_eq!(
                 maybe_reimburse_request,
                 &EthWithdrawalRequest {
-                    withdrawal_amount: Wei::new(
-                        crate::state::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT
-                    ),
+                    withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
                     destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
                     ledger_burn_index,
-                    from: candid::Principal::from_str(
-                        crate::state::transactions::tests::DEFAULT_PRINCIPAL,
-                    )
-                    .unwrap(),
-                    from_subaccount: Some(Subaccount(
-                        crate::state::transactions::tests::DEFAULT_SUBACCOUNT
-                    )),
-                    created_at: Some(crate::state::transactions::tests::DEFAULT_CREATED_AT),
+                    from: candid::Principal::from_str(DEFAULT_PRINCIPAL,).unwrap(),
+                    from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+                    created_at: Some(DEFAULT_CREATED_AT),
                 }
             );
 
@@ -1287,8 +1281,6 @@ mod eth_transactions {
                 .get_alt(&ledger_burn_index)
                 .expect("finalized tx not found");
 
-            let effective_fee_paid = finalized_transaction.effective_transaction_fee();
-
             assert!(transactions.maybe_reimburse.is_empty());
             let reimbursement_request = transactions
                 .reimbursement_requests
@@ -1299,18 +1291,9 @@ mod eth_transactions {
                 &ReimbursementRequest {
                     transaction_hash: Some(receipt.transaction_hash),
                     withdrawal_id: ledger_burn_index,
-                    to: candid::Principal::from_str(
-                        crate::state::transactions::tests::DEFAULT_PRINCIPAL,
-                    )
-                    .unwrap(),
-                    to_subaccount: Some(Subaccount(
-                        crate::state::transactions::tests::DEFAULT_SUBACCOUNT
-                    )),
-                    reimbursed_amount: Wei::new(
-                        crate::state::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT
-                    )
-                    .checked_sub(effective_fee_paid)
-                    .unwrap(),
+                    to: candid::Principal::from_str(DEFAULT_PRINCIPAL,).unwrap(),
+                    to_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+                    reimbursed_amount: *finalized_transaction.transaction_amount(),
                 }
             );
         }
