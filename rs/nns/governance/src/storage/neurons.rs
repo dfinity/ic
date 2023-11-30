@@ -14,7 +14,7 @@ use maplit::hashmap;
 use prost::Message;
 use std::{
     borrow::Cow,
-    collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
+    collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap, HashSet},
     ops::RangeBounds,
 };
 
@@ -295,6 +295,15 @@ where
         self.main
             .range(range)
             .map(|(_neuron_id, neuron)| self.reconstitute_neuron(neuron))
+    }
+
+    /// Returns all neuron ids as a set. Note that this method can take ~1B instructions and
+    /// probably shouldn't be used outside of upgrades.
+    pub fn stable_neuron_ids(&self) -> HashSet<u64> {
+        self.main
+            .range(u64::MIN..=u64::MAX)
+            .map(|(neuron_id, _)| neuron_id)
+            .collect()
     }
 
     /// Returns the number of entries for some of the storage sections.
