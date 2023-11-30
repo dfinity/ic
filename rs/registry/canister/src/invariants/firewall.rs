@@ -328,6 +328,7 @@ mod tests {
             p2p_flow_endpoints: vec![],
             hostos_version_id: None,
             chip_id: None,
+            public_ipv4_config: None,
         }
     }
 

@@ -24,6 +24,12 @@ message FlowEndpoint {
   ConnectionEndpoint endpoint = 2;
 }
 
+message IPv4InterfaceConfig {
+  string ip_addr = 1;
+  repeated string gateway_ip_addr = 2;
+  uint32 prefix_length = 3;
+}
+
 // A node: one machine running a replica instance.
 message NodeRecord {
   // the node_id is redundant as it is already contained in the key for this
@@ -62,4 +68,7 @@ message NodeRecord {
 
   // ID of the HostOS version to run.
   optional string hostos_version_id = 17;
+
+  // IPv4 interface configuration
+  optional IPv4InterfaceConfig public_ipv4_config = 18;
 }
