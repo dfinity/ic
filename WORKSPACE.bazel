@@ -713,6 +713,14 @@ http_file(
     url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm.gz",
 )
 
+# Cycles Ledger canister
+
+http_file(
+    name = "cycles-ledger.wasm.gz",
+    sha256 = "4f26aae9edef5b4e2c785c1dc6f312163af055f22954dd99d515d8a862bd59bd",
+    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v0.2.3/cycles-ledger.wasm.gz",
+)
+
 # Import Python rules
 
 http_archive(
