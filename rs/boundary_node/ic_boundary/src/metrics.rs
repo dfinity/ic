@@ -540,6 +540,34 @@ impl HttpMetricParams {
     }
 }
 
+pub struct WithMetricsSnapshot<T>(pub T, pub MetricParamsSnapshot);
+
+#[derive(Clone)]
+pub struct MetricParamsSnapshot {
+    pub version: IntGauge,
+    pub timestamp: IntGauge,
+}
+
+impl MetricParamsSnapshot {
+    pub fn new(registry: &Registry) -> Self {
+        Self {
+            version: register_int_gauge_with_registry!(
+                format!("registry_version"),
+                format!("Currently published registry version"),
+                registry
+            )
+            .unwrap(),
+
+            timestamp: register_int_gauge_with_registry!(
+                format!("registry_timestamp"),
+                format!("Timestamp of the last registry update"),
+                registry
+            )
+            .unwrap(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct HttpMetricParamsStatus {
     pub counter: IntCounterVec,

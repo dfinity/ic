@@ -78,7 +78,8 @@ pub fn generate_custom_registry_snapshot(
     }
 
     RegistrySnapshot {
-        registry_version: 1,
+        version: 1,
+        timestamp: 123,
         nns_subnet_id: subnet_test_id(0).get().0,
         nns_public_key: vec![],
         subnets,

@@ -47,15 +47,15 @@ use crate::{
     management,
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
-        MetricParamsPersist, MetricsCache, MetricsRunner, WithMetrics, WithMetricsCheck,
-        WithMetricsPersist,
+        MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
+        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
     },
     nns::{Load, Loader},
     persist,
     rate_limiting::RateLimit,
     retry::{retry_request, RetryParams},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
-    snapshot::{Runner as SnapshotRunner, SnapshotPersister},
+    snapshot::{SnapshotPersister, Snapshotter},
     tls_verify::TlsVerifier,
 };
 
@@ -355,26 +355,31 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     // Snapshots
-    let mut snapshot_runner = SnapshotRunner::new(
-        Arc::clone(&registry_snapshot),
-        registry_client.clone(),
-        Duration::from_secs(cli.registry.min_version_age),
+    let snapshot_runner = WithMetricsSnapshot(
+        {
+            let mut snapshotter = Snapshotter::new(
+                Arc::clone(&registry_snapshot),
+                registry_client.clone(),
+                Duration::from_secs(cli.registry.min_version_age),
+            );
+
+            if let Some(v) = &cli.firewall.nftables_system_replicas_path {
+                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
+
+                let fw_generator = FirewallGenerator::new(
+                    v.clone(),
+                    cli.firewall.nftables_system_replicas_var.clone(),
+                );
+
+                let persister = SnapshotPersister::new(fw_generator, fw_reloader);
+                snapshotter.set_persister(persister);
+            }
+
+            snapshotter
+        },
+        MetricParamsSnapshot::new(&registry),
     );
 
-    if let Some(v) = &cli.firewall.nftables_system_replicas_path {
-        let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
-
-        let fw_generator =
-            FirewallGenerator::new(v.clone(), cli.firewall.nftables_system_replicas_var.clone());
-
-        let persister = SnapshotPersister::new(fw_generator, fw_reloader);
-        snapshot_runner.set_persister(persister);
-    }
-
-    let snapshot_runner = WithMetrics(
-        snapshot_runner,
-        MetricParams::new(&registry, "run_snapshot"),
-    );
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
 
     // Checks
