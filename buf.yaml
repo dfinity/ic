@@ -20,8 +20,6 @@ lint:
     - DEFAULT
 breaking:
   ignore:
-    - ic_sns_swap/pb/v1/swap.proto
-    - ic_nns_governance/pb/v1/governance.proto
   use:
     - WIRE
   except:
