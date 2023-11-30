@@ -263,8 +263,8 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
 
 fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     let CanisterIdRange { start, end } = range;
-    let start = start.get().into();
-    let end = end.get().into();
+    let start = start.get().0.into();
+    let end = end.get().0.into();
     rest::CanisterIdRange { start, end }
 }
 

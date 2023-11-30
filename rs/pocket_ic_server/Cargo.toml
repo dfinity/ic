@@ -38,6 +38,8 @@ tempfile = "*"
 base64 = { workspace = true }
 wat = "1.0.52"
 flate2 = "1.0.27"
+aide = { version = "0.12.0", features = ["axum"] }
+schemars = "0.8.16"
 
 [dev-dependencies]
 reqwest = { workspace = true }

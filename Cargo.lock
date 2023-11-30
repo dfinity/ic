@@ -296,6 +296,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "aide"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0b9ab2c8531a5ac6bcc579cc4c308d1b4bd5b9910a0f08bf4e65b3452407400"
+dependencies = [
+ "axum",
+ "bytes",
+ "cfg-if 1.0.0",
+ "derive_more 0.99.17",
+ "http",
+ "indexmap 1.9.2",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_qs 0.12.0",
+ "thiserror",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12042,6 +12064,7 @@ checksum = "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
 dependencies = [
  "autocfg 1.1.0",
  "hashbrown 0.12.3",
+ "serde",
 ]
 
 [[package]]
@@ -14475,6 +14498,7 @@ dependencies = [
  "ic-universal-canister",
  "icp-ledger",
  "reqwest",
+ "schemars",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -14487,6 +14511,7 @@ dependencies = [
 name = "pocket-ic-server"
 version = "2.0.1"
 dependencies = [
+ "aide",
  "axum",
  "base64 0.13.1",
  "candid",
@@ -14511,6 +14536,7 @@ dependencies = [
  "pocket-ic",
  "rand 0.8.5",
  "reqwest",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -16115,6 +16141,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
+dependencies = [
+ "dyn-clone",
+ "indexmap 1.9.2",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c767fd6fa65d9ccf9cf026122c1b555f2ef9a4f0cea69da4d7dbc3e258d30967"
+dependencies = [
+ "proc-macro2 1.0.66",
+ "quote 1.0.31",
+ "serde_derive_internals",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "scoped-tls"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16358,6 +16409,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_derive_internals"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
+dependencies = [
+ "proc-macro2 1.0.66",
+ "quote 1.0.31",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "serde_json"
 version = "1.0.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16395,6 +16457,19 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7715380eec75f029a4ef7de39a9200e0a63823176b759d055b613f5a87df6a6"
 dependencies = [
+ "percent-encoding 2.3.0",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "serde_qs"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0431a35568651e363364210c91983c1da5eb29404d9f0928b67d4ebcfa7d330c"
+dependencies = [
+ "axum",
+ "futures",
  "percent-encoding 2.3.0",
  "serde",
  "thiserror",

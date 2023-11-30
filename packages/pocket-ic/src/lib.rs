@@ -50,6 +50,7 @@ use ic_cdk::api::management_canister::{
     provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
 };
 use reqwest::Url;
+use schemars::JsonSchema;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
@@ -931,7 +932,9 @@ pub enum TryFromError {
 /// convention: the most significant digit is the corresponding reject
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
-#[derive(PartialOrd, Ord, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
+)]
 pub enum ErrorCode {
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
@@ -1054,7 +1057,9 @@ impl std::fmt::Display for ErrorCode {
 /// The error that is sent back to users from the IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in the ingress history.
-#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
+)]
 pub struct UserError {
     /// The error code.
     pub code: ErrorCode,
