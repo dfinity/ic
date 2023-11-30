@@ -1303,27 +1303,9 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     );
 
     // Step 1: Submit and execute the proposal in the NNS
+    let proposal = CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL.clone();
 
-    let mut swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL
-        .swap_parameters
-        .clone();
-
-    // Disable Neurons Fund participation
-    if let Some(s) = &mut swap_parameters {
-        s.neurons_fund_participation = Some(false);
-        if s.minimum_icp.is_some() {
-            s.minimum_direct_participation_icp = s.minimum_icp;
-        }
-        if s.maximum_icp.is_some() {
-            s.maximum_direct_participation_icp = s.maximum_icp;
-        }
-    }
-    let proposal = CreateServiceNervousSystem {
-        swap_parameters,
-        ..CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL.clone()
-    };
-
-    // Submit the proposal! :)
+    // Submit the proposal!
     let proposal_id = sns_initialization_flow_test.propose_create_service_nervous_system(
         get_neuron_1().principal_id,
         get_neuron_1().neuron_id,

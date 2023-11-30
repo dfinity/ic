@@ -1389,12 +1389,9 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 #[cfg(feature = "test")]
 mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
     use super::*;
-    use crate::pb::v1::create_service_nervous_system::SwapParameters;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
-    use test_data::{
-        CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
-    };
+    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
     use test_data::{IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
@@ -1694,27 +1691,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             converted.swap_due_timestamp_seconds,
             Some(expected_swap_due_timestamp_seconds)
         );
-    }
-
-    // TODO NNS1-2687: remove this test once the check is moved to sns/init
-    #[test]
-    fn test_neurons_fund_participation_required() {
-        // Step 1: Prepare the world. (In this case, trivial.)
-
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                neurons_fund_participation: None,
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let error = SnsInitPayload::try_from(payload).unwrap_err();
-
-        assert!(error.contains("neurons_fund_participation"));
     }
 }
 
