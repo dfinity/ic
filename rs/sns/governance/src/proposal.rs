@@ -3013,8 +3013,7 @@ Version {
             Vote::No
         );
     }
-    
-    
+
     #[test]
     fn validate_and_render_manage_ledger_parameters_must_be_changes() {
         let rendered_error =
