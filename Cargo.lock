@@ -5123,6 +5123,7 @@ dependencies = [
  "moka",
  "prometheus",
  "rand 0.8.5",
+ "rayon",
  "rcgen 0.10.0",
  "regex",
  "reqwest",

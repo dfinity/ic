@@ -90,14 +90,14 @@ fn gen_metric_families() -> Vec<MetricFamily> {
 }
 
 #[test]
-fn test_remove_stale_nodes() -> Result<(), Error> {
+fn test_remove_stale_metrics() -> Result<(), Error> {
     // subnet id: fscpm-uiaaa-aaaaa-aaaap-yai
     // node ids in a snapshot:
     // - y7s52-3xjam-aaaaa-aaaap-2ai
     // - ftjgm-3pkam-aaaaa-aaaap-2ai
     // - fat3m-uhiam-aaaaa-aaaap-2ai
     let snapshot = Arc::new(generate_custom_registry_snapshot(1, 3, 0));
-    let mfs = remove_stale_nodes(Arc::clone(&snapshot), gen_metric_families());
+    let mfs = remove_stale_metrics(Arc::clone(&snapshot), gen_metric_families());
     assert!(mfs.len() == 6);
 
     let mut only_node_id = 0;
@@ -135,7 +135,7 @@ fn test_remove_stale_nodes() -> Result<(), Error> {
     }
 
     assert_eq!(only_node_id, NODES.len());
-    assert_eq!(only_subnet_id, NODES.len());
+    assert_eq!(only_subnet_id, NODES.len() - 1);
     assert_eq!(no_ids, NODES.len());
 
     Ok(())
