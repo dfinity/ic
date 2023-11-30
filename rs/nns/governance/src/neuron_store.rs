@@ -266,10 +266,19 @@ impl NeuronStore {
     // neuron indexes and inactive neurons) and persisted data are already calculated (e.g.
     // topic_followee_index).
     pub fn new_restored(
-        heap_neurons: BTreeMap<u64, Neuron>,
+        mut heap_neurons: BTreeMap<u64, Neuron>,
         topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
     ) -> Self {
         let clock = Box::new(IcClock::new());
+
+        // TODO(NNS1-2765): clean up after it executes once.
+        if crate::should_store_inactive_neurons_only_in_stable_memory() {
+            // Retains only the neurons not found in stable storage.
+            let stable_storage_neuron_ids = with_stable_neuron_store(|stable_neuron_store| {
+                stable_neuron_store.stable_neuron_ids()
+            });
+            heap_neurons.retain(|neuron_id, _| !stable_storage_neuron_ids.contains(neuron_id));
+        }
 
         Self {
             heap_neurons,
