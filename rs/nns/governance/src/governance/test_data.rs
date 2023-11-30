@@ -62,7 +62,7 @@ lazy_static! {
                 }),
             }),
         }),
-        ledger_parameters: Some(src::LedgerParameters {
+        ledger_parameters: Some(LedgerParameters {
             transaction_fee: Some(pb::Tokens { e8s: Some(11143) }),
             token_name: Some("Most valuable SNS of all time.".to_string()),
             token_symbol: Some("Kanye".to_string()),
@@ -150,7 +150,7 @@ lazy_static! {
                     seconds: Some(10_001),
                 })
             }),
-            start_time: Some(pb::GlobalTimeOfDay {
+            start_time: Some(GlobalTimeOfDay {
                seconds_after_utc_midnight: Some(0),
             }),
             duration: Some(pb::Duration {
@@ -160,7 +160,7 @@ lazy_static! {
             neurons_fund_investment_icp: Some(pb::Tokens {
                 e8s: Some(6_100_000_000),
             }),
-            neurons_fund_participation: None,
+            neurons_fund_participation: Some(false),
         })
     };
 
