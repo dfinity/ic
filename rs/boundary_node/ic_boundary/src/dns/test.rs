@@ -4,12 +4,9 @@ use std::{str::FromStr, time::Duration};
 
 use anyhow::Error;
 
-use crate::{
-    core::Run,
-    snapshot::{
-        test::{create_fake_registry_client, create_nodes},
-        Runner,
-    },
+use crate::snapshot::{
+    test::{create_fake_registry_client, create_nodes},
+    Snapshot, Snapshotter,
 };
 
 // Check that resolver yields correct IPs
@@ -18,10 +15,10 @@ async fn test_resolve() -> Result<(), Error> {
     use hyper::client::connect::dns::Name;
 
     let reg = Arc::new(create_fake_registry_client(4));
-    let rt = Arc::new(ArcSwapOption::empty());
-    let helper = DnsResolver::new(Arc::clone(&rt));
-    let mut runner = Runner::new(Arc::clone(&rt), reg, Duration::ZERO);
-    runner.run().await?;
+    let snapshot = Arc::new(ArcSwapOption::empty());
+    let helper = DnsResolver::new(Arc::clone(&snapshot));
+    let mut snapshotter = Snapshotter::new(Arc::clone(&snapshot), reg, Duration::ZERO);
+    snapshotter.snapshot().await?;
 
     // Check that resolved node's IPs match expected ones
     let nodes = create_nodes();

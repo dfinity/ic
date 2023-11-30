@@ -7,10 +7,7 @@ use anyhow::Error;
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use rustls::{Certificate, ServerName};
 
-use crate::{
-    core::Run,
-    snapshot::{test::create_fake_registry_client, Runner},
-};
+use crate::snapshot::{test::create_fake_registry_client, Snapshot, Snapshotter};
 
 // CN = s52il-lowsg-eip4y-pt5lv-sbdpb-vg4gg-4iasu-egajp-yluji-znfz3-2qe
 const TEST_CERTIFICATE: &str = "3082015530820107a00302010202136abf05c1260364e09ad5f4ad0e9cb90a6e0edb300506032b6570304a3148304606035504030c3f733532696c2d6c6f7773672d\
@@ -49,15 +46,15 @@ fn check_certificate_verification(
 
 #[tokio::test]
 async fn test_verify_tls_certificate() -> Result<(), Error> {
-    let rt = Arc::new(ArcSwapOption::empty());
+    let snapshot = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(Arc::clone(&rt), reg, Duration::ZERO);
-    let helper = TlsVerifier::new(Arc::clone(&rt));
-    runner.run().await?;
+    let mut snapshotter = Snapshotter::new(Arc::clone(&snapshot), reg, Duration::ZERO);
+    let helper = TlsVerifier::new(Arc::clone(&snapshot));
+    snapshotter.snapshot().await?;
 
-    let rt = rt.load_full().unwrap();
+    let snapshot = snapshot.load_full().unwrap();
 
-    for sn in rt.subnets.iter() {
+    for sn in snapshot.subnets.iter() {
         let node_name = sn.nodes[0].id.to_string();
 
         check_certificate_verification(

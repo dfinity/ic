@@ -175,14 +175,14 @@ pub fn create_nodes() -> Vec<(&'static str, IpAddr, u16)> {
 
 #[tokio::test]
 async fn test_routing_table() -> Result<(), Error> {
-    let rt = Arc::new(ArcSwapOption::empty());
+    let snapshot = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(Arc::clone(&rt), reg, Duration::ZERO);
-    runner.run().await?;
-    let rt = rt.load_full().unwrap();
+    let mut snapshotter = Snapshotter::new(Arc::clone(&snapshot), reg, Duration::ZERO);
+    snapshotter.snapshot().await?;
+    let snapshot = snapshot.load_full().unwrap();
 
-    assert_eq!(rt.registry_version, 1);
-    assert_eq!(rt.subnets.len(), 4);
+    assert_eq!(snapshot.version, 1);
+    assert_eq!(snapshot.subnets.len(), 4);
 
     let subnets = [
         (
@@ -205,8 +205,8 @@ async fn test_routing_table() -> Result<(), Error> {
 
     let nodes = create_nodes();
 
-    for i in 0..rt.subnets.len() {
-        let sn = &rt.subnets[i];
+    for i in 0..snapshot.subnets.len() {
+        let sn = &snapshot.subnets[i];
         assert_eq!(sn.id.to_string(), subnets[i].0);
 
         assert_eq!(sn.ranges.len(), 1);
