@@ -27,6 +27,7 @@ use prometheus::{
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
+use rayon::prelude::*;
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;
@@ -67,11 +68,11 @@ impl MetricsCache {
 // Iterates over given metric families and removes metrics that have
 // node_id+subnet_id labels and where the corresponding nodes are
 // not present in the registry snapshot
-fn remove_stale_nodes(
+fn remove_stale_metrics(
     snapshot: Arc<RegistrySnapshot>,
     mut mfs: Vec<MetricFamily>,
 ) -> Vec<MetricFamily> {
-    for mf in mfs.iter_mut() {
+    mfs.par_iter_mut().for_each(|mf| {
         // Iterate over the metrics in the metric family
         let metrics = mf
             .take_metric()
@@ -90,8 +91,8 @@ fn remove_stale_nodes(
                     .find(|&v| v.get_name() == SUBNET_ID_LABEL)
                     .map(|x| x.get_value());
 
-                // Check if we got both node_id and subnet_id labels
                 match (node_id, subnet_id) {
+                    // Check if we got both node_id and subnet_id labels
                     (Some(node_id), Some(subnet_id)) => snapshot
                         .nodes
                         // Check if the node_id is in the snapshot
@@ -100,6 +101,14 @@ fn remove_stale_nodes(
                         .map(|x| x.subnet_id.to_string() == subnet_id)
                         .unwrap_or(false),
 
+                    // If there's only subnet_id label - check if this subnet exists
+                    // TODO create a hashmap of subnets in snapshot for faster lookup, currently complexity is O(n)
+                    // but since we have very few subnets currently (<40) probably it's Ok
+                    (None, Some(subnet_id)) => snapshot
+                        .subnets
+                        .iter()
+                        .any(|x| x.id.to_string() == subnet_id),
+
                     // Otherwise just pass this metric through
                     _ => true,
                 }
@@ -107,7 +116,7 @@ fn remove_stale_nodes(
             .collect();
 
         mf.set_metric(metrics);
-    }
+    });
 
     mfs
 }
@@ -205,7 +214,7 @@ impl Run for MetricsRunner {
 
         // If we have a published snapshot - use it to remove the metrics not present anymore
         if let Some(snapshot) = self.published_registry_snapshot.load_full() {
-            metric_families = remove_stale_nodes(snapshot, metric_families);
+            metric_families = remove_stale_metrics(snapshot, metric_families);
         }
 
         // Take a write lock, truncate the vector and encode the metrics into it
@@ -476,8 +485,6 @@ pub struct HttpMetricParams {
     pub durationer: HistogramVec,
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
-    pub cache_counter: IntCounterVec,
-    pub retry_counter: IntCounterVec,
 }
 
 impl HttpMetricParams {
@@ -486,8 +493,10 @@ impl HttpMetricParams {
             "request_type",
             "status_code",
             SUBNET_ID_LABEL,
-            NODE_ID_LABEL,
             "error_cause",
+            "cache_status",
+            "cache_bypass",
+            "retry",
         ];
 
         Self {
@@ -524,22 +533,6 @@ impl HttpMetricParams {
                 format!("Records the size of {action} responses"),
                 LABELS_HTTP,
                 HTTP_RESPONSE_SIZE_BUCKETS.to_vec(),
-                registry
-            )
-            .unwrap(),
-
-            cache_counter: register_int_counter_vec_with_registry!(
-                format!("{action}_cache"),
-                format!("Counts cache results"),
-                &["cache_status", "cache_bypass"],
-                registry
-            )
-            .unwrap(),
-
-            retry_counter: register_int_counter_vec_with_registry!(
-                format!("{action}_retry"),
-                format!("Counts per-subnet retry results"),
-                &["subnet_id", "success"],
                 registry
             )
             .unwrap(),
@@ -632,8 +625,6 @@ pub async fn metrics_middleware(
         durationer,
         request_sizer,
         response_sizer,
-        cache_counter,
-        retry_counter,
     } = metric_params;
 
     // Closure that gets called when the response body is fully read (or an error occurs)
@@ -650,29 +641,36 @@ pub async fn metrics_middleware(
             _ => None,
         };
 
+        let retry_result = retry_result.clone();
+
+        let retry_label =
+            // Check if retry happened and if it succeeded
+            if let Some(v) = &retry_result {
+                if v.success {
+                    "ok"
+                } else {
+                    "fail"
+                }
+            } else {
+                "no"
+            };
+
         // Prepare labels
         // Otherwise "temporary value dropped" error occurs
         let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
         let subnet_id_lbl = subnet_id.clone().unwrap_or("unknown".to_string());
-        let node_id_lbl = node_id.clone().unwrap_or("unknown".to_string());
         let cache_status_lbl = &cache_status.to_string();
         let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
 
-        // TODO Potential cardinality is up to 900K which is a lot
-        // In reality it's less thank 80K which is still high
-        // Check over a long period
+        // Average cardinality up to 150k
         let labels = &[
-            request_type.as_str(),    // x3
-            status_code.as_str(),     // x27 but usually x8
-            subnet_id_lbl.as_str(),   // x37 but since each node is in a single subnet -> x1
-            node_id_lbl.as_str(),     // x550
-            error_cause_lbl.as_str(), // x15 but usually x6
-        ];
-
-        // Cardinality x9
-        let labels_cache = &[
-            cache_status_lbl.as_str(),        // x5
-            cache_bypass_reason_lbl.as_str(), // x6 but since it relates only to BYPASS cache status -> total for 2 fields is x10
+            request_type.as_str(),            // x3
+            status_code.as_str(),             // x27 but usually x8
+            subnet_id_lbl.as_str(),           // x37 as of now
+            error_cause_lbl.as_str(),         // x15 but usually x6
+            cache_status_lbl.as_str(),        // x4
+            cache_bypass_reason_lbl.as_str(), // x6 but since it relates only to BYPASS cache status -> total for 2 fields is x9
+            retry_label,                      // x3
         ];
 
         counter.with_label_values(labels).inc();
@@ -683,16 +681,6 @@ pub async fn metrics_middleware(
         response_sizer
             .with_label_values(labels)
             .observe(response_size as f64);
-        cache_counter.with_label_values(labels_cache).inc();
-
-        let retry_result = retry_result.clone();
-
-        // Count the retry if one happened
-        if let Some(v) = &retry_result {
-            retry_counter
-                .with_label_values(&[subnet_id_lbl.as_str(), if v.success { "yes" } else { "no" }])
-                .inc();
-        }
 
         info!(
             action,

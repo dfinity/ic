@@ -80,7 +80,7 @@ const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
 pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
-const METRICS_CACHE_CAPACITY: usize = 30 * MB;
+const METRICS_CACHE_CAPACITY: usize = 15 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
 
@@ -341,14 +341,17 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             cache: metrics_cache.clone(),
         });
 
-    let metrics_runner = WithThrottle(
-        MetricsRunner::new(
-            metrics_cache,
-            registry.clone(),
-            cache,
-            Arc::clone(&registry_snapshot),
+    let metrics_runner = WithMetrics(
+        WithThrottle(
+            MetricsRunner::new(
+                metrics_cache,
+                registry.clone(),
+                cache,
+                Arc::clone(&registry_snapshot),
+            ),
+            ThrottleParams::new(5 * SECOND),
         ),
-        ThrottleParams::new(10 * SECOND),
+        MetricParams::new(&registry, "run_metrics"),
     );
 
     // Snapshots

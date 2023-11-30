@@ -16,6 +16,7 @@ use dashmap::DashMap;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
+use rayon::prelude::*;
 use tracing::warn;
 use url::Url;
 
@@ -185,7 +186,7 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
         // Filter out bad nodes
         let mut nodes = nodes
-            .into_iter()
+            .into_par_iter()
             .filter_map(Result::ok) // Filter any green thread errors
             .filter_map(Result::ok) // Filter any `check` errors
             .collect::<Vec<_>>();
@@ -207,12 +208,12 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
         // Filter out nodes that fail the predicates
         let nodes = nodes
-            .into_iter()
+            .into_par_iter()
             .filter(|x| x.height >= min_height) // Filter below min_height
             .filter(|x| x.ok_count >= self.min_ok_count) // Filter below min_ok_count
+            .map(|x| x.node)
             .collect::<Vec<_>>();
 
-        let nodes = nodes.into_iter().map(|x| x.node).collect();
         Subnet { nodes, ..subnet }
     }
 }
