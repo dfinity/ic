@@ -4,7 +4,7 @@ use core::{
     option::Option::{None, Some},
     time::Duration,
 };
-use cycles_minting_canister::CyclesCanisterInitPayload;
+use cycles_minting_canister::{CyclesCanisterInitPayload, CYCLES_LEDGER_CANISTER_ID};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
@@ -88,6 +88,7 @@ impl NnsInitPayloadsBuilder {
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
+                cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID.try_into().unwrap()),
             }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),

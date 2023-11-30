@@ -38,6 +38,7 @@ ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 lazy_static = "1.4.0"
 lifeline = { path = "../handlers/lifeline/impl" }

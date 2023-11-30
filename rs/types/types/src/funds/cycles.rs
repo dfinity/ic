@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Nat};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccount;
@@ -104,6 +104,12 @@ impl From<Cycles> for Vec<u8> {
 impl From<Cycles> for u128 {
     fn from(val: Cycles) -> Self {
         val.0
+    }
+}
+
+impl From<Cycles> for Nat {
+    fn from(val: Cycles) -> Self {
+        val.0.into()
     }
 }
 

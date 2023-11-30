@@ -7,6 +7,8 @@ type CanisterSettings = record {
   freezing_threshold : opt nat;
   reserved_cycles_limit: opt nat;
 };
+type Subaccount = blob;
+type Memo = nat64;
 
 // The argument of the [notify_top_up] method.
 type NotifyTopUpArg = record {
@@ -192,6 +194,26 @@ type CyclesCanisterInitPayload = record {
     exchange_rate_canister: opt ExchangeRateCanister;
 };
 
+type NotifyMintCyclesArg = record {
+  block_index: BlockIndex;
+  to_subaccount: Subaccount;
+  deposit_memo: Memo;
+};
+
+type NotifyMintCyclesResult = variant {
+  Ok: NotifyMintCyclesSuccess;
+  Err: NotifyError;
+};
+
+type NotifyMintCyclesSuccess = record {
+    // Cycles ledger block index of deposit
+    block_index: nat;
+    // Amount of cycles that were minted and deposited to the cycles ledger
+    minted: nat;
+    // New balance of the cycles ledger account
+    balance: nat;
+};
+
 service : (opt CyclesCanisterInitPayload) -> {
   // Prompts the cycles minting canister to process a payment by converting ICP
   // into cycles and sending the cycles the specified canister.
@@ -202,6 +224,9 @@ service : (opt CyclesCanisterInitPayload) -> {
 
   // Prompts the cycles minting canister to process a payment for canister creation.
   notify_create_canister : (NotifyCreateCanisterArg) -> (NotifyCreateCanisterResult);
+
+  // Mints cycles and deposits them to the cycles ledger
+  notify_mint_cycles : (NotifyMintCyclesArg) -> (NotifyMintCyclesResult);
 
   // Returns the ICP/XDR conversion rate.
   get_icp_xdr_conversion_rate : () -> (IcpXdrConversionRateResponse) query;
