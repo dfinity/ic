@@ -405,6 +405,7 @@ fn should_reimburse() {
         .expect_withdrawal_request_accepted();
 
     let withdrawal_id = cketh.withdrawal_id().clone();
+    let (tx, _sig) = default_signed_eip_1559_transaction();
     let cketh = cketh
         .wait_and_validate_withdrawal(
             ProcessWithdrawalParams::default().with_mock_eth_get_transaction_receipt(move |mock| {
@@ -437,14 +438,21 @@ fn should_reimburse() {
     cketh.env.advance_time(PROCESS_REIMBURSEMENT);
     cketh.env.tick();
 
-    let gas_cost = Nat::from(21_000_u64 * EFFECTIVE_GAS_PRICE);
+    let cost_of_failed_transaction = withdrawal_amount
+        .0
+        .to_u128()
+        .unwrap()
+        .checked_sub(tx.value.unwrap().as_u128())
+        .unwrap();
+    assert_eq!(cost_of_failed_transaction, 693_077_873_418_000);
+
     let balance_after_withdrawal = cketh.balance_of(caller);
     assert_eq!(
         balance_after_withdrawal,
-        balance_before_withdrawal.clone() - gas_cost.clone()
+        balance_before_withdrawal.clone() - cost_of_failed_transaction
     );
 
-    let reimbursed_amount = balance_before_withdrawal.clone() - gas_cost.clone();
+    let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
     let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1);
     let failed_tx_hash =
         "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
@@ -463,7 +471,7 @@ fn should_reimburse() {
     cketh
         .call_ledger_get_transaction(reimbursed_in_block)
         .expect_mint(Mint {
-            amount: reimbursed_amount,
+            amount: reimbursed_amount.clone(),
             to: Account {
                 owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
                 subaccount: None,
@@ -514,7 +522,7 @@ fn should_reimburse() {
             }},
         EventPayload::ReimbursedEthWithdrawal {
             transaction_hash: Some("0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()),
-            reimbursed_amount: balance_before_withdrawal - gas_cost,
+            reimbursed_amount,
             withdrawal_id: withdrawal_id.clone(),
             reimbursed_in_block: withdrawal_id + 1,
         },
