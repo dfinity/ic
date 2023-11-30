@@ -8,11 +8,11 @@ use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
 use crate::util::block_on;
-use ic_rosetta_api::models::Object;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{NeuronInfo, Spawn, Status};
 use ic_rosetta_test_utils::RequestInfo;
+use rosetta_core::objects::Object;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -187,6 +187,6 @@ async fn test_spawn_invalid(ros: &RosettaApiClient, neuron_info: &NeuronDetails)
     );
 
     let err = res.unwrap_err();
-    assert_eq!(err.code, 770);
-    assert_eq!(err.message, "Operation failed".to_string());
+    assert_eq!(err.0.code, 770);
+    assert_eq!(err.0.message, "Operation failed".to_string());
 }

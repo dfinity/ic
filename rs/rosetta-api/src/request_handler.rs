@@ -9,7 +9,7 @@ mod construction_submit;
 
 use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
-use crate::models::{CallResponse, Object};
+use crate::models::{CallResponse, NetworkIdentifier, Object};
 use crate::request_types::GetProposalInfo;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
@@ -18,11 +18,12 @@ use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
 use ic_types::CanisterId;
 use icp_ledger::{Block, BlockIndex};
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::NetworkListResponse;
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
@@ -34,10 +35,9 @@ use crate::models::amount::tokens_to_amount;
 use crate::models::{
     AccountBalanceRequest, AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier,
     BlockResponse, BlockTransaction, BlockTransactionResponse, Error, MempoolResponse,
-    MempoolTransactionResponse, NetworkIdentifier, NetworkListResponse, NetworkOptionsResponse,
-    NetworkStatusResponse, NeuronInfoResponse, NeuronState, NeuronSubaccountComponents,
-    OperationStatus, Operator, PartialBlockIdentifier, SearchTransactionsResponse, SyncStatus,
-    Version,
+    MempoolTransactionResponse, NetworkOptionsResponse, NetworkStatusResponse, NeuronInfoResponse,
+    NeuronState, NeuronSubaccountComponents, OperationStatus, Operator, PartialBlockIdentifier,
+    SearchTransactionsResponse, SyncStatus, Version,
 };
 
 /// The maximum amount of blocks to retrieve in a single search.
@@ -254,10 +254,10 @@ impl RosettaRequestHandler {
     /// Get List of Available Networks
     pub async fn network_list(
         &self,
-        _metadata_request: models::MetadataRequest,
+        _metadata_request: MetadataRequest,
     ) -> Result<NetworkListResponse, ApiError> {
         let net_id = self.network_id();
-        Ok(NetworkListResponse::new(vec![net_id]))
+        Ok(NetworkListResponse::new(vec![net_id.0]))
     }
 
     /// Get Network Options
@@ -307,7 +307,7 @@ impl RosettaRequestHandler {
 
                     // We don't want to return any schema for details.
                     for e in errs.iter_mut() {
-                        e.details = Default::default();
+                        e.0.details = Default::default();
                     }
                     errs
                 },
@@ -690,7 +690,7 @@ fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Re
 }
 
 fn verify_network_blockchain(net_id: &NetworkIdentifier) -> Result<(), ApiError> {
-    match net_id.blockchain.as_str() {
+    match net_id.0.blockchain.as_str() {
         "Internet Computer" => Ok(()),
         _ => Err(ApiError::InvalidNetworkId(
             false,

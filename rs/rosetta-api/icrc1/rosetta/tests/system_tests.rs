@@ -9,9 +9,8 @@ use ic_icrc_rosetta::{
         storage::types::RosettaBlock,
         types::{
             AccountIdentifier, Amount, ApproveMetadata, Block, BlockIdentifier, BlockResponse,
-            BlockTransactionResponse, Currency, NetworkIdentifier, Object, Operation,
-            OperationIdentifier, OperationType, PartialBlockIdentifier, Transaction,
-            TransactionIdentifier,
+            BlockTransactionResponse, Currency, Operation, OperationIdentifier, OperationType,
+            PartialBlockIdentifier, Transaction, TransactionIdentifier,
         },
     },
     Metadata,
@@ -19,6 +18,7 @@ use ic_icrc_rosetta::{
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::{start_rosetta, RosettaOptions, DEFAULT_DECIMAL_PLACES};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use ic_starter_tests::{start_replica, ReplicaBins, ReplicaStarterConfig};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::{
@@ -28,6 +28,8 @@ use icrc_ledger_types::{
     icrc3::blocks::GetBlocksRequest,
 };
 use lazy_static::lazy_static;
+use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::objects::Object;
 use serde_json::Number;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -98,8 +100,11 @@ async fn test_network_list() {
         .await
         .expect("Unable to call network_list")
         .network_identifiers;
-    let expected = NetworkIdentifier::for_ledger_id(
-        CanisterId::try_from(Principal::anonymous().as_slice()).unwrap(),
+    let expected = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(Principal::anonymous().as_slice())
+            .unwrap()
+            .to_string(),
     );
     assert_eq!(network_list, vec![expected]);
 }
@@ -161,8 +166,12 @@ async fn test_network_status() {
 
     let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
         .expect("Unable to parse url");
-    let network_identifier =
-        NetworkIdentifier::for_ledger_id(CanisterId::try_from(ledger_id.as_slice()).unwrap());
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string(),
+    );
 
     let rosetta_response = client
         .network_status(network_identifier.clone())
@@ -550,8 +559,12 @@ async fn test_block() {
 
     let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
         .expect("Unable to parse url");
-    let network_identifier =
-        NetworkIdentifier::for_ledger_id(CanisterId::try_from(ledger_id.as_slice()).unwrap());
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string(),
+    );
 
     for (index, expected_response) in expected_responses.into_iter().enumerate() {
         let partial_block_identifier = match index % 3 {
@@ -673,8 +686,13 @@ async fn test_block_transaction() {
 
     let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
         .expect("Unable to parse url");
-    let network_identifier =
-        NetworkIdentifier::for_ledger_id(CanisterId::try_from(ledger_id.as_slice()).unwrap());
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string()
+            .to_string(),
+    );
 
     for (index, (expected_block_hash, expected_response)) in
         expected_responses.into_iter().enumerate()
@@ -720,8 +738,12 @@ async fn test_mempool() {
 
     let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
         .expect("Unable to parse url");
-    let network_identifier =
-        NetworkIdentifier::for_ledger_id(CanisterId::try_from(ledger_id.as_slice()).unwrap());
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string(),
+    );
 
     let transaction_identifiers = client
         .mempool(network_identifier)

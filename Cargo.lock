@@ -7814,6 +7814,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest",
  "ring",
+ "rosetta-core",
  "rusqlite",
  "serde",
  "serde_bytes",
@@ -7837,6 +7838,7 @@ dependencies = [
  "ic-icrc-rosetta",
  "ic-rosetta-api",
  "reqwest",
+ "rosetta-core",
  "url",
 ]
 
@@ -10229,6 +10231,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
+ "rosetta-core",
  "rustls",
  "rustls-pemfile",
  "serde",
@@ -10255,6 +10258,7 @@ dependencies = [
  "nix 0.24.3",
  "rand 0.8.5",
  "reqwest",
+ "rosetta-core",
  "serde",
  "serde_json",
  "slog",
@@ -15840,6 +15844,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rosetta-core"
+version = "0.9.0"
+dependencies = [
+ "serde",
+ "serde_cbor",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "rsa"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17679,6 +17693,7 @@ dependencies = [
  "registry-canister",
  "reqwest",
  "ring",
+ "rosetta-core",
  "rsa",
  "rust_decimal",
  "rustls",

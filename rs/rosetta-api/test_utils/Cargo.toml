@@ -23,3 +23,4 @@ tempfile = "3.1.0"
 reqwest = { workspace = true }
 tokio = { workspace = true }
 url = "2.1.1"
+rosetta-core = {path = "../rosetta_core"}

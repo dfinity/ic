@@ -610,8 +610,8 @@ pub fn assert_ic_error(err: &RosettaError, code: u32, ic_http_status: u64, text:
         err.clone()
     };
 
-    assert_eq!(err.code, code);
-    let details = err.details.as_ref().unwrap();
+    assert_eq!(err.0.code, code);
+    let details = err.0.details.as_ref().unwrap();
     assert_eq!(
         details.get("ic_http_status").unwrap().as_u64().unwrap(),
         ic_http_status
@@ -639,11 +639,11 @@ pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
     };
 
     assert_eq!(
-        err.code, code,
+        err.0.code, code,
         "rosetta error {:?} does not have code: {}",
         err, code
     );
-    let details = err.details.as_ref().unwrap();
+    let details = err.0.details.as_ref().unwrap();
     assert!(
         details
             .get("error_message")

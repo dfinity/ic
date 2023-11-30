@@ -4,60 +4,16 @@ use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use candid::Deserialize;
 
-use ic_base_types::CanisterId;
+use super::storage::types::RosettaBlock;
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
+use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::objects::Object;
 use serde::Serialize;
 use serde_json::Number;
 
-use super::storage::types::RosettaBlock;
-
 // Generated from the [Rosetta API specification v1.4.13](https://github.com/coinbase/rosetta-specifications/blob/v1.4.13/api.json)
 // Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html
-
-const DEFAULT_BLOCKCHAIN: &str = "Internet Computer";
-
-pub type Object = serde_json::map::Map<String, serde_json::Value>;
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct MetadataRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkListResponse {
-    pub network_identifiers: Vec<NetworkIdentifier>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkIdentifier {
-    pub blockchain: String,
-
-    pub network: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_network_identifier: Option<SubNetworkIdentifier>,
-}
-
-impl NetworkIdentifier {
-    pub fn for_ledger_id(ledger_id: CanisterId) -> Self {
-        let network = hex::encode(ledger_id.get().into_vec());
-        NetworkIdentifier {
-            blockchain: DEFAULT_BLOCKCHAIN.to_string(),
-            network,
-            sub_network_identifier: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SubNetworkIdentifier {
-    pub network: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct NetworkOptionsResponse {
@@ -163,21 +119,9 @@ pub struct OperationStatus {
     pub successful: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Error {
-    pub code: u32,
-
-    pub message: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-
-    pub retriable: bool,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
-}
-
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct Error(pub rosetta_core::objects::Error);
 const ERROR_CODE_INVALID_NETWORK_ID: u32 = 1;
 const ERROR_CODE_UNABLE_TO_FIND_BLOCK: u32 = 2;
 const ERROR_CODE_INVALID_BLOCK_IDENTIFIER: u32 = 3;
@@ -186,13 +130,22 @@ const ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER: u32 = 5;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(self.0)).into_response()
     }
 }
-
+impl From<Error> for rosetta_core::objects::Error {
+    fn from(value: Error) -> Self {
+        value.0
+    }
+}
+impl From<rosetta_core::objects::Error> for Error {
+    fn from(value: rosetta_core::objects::Error) -> Self {
+        Error(value)
+    }
+}
 impl Error {
     pub fn invalid_network_id(expected: &NetworkIdentifier) -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_INVALID_NETWORK_ID,
             message: "Invalid network identifier".into(),
             description: Some(format!(
@@ -201,21 +154,21 @@ impl Error {
             )),
             retriable: false,
             details: None,
-        }
+        })
     }
 
     pub fn unable_to_find_block(description: String) -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_UNABLE_TO_FIND_BLOCK,
             message: "Unable to find block".into(),
             description: Some(description),
             retriable: false,
             details: None,
-        }
+        })
     }
 
     pub fn invalid_block_identifier() -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_INVALID_BLOCK_IDENTIFIER,
             message: "Invalid block identifier provided".into(),
             description: Some(
@@ -223,27 +176,27 @@ impl Error {
             ),
             retriable: false,
             details: None,
-        }
+        })
     }
 
     pub fn failed_to_build_block_response(description: String) -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE,
             message: "Failed to build block response".into(),
             description: Some(description),
             retriable: false,
             details: None,
-        }
+        })
     }
 
     pub fn invalid_transaction_identifier() -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER,
             message: "Invalid transaction identifier provided".into(),
             description: Some("Invalid transaction identifier provided.".into()),
             retriable: false,
             details: None,
-        }
+        })
     }
 }
 
