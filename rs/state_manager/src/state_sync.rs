@@ -6,25 +6,61 @@ use crate::{
     NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_base_types::NodeId;
-use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor},
-    artifact_pool::{ChangeResult, UnvalidatedArtifactEvent},
-    state_sync_client::StateSyncClient,
-    time_source::{SysTimeSource, TimeSource},
-};
-use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
+use ic_interfaces::p2p::{consensus::ChangeResult, state_sync::StateSyncClient};
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_types::{
     artifact::{
         Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncFilter,
-        StateSyncMessage,
+        StateSyncMessage, UnvalidatedArtifactMutation,
     },
     chunkable::{ArtifactChunk, ChunkId, Chunkable, ChunkableArtifact},
     crypto::crypto_hash,
     state_sync::FileGroupChunks,
     Height,
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    convert::Infallible,
+    sync::{Arc, Mutex},
+};
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct StateSyncArtifact;
+
+impl ArtifactKind for StateSyncArtifact {
+    const TAG: ArtifactTag = ArtifactTag::StateSyncArtifact;
+    // No wire type since it is never sent over the wire.
+    type PbId = ic_protobuf::p2p::v1::StateSyncId;
+    type PbIdError = Infallible;
+    type Id = StateSyncArtifactId;
+    type PbMessage = ();
+    type PbMessageError = Infallible;
+    type Message = StateSyncMessage;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
+    type Attribute = ();
+    type PbFilter = pb::StateSyncFilter;
+    type PbFilterError = ProxyDecodeError;
+    type Filter = StateSyncFilter;
+
+    fn message_to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
+        let size: u64 = msg
+            .manifest
+            .file_table
+            .iter()
+            .map(|file_info| file_info.size_bytes)
+            .sum();
+        Advert {
+            id: StateSyncArtifactId {
+                height: msg.height,
+                hash: msg.root_hash.clone(),
+            },
+            attribute: (),
+            size: size as usize,
+            integrity_hash: crypto_hash(msg).get(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct StateSync {
@@ -64,39 +100,8 @@ impl StateSync {
             self.state_manager.malicious_flags.clone(),
         ))
     }
-}
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct StateSyncArtifact;
-
-impl ArtifactKind for StateSyncArtifact {
-    const TAG: ArtifactTag = ArtifactTag::StateSyncArtifact;
-    type Id = StateSyncArtifactId;
-    type Message = StateSyncMessage;
-    type Attribute = ();
-    type Filter = StateSyncFilter;
-
-    fn message_to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
-        let size: u64 = msg
-            .manifest
-            .file_table
-            .iter()
-            .map(|file_info| file_info.size_bytes)
-            .sum();
-        Advert {
-            id: StateSyncArtifactId {
-                height: msg.height,
-                hash: msg.root_hash.clone(),
-            },
-            attribute: (),
-            size: size as usize,
-            integrity_hash: crypto_hash(msg).get(),
-        }
-    }
-}
-
-impl ArtifactClient<StateSyncArtifact> for StateSync {
-    fn get_validated_by_identifier(
+    pub fn get_validated_by_identifier(
         &self,
         msg_id: &StateSyncArtifactId,
     ) -> Option<StateSyncMessage> {
@@ -152,7 +157,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         state_sync_message
     }
 
-    fn has_artifact(&self, msg_id: &StateSyncArtifactId) -> bool {
+    pub fn has_artifact(&self, msg_id: &StateSyncArtifactId) -> bool {
         self.state_manager
             .states
             .read()
@@ -205,7 +210,8 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
             .collect()
     }
 
-    fn get_priority_function(
+    #[allow(clippy::type_complexity)]
+    pub fn get_priority_function(
         &self,
     ) -> Box<dyn Fn(&StateSyncArtifactId, &()) -> Priority + Send + Sync + 'static> {
         use ic_interfaces_state_manager::StateReader;
@@ -277,40 +283,21 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         })
     }
 
-    /// Get StateSync Filter for re-transmission purpose.
-    ///
-    /// Anything below or equal to the filter represents what the local
-    /// state_manager already has.
-    ///
-    /// Return the highest certified height as the filter.
-    fn get_filter(&self) -> StateSyncFilter {
-        StateSyncFilter {
-            height: *self
-                .state_manager
-                .list_state_heights(CERT_CERTIFIED)
-                .last()
-                .unwrap_or(&Height::from(0)),
-        }
-    }
-
     /// Returns requested state as a Chunkable artifact for StateSync.
     fn get_chunk_tracker(&self, id: &StateSyncArtifactId) -> Box<dyn Chunkable + Send + Sync> {
         self.create_chunkable_state(id)
     }
-}
 
-impl ArtifactProcessor<StateSyncArtifact> for StateSync {
     // Returns the states checkpointed since the last time process_changes was
     // called.
-    fn process_changes(
+    pub fn process_changes(
         &self,
-        _time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactEvent<StateSyncArtifact>>,
+        artifact_events: Vec<UnvalidatedArtifactMutation<StateSyncArtifact>>,
     ) -> ChangeResult<StateSyncArtifact> {
         // Processes received state sync artifacts.
         for artifact_event in artifact_events {
             match artifact_event {
-                UnvalidatedArtifactEvent::Insert((message, peer_id)) => {
+                UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
                     let height = message.height;
                     info!(
                         self.log,
@@ -338,7 +325,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
                         message.root_hash,
                     );
                 }
-                UnvalidatedArtifactEvent::Remove(_) => {}
+                UnvalidatedArtifactMutation::Remove(_) => {}
             }
         }
 
@@ -396,9 +383,6 @@ impl StateSyncClient for StateSync {
 
     /// Blocking. Makes synchronous file system calls.
     fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
-        let _ = self.process_changes(
-            &SysTimeSource::new(),
-            vec![UnvalidatedArtifactEvent::Insert((msg, peer_id))],
-        );
+        let _ = self.process_changes(vec![UnvalidatedArtifactMutation::Insert((msg, peer_id))]);
     }
 }

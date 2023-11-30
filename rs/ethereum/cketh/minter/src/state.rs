@@ -1,11 +1,11 @@
 use crate::address::Address;
 use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::BlockTag;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
-use crate::numeric::{BlockNumber, LedgerMintIndex, TransactionNonce, Wei};
-use crate::transactions::EthTransactions;
+use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -13,9 +13,11 @@ use ic_crypto_ecdsa_secp256k1::PublicKey;
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 use strum_macros::EnumIter;
+use transactions::EthTransactions;
 
 pub mod audit;
 pub mod event;
+pub mod transactions;
 
 #[cfg(test)]
 mod tests;
@@ -45,13 +47,18 @@ pub struct State {
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
+    pub first_scraped_block_number: BlockNumber,
     pub last_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEthEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, String>,
     pub eth_transactions: EthTransactions,
+    pub skipped_blocks: BTreeSet<BlockNumber>,
 
+    /// Current balance of ETH held by minter.
+    /// Computed based on audit events.
+    pub eth_balance: EthBalance,
     /// Per-principal lock for pending_retrieve_eth_requests
     pub retrieve_eth_principals: BTreeSet<Principal>,
 
@@ -110,7 +117,7 @@ impl State {
         Some(Address::from_pubkey(&pubkey))
     }
 
-    fn record_event_to_mint(&mut self, event: ReceivedEthEvent) {
+    fn record_event_to_mint(&mut self, event: &ReceivedEthEvent) {
         let event_source = event.source();
         assert!(
             !self.events_to_mint.contains_key(&event_source),
@@ -119,7 +126,9 @@ impl State {
         assert!(!self.minted_events.contains_key(&event_source));
         assert!(!self.invalid_events.contains_key(&event_source));
 
-        self.events_to_mint.insert(event_source, event);
+        self.events_to_mint.insert(event_source, event.clone());
+
+        self.update_eth_balance_upon_deposit(event)
     }
 
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
@@ -164,12 +173,66 @@ impl State {
         );
     }
 
+    pub fn record_finalized_transaction(
+        &mut self,
+        withdrawal_id: &LedgerBurnIndex,
+        receipt: &TransactionReceipt,
+    ) {
+        self.eth_transactions
+            .record_finalized_transaction(*withdrawal_id, receipt.clone());
+        self.update_eth_balance_upon_withdrawal(withdrawal_id, receipt);
+    }
+
     pub fn next_request_id(&mut self) -> u64 {
         let current_request_id = self.http_request_counter;
         // overflow is not an issue here because we only use `next_request_id` to correlate
         // requests and responses in logs.
         self.http_request_counter = self.http_request_counter.wrapping_add(1);
         current_request_id
+    }
+
+    fn update_eth_balance_upon_deposit(&mut self, event: &ReceivedEthEvent) {
+        self.eth_balance.eth_balance_add(event.value);
+    }
+
+    fn update_eth_balance_upon_withdrawal(
+        &mut self,
+        withdrawal_id: &LedgerBurnIndex,
+        receipt: &TransactionReceipt,
+    ) {
+        let tx_fee = receipt.effective_transaction_fee();
+        match receipt.status {
+            TransactionStatus::Success => {
+                let tx = self
+                    .eth_transactions
+                    .finalized_tx
+                    .get_alt(withdrawal_id)
+                    .expect("BUG: missing finalized transaction");
+                let debited_amount = tx
+                    .transaction()
+                    .amount
+                    .checked_add(tx_fee)
+                    .expect("BUG: debited amount always fits into U256");
+                let charged_tx_fee = tx.transaction_price().max_transaction_fee();
+                let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect("BUG: charged transaction fee MUST always be at least the effective transaction fee");
+
+                self.eth_balance.eth_balance_sub(debited_amount);
+                self.eth_balance.total_effective_tx_fees_add(tx_fee);
+                self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
+            }
+            TransactionStatus::Failure => {
+                self.eth_balance.eth_balance_sub(tx_fee);
+                self.eth_balance.total_effective_tx_fees_add(tx_fee);
+            }
+        }
+    }
+
+    pub fn record_skipped_block(&mut self, block_number: BlockNumber) {
+        assert!(
+            self.skipped_blocks.insert(block_number),
+            "BUG: block {} was already skipped",
+            block_number
+        );
     }
 
     pub const fn ethereum_network(&self) -> EthereumNetwork {
@@ -235,6 +298,10 @@ impl State {
             other.minimum_withdrawal_amount
         );
         ensure_eq!(
+            self.first_scraped_block_number,
+            other.first_scraped_block_number
+        );
+        ensure_eq!(
             self.last_scraped_block_number,
             other.last_scraped_block_number
         );
@@ -245,6 +312,10 @@ impl State {
 
         self.eth_transactions
             .is_equivalent_to(&other.eth_transactions)
+    }
+
+    pub fn eth_balance(&self) -> &EthBalance {
+        &self.eth_balance
     }
 }
 
@@ -306,6 +377,87 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
 
 pub async fn minter_address() -> Address {
     Address::from_pubkey(&lazy_call_ecdsa_public_key().await)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EthBalance {
+    /// Amount of ETH controlled by the minter's address via tECDSA.
+    /// Note that invalid deposits are not accounted for and so so this value
+    /// might be less than what is displayed by Etherscan
+    /// or retrieved by the JSON-RPC call `eth_getBalance`.
+    /// Also some transactions may have gone directly to the minter's address
+    /// without going via the helper smart contract.
+    eth_balance: Wei,
+    /// Total amount of fees across all finalized transactions ckETH -> ETH.
+    total_effective_tx_fees: Wei,
+    /// Total amount of fees that were charged to the user during the withdrawal
+    /// but not consumed by the finalized transaction ckETH -> ETH
+    total_unspent_tx_fees: Wei,
+}
+
+impl Default for EthBalance {
+    fn default() -> Self {
+        Self {
+            eth_balance: Wei::ZERO,
+            total_effective_tx_fees: Wei::ZERO,
+            total_unspent_tx_fees: Wei::ZERO,
+        }
+    }
+}
+
+impl EthBalance {
+    fn eth_balance_add(&mut self, value: Wei) {
+        self.eth_balance = self.eth_balance.checked_add(value).unwrap_or_else(|| {
+            panic!(
+                "BUG: overflow when adding {} to {}",
+                value, self.eth_balance
+            )
+        })
+    }
+
+    fn eth_balance_sub(&mut self, value: Wei) {
+        self.eth_balance = self.eth_balance.checked_sub(value).unwrap_or_else(|| {
+            panic!(
+                "BUG: underflow when subtracting {} from {}",
+                value, self.eth_balance
+            )
+        })
+    }
+
+    fn total_effective_tx_fees_add(&mut self, value: Wei) {
+        self.total_effective_tx_fees = self
+            .total_effective_tx_fees
+            .checked_add(value)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: overflow when adding {} to {}",
+                    value, self.total_effective_tx_fees
+                )
+            })
+    }
+
+    fn total_unspent_tx_fees_add(&mut self, value: Wei) {
+        self.total_unspent_tx_fees = self
+            .total_unspent_tx_fees
+            .checked_add(value)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: overflow when adding {} to {}",
+                    value, self.total_unspent_tx_fees
+                )
+            })
+    }
+
+    pub fn eth_balance(&self) -> Wei {
+        self.eth_balance
+    }
+    pub fn total_effective_tx_fees(&self) -> Wei {
+        self.total_effective_tx_fees
+    }
+
+    pub fn total_unspent_tx_fees(&self) -> Wei {
+        self.total_unspent_tx_fees
+    }
 }
 
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, EnumIter)]

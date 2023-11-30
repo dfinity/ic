@@ -78,7 +78,7 @@ impl From<&CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCo
 impl From<&CanisterHttpResponseDivergence> for pb::CanisterHttpResponseDivergence {
     fn from(payload: &CanisterHttpResponseDivergence) -> Self {
         pb::CanisterHttpResponseDivergence {
-            shares: payload.shares.iter().map(Into::into).collect(),
+            shares: payload.shares.iter().cloned().map(Into::into).collect(),
         }
     }
 }
@@ -208,8 +208,8 @@ impl TryFrom<pb::CanisterHttpResponseContent> for CanisterHttpResponseContent {
     }
 }
 
-impl From<&CanisterHttpResponseShare> for pb::CanisterHttpShare {
-    fn from(share: &CanisterHttpResponseShare) -> Self {
+impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
+    fn from(share: CanisterHttpResponseShare) -> Self {
         pb::CanisterHttpShare {
             metadata: Some(pb::CanisterHttpResponseMetadata {
                 id: share.content.id.get(),

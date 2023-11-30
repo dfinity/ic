@@ -2,16 +2,8 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    is_copy_inactive_neurons_to_stable_memory_enabled,
     neuron::neuron_id_range_to_u64_range,
-    pb::v1::{
-        governance::{
-            migration::{MigrationStatus, Progress},
-            Migration,
-        },
-        governance_error::ErrorType,
-        GovernanceError, Neuron, NeuronState, Topic,
-    },
+    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
@@ -25,26 +17,23 @@ use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
-    neuron_principal::{
-        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, HeapNeuronPrincipalIndex,
-        NeuronPrincipalIndex,
-    },
+    neuron_principal::NeuronPrincipalIndex,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, HashSet},
     fmt::{Debug, Display, Formatter},
+    ops::Deref,
     ops::RangeBounds,
 };
 
-// On average, each neuron takes ~4M instructions to add to neuron indexes. Use batch size 15 so
-// that on average the migration takes ~60M instructions.
-const NEURON_INDEXES_MIGRATION_BATCH_SIZE: usize = 15;
-
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
-    NeuronNotFound(NeuronNotFound),
+    NeuronNotFound {
+        neuron_id: NeuronId,
+    },
     CorruptedNeuronIndexes(CorruptedNeuronIndexes),
     NeuronIdIsNone,
     InvalidSubaccount {
@@ -60,13 +49,14 @@ pub enum NeuronStoreError {
         new_subaccount: Subaccount,
     },
     NeuronAlreadyExists(NeuronId),
+    InvalidData {
+        reason: String,
+    },
 }
 
 impl NeuronStoreError {
-    pub fn not_found(neuron_id: &NeuronId) -> Self {
-        NeuronStoreError::NeuronNotFound(NeuronNotFound {
-            neuron_id: *neuron_id,
-        })
+    pub fn not_found(neuron_id: NeuronId) -> Self {
+        NeuronStoreError::NeuronNotFound { neuron_id }
     }
 
     pub fn invalid_subaccount(neuron_id: NeuronId, subaccount_bytes: Vec<u8>) -> Self {
@@ -99,8 +89,8 @@ pub struct NeuronNotFound {
 impl Display for NeuronStoreError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            NeuronStoreError::NeuronNotFound(neuron_not_found) => {
-                write!(f, "Neuron not found: {:?}", neuron_not_found.neuron_id)
+            NeuronStoreError::NeuronNotFound { neuron_id } => {
+                write!(f, "Neuron not found: {:?}", neuron_id)
             }
             NeuronStoreError::CorruptedNeuronIndexes(corrupted_neuron_indexes) => {
                 write!(
@@ -141,6 +131,9 @@ impl Display for NeuronStoreError {
                     neuron_id
                 )
             }
+            NeuronStoreError::InvalidData { reason } => {
+                write!(f, "Failed to store neuron with invalid data: {:?}", reason)
+            }
         }
     }
 }
@@ -148,30 +141,17 @@ impl Display for NeuronStoreError {
 impl From<NeuronStoreError> for GovernanceError {
     fn from(value: NeuronStoreError) -> Self {
         let error_type = match &value {
-            NeuronStoreError::NeuronNotFound(_) => ErrorType::NotFound,
+            NeuronStoreError::NeuronNotFound { .. } => ErrorType::NotFound,
             NeuronStoreError::CorruptedNeuronIndexes(_) => ErrorType::PreconditionFailed,
             NeuronStoreError::NeuronIdIsNone => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidSubaccount { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NeuronIdModified { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::SubaccountModified { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NeuronAlreadyExists(_) => ErrorType::PreconditionFailed,
+            NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
-}
-
-pub fn get_neuron_subaccount(
-    neuron_store: &NeuronStore,
-    neuron_id: NeuronId,
-) -> Result<Subaccount, NeuronStoreError> {
-    neuron_store.with_neuron(&neuron_id, |neuron| {
-        neuron
-            .subaccount()
-            .map_err(|_| NeuronStoreError::InvalidSubaccount {
-                neuron_id,
-                subaccount_bytes: neuron.account.clone(),
-            })
-    })?
 }
 
 trait PracticalClock: Clock + Send + Sync + Debug + DynClone {}
@@ -187,10 +167,42 @@ pub struct NeuronsFundNeuron {
     pub controller: PrincipalId,
 }
 
+enum StorageLocation {
+    Heap,
+    Stable,
+}
+
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
 /// in either heap memory or stable memory.
 #[cfg_attr(test, derive(Clone, Debug))]
 pub struct NeuronStore {
+    /// Neurons stored in heap (as supposed to StableNeuronStore). The invariant regarding neurons
+    /// in heap v.s. stable storage: "all neurons in the stable storage should be inactive", which
+    /// is equivalent to: "all active neurons should remain on the heap". The invariant holds
+    /// because: (1) all neuron mutations go through `add_neuron`, `remove_neuron` and
+    /// `with_neuron_mut` which is responsible for upholding the invariant. (2) neuron being
+    /// inactive is monotonic through passage of time without mutation - when time increases, an
+    /// inactive neuron will stay inactive without mutation.
+    ///
+    /// Note that 'inactive' definition comes from `Neuron::is_inactive` which takes current time as
+    /// an argument.
+    ///
+    /// All accesses to heap_neurons need to be aware that it is only guaranteed that active neurons
+    /// are always returned, and the current use cases are (which also means new use cases should be
+    /// evaluated this way):
+    /// - computing cached entries: when it involves neurons, it mostly cares about stake, maturity
+    ///   and NF fund.
+    /// - validating indexes by checking whether each neuron in the heap has corresponding entires
+    ///   in the indexes.
+    /// - `Governance::validate`: soon to be deprecated since we have subaccount index.
+    /// - `voting_eligible_neurons()`: inactive neurons have been dissolved for 14 days, so it
+    ///   cannot be voting eligible.
+    /// - `list_community_fund_neuron_ids` and `list_active_neurons_fund_neurons`: inactive neurons
+    ///   must not be NF.
+    /// - `list_neurons_ready_to_unstake_maturity`: inactive neurons have 0 stake (which also means
+    ///   0 staked maturity), so no inactive neurons need to unstake maturity.
+    /// - `list_ready_to_spawn_neuron_ids`: inactive neurons must have 0 maturity, and spawning
+    ///   neurons must have maturity.
     heap_neurons: BTreeMap<u64, Neuron>,
 
     /// Cached data structure that (for each topic) maps a followee to
@@ -201,21 +213,6 @@ pub struct NeuronStore {
     ///
     /// (Topic, Followee) -> set of followers.
     topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
-
-    /// Maps Principals to the Neuron IDs of all Neurons that have this
-    /// Principal as their controller or as one of their hot keys
-    ///
-    /// This is a cached index and will be removed and recreated when the state
-    /// is saved and restored.
-    principal_to_neuron_ids_index: HeapNeuronPrincipalIndex<NeuronId>,
-
-    /// Set of all names given to Known Neurons, to prevent duplication.
-    ///
-    /// This set is cached and will be removed and recreated when the state is saved and restored.
-    known_neuron_name_set: HashSet<String>,
-
-    /// Neuron indexes migration state.
-    indexes_migration: Migration,
 
     // In non-test builds, Box would suffice. However, in test, the containing struct (to wit,
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
@@ -231,18 +228,10 @@ impl PartialEq for NeuronStore {
         let Self {
             heap_neurons,
             topic_followee_index,
-            principal_to_neuron_ids_index,
-            known_neuron_name_set,
-            indexes_migration,
-
             clock: _,
         } = self;
 
-        *heap_neurons == other.heap_neurons
-            && *topic_followee_index == other.topic_followee_index
-            && *principal_to_neuron_ids_index == other.principal_to_neuron_ids_index
-            && *known_neuron_name_set == other.known_neuron_name_set
-            && *indexes_migration == other.indexes_migration
+        *heap_neurons == other.heap_neurons && *topic_followee_index == other.topic_followee_index
     }
 }
 
@@ -255,24 +244,11 @@ impl NeuronStore {
         let mut neuron_store = Self {
             heap_neurons: BTreeMap::new(),
             topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
-            principal_to_neuron_ids_index: HeapNeuronPrincipalIndex::new(),
-            known_neuron_name_set: HashSet::new(),
-            indexes_migration: Migration {
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            },
             clock: Box::new(IcClock::new()),
         };
 
         // Adds the neurons one by one into neuron store.
         for neuron in neurons.into_values() {
-            // We are still relying on `Governance::add_neuron()` to call this method. This will be
-            // gone when the stable storage indexes is used and the heap version is retired.
-            neuron_store.add_neuron_to_principal_to_neuron_ids_index(
-                neuron.id.expect("Neuron must have an id"),
-                neuron.principal_ids_with_special_permissions(),
-            );
             // We are not adding the neuron into the known_neuron_index even if it has known neuron
             // data. This is somewhat what we want - we can never create a neuron as a known neuron,
             // and it requires a proposal to do so. Ideally, the neuron type accepted by
@@ -291,18 +267,12 @@ impl NeuronStore {
     pub fn new_restored(
         heap_neurons: BTreeMap<u64, Neuron>,
         topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
-        indexes_migration: Migration,
     ) -> Self {
-        let principal_to_neuron_ids_index = build_principal_to_neuron_ids_index(&heap_neurons);
-        let known_neuron_name_set = build_known_neuron_name_index(&heap_neurons);
         let clock = Box::new(IcClock::new());
 
         Self {
             heap_neurons,
             topic_followee_index,
-            principal_to_neuron_ids_index,
-            known_neuron_name_set,
-            indexes_migration,
             clock,
         }
     }
@@ -369,7 +339,10 @@ impl NeuronStore {
 
     /// Returns if store contains a Neuron by id
     pub fn contains(&self, neuron_id: NeuronId) -> bool {
-        self.heap_neurons.contains_key(&neuron_id.id)
+        let in_heap = self.heap_neurons.contains_key(&neuron_id.id);
+        let in_stable =
+            with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.contains(neuron_id));
+        in_heap || in_stable
     }
 
     /// Get the number of neurons in the Store
@@ -381,30 +354,36 @@ impl NeuronStore {
     pub fn add_neuron(&mut self, neuron: Neuron) -> Result<NeuronId, NeuronStoreError> {
         let neuron_id = neuron.id.expect("Neuron must have an id");
 
-        // TODO check stable storage also
         if self.contains(neuron_id) {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
         }
 
+        if neuron.is_inactive(self.now()) {
+            // Write as primary copy in stable storage.
+            with_stable_neuron_store_mut(|stable_neuron_store| {
+                stable_neuron_store.create(neuron.clone())
+            })?;
+            // Write as secondary copy in heap.
+            self.heap_neurons.insert(neuron_id.id, neuron.clone());
+        } else {
+            // Write as primary copy in heap.
+            self.heap_neurons.insert(neuron_id.id, neuron.clone());
+        }
+
+        // Write to indexes after writing to primary storage as the write to primary storage can
+        // fail.
         self.add_neuron_to_indexes(&neuron);
-        self.heap_neurons.insert(neuron_id.id, neuron);
 
         Ok(neuron_id)
     }
 
     fn add_neuron_to_indexes(&mut self, neuron: &Neuron) {
-        if Self::is_indexes_migrated_for_neuron(
-            &self.indexes_migration,
-            neuron.id.expect("Neuron must have an id."),
-        ) {
-            if let Err(error) = with_stable_neuron_indexes_mut(|indexes| indexes.add_neuron(neuron))
-            {
-                println!(
-                    "{}WARNING: issues found when adding neuron to indexes, possibly because \
+        if let Err(error) = with_stable_neuron_indexes_mut(|indexes| indexes.add_neuron(neuron)) {
+            println!(
+                "{}WARNING: issues found when adding neuron to indexes, possibly because \
                      neuron indexes are out-of-sync with neurons: {}",
-                    LOG_PREFIX, error
-                );
-            }
+                LOG_PREFIX, error
+            );
         }
 
         if let Err(defects) = self.topic_followee_index.add_neuron(neuron) {
@@ -422,31 +401,47 @@ impl NeuronStore {
 
     /// Remove a Neuron by id
     pub fn remove_neuron(&mut self, neuron_id: &NeuronId) {
-        let removed_neuron = self.heap_neurons.remove(&neuron_id.id);
-
-        let removed_neuron = match removed_neuron {
-            Some(removed_neuron) => removed_neuron,
-            None => {
-                println!("WARNING: trying to remove a neuron that does not exist");
+        let load_neuron_result = self.load_neuron(*neuron_id);
+        let (neuron_to_remove, primary_location) = match load_neuron_result {
+            Ok(load_neuron_result) => load_neuron_result,
+            Err(error) => {
+                println!(
+                    "{}WARNING: cannot find neuron {:?} while trying to remove it: {}",
+                    LOG_PREFIX, *neuron_id, error
+                );
                 return;
             }
         };
 
-        self.remove_neuron_from_indexes(&removed_neuron);
+        let neuron_to_remove = neuron_to_remove.deref().clone();
+
+        match primary_location {
+            StorageLocation::Heap => {
+                // Remove its primary copy.
+                self.heap_neurons.remove(&neuron_id.id);
+            }
+            StorageLocation::Stable => {
+                let _remove_result = with_stable_neuron_store_mut(|stable_neuron_store| {
+                    stable_neuron_store.delete(*neuron_id)
+                });
+
+                // Remove the secondary copy.
+                self.heap_neurons.remove(&neuron_id.id);
+            }
+        }
+
+        self.remove_neuron_from_indexes(&neuron_to_remove);
     }
 
     fn remove_neuron_from_indexes(&mut self, neuron: &Neuron) {
         let neuron_id = neuron.id.expect("Neuron must have id");
-        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, neuron_id) {
-            if let Err(error) =
-                with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(neuron))
-            {
-                println!(
-                    "{}WARNING: issues found when adding neuron to indexes, possibly because of \
+        if let Err(error) = with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(neuron))
+        {
+            println!(
+                "{}WARNING: issues found when adding neuron to indexes, possibly because of \
                      neuron indexes are out-of-sync with neurons: {}",
-                    LOG_PREFIX, error
-                );
-            }
+                LOG_PREFIX, error
+            );
         }
 
         if let Err(defects) = self.topic_followee_index.remove_neuron(neuron) {
@@ -455,32 +450,125 @@ impl NeuronStore {
                  neuron indexes are out-of-sync with neurons: {}",
                 LOG_PREFIX,
                 NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
-                    neuron_id: neuron.id.unwrap().id,
+                    neuron_id: neuron_id.id,
                     indexes: vec![defects],
                 })
             );
         };
     }
 
+    // Loads a neuron from either heap or stable storage and returns its primary storage location.
+    // Note that all neuron reads go through this method.
+    fn load_neuron(
+        &self,
+        neuron_id: NeuronId,
+    ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
+        let heap_neuron = self
+            .heap_neurons
+            .get(&neuron_id.id)
+            .map(|neuron| Cow::Borrowed(neuron));
+
+        if let Some(heap_neuron) = heap_neuron.clone() {
+            // If the neuron is active on heap, return early to avoid any operation on stable
+            // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
+            // on stable storage.
+            if !heap_neuron.is_inactive(self.now()) {
+                return Ok((heap_neuron, StorageLocation::Heap));
+            }
+        }
+
+        let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store
+                .read(neuron_id)
+                .ok()
+                .map(|neuron| Cow::Owned(neuron))
+        });
+        match (stable_neuron, heap_neuron) {
+            (Some(stable), Some(_)) => Ok((stable, StorageLocation::Stable)),
+            (Some(stable), None) => {
+                // This is not desirable, but we will be able to recover from it as writing it again
+                // will create a copy on heap, but log a warning since something might be wrong.
+                println!(
+                    "{}WARNING: neuron {:?} is in stable memory without a copy on the heap",
+                    LOG_PREFIX, neuron_id
+                );
+                Ok((stable, StorageLocation::Stable))
+            }
+            (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
+            (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
+        }
+    }
+
+    fn update_neuron(
+        &mut self,
+        neuron_id: NeuronId,
+        neuron: Neuron,
+        previous_location: StorageLocation,
+        is_neuron_changed: bool,
+    ) -> Result<(), NeuronStoreError> {
+        let target_location = if neuron.is_inactive(self.now()) {
+            StorageLocation::Stable
+        } else {
+            StorageLocation::Heap
+        };
+
+        // Perform transition betweene 2 storage if necessary.
+        //
+        // Note:
+        // - the location here is the primary location. Currently, StorageLocation::Stable means the
+        // neuron is stored in stable storage while having a copy on the heap. StorageLocation::Heap
+        // means the neuron will have its only copy in heap.
+        // - The `self.heap_neurons.insert(..)` can be done outside of the match expression, but
+        // since they have different meanings regarding primary/secondary copies, and the logic will
+        // diverge as we remove the secondary copy, we call it in the same way in all 4 cases.
+        match (previous_location, target_location) {
+            (StorageLocation::Heap, StorageLocation::Heap) => {
+                // We might be able to improve the performance by comparing and changing each field of neuron separately.
+                if is_neuron_changed {
+                    self.heap_neurons.insert(neuron_id.id, neuron);
+                }
+            }
+            (StorageLocation::Heap, StorageLocation::Stable) => {
+                // It is guaranteed that when previous location is Heap, there is not an entry in
+                // stable neuron store. Therefore we want to exist when there is an error in create,
+                // since there is probably a real issue.
+                with_stable_neuron_store_mut(|stable_neuron_store| {
+                    stable_neuron_store.create(neuron.clone())
+                })?;
+                // Now the neuron in heap becomes its secondary copy and the one in stable memory is
+                // the primary copy.
+                self.heap_neurons.insert(neuron_id.id, neuron);
+            }
+            (StorageLocation::Stable, StorageLocation::Heap) => {
+                // Now the neuron in heap becomes its primary copy and the one in stable memory is
+                // the secondary copy.
+                self.heap_neurons.insert(neuron_id.id, neuron);
+                with_stable_neuron_store_mut(|stable_neuron_store| {
+                    stable_neuron_store.delete(neuron_id)
+                })?;
+            }
+            (StorageLocation::Stable, StorageLocation::Stable) => {
+                // There should be a previous version in stable storage. Use update and return with
+                // error since it signals a real issue.
+                if is_neuron_changed {
+                    with_stable_neuron_store_mut(|stable_neuron_store| {
+                        stable_neuron_store.update(neuron.clone())
+                    })?;
+                    // Update the secondary copy.
+                    self.heap_neurons.insert(neuron_id.id, neuron);
+                }
+            }
+        };
+        Ok(())
+    }
+
     /// Get NeuronId for a particular subaccount.
     pub fn get_neuron_id_for_subaccount(&self, subaccount: Subaccount) -> Option<NeuronId> {
-        let neuron_id = if crate::use_neuron_stable_indexes() {
-            with_stable_neuron_indexes(|indexes| {
-                indexes
-                    .subaccount()
-                    .get_neuron_id_by_subaccount(&subaccount)
-            })
-        } else {
-            self.heap_neurons
-                .values()
-                .find(|n| {
-                    n.subaccount()
-                        .map(|neuron_subaccount| neuron_subaccount == subaccount)
-                        .unwrap_or_default()
-                })
-                .and_then(|n| n.id)
-        };
-        neuron_id
+        with_stable_neuron_indexes(|indexes| {
+            indexes
+                .subaccount()
+                .get_neuron_id_by_subaccount(&subaccount)
+        })
     }
 
     pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
@@ -491,6 +579,10 @@ impl NeuronStore {
     /// access to the heap neurons during transition to better data hiding.
     pub fn heap_neurons(&self) -> &BTreeMap<u64, Neuron> {
         &self.heap_neurons
+    }
+
+    fn heap_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
+        self.heap_neurons.values()
     }
 
     /// Returns Neurons in heap starting with the first one whose ID is >= begin.
@@ -514,8 +606,7 @@ impl NeuronStore {
         filter: impl Fn(&Neuron) -> bool,
         f: impl FnMut(&Neuron) -> R,
     ) -> Vec<R> {
-        self.heap_neurons
-            .values()
+        self.heap_neurons_iter()
             .filter(|n| filter(n))
             .map(f)
             .collect()
@@ -563,15 +654,7 @@ impl NeuronStore {
 
     /// List all neuron ids of known neurons
     pub fn list_known_neuron_ids(&self) -> Vec<NeuronId> {
-        if crate::use_neuron_stable_indexes() {
-            with_stable_neuron_indexes(|indexes| indexes.known_neuron().list_known_neuron_ids())
-        } else {
-            let filter = |n: &Neuron| n.known_neuron_data.is_some();
-            self.map_heap_neurons_filtered(filter, |n| n.id)
-                .into_iter()
-                .flatten()
-                .collect()
-        }
+        with_stable_neuron_indexes(|indexes| indexes.known_neuron().list_known_neuron_ids())
     }
 
     /// List all neurons that are spawning
@@ -591,19 +674,14 @@ impl NeuronStore {
             .collect()
     }
 
-    /// Execute a function against each voting eligible neuron
-    pub fn map_voting_eligible_neurons<R>(
-        &self,
-        now_seconds: u64,
-        mut f: impl FnMut(&Neuron) -> R,
-    ) -> Vec<R> {
-        let filter = |n: &Neuron| {
-            n.dissolve_delay_seconds(now_seconds) >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        };
-
+    /// Returns an iterator of all voting-eligible neurons
+    pub fn voting_eligible_neurons(&self, now_seconds: u64) -> impl Iterator<Item = &Neuron> {
         // This should be safe to do without with_neuron because
         // all voting_eligible neurons should be in the heap
-        self.map_heap_neurons_filtered(filter, |neuron| f(neuron))
+        self.heap_neurons_iter().filter(move |&neuron| {
+            neuron.dissolve_delay_seconds(now_seconds)
+                >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        })
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,
@@ -613,33 +691,19 @@ impl NeuronStore {
         neuron_id: &NeuronId,
         f: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, NeuronStoreError> {
-        let now = self.now();
-        let old_neuron = self
-            .heap_neurons
-            .get(&neuron_id.id)
-            .cloned()
-            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
-
-        // Clone and call f() to possibly modify the neuron.
+        let (neuron, location) = self.load_neuron(*neuron_id)?;
+        let old_neuron = neuron.deref().clone();
         let mut new_neuron = old_neuron.clone();
-
-        // TODO(NNS1-2584): let was_inactive_before = neuron.is_inactive(self.now());
-        // TODO(NNS1-2582): let original_neuron = neuron.clone()
-
-        let result = Ok(f(&mut new_neuron));
-
-        // Update stable_neuron_store. For now, this functionality is disabled by default. It is
-        // enabled when building tests, and when feature = "test" is enabled.
-        if is_copy_inactive_neurons_to_stable_memory_enabled() {
-            write_through_to_stable_neuron_store(&new_neuron, now);
-        }
-
+        let result = f(&mut new_neuron);
+        self.update_neuron(
+            *neuron_id,
+            new_neuron.clone(),
+            location,
+            new_neuron != old_neuron,
+        )?;
+        // Updating indexes needs to happen after successfully storing primary data.
         self.update_neuron_indexes(&old_neuron, &new_neuron);
-
-        // TODO switch to stable storage in the neuron is inactive and vice versa
-        self.heap_neurons.insert(neuron_id.id, new_neuron);
-
-        result
+        Ok(result)
     }
 
     /// Internal function to update neuron indexes when an existing neuron is changed.
@@ -647,16 +711,14 @@ impl NeuronStore {
     ///  and update in the index)
     fn update_neuron_indexes(&mut self, old_neuron: &Neuron, new_neuron: &Neuron) {
         // Update indexes by passing in both old and new versions of neuron.
-        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, old_neuron.id.unwrap()) {
-            if let Err(error) = with_stable_neuron_indexes_mut(|indexes| {
-                indexes.update_neuron(old_neuron, new_neuron)
-            }) {
-                println!(
-                    "{}WARNING: issues found when updating neuron indexes, possibly because of \
+        if let Err(error) =
+            with_stable_neuron_indexes_mut(|indexes| indexes.update_neuron(old_neuron, new_neuron))
+        {
+            println!(
+                "{}WARNING: issues found when updating neuron indexes, possibly because of \
                  neuron indexes are out-of-sync with neurons: {}",
-                    LOG_PREFIX, error
-                );
-            }
+                LOG_PREFIX, error
+            );
         }
 
         if let Err(defects) = self
@@ -675,23 +737,6 @@ impl NeuronStore {
         };
     }
 
-    fn is_indexes_migrated_for_neuron(indexes_migration: &Migration, neuron_id: NeuronId) -> bool {
-        match indexes_migration.migration_status() {
-            MigrationStatus::Unspecified => false,
-            MigrationStatus::InProgress => match indexes_migration.progress {
-                Some(Progress::LastNeuronId(last_neuron_id)) => neuron_id <= last_neuron_id,
-                None => {
-                    eprintln!("{}Neuron index migration progress is wrong", LOG_PREFIX);
-                    false
-                }
-            },
-            MigrationStatus::Succeeded => true,
-            // Some intervention is needed when it failed, so although some neurons are migrated, we
-            // do not keep updating the indexes.
-            MigrationStatus::Failed => false,
-        }
-    }
-
     /// Execute a function with a reference to a neuron, returning the result of the function,
     /// unless the neuron is not found
     pub fn with_neuron<R>(
@@ -699,245 +744,11 @@ impl NeuronStore {
         neuron_id: &NeuronId,
         f: impl FnOnce(&Neuron) -> R,
     ) -> Result<R, NeuronStoreError> {
-        let neuron = self
-            .heap_neurons
-            .get(&neuron_id.id)
-            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
-        Ok(f(neuron))
-    }
-
-    pub(crate) fn maybe_batch_add_heap_neurons_to_stable_indexes(&mut self) -> Migration {
-        let migration = &self.indexes_migration;
-        let last_neuron_id = match migration.migration_status() {
-            MigrationStatus::Unspecified => NeuronId { id: 0 },
-            MigrationStatus::InProgress => match migration.progress {
-                Some(Progress::LastNeuronId(last_neuron_id)) => last_neuron_id,
-                None => {
-                    eprintln!("{}Neuron index migration progress is wrong", LOG_PREFIX);
-                    return migration.clone();
-                }
-            },
-            _ => return migration.clone(),
-        };
-
-        let result = self.batch_add_heap_neurons_to_stable_indexes(
-            last_neuron_id,
-            NEURON_INDEXES_MIGRATION_BATCH_SIZE,
-        );
-
-        let new_migration = match result {
-            Err(failure_reason) => Migration {
-                status: Some(MigrationStatus::Failed as i32),
-                failure_reason: Some(failure_reason),
-                progress: None,
-            },
-            Ok(Some(new_last_neuron_id)) => Migration {
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(Progress::LastNeuronId(new_last_neuron_id)),
-            },
-            Ok(None) => Migration {
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            },
-        };
-
-        self.indexes_migration = new_migration.clone();
-        new_migration
-    }
-
-    /// For heap neurons starting from `last_neuron_id + 1` where `last_neuron_id` is the last
-    /// neuron id that has been migrated, and it adds at most `batch_size` of them into stable
-    /// storage indexes. It is an undefined behavior if `last_neuron_id` passed in was not returned
-    /// by the one returned by the same function.
-    ///
-    /// Returns `Err(failure_reason)` if it failed; returns Ok(None) if the cursor reaches the end;
-    /// returns `Ok(last_neuron_id)` if the cursor has not reached the end.
-    ///
-    /// Note that a Neuron with id 0 will never be scan, and it's OK because it is not a valid id.
-    fn batch_add_heap_neurons_to_stable_indexes(
-        &mut self,
-        last_neuron_id: NeuronId,
-        batch_size: usize,
-    ) -> Result<Option<NeuronId>, String> {
-        let mut new_last_neuron_id = None;
-        let mut count = 0;
-        // In the extremely rare event where we have a u64::MAX neuron id, we don't want to wrap
-        // around and start with 0 again.
-        let start_neuron_id = last_neuron_id.id.saturating_add(1);
-        for (neuron_id, neuron) in self.heap_neurons.range(start_neuron_id..).take(batch_size) {
-            with_stable_neuron_indexes_mut(|indexes| indexes.add_neuron(neuron))
-                .map_err(|error| GovernanceError::from(error).error_message)?;
-            count += 1;
-            new_last_neuron_id = Some(NeuronId { id: *neuron_id });
-        }
-
-        if count < batch_size {
-            // No more neurons to migrate
-            new_last_neuron_id = None
-        }
-        Ok(new_last_neuron_id)
-    }
-
-    /// Does what the name says: copies inactive Neurons from heap to stable memory.
-    ///
-    /// Why not pass (begin, size) instead of batch: Unfortunately, it is not enough to have the
-    /// Neuron itself (available here) in order to determine whether it is active or not. Rather,
-    /// there are a couple other pieces of data that are needed: locks and open proposals. These are
-    /// not available in NeuronStore; Governance has them.
-    ///
-    /// As a result, batch is constructed by the caller (Governance), since it has the
-    /// aforementioned needed supporting auxiliary data. Of course, to do this, Governance still
-    /// needs some help from self to scan a range of heap neurons based on begin, and limit
-    /// (i.e. batch size). That functionality is provided by heap_neurons_range_with_begin_and_limit
-    pub(crate) fn batch_add_inactive_neurons_to_stable_memory(
-        &mut self,
-        batch: Vec<(Neuron, /* is_inactive */ bool)>,
-    ) -> Result<Option<NeuronId>, String> {
-        // TODO: Make this owned by self, and stop accessing accessing data via global. There is
-        // no known way to do this right now, because StableBTreeMap is used, and it is not
-        // Send.
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            let batch_len = batch.len();
-
-            let mut new_last_neuron_id = None; // result/work tracker
-
-            // The actual/main work itself.
-            let mut copy_count = 0;
-            for (neuron, is_inactive) in batch {
-                // Track the work that is about to be performed.
-                new_last_neuron_id = neuron.id;
-
-                if !is_inactive {
-                    // TODO(NNS1-2493): We could try to delete neuron from stable_neuron_store, but
-                    // it should already not be there. A neuron might already be in
-                    // stable_neuron_store if it was previously active, but is now
-                    // inactive. However, in that case, the mutation that caused it to go from
-                    // active to inactive is responsible for deleting the neuron from
-                    // stable_neuron_store. This is where we can double check that such
-                    // responsibilities were actually fulfilled.
-                    continue;
-                }
-                copy_count += 1;
-
-                // TODO(NNS1-2493): If neuron is already in stable_neuron_store, then it should be
-                // equivalent to the one we have here. If it isn't, that's a bug, because any
-                // mutation of the neuron that later took place is responsible for writing it
-                // through to stable_neuron_store, like above.
-
-                stable_neuron_store
-                    // Here, upsert is used instead of create, because it is possible that online
-                    // copying already copied neuron to stable_neuron_store, and in that case, we do
-                    // not want to trigger the Err behavior of create.
-                    .upsert(neuron) // The real work takes place here.
-                    .map_err(|governance_err| {
-                        // TODO(NNS1-2493): Increment an error counter metric, since this should
-                        // never happen. Also, alert on it, and have it notify NNS team via Slack,
-                        // not page FITS team, since this does not indicate that operators need to
-                        // quickly intervene. Rather, it is a bug that developers (i.e. NNS team)
-                        // should be made aware of, investigate, and fix.
-                        governance_err.to_string()
-                    })?;
-            }
-            // TODO(NNS1-2493): Don't just log this: increment a metric (or maybe do that from
-            // within the loop instead of after?).
-            println!(
-                "{} out of {} Neruons in batch were inactive/copied",
-                copy_count, batch_len
-            );
-
-            Ok(new_last_neuron_id)
-        })
+        let (neuron, _) = self.load_neuron(*neuron_id)?;
+        Ok(f(neuron.deref()))
     }
 
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.
-
-    /// Update `index` to map all the given Neuron's hot keys and controller to
-    /// `neuron_id`
-    pub fn add_neuron_to_principal_to_neuron_ids_index(
-        &mut self,
-        neuron_id: NeuronId,
-        principal_ids: Vec<PrincipalId>,
-    ) {
-        let already_present_principal_ids = add_neuron_id_principal_ids(
-            &mut self.principal_to_neuron_ids_index,
-            &neuron_id,
-            principal_ids,
-        );
-        for already_present_principal_id in already_present_principal_ids {
-            println!(
-                "{} Principal {:?}  already present in the index for neuron {:?}",
-                LOG_PREFIX, already_present_principal_id, neuron_id
-            );
-        }
-    }
-
-    pub fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
-        &mut self,
-        neuron_id: NeuronId,
-        principal_id: PrincipalId,
-    ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        if !self
-            .principal_to_neuron_ids_index
-            .add_neuron_id_principal_id(&neuron_id, principal_id)
-        {
-            println!(
-                "{} Principal {:?}  already present in the index for neuron {:?}",
-                LOG_PREFIX, principal_id, neuron_id
-            );
-        }
-    }
-
-    /// Update `index` to remove the neuron from the list of neurons mapped to
-    /// principals.
-    pub fn remove_neuron_from_principal_to_neuron_ids_index(
-        &mut self,
-        neuron_id: NeuronId,
-        principal_ids: Vec<PrincipalId>,
-    ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        let already_absent_principal_ids = remove_neuron_id_principal_ids(
-            &mut self.principal_to_neuron_ids_index,
-            &neuron_id,
-            principal_ids,
-        );
-        for already_absent_principal_id in already_absent_principal_ids {
-            println!(
-                "{} Principal {:?}  already absent in the index for neuron {:?}",
-                LOG_PREFIX, already_absent_principal_id, neuron_id
-            );
-        }
-    }
-
-    pub fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-        &mut self,
-        neuron_id: NeuronId,
-        principal_id: PrincipalId,
-    ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        if !self
-            .principal_to_neuron_ids_index
-            .remove_neuron_id_principal_id(&neuron_id, principal_id)
-        {
-            println!(
-                "{} Principal {:?}  already absent in the index for neuron {:?}",
-                LOG_PREFIX, principal_id, neuron_id
-            );
-        }
-    }
-
-    pub fn add_known_neuron_to_index(&mut self, known_neuron_name: &str) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        self.known_neuron_name_set
-            .insert(known_neuron_name.to_string());
-    }
-
-    pub fn remove_known_neuron_from_index(&mut self, known_neuron_name: &str) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        self.known_neuron_name_set.remove(known_neuron_name);
-    }
 
     // Read methods for indexes.
 
@@ -962,32 +773,59 @@ impl NeuronStore {
         &self,
         principal_id: PrincipalId,
     ) -> HashSet<NeuronId> {
-        if crate::use_neuron_stable_indexes() {
-            with_stable_neuron_indexes(|indexes| {
-                indexes
-                    .principal()
-                    .get_neuron_ids(principal_id)
-                    .into_iter()
-                    .map(|id| NeuronId { id })
-                    .collect()
-            })
-        } else {
-            self.principal_to_neuron_ids_index
+        with_stable_neuron_indexes(|indexes| {
+            indexes
+                .principal()
                 .get_neuron_ids(principal_id)
-        }
+                .into_iter()
+                .map(|id| NeuronId { id })
+                .collect()
+        })
     }
 
     // Returns whether the known neuron name already exists.
     pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
-        if crate::use_neuron_stable_indexes() {
-            with_stable_neuron_indexes(|indexes| {
-                indexes
-                    .known_neuron()
-                    .contains_known_neuron_name(known_neuron_name)
-            })
-        } else {
-            self.known_neuron_name_set.contains(known_neuron_name)
-        }
+        with_stable_neuron_indexes(|indexes| {
+            indexes
+                .known_neuron()
+                .contains_known_neuron_name(known_neuron_name)
+        })
+    }
+
+    /// Validates a batch of neurons in stable neuron store are all inactive.
+    ///
+    /// The batch is defined as the `next_neuron_id` to start and the `batch_size` for the upper
+    /// bound of the number of neurons to validate.
+    ///
+    /// Returns the neuron id the next batch will start with (the neuron id last validated + 1). If
+    /// no neuron is validated in this batch, returns None.
+    pub fn batch_validate_neurons_in_stable_store_are_inactive(
+        &self,
+        next_neuron_id: NeuronId,
+        batch_size: usize,
+    ) -> (Vec<NeuronId>, Option<NeuronId>) {
+        let mut neuron_id_for_next_batch = None;
+        let active_neurons_in_stable_store = with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store
+                .range_neurons(next_neuron_id..)
+                .take(batch_size)
+                .flat_map(|neuron| {
+                    let current_neuron_id = neuron.id.unwrap();
+                    neuron_id_for_next_batch = current_neuron_id.next();
+
+                    let is_neuron_inactive = neuron.is_inactive(self.now());
+
+                    if is_neuron_inactive {
+                        None
+                    } else {
+                        // An active neuron in stable neuron store is invalid.
+                        Some(current_neuron_id)
+                    }
+                })
+                .collect()
+        });
+
+        (active_neurons_in_stable_store, neuron_id_for_next_batch)
     }
 
     // Census
@@ -1012,81 +850,6 @@ pub struct NeuronIndexesLens {
     pub principal: usize,
     pub following: usize,
     pub known_neuron: usize,
-}
-
-fn write_through_to_stable_neuron_store(neuron: &Neuron, now: u64) {
-    let neuron_id = match neuron.id {
-        Some(ok) => ok,
-        None => {
-            println!(
-                "{}ERROR: Tried to write through a Neuron that has no ID to \
-                 StableNeuronStore:\n{:#?}",
-                LOG_PREFIX, neuron,
-            );
-
-            // TODO(NNS1-2493): Increment some error metric.
-
-            return;
-        }
-    };
-
-    if neuron.is_inactive(now) {
-        // TODO(NNS1-2584): Once a full copy sweep of inactive Neuron copying has been
-        // performed, then we can use was_inactive_before to know precisely whether we
-        // should be calling create or update here (instead of upsert), and expect Ok is
-        // returned. Before a full copy sweep has been performed, we have to instead use
-        // more the "permissive" upsert method, because it is not necessary wrong that the
-        // Neuron was not already in stable_neuron_store.
-        let upsert_result = with_stable_neuron_store_mut(|stable_neuron_store| {
-            stable_neuron_store.upsert(neuron.clone())
-        });
-        if let Err(err) = upsert_result {
-            // TODO(NNS1-2493): Increment some error metric.
-            println!(
-                "{}ERROR: Failed to update inactive Neuron in stable_neuron_store: {}",
-                LOG_PREFIX, err,
-            );
-        }
-    // neuron is active. Therefore, it should not be in StableNeuronStore (anymore).
-    } else {
-        // TODO(NNS1-2584): Once a full sweep of inactive Neuron copying has been performed,
-        // then we can expect that delete returns Ok or Err, depending on
-        // was_inactive_before. Before a full copy sweep has been performed, it is not feasible
-        // to determine whether the Neuron should have been there or not.
-        let _ignore_result = with_stable_neuron_store_mut(|stable_neuron_store| {
-            stable_neuron_store.delete(neuron_id)
-        });
-    }
-}
-
-fn build_principal_to_neuron_ids_index(
-    heap_neurons: &BTreeMap<u64, Neuron>,
-) -> HeapNeuronPrincipalIndex<NeuronId> {
-    let mut index = HeapNeuronPrincipalIndex::new();
-    for neuron in heap_neurons.values() {
-        let already_present_principal_ids = add_neuron_id_principal_ids(
-            &mut index,
-            &neuron.id.unwrap(),
-            neuron.principal_ids_with_special_permissions(),
-        );
-        for already_present_principal_id in already_present_principal_ids {
-            println!(
-                "{} Principal {:?}  already present in the index for neuron {:?}",
-                LOG_PREFIX, already_present_principal_id, neuron.id
-            );
-        }
-    }
-    index
-}
-
-fn build_known_neuron_name_index(heap_neurons: &BTreeMap<u64, Neuron>) -> HashSet<String> {
-    let mut index = HashSet::new();
-    for neuron in heap_neurons.values() {
-        if let Some(known_neuron_data) = &neuron.known_neuron_data {
-            index.insert(known_neuron_data.name.clone());
-        }
-    }
-    index
 }
 
 #[cfg(test)]

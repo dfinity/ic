@@ -20,7 +20,7 @@ sys.path.append(os.path.dirname(this_script_dir))
 from common import ssh  # noqa
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_string("farm_group_name", None, "Farm group name to use. Default is testvm-$user-$time")
+gflags.DEFINE_string("infra_group_name", None, "Farm group name to use. Default is testvm-$user-$time")
 gflags.DEFINE_string("ci_runner_tags", None, "Allocate VMs close to the CI runner, when running on CI")
 gflags.DEFINE_integer("farm_ttl_secs", 3600, "VM expiry in seconds")
 
@@ -222,8 +222,8 @@ class Farm(object):
         self.version = version
         self.subnet_config = subnet_config
 
-        if FLAGS.farm_group_name is not None:
-            self.group_name = FLAGS.farm_group_name
+        if FLAGS.infra_group_name is not None:
+            self.group_name = FLAGS.infra_group_name
         else:
             if "CI_JOB_ID" in os.environ:
                 test_id = os.environ["CI_JOB_ID"]

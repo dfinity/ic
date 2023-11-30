@@ -20,6 +20,7 @@ use ic_consensus_utils::{
     RoundRobin,
 };
 use ic_interfaces::{
+    batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
     consensus_pool::*,
     dkg::DkgPool,
@@ -43,10 +44,10 @@ use ic_types::{
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
-    Height, NodeId, NodeIndex, RegistryVersion,
+    Height, NodeId, RegistryVersion,
 };
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -993,6 +994,7 @@ impl Validator {
             }
         }
 
+        let proposer = proposal.signature.signer;
         let parent = get_notarized_parent(pool_reader, proposal)?;
         self.verify_artifact(pool_reader, proposal)?;
 
@@ -1033,9 +1035,12 @@ impl Validator {
         self.payload_builder
             .validate_payload(
                 proposal.height,
+                &ProposalContext {
+                    proposer,
+                    validation_context: &proposal.context,
+                },
                 &proposal.payload,
                 &payloads,
-                &proposal.context,
             )
             .map_err(|err| {
                 err.map(
@@ -1133,17 +1138,6 @@ impl Validator {
         let last_beacon = pool_reader.get_random_beacon_tip();
         let last_hash: CryptoHashOf<RandomBeacon> = ic_types::crypto::crypto_hash(&last_beacon);
         let next_height = last_beacon.content.height().increment();
-        // we need the current threshold to determine how many validations we should make
-        let threshold = active_low_threshold_transcript(
-            pool_reader.as_cache(),
-            pool_reader.get_catch_up_height(),
-        )
-        .map_or(NodeIndex::MAX, |transcript| {
-            transcript.threshold.get().get()
-        });
-        // number of shares during this iteration
-        let mut existing_shares =
-            pool_reader.get_random_beacon_shares(next_height).count() as NodeIndex;
 
         // Since the parent beacon is required to be already validated, only a single
         // height is checked.
@@ -1158,20 +1152,14 @@ impl Validator {
                         beacon.into_message(),
                         "The parent hash of the beacon was not correct".to_string(),
                     ))
-                } else if existing_shares < threshold {
+                } else {
                     self.metrics.validation_random_beacon_shares_count.add(1);
                     let verification = self.verify_artifact(pool_reader, &beacon);
-                    let ret = self.compute_action_from_artifact_verification(
+                    self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
                         beacon.into_message(),
-                    );
-                    if let Some(&ChangeAction::MoveToValidated(_)) = ret.as_ref() {
-                        existing_shares += 1;
-                    }
-                    ret
-                } else {
-                    None
+                    )
                 }
             })
             .collect();
@@ -1253,15 +1241,6 @@ impl Validator {
             expected_height,
             max_height.min(finalized_height.increment()),
         );
-        // we need the current threshold to determine how many validations we should make
-        let threshold = active_low_threshold_transcript(
-            pool_reader.as_cache(),
-            pool_reader.get_catch_up_height(),
-        )
-        .map_or(NodeIndex::MAX, |transcript| {
-            transcript.threshold.get().get()
-        });
-        let mut height_share_map = HashMap::<Height, u32>::with_capacity(64);
 
         let change_set: ChangeSet = pool_reader
             .pool()
@@ -1280,27 +1259,13 @@ impl Validator {
                     // Remove if we already have a validated tape at this height
                     Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
                 } else {
-                    let existing_shares = *height_share_map.entry(height).or_insert_with(|| {
-                        pool_reader.get_random_tape_shares(height, height).count() as NodeIndex
-                    });
-                    // if # of existing shares + shares validated in this loop exceeds
-                    // the threshold, then we don't need to continue validating anymore.
-                    if existing_shares < threshold {
-                        self.metrics.validation_random_tape_shares_count.add(1);
-                        let verification = self.verify_artifact(pool_reader, &tape);
-                        let ret = self.compute_action_from_artifact_verification(
-                            pool_reader,
-                            verification,
-                            tape.into_message(),
-                        );
-                        // increment counter of validated shares
-                        if let Some(&ChangeAction::MoveToValidated(_)) = ret.as_ref() {
-                            height_share_map.insert(height, existing_shares + 1);
-                        }
-                        ret
-                    } else {
-                        None
-                    }
+                    self.metrics.validation_random_tape_shares_count.add(1);
+                    let verification = self.verify_artifact(pool_reader, &tape);
+                    self.compute_action_from_artifact_verification(
+                        pool_reader,
+                        verification,
+                        tape.into_message(),
+                    )
                 }
             })
             .collect();
@@ -1614,7 +1579,8 @@ pub mod test {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_consensus_utils::get_block_maker_delay;
-    use ic_interfaces::{artifact_pool::MutablePool, messaging::XNetTransientValidationError};
+    use ic_interfaces::{messaging::XNetTransientValidationError, p2p::consensus::MutablePool};
+    use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -1625,7 +1591,6 @@ pub mod test {
         consensus::fake::*,
         crypto::CryptoReturningOk,
         matches_pattern,
-        message_routing::MockMessageRouting,
         state_manager::RefMockStateManager,
         types::ids::{node_test_id, subnet_test_id},
         FastForwardTimeSource,
@@ -1967,7 +1932,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::RandomBeacon(beacon_2))
             );
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // share_3 now validates
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -2083,7 +2048,7 @@ pub mod test {
             );
 
             // Accept changes
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Insert random tape at height 4, check if it is ignored
             let content = RandomTapeContent::new(Height::from(4));
@@ -2106,7 +2071,7 @@ pub mod test {
             );
 
             // Accept changes
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Set expected batch height to height 4, check if tape_3 is ignored
             let content = RandomTapeContent::new(Height::from(3));
@@ -2141,7 +2106,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .withf(move |_, _, payloads, _| {
+                .withf(move |_, _, _, payloads| {
                     // Assert that payloads are from blocks between:
                     // `certified_height` and the current height (`prior_height`)
                     payloads.len() as u64 == (prior_height - certified_height).get()
@@ -2253,7 +2218,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .withf(move |_, _, payloads, _| {
+                .withf(move |_, _, _, payloads| {
                     // Assert that payloads are from blocks between:
                     // `certified_height` and the current height (`prior_height`)
                     payloads.len() as u64 == (prior_height - certified_height).get()
@@ -2424,7 +2389,7 @@ pub mod test {
             pool.insert_unvalidated(test_block.clone());
             let valid_results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_valid(&valid_results, &test_block);
-            pool.apply_changes(time_source.as_ref(), valid_results);
+            pool.apply_changes(valid_results);
 
             let mut next_block = pool.make_next_block_from_parent(test_block.as_ref());
             next_block.signature.signer = get_block_maker_by_rank(
@@ -2520,7 +2485,7 @@ pub mod test {
             pool.insert_unvalidated(test_block.clone());
             let results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_invalid(&results, &test_block);
-            pool.apply_changes(time_source.as_ref(), results);
+            pool.apply_changes(results);
 
             // Construct a block with a registry version that is higher than any we
             // currently recognize. This should yield an empty change set
@@ -2717,7 +2682,7 @@ pub mod test {
 
             // after we finalize a block with time `block_time`, the validator should reject
             // a child block with a smaller time
-            pool.apply_changes(time_source.as_ref(), results);
+            pool.apply_changes(results);
             pool.notarize(&test_block);
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
@@ -2867,7 +2832,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
             ));
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
@@ -2875,7 +2840,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::RemoveFromUnvalidated(ConsensusMessage::Notarization(_))
             ));
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Finally, changeset should be empty.
             assert!(validator
@@ -2943,7 +2908,7 @@ pub mod test {
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
             ));
             assert_eq!(changeset.len(), 1);
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Next run does not consider the extra Finalization.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -3111,7 +3076,7 @@ pub mod test {
                     ChangeAction::MoveToValidated(notarization.into_message())
                 ]
             );
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
         })
     }
 }

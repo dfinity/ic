@@ -174,7 +174,7 @@ fn test_parse() {
             duration: nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
             },
-            neurons_fund_investment_icp: nervous_system_pb::Tokens { e8s: Some(10 * E8) },
+            neurons_fund_investment_icp: None,
             neurons_fund_participation: Some(true),
         },
         nns_proposal: NnsProposal {
@@ -460,7 +460,7 @@ fn test_convert_to_create_service_nervous_system() {
             duration: Some(nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
             }),
-            neurons_fund_investment_icp: Some(nervous_system_pb::Tokens { e8s: Some(10 * E8) }),
+            neurons_fund_investment_icp: None,
 
             neurons_fund_participation: Some(true),
         }

@@ -55,7 +55,7 @@ use slog::{info, Logger};
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
-const APP_NODES: i32 = 1;
+const APP_NODES: usize = 1;
 
 const MESSAGE_IN_THE_CANISTER_TO_BE_MIGRATED: &str =
     "Message in the canister to be migrated from source subnet to the destination subnet";
@@ -75,14 +75,14 @@ pub fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(APP_NODES.try_into().unwrap()),
+                .add_nodes(APP_NODES),
         )
         // Destination Subnet
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .halted()
-                .add_nodes(APP_NODES.try_into().unwrap()),
+                .add_nodes(APP_NODES),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -96,7 +96,7 @@ pub fn subnet_splitting_test(env: TestEnv) {
     //
     let logger = env.logger();
 
-    let master_version = env
+    let initial_replica_version = env
         .get_initial_replica_version()
         .expect("Failed to get master version");
 
@@ -130,7 +130,7 @@ pub fn subnet_splitting_test(env: TestEnv) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: get_nns_node(&env.topology_snapshot()).get_public_url(),
-        replica_version: Some(master_version.clone()),
+        replica_version: Some(initial_replica_version.clone()),
         key_file: Some(
             env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
                 .join(SSH_USERNAME),
@@ -195,14 +195,14 @@ pub fn subnet_splitting_test(env: TestEnv) {
     verify_source_subnet(
         &topology_snapshot,
         source_subnet.subnet_id,
-        &master_version,
+        &initial_replica_version,
         canister_id_to_stay_in_source_subnet,
         &logger,
     );
     verify_destination_subnet(
         &topology_snapshot,
         destination_subnet.subnet_id,
-        &master_version,
+        &initial_replica_version,
         canister_id_to_be_migrated,
         &logger,
     );
@@ -234,6 +234,7 @@ fn prepare_source_subnet(
         &download_node.get_public_url(),
         download_node.effective_canister_id(),
         MESSAGE_IN_THE_CANISTER_TO_STAY_IN_SOURCE_SUBNET,
+        logger,
     );
     assert!(can_read_msg(
         logger,
@@ -246,6 +247,7 @@ fn prepare_source_subnet(
         &download_node.get_public_url(),
         download_node.get_last_canister_id_in_allocation_ranges(),
         MESSAGE_IN_THE_CANISTER_TO_BE_MIGRATED,
+        logger,
     );
     assert!(can_read_msg(
         logger,

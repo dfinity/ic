@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::metrics::{StateSyncManagerHandlerMetrics, CHUNK_HANDLER_LABEL};
+use crate::metrics::{OngoingStateSyncMetrics, StateSyncManagerHandlerMetrics};
 use crate::ongoing::DownloadChunkError;
 use axum::{
     body::Bytes,
@@ -8,7 +8,7 @@ use axum::{
     http::{Request, Response, StatusCode},
 };
 use bytes::BytesMut;
-use ic_interfaces::state_sync_client::StateSyncClient;
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
 use ic_types::{
@@ -46,12 +46,6 @@ pub(crate) async fn state_sync_chunk_handler(
     State(state): State<Arc<StateSyncChunkHandler>>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode> {
-    let _timer = state
-        .metrics
-        .request_duration
-        .with_label_values(&[CHUNK_HANDLER_LABEL])
-        .start_timer();
-
     // Parse payload
     let pb::StateSyncChunkRequest { id, chunk_id } =
         pb::StateSyncChunkRequest::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
@@ -105,17 +99,25 @@ pub(crate) fn build_chunk_handler_request(
 pub(crate) fn parse_chunk_handler_response(
     response: Response<Bytes>,
     chunk_id: ChunkId,
+    metrics: OngoingStateSyncMetrics,
 ) -> Result<ArtifactChunk, DownloadChunkError> {
     let (parts, body) = response.into_parts();
 
     match parts.status {
         StatusCode::OK => {
+            metrics
+                .chunk_size_compressed_total
+                .inc_by(body.len() as u64);
             let decompressed = zstd::bulk::decompress(&body, MAX_CHUNK_SIZE).map_err(|e| {
                 DownloadChunkError::RequestError {
                     chunk_id,
                     err: e.to_string(),
                 }
             })?;
+
+            metrics
+                .chunk_size_decompressed_total
+                .inc_by(decompressed.len() as u64);
 
             let pb =
                 pb::StateSyncChunkResponse::decode(Bytes::from(decompressed)).map_err(|e| {

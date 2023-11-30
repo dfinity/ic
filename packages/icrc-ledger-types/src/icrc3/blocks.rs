@@ -2,11 +2,12 @@ use crate::icrc3::archive::ArchivedRange;
 use crate::icrc3::archive::QueryBlockArchiveFn;
 use crate::{icrc::generic_value::Value, icrc1::transfer::BlockIndex};
 use candid::{CandidType, Deserialize, Nat};
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 
 pub type GenericBlock = Value;
 
-#[derive(Debug, CandidType, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GetBlocksResponse {
     pub first_index: BlockIndex,
     pub chain_length: u64,
@@ -14,13 +15,13 @@ pub struct GetBlocksResponse {
     pub blocks: Vec<GenericBlock>,
     pub archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>>,
 }
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetBlocksRequest {
     pub start: BlockIndex,
     pub length: Nat,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockRange {
     pub blocks: Vec<GenericBlock>,
 }
@@ -47,7 +48,7 @@ impl GetBlocksRequest {
     }
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Serialize, Deserialize)]
 pub struct DataCertificate {
     pub certificate: Option<serde_bytes::ByteBuf>,
     pub hash_tree: serde_bytes::ByteBuf,

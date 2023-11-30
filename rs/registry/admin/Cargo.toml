@@ -69,12 +69,12 @@ serde_json = { workspace = true }
 serde-bytes-repr = "0.1.5"
 tokio = { workspace = true }
 candid = { workspace = true }
-reqwest = { version = "0.11.1", features = ["native-tls"] }
 tempfile = "3.1.0"
 url = { version = "2.1.1", features = ["serde"] }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 chrono = { workspace = true }
+indexmap = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.4.0"

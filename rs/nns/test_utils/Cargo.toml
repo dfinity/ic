@@ -25,6 +25,9 @@ ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -58,6 +61,7 @@ num-traits = "0.2.14"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prometheus-parse = "0.2.4"
 prost = { workspace = true }
+rand = { version = "0.8.4" }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }

@@ -24,7 +24,7 @@ lazy_static = "1.4.0"
 num-traits = "0.2.12"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
-prost-derive = "0.11"
+prost-derive = "0.12"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

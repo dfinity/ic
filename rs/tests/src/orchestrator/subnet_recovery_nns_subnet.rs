@@ -93,6 +93,7 @@ pub fn test(env: TestEnv) {
         &upload_node.get_public_url(),
         upload_node.effective_canister_id(),
         msg,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,
@@ -228,6 +229,7 @@ pub fn test(env: TestEnv) {
         &upload_node.get_public_url(),
         upload_node.effective_canister_id(),
         new_msg,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,

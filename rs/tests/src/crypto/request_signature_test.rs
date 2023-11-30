@@ -456,6 +456,7 @@ pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signa
         canister_id: Principal::from_slice(&content.canister_id),
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
+        nonce: None,
     };
     identity.sign(&msg).unwrap()
 }

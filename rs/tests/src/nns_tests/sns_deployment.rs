@@ -920,6 +920,7 @@ impl Identity for SaleParticipant {
         Ok(Signature {
             signature: Some(signature.as_ref().to_vec()),
             public_key: self.public_key(),
+            delegations: None,
         })
     }
 }
@@ -1367,19 +1368,19 @@ async fn create_one_sale_participant(
                 SNS_ENDPOINT_RETRY_BACKOFF,
                 None,
             )
+    }
+    .await
+    .check_response(|response| {
+        let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
+        if response_amount >= contribution {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
         }
-        .await
-        .check_response(|response| {
-            let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
-            if response_amount >= contribution {
-                Ok(())
-            } else {
-                Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
-            }
-        })
-        .with_workflow_position(4)
-        .push_outcome_display_error(outcome)
-        .result()?;
+    })
+    .with_workflow_position(4)
+    .push_outcome_display_error(outcome)
+    .result()?;
 
     // 5. Check that the ticket has been deleted via swap.get_open_ticket
     {
@@ -1397,8 +1398,8 @@ async fn create_one_sale_participant(
             .ticket()
             .map_err(|err| {
                 // Convert the error code to a string for easier debugging
-                new_sale_ticket_response::err::Type::from_i32(err)
-                    .unwrap_or_else(|| panic!("{err} could not be converted to error type"))
+                new_sale_ticket_response::err::Type::try_from(err)
+                    .unwrap_or_else(|_| panic!("{err} could not be converted to error type"))
             })
             .map_err(|err| anyhow::anyhow!("get_open_ticket failed: {err:?}"))?;
         if response.is_some() {

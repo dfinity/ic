@@ -188,7 +188,9 @@ fn main() {
         .unwrap();
 
     // Upload config image
-    let image_id = farm.upload_file(&config_path, filename).unwrap();
+    let image_id = farm
+        .upload_file(&group_name, &config_path, filename)
+        .unwrap();
 
     // Attach image
     farm.attach_disk_images(&group_name, vm_name, "usb-storage", vec![image_id])
@@ -208,7 +210,6 @@ fn subnet_to_subnet_config(
         0,
         nodes,
         Some(version),
-        subnet.ingress_bytes_per_block_soft_cap,
         subnet.max_ingress_bytes_per_message,
         subnet.max_ingress_messages_per_block,
         subnet.max_block_payload_size,
@@ -220,7 +221,7 @@ fn subnet_to_subnet_config(
         subnet.max_instructions_per_message,
         subnet.max_instructions_per_round,
         subnet.max_instructions_per_install_code,
-        subnet.features.map(|f| f.into()),
+        subnet.features,
         None,
         subnet.max_number_of_canisters,
         subnet.ssh_readonly_access,

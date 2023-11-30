@@ -36,6 +36,103 @@ impl<R, T: HttpRequestEnvelopeContent<HttpRequestContentType = R> + Debug> Envel
 {
 }
 
+mod request_nonce {
+    use super::*;
+    use crate::RequestValidationError::NonceTooBigError;
+    use rand::RngCore;
+
+    #[test]
+    fn should_check_request_nonce() {
+        let rng = &mut ReproducibleRng::new();
+        let verifier = default_verifier()
+            .with_root_of_trust(hard_coded_root_of_trust().public_key)
+            .build();
+        let reasonable_nonce = {
+            let random_bytes = rng.gen::<[u8; 32]>();
+            let nonce_size = rng.gen_range(0..=32);
+            random_bytes[..nonce_size].to_vec()
+        };
+        let unreasonable_nonce = {
+            let nonce_size = rng.gen_range(33..100);
+            let mut random_bytes = [0_u8; 100];
+            rng.fill_bytes(&mut random_bytes);
+            random_bytes[..nonce_size].to_vec()
+        };
+        let expected_error = Err(NonceTooBigError {
+            num_bytes: unreasonable_nonce.len(),
+            maximum: 32,
+        });
+
+        for scheme in all_authentication_schemes(rng) {
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                scheme.clone(),
+                reasonable_nonce.clone(),
+                Ok(()),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                scheme.clone(),
+                reasonable_nonce.clone(),
+                Ok(()),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_read_state(),
+                scheme.clone(),
+                reasonable_nonce.clone(),
+                Ok(()),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                scheme.clone(),
+                unreasonable_nonce.clone(),
+                expected_error.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                scheme.clone(),
+                unreasonable_nonce.clone(),
+                expected_error.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_read_state(),
+                scheme,
+                unreasonable_nonce.clone(),
+                expected_error.clone(),
+            );
+        }
+
+        fn test<ReqContent, EnvContent, Verifier>(
+            verifier: &Verifier,
+            builder: HttpRequestBuilder<EnvContent>,
+            scheme: AuthenticationScheme,
+            nonce: Vec<u8>,
+            expected_result: Result<(), RequestValidationError>,
+        ) where
+            ReqContent: HttpRequestContent,
+            EnvContent: EnvelopeContent<ReqContent>,
+            Verifier: HttpRequestVerifier<ReqContent>,
+        {
+            let builder_info = format!("{:?}", builder);
+            let request = builder
+                .with_authentication(scheme)
+                .with_ingress_expiry_at(max_ingress_expiry_at(CURRENT_TIME))
+                .with_nonce(nonce)
+                .build();
+
+            let result = verifier.validate_request(&request);
+
+            assert_eq!(expected_result, result, "Test with {builder_info} failed",);
+        }
+    }
+}
+
 mod ingress_expiry {
     use super::*;
     use crate::RequestValidationError::InvalidIngressExpiry;

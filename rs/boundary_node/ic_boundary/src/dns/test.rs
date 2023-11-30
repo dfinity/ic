@@ -1,6 +1,6 @@
 use super::*;
 
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 use anyhow::Error;
 
@@ -20,7 +20,7 @@ async fn test_resolve() -> Result<(), Error> {
     let reg = Arc::new(create_fake_registry_client(4));
     let rt = Arc::new(ArcSwapOption::empty());
     let helper = DnsResolver::new(Arc::clone(&rt));
-    let mut runner = Runner::new(Arc::clone(&rt), reg);
+    let mut runner = Runner::new(Arc::clone(&rt), reg, Duration::ZERO);
     runner.run().await?;
 
     // Check that resolved node's IPs match expected ones

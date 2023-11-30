@@ -13,11 +13,11 @@ clap = { workspace = true }
 chrono = { workspace = true }
 fs_extra = "1.2.0"
 hex = "0.4"
-ic-crypto = { path = "../crypto" }
 ic-nns-common = { path = "../nns/common" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-node-key-validation = { path = "../crypto/node_key_validation" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -32,13 +32,14 @@ ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-types = { path = "../types/types" }
 json5 = "0.4.1"
 maplit = "1.0.2"
 prost = { workspace = true }
 rand = "0.8"
-reqwest = { version = "0.11.1", features = ["blocking", "native-tls"] }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { version = "2.5.2", features = [

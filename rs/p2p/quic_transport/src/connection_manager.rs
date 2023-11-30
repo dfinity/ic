@@ -36,7 +36,7 @@ use std::{
     time::Duration,
 };
 
-use axum::Router;
+use axum::{middleware::from_fn_with_state, Router};
 use either::Either;
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
@@ -47,7 +47,7 @@ use ic_crypto_tls_interfaces::{
 use ic_crypto_utils_tls::{
     node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
 };
-use ic_icos_sev_interfaces::ValidateAttestedStream;
+use ic_icos_sev::ValidateAttestedStream;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -68,6 +68,7 @@ use tokio_util::time::DelayQueue;
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
+    utils::collect_metrics,
     ConnId,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
@@ -191,7 +192,7 @@ impl std::fmt::Display for ConnectionEstablishError {
 pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-    rt: Handle,
+    rt: &Handle,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
@@ -204,6 +205,9 @@ pub(crate) fn start_connection_manager(
     let topology = watcher.borrow().clone();
 
     let metrics = QuicTransportMetrics::new(metrics_registry);
+
+    let router = router.route_layer(from_fn_with_state(metrics.clone(), collect_metrics));
+
     // We use a random reset key here. The downside of this is that
     // during a crash and restart the peer will not recognize our
     // CONNECTION_RESETS.Not recognizing the reset might lead

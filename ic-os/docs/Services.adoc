@@ -38,6 +38,7 @@ These lists may be out-of-date. For the source of truth, see each OSes `rootfs/D
 |guestos                        |service|Enabled|No      |Start and stop virtual machine
 |filebeat                       |service|Enabled|No      |Logging daemon
 |libvirtd                       |service|Enabled|Yes     |Virtualization daemon
+|metrics-proxy                  |service|Enabled|No      |Prometheus metrics proxy
 |monitor-guestos                |service|Enabled|No      |Monitor virtual machine service
 |monitor-guestos                |timer  |Enabled|No      |Monitor virtual machine interval
 |nftables                       |service|Enabled|Yes     |nftables firewall

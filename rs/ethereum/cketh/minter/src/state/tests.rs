@@ -64,7 +64,8 @@ fn a_state() -> State {
 mod mint_transaction {
     use crate::eth_logs::{EventSourceError, ReceivedEthEvent};
     use crate::lifecycle::init::InitArg;
-    use crate::numeric::{wei_from_milli_ether, BlockNumber, LedgerMintIndex, LogIndex, Wei};
+    use crate::numeric::{wei_from_milli_ether, LedgerMintIndex, LogIndex};
+    use crate::state::tests::received_eth_event;
     use crate::state::{MintedEvent, State};
 
     #[test]
@@ -72,7 +73,7 @@ mod mint_transaction {
         let mut state = dummy_state();
         let event = received_eth_event();
 
-        state.record_event_to_mint(event.clone());
+        state.record_event_to_mint(&event);
 
         assert!(state.events_to_mint.contains_key(&event.source()));
 
@@ -106,11 +107,11 @@ mod mint_transaction {
 
         assert_ne!(event_1, event_2);
 
-        state.record_event_to_mint(event_1.clone());
+        state.record_event_to_mint(&event_1);
 
         assert!(state.events_to_mint.contains_key(&event_1.source()));
 
-        state.record_event_to_mint(event_2.clone());
+        state.record_event_to_mint(&event_2);
 
         assert!(state.events_to_mint.contains_key(&event_2.source()));
 
@@ -133,7 +134,7 @@ mod mint_transaction {
         let mut state = dummy_state();
         let event = received_eth_event();
 
-        state.record_event_to_mint(event.clone());
+        state.record_event_to_mint(&event);
 
         assert!(state.events_to_mint.contains_key(&event.source()));
 
@@ -186,22 +187,22 @@ mod mint_transaction {
         })
         .expect("init args should be valid")
     }
+}
 
-    fn received_eth_event() -> ReceivedEthEvent {
-        ReceivedEthEvent {
-            transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
-                .parse()
-                .unwrap(),
-            block_number: BlockNumber::new(3960623u128),
-            log_index: LogIndex::from(29u8),
-            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
-                .parse()
-                .unwrap(),
-            value: Wei::from(10_000_000_000_000_000_u128),
-            principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
-                .parse()
-                .unwrap(),
-        }
+fn received_eth_event() -> ReceivedEthEvent {
+    ReceivedEthEvent {
+        transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(3960623u128),
+        log_index: LogIndex::from(29u8),
+        from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
+            .parse()
+            .unwrap(),
+        value: Wei::from(10_000_000_000_000_000_u128),
+        principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+            .parse()
+            .unwrap(),
     }
 }
 
@@ -548,10 +549,10 @@ proptest! {
 fn state_equivalence() {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::map::MultiKeyMap;
-    use crate::state::MintedEvent;
-    use crate::transactions::{
+    use crate::state::transactions::{
         EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
     };
+    use crate::state::MintedEvent;
     use crate::tx::{Eip1559Signature, Eip1559TransactionRequest};
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
     use maplit::btreemap;
@@ -586,6 +587,7 @@ fn state_equivalence() {
         ledger_burn_index: LedgerBurnIndex::new(10),
         from: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
         from_subaccount: None,
+        created_at: Some(1699527697000000000),
     };
     let withdrawal_request2 = EthWithdrawalRequest {
         ledger_burn_index: LedgerBurnIndex::new(20),
@@ -684,10 +686,14 @@ fn state_equivalence() {
                     .parse()
                     .unwrap(),
                 from_subaccount: None,
+                created_at: Some(1699527697000000000),
             }
         },
         reimbursement_requests: btreemap! {
             LedgerBurnIndex::new(3) => ReimbursementRequest {
+                transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
+                .parse()
+                .unwrap()),
                 withdrawal_id: LedgerBurnIndex::new(3),
                 reimbursed_amount: Wei::new(100_000_000_000),
                 to: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae".parse().unwrap(),
@@ -696,6 +702,7 @@ fn state_equivalence() {
         },
         reimbursed: btreemap! {
             LedgerBurnIndex::new(6) => Reimbursed {
+                transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d".parse().unwrap()),
                 reimbursed_in_block: LedgerMintIndex::new(150),
                 reimbursed_amount: Wei::new(10_000_000_000_000),
                 withdrawal_id: LedgerBurnIndex::new(6),
@@ -717,6 +724,7 @@ fn state_equivalence() {
         }),
         minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
         ethereum_block_height: BlockTag::Finalized,
+        first_scraped_block_number: BlockNumber::new(1_000_001),
         last_scraped_block_number: BlockNumber::new(1_000_000),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
@@ -749,6 +757,8 @@ fn state_equivalence() {
         retrieve_eth_principals: Default::default(),
         active_tasks: Default::default(),
         http_request_counter: 100,
+        eth_balance: Default::default(),
+        skipped_blocks: Default::default(),
     };
 
     assert_eq!(
@@ -760,6 +770,15 @@ fn state_equivalence() {
             ..state.clone()
         }),
         "changing only computed/transient fields should result in an equivalent state",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            first_scraped_block_number: BlockNumber::new(100_000_000_000),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
     );
 
     assert_ne!(
@@ -943,4 +962,240 @@ fn state_equivalence() {
         }),
         "changing the next nonce should break equivalence"
     );
+}
+
+mod eth_balance {
+    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::lifecycle::EthereumNetwork;
+    use crate::numeric::{
+        BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+    };
+    use crate::state::audit::{apply_state_transition, EventType};
+    use crate::state::tests::{a_state, received_eth_event};
+    use crate::state::transactions::EthWithdrawalRequest;
+    use crate::state::{EthBalance, State};
+    use crate::tx::{
+        Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+        TransactionPrice,
+    };
+
+    #[test]
+    fn should_add_deposit_to_eth_balance() {
+        let mut state = a_state();
+        let balance_before = state.eth_balance.clone();
+
+        let deposit_event = received_eth_event();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedDeposit(deposit_event.clone()),
+        );
+        let balance_after = state.eth_balance.clone();
+
+        assert_eq!(
+            balance_after,
+            EthBalance {
+                eth_balance: deposit_event.value,
+                ..balance_before
+            }
+        )
+    }
+
+    #[test]
+    fn should_ignore_rejected_deposit() {
+        let mut state = a_state();
+        let balance_before = state.eth_balance.clone();
+
+        let deposit_event = received_eth_event();
+        apply_state_transition(
+            &mut state,
+            &EventType::InvalidDeposit {
+                event_source: deposit_event.source(),
+                reason: "invalid principal".to_string(),
+            },
+        );
+        let balance_after = state.eth_balance.clone();
+
+        assert_eq!(balance_after, balance_before)
+    }
+
+    #[test]
+    fn should_update_after_failed_withdrawal() {
+        let mut state = a_state();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+
+        let balance_before = state.eth_balance.clone();
+        let receipt = WithdrawalFlow {
+            withdrawal_amount: Wei::new(1_000_000_000_000),
+            tx_status: TransactionStatus::Failure,
+            ..Default::default()
+        }
+        .apply(&mut state);
+        let balance_after = state.eth_balance.clone();
+
+        assert_eq!(
+            balance_after,
+            EthBalance {
+                eth_balance: balance_before
+                    .eth_balance
+                    .checked_sub(receipt.effective_transaction_fee())
+                    .unwrap(),
+                total_effective_tx_fees: balance_before
+                    .total_effective_tx_fees
+                    .checked_add(receipt.effective_transaction_fee())
+                    .unwrap(),
+                ..balance_before
+            }
+        )
+    }
+
+    #[test]
+    fn should_update_after_successful_withdrawal() {
+        let mut state = a_state();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+
+        let balance_before = state.eth_balance.clone();
+        //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
+        let transaction_price = TransactionPrice {
+            gas_limit: GasAmount::from(21_000_u32),
+            max_fee_per_gas: WeiPerGas::from(7_828_365_474_u64),
+            max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+        };
+        let _receipt = WithdrawalFlow {
+            withdrawal_amount: Wei::new(10_000_000_000_000_000),
+            tx_fee: transaction_price.clone(),
+            effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
+            tx_status: TransactionStatus::Success,
+            ..Default::default()
+        }
+        .apply(&mut state);
+        let balance_after = state.eth_balance.clone();
+
+        assert_eq!(
+            balance_after,
+            EthBalance {
+                eth_balance: balance_before
+                    .eth_balance
+                    .checked_sub(Wei::from(9_934_054_275_043_000_u64))
+                    .unwrap(),
+                total_effective_tx_fees: balance_before
+                    .total_effective_tx_fees
+                    .checked_add(Wei::from(98_449_949_997_000_u64))
+                    .unwrap(),
+                total_unspent_tx_fees: balance_before
+                    .total_unspent_tx_fees
+                    .checked_add(Wei::from(65_945_724_957_000_u64))
+                    .unwrap()
+            }
+        );
+    }
+
+    struct WithdrawalFlow {
+        ledger_burn_index: LedgerBurnIndex,
+        nonce: TransactionNonce,
+        withdrawal_amount: Wei,
+        tx_fee: TransactionPrice,
+        effective_gas_price: WeiPerGas,
+        tx_status: TransactionStatus,
+    }
+
+    impl Default for WithdrawalFlow {
+        fn default() -> Self {
+            Self {
+                ledger_burn_index: LedgerBurnIndex::new(0),
+                nonce: TransactionNonce::ZERO,
+                withdrawal_amount: Wei::ONE,
+                tx_fee: TransactionPrice {
+                    gas_limit: GasAmount::from(21_000_u32),
+                    max_fee_per_gas: WeiPerGas::ONE,
+                    max_priority_fee_per_gas: WeiPerGas::ONE,
+                },
+                effective_gas_price: WeiPerGas::ONE,
+                tx_status: TransactionStatus::Success,
+            }
+        }
+    }
+
+    impl WithdrawalFlow {
+        fn apply(self, state: &mut State) -> TransactionReceipt {
+            let withdrawal_request = EthWithdrawalRequest {
+                withdrawal_amount: self.withdrawal_amount,
+                destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                    .parse()
+                    .unwrap(),
+                ledger_burn_index: self.ledger_burn_index,
+                from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                    .parse()
+                    .unwrap(),
+                from_subaccount: None,
+                created_at: Some(1699527697000000000),
+            };
+            apply_state_transition(
+                state,
+                &EventType::AcceptedEthWithdrawalRequest(withdrawal_request.clone()),
+            );
+
+            let max_fee = self.tx_fee.max_transaction_fee();
+            let transaction = Eip1559TransactionRequest {
+                chain_id: EthereumNetwork::Sepolia.chain_id(),
+                nonce: self.nonce,
+                max_priority_fee_per_gas: self.tx_fee.max_priority_fee_per_gas,
+                max_fee_per_gas: self.tx_fee.max_fee_per_gas,
+                gas_limit: self.tx_fee.gas_limit,
+                destination: withdrawal_request.destination,
+                amount: withdrawal_request
+                    .withdrawal_amount
+                    .checked_sub(max_fee)
+                    .unwrap(),
+                data: vec![],
+                access_list: Default::default(),
+            };
+            apply_state_transition(
+                state,
+                &EventType::CreatedTransaction {
+                    withdrawal_id: self.ledger_burn_index,
+                    transaction: transaction.clone(),
+                },
+            );
+
+            let dummy_signature = Eip1559Signature {
+                signature_y_parity: false,
+                r: Default::default(),
+                s: Default::default(),
+            };
+            let signed_tx =
+                SignedEip1559TransactionRequest::from((transaction.clone(), dummy_signature));
+            apply_state_transition(
+                state,
+                &EventType::SignedTransaction {
+                    withdrawal_id: self.ledger_burn_index,
+                    transaction: signed_tx.clone(),
+                },
+            );
+
+            let tx_receipt = TransactionReceipt {
+                block_hash: "0xce67a85c9fb8bc50213815c32814c159fd75160acf7cb8631e8e7b7cf7f1d472"
+                    .parse()
+                    .unwrap(),
+                block_number: BlockNumber::new(4190269),
+                effective_gas_price: self.effective_gas_price,
+                gas_used: signed_tx.transaction().gas_limit,
+                status: self.tx_status,
+                transaction_hash: signed_tx.hash(),
+            };
+            apply_state_transition(
+                state,
+                &EventType::FinalizedTransaction {
+                    withdrawal_id: self.ledger_burn_index,
+                    transaction_receipt: tx_receipt.clone(),
+                },
+            );
+            tx_receipt
+        }
+    }
 }

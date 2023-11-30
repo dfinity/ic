@@ -277,7 +277,7 @@ impl From<NodeConfiguration> for pbNodeRecord {
         pb_node_record.node_operator_id = node_configuration
             .node_operator_principal_id
             .map(|id| id.to_vec())
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
 
         pb_node_record
     }

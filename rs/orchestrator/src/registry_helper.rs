@@ -6,7 +6,6 @@ use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::firewall::FirewallRegistry;
 use ic_registry_client_helpers::hostos_version::HostosRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
@@ -14,6 +13,7 @@ use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_keys::FirewallRulesScope;
+use ic_types::consensus::CatchUpPackage;
 use ic_types::hostos_version::HostosVersion;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
@@ -126,8 +126,8 @@ impl RegistryHelper {
         &self,
         version: RegistryVersion,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<pb::CatchUpPackage> {
-        make_registry_cup(&*self.registry_client, subnet_id, Some(&self.logger))
+    ) -> OrchestratorResult<CatchUpPackage> {
+        make_registry_cup(&*self.registry_client, subnet_id, &self.logger)
             .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
     }
 
@@ -251,10 +251,13 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)?;
 
         node_record
-            .and_then(|v| v.hostos_version_id)
-            .map(|v| {
-                HostosVersion::try_from(v).map_err(|_| {
-                    OrchestratorError::UpgradeError("Could not parse HostOS version".to_string())
+            .and_then(|node_record| node_record.hostos_version_id)
+            .map(|node_record| {
+                HostosVersion::try_from(node_record).map_err(|err| {
+                    OrchestratorError::UpgradeError(format!(
+                        "Could not parse HostOS version: {}",
+                        err
+                    ))
                 })
             })
             .transpose()

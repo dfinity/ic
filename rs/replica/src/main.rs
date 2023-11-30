@@ -178,9 +178,10 @@ fn main() -> io::Result<()> {
     #[cfg(target_os = "linux")]
     metrics_registry.register(jemalloc_metrics::JemallocMetrics::new());
 
-    let cup = setup::get_catch_up_package(&replica_args, &logger)
+    let cup_proto = setup::get_catch_up_package(&replica_args, &logger);
+    let cup = cup_proto
         .as_ref()
-        .map(|c| CatchUpPackage::try_from(c).expect("deserializing CUP failed"));
+        .map(|proto| CatchUpPackage::try_from(proto).expect("deserializing CUP failed"));
 
     // Set the replica version and report as metric
     setup::set_replica_version(&replica_args, &logger);
@@ -259,7 +260,7 @@ fn main() -> io::Result<()> {
             subnet_id,
             registry,
             crypto,
-            cup,
+            cup_proto,
         )?;
 
     info!(logger, "Constructed IC stack");

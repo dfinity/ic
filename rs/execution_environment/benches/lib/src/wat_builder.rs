@@ -165,7 +165,7 @@ fn wrap_lines(prefix: &str, lines: Vec<String>, suffix: &str) -> Vec<String> {
     vec![prefix.into()]
         .into_iter()
         .chain(lines.into_iter().map(|l| format!("    {l}")))
-        .chain(vec![suffix.into()].into_iter())
+        .chain(vec![suffix.into()])
         .collect()
 }
 

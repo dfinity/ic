@@ -248,7 +248,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterContractViolation => "Canister Contract Violation",
         CanisterInvalidWasm => "Canister Invalid WASM",
         CanisterDidNotReply => "Canister Did Not Reply",
-        CanisterOutputQueueFull => "Canister Output Queue Full",
+        CanisterQueueFull => "Canister Queue Full",
         CanisterQueueNotEmpty => "Canister Queues Not Empty",
         CanisterOutOfMemory => "Canister Out Of Memory",
         CanisterStopped => "Canister Stopped",
@@ -287,5 +287,6 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         ReservedCyclesLimitExceededInMemoryAllocation => "Canister cannot increase memory allocation due to its reserved cycles limit",
         ReservedCyclesLimitExceededInMemoryGrow => "Canister cannot grow memory due to its reserved cycles limit",
         InsufficientCyclesInMessageMemoryGrow => "Canister does not have enough cycles to grow message memory",
+        StopCanisterRequestTimeout => "Stop canister request timed out",
     }
 }

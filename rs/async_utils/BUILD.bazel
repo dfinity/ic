@@ -27,7 +27,7 @@ rust_test(
     name = "async_utils_test",
     crate = ":async_utils",
     deps = [
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 

@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::sync::Arc;
 
 use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
@@ -36,7 +37,7 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 #[test]
 fn test_wasmtime_system_api() {
-    let engine = Engine::new(&WasmtimeEmbedder::initial_wasmtime_config(
+    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(
         &EmbeddersConfig::default(),
     ))
     .expect("Failed to initialize Wasmtime engine");
@@ -77,7 +78,7 @@ fn test_wasmtime_system_api() {
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Arc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
     let mut store = Store::new(
@@ -197,7 +198,7 @@ fn test_initial_wasmtime_config() {
             "function_references",
             "https://github.com/WebAssembly/function-references/",
             "(module (type $t (func (param i32))) (func $fn (param $f (ref $t))))",
-            "function references required",
+            "heap types not supported without the gc feature",
         ),
         // Memory control
         // GC

@@ -15,23 +15,24 @@ use ic_consensus_utils::{
     pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
     certification::Verifier,
     consensus_pool::{ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool},
     messaging::MessageRouting,
+    p2p::consensus::{MutablePool, UnvalidatedArtifact},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::types::v1 as pb;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
         certification::{Certification, CertificationShare},
-        Block, CatchUpPackage, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable,
-        HasBlockHash, HasCommittee,
+        Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
+        HasCommittee,
     },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
@@ -187,10 +188,10 @@ impl ReplayValidator {
 
     /// Return a new consensus pool in a temp directory. Validated artifacts of the given pool are inserted as
     /// unvalidated artifacts into the new pool.
-    pub fn get_new_unvalidated(
+    fn get_new_unvalidated(
         &self,
         consensus_pool: &dyn ConsensusPool,
-        cup: CatchUpPackage,
+        cup: pb::CatchUpPackage,
     ) -> ConsensusPoolImpl {
         let tmp_dir = tempfile::Builder::new()
             .prefix("replay_artifact_pool_")
@@ -208,7 +209,7 @@ impl ReplayValidator {
         let artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool);
 
         // This creates a new pool with just the genesis CUP.
-        let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let mut pool = ConsensusPoolImpl::new(
             self.replica_cfg.node_id,
             self.replica_cfg.subnet_id,
             cup,
@@ -288,7 +289,6 @@ impl ReplayValidator {
         target_height: Height,
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
         let validator = self.get_validator();
-        let time = self.get_timesource();
 
         let mut invalid_artifacts = Vec::new();
 
@@ -328,7 +328,7 @@ impl ReplayValidator {
             if changes.is_empty() {
                 break;
             } else {
-                pool.apply_changes(time.as_ref(), changes);
+                pool.apply_changes(changes);
             }
         }
 
@@ -350,10 +350,10 @@ impl ReplayValidator {
 
     /// Validate the given consensus pool by moving its artifacts to the unvalidated section of a
     /// temp pool, and doing validation there.
-    pub fn validate_in_tmp_pool(
+    pub(crate) fn validate_in_tmp_pool(
         &self,
         consensus_pool: &dyn ConsensusPool,
-        cup: CatchUpPackage,
+        cup: pb::CatchUpPackage,
         target_height: Height,
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
         let mut pool = self.get_new_unvalidated(consensus_pool, cup);

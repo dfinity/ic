@@ -453,6 +453,23 @@ impl StateLayout {
         Ok(())
     }
 
+    /// Mark files (but not dirs) in all checkpoints readonly.
+    pub fn mark_checkpoint_files_readonly(
+        &self,
+        thread_pool: &mut Option<scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        for height in self.checkpoint_heights()? {
+            let path = self.checkpoint(height)?.raw_path().to_path_buf();
+            sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
+                .map_err(|err| LayoutError::IoError {
+                    path,
+                    message: format!("Could not sync and mark readonly checkpoint {}", height),
+                    io_err: err,
+                })?;
+        }
+        Ok(())
+    }
+
     /// Create tip handler. Could only be called once as TipHandler is an exclusive owner of the
     /// tip folder.
     pub fn capture_tip_handler(&self) -> TipHandler {
@@ -1901,6 +1918,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
 
 impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits {
     type Error = ProxyDecodeError;
+
     fn try_from(value: pb_canister_state_bits::ExecutionStateBits) -> Result<Self, Self::Error> {
         let mut globals = Vec::with_capacity(value.exported_globals.len());
         for g in value.exported_globals.into_iter() {
@@ -1928,7 +1946,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
                 .unwrap_or_default(),
             binary_hash,
             next_scheduled_method: match value.next_scheduled_method {
-                Some(method_id) => pb_canister_state_bits::NextScheduledMethod::from_i32(method_id)
+                Some(method_id) => pb_canister_state_bits::NextScheduledMethod::try_from(method_id)
                     .unwrap_or_default()
                     .into(),
                 None => NextScheduledMethod::default(),

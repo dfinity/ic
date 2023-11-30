@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 # See rs/nervous_system/feature_test.md
@@ -27,7 +27,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:libsecp256k1",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:sha3",
     "@crate_index//:simple_asn1",
@@ -85,7 +85,7 @@ cargo_build_script(
 rust_library(
     name = "gtc",
     srcs = glob([
-        "src/**",
+        "src/**/*.rs",
     ]),
     aliases = ALIASES,
     crate_name = "ic_nns_gtc",
@@ -97,7 +97,7 @@ rust_library(
 rust_library(
     name = "gtc--test_feature",
     srcs = glob([
-        "src/**",
+        "src/**/*.rs",
     ]),
     aliases = ALIASES,
     crate_features = ["test"],
@@ -171,7 +171,7 @@ rust_test_suite(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["src/gen/**"]) + [
+    data = glob(["src/gen/**/*.rs"]) + [
         ":protos",
         "//rs/nns/common:protos",
         "//rs/types/base_types:protos",

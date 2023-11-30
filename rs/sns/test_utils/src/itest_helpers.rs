@@ -264,9 +264,9 @@ pub fn populate_canister_ids(
     index_canister_id: CanisterId,
     sns_canister_init_payloads: &mut SnsCanisterInitPayloads,
 ) {
-    let root_canister_id = Some(PrincipalId::from(root_canister_id));
-    let governance_canister_id = Some(PrincipalId::from(governance_canister_id));
-    let ledger_canister_id = Some(PrincipalId::from(ledger_canister_id));
+    let root_canister_id = PrincipalId::from(root_canister_id);
+    let governance_canister_id = PrincipalId::from(governance_canister_id);
+    let ledger_canister_id = PrincipalId::from(ledger_canister_id);
     let swap_canister_id = Some(PrincipalId::from(swap_canister_id));
     let index_canister_id = Some(PrincipalId::from(index_canister_id));
 
@@ -274,10 +274,10 @@ pub fn populate_canister_ids(
     {
         let root = &mut sns_canister_init_payloads.root;
         if root.governance_canister_id.is_none() {
-            root.governance_canister_id = governance_canister_id;
+            root.governance_canister_id = Some(governance_canister_id);
         }
         if root.ledger_canister_id.is_none() {
-            root.ledger_canister_id = ledger_canister_id;
+            root.ledger_canister_id = Some(ledger_canister_id);
         }
         if root.swap_canister_id.is_none() {
             root.swap_canister_id = swap_canister_id;
@@ -290,8 +290,8 @@ pub fn populate_canister_ids(
     // Governance canister_init args.
     {
         let governance = &mut sns_canister_init_payloads.governance;
-        governance.ledger_canister_id = ledger_canister_id;
-        governance.root_canister_id = root_canister_id;
+        governance.ledger_canister_id = Some(ledger_canister_id);
+        governance.root_canister_id = Some(root_canister_id);
         governance.swap_canister_id = swap_canister_id;
     }
 
@@ -299,10 +299,10 @@ pub fn populate_canister_ids(
     {
         if let LedgerArgument::Init(ref mut ledger) = sns_canister_init_payloads.ledger {
             ledger.minting_account = Account {
-                owner: governance_canister_id.unwrap().0,
+                owner: governance_canister_id.0,
                 subaccount: None,
             };
-            ledger.archive_options.controller_id = root_canister_id.unwrap();
+            ledger.archive_options.controller_id = root_canister_id;
         } else {
             panic!("bug: expected Init got Upgrade");
         }
@@ -311,9 +311,9 @@ pub fn populate_canister_ids(
     // Swap
     {
         let swap = &mut sns_canister_init_payloads.swap;
-        swap.sns_root_canister_id = root_canister_id.unwrap().to_string();
-        swap.sns_governance_canister_id = governance_canister_id.unwrap().to_string();
-        swap.sns_ledger_canister_id = ledger_canister_id.unwrap().to_string();
+        swap.sns_root_canister_id = root_canister_id.to_string();
+        swap.sns_governance_canister_id = governance_canister_id.to_string();
+        swap.sns_ledger_canister_id = ledger_canister_id.to_string();
 
         swap.nns_governance_canister_id = NNS_GOVERNANCE_CANISTER_ID.to_string();
         swap.icp_ledger_canister_id = ICP_LEDGER_CANISTER_ID.to_string();

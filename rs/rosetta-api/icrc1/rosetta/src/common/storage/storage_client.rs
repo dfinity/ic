@@ -152,9 +152,9 @@ impl StorageClient {
                 spender_principal BLOB,
                 spender_subaccount BLOB,
                 memo BLOB,
-                amount INTEGER,
-                expected_allowance INTEGER,
-                fee INTEGER,
+                amount TEXT,
+                expected_allowance TEXT,
+                fee TEXT,
                 transaction_created_at_time INTEGER,
                 approval_expires_at INTEGER,
                 PRIMARY KEY(block_idx),
@@ -179,7 +179,7 @@ mod tests {
     use crate::{common::utils::unit_test_utils::create_tmp_dir, Metadata};
     use ic_icrc1::Block;
     use ic_icrc1_test_utils::{
-        arb_small_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
+        arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
     };
     use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
@@ -196,7 +196,7 @@ mod tests {
 
     proptest! {
        #[test]
-       fn test_read_and_write_blocks(block in blocks_strategy(arb_small_amount()),index in (0..10000u64)){
+       fn test_read_and_write_blocks(block in blocks_strategy(arb_amount()),index in (0..10000u64)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let rosetta_block = RosettaBlock::from_icrc_ledger_block(block,index).unwrap();
            storage_client_memory.store_blocks(vec![rosetta_block.clone()]).unwrap();
@@ -209,10 +209,9 @@ mod tests {
        #[test]
        fn test_read_and_write_transactions(blockchain in valid_blockchain_with_gaps_strategy(1000)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
-           let mut rosetta_blocks = vec![];
-           for (index,block) in blockchain.into_iter().enumerate(){
-               rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
-           }
+           let rosetta_blocks: Vec<_> = blockchain.0.iter().zip(blockchain.1.iter())
+               .map(|(block, index)| RosettaBlock::from_icrc_ledger_block(block.clone(), *index as u64).unwrap())
+               .collect();
            storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
            for block in rosetta_blocks.clone(){
                let tx0 = Block::decode(block.encoded_block).unwrap().transaction;
@@ -225,11 +224,12 @@ mod tests {
            }
 
            if !rosetta_blocks.is_empty() {
+            let last_block = &rosetta_blocks[rosetta_blocks.len().saturating_sub(1)];
            // If the index is out of range the function should return `None`.
-           assert!(storage_client_memory.get_transaction_at_idx(rosetta_blocks[rosetta_blocks.len().saturating_sub(1)].index+1).unwrap().is_none());
+           assert!(storage_client_memory.get_transaction_at_idx(last_block.index+1).unwrap().is_none());
 
            // Duplicate the last transaction generated
-           let duplicate_tx_block = RosettaBlock::from_icrc_ledger_block(Block::decode(rosetta_blocks[rosetta_blocks.len().saturating_sub(1)].encoded_block.clone()).unwrap(),rosetta_blocks.len() as u64).unwrap();
+           let duplicate_tx_block = RosettaBlock::from_icrc_ledger_block(Block::decode(last_block.encoded_block.clone()).unwrap(), last_block.index + 1).unwrap();
            storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).unwrap();
 
            // The hash of the duplicated transaction should still be the same --> There should be two transactions with the same transaction hash.
@@ -238,7 +238,7 @@ mod tests {
         }
 
        #[test]
-       fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy(arb_small_amount()),1..100)){
+       fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy(arb_amount()),1..100)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let mut rosetta_blocks = vec![];
            for (index,block) in blocks.clone().into_iter().enumerate(){
@@ -265,8 +265,8 @@ mod tests {
        fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy(1000)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let mut rosetta_blocks = vec![];
-           for (index,block) in blockchain.into_iter().enumerate(){
-               rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
+           for i in 0..blockchain.0.len() {
+            rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(blockchain.0[i].clone(),blockchain.1[i] as u64).unwrap());
            }
 
            storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();

@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-askama = "0.11"
+askama = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = "0.4.3"
@@ -19,7 +19,7 @@ ic-stable-structures = { workspace = true }
 num-traits = "0.2.14"
 serde = { workspace = true }
 serde_json = { workspace = true }
-time = { version = "0.3.20", features = ["formatting"] }
+time = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"

@@ -1,6 +1,5 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
-    hash::Hash,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -8,20 +7,27 @@ use std::{
 use axum::http::Request;
 use backoff::backoff::Backoff;
 use bytes::Bytes;
-use ic_async_utils::JoinMap;
-use ic_interfaces::{artifact_manager::ArtifactProcessorEvent, artifact_pool::ValidatedPoolReader};
+use ic_interfaces::p2p::{
+    artifact_manager::ArtifactProcessorEvent, consensus::ValidatedPoolReader,
+};
 use ic_logger::{warn, ReplicaLogger};
+use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind};
 use ic_types::NodeId;
-use serde::{Deserialize, Serialize};
-use tokio::{runtime::Handle, select, sync::mpsc::Receiver, task::JoinHandle, time};
+use tokio::{
+    runtime::Handle,
+    select,
+    sync::mpsc::Receiver,
+    task::{JoinHandle, JoinSet},
+    time,
+};
 
-use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, Data, SlotNumber};
+use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, SlotNumber, Update};
 
-const ENABLE_ARTIFACT_PUSH: bool = false;
-/// Artifact push threshold. Artifacts smaller or equal than this are pushed.
-const ARTIFACT_PUSH_THRESHOLD: usize = 5 * 1024;
+/// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
+/// in size are pushed.
+const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
 
 //TODO(NET-1539): Move all these bounds to the ArtifactKind trait directly.
 // pub trait Send + Sync + Hash +'static: Send + Sync  + Hash + 'static {}
@@ -64,14 +70,7 @@ pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     active_adverts: HashMap<Artifact::Id, (JoinHandle<()>, SlotNumber)>,
 }
 
-impl<Artifact> ConsensusManagerSender<Artifact>
-where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
-{
+impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
     pub(crate) fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
@@ -174,45 +173,49 @@ where
         transport: Arc<dyn Transport>,
         commit_id: CommitId,
         slot_number: SlotNumber,
-        advert: Advert<Artifact>,
+        Advert {
+            id,
+            attribute,
+            size,
+            ..
+        }: Advert<Artifact>,
         pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     ) {
         // Try to push artifact if size below threshold && the artifact is not a relay.
-        let push_artifact = ENABLE_ARTIFACT_PUSH && advert.size <= ARTIFACT_PUSH_THRESHOLD;
+        let push_artifact = size < ARTIFACT_PUSH_THRESHOLD_BYTES;
 
-        let data = if push_artifact {
-            let id = advert.id.clone();
-
+        let artifact = if push_artifact {
+            let id = id.clone();
             let artifact = tokio::task::spawn_blocking(move || {
                 pool_reader.read().unwrap().get_validated_by_identifier(&id)
             })
-            .await
-            .expect("Should not be cancelled");
+            .await;
 
             match artifact {
-                Some(artifact) => Data::Artifact(artifact),
-                None => {
+                Ok(Some(artifact)) => Some(artifact),
+                _ => {
                     warn!(log, "Attempted to push Artifact, but the Artifact was not found in the pool. Sending an advert instead.");
-                    Data::Advert(advert)
+                    None
                 }
             }
         } else {
-            Data::Advert(advert)
+            None
         };
 
-        let advert_update = AdvertUpdate {
+        let advert_update: AdvertUpdate<Artifact> = AdvertUpdate {
             slot_number,
             commit_id,
-            data,
+            update: match artifact {
+                Some(artifact) => Update::Artifact(artifact),
+                None => Update::Advert((id, attribute)),
+            },
         };
 
-        let body: Bytes = bincode::serialize(&advert_update)
-            .expect("Serializing advert update")
-            .into();
+        let body = Bytes::from(pb::AdvertUpdate::proxy_encode(advert_update));
 
-        let mut in_progress_transmissions = JoinMap::new();
+        let mut in_progress_transmissions = JoinSet::new();
         // stores the connection ID of the last successful transmission to a peer.
-        let mut completed_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
+        let mut initiated_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
         let mut periodic_check_interval = time::interval(Duration::from_secs(5));
 
         loop {
@@ -222,20 +225,20 @@ where
                     // spawn task for peers with higher conn id or not in completed transmissions.
                     // add task to join map
                     for (peer, connection_id) in transport.peers() {
-                        let is_completed = completed_transmissions.get(&peer).is_some_and(|c| *c == connection_id);
+                        let is_initiated = initiated_transmissions.get(&peer).is_some_and(|c| *c == connection_id);
 
-                        if !is_completed {
+                        if !is_initiated {
                             metrics.send_view_send_to_peer_total.inc();
-                            let task = send_advert_to_peer(transport.clone(), connection_id, body.clone(), peer, Artifact::TAG.into());
-                            in_progress_transmissions.spawn_on(peer, task, &rt_handle);
+                            let task = send_advert_to_peer(transport.clone(), body.clone(), peer, Artifact::TAG.into());
+                            in_progress_transmissions.spawn_on(task, &rt_handle);
+                            initiated_transmissions.insert(peer, connection_id);
                         }
                     }
                 }
                 Some(result) = in_progress_transmissions.join_next() => {
                     match result {
-                        Ok((connection_id, peer)) => {
+                        Ok(_) => {
                             metrics.send_view_send_to_peer_delivered_total.inc();
-                            completed_transmissions.insert(peer, connection_id);
                         },
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
@@ -254,11 +257,10 @@ where
 /// If the peer is not reachable, it will retry with an exponential backoff.
 async fn send_advert_to_peer(
     transport: Arc<dyn Transport>,
-    connection_id: ConnId,
     message: Bytes,
     peer: NodeId,
     uri_prefix: &str,
-) -> ConnId {
+) {
     let mut backoff = get_backoff_policy();
 
     loop {
@@ -268,7 +270,7 @@ async fn send_advert_to_peer(
             .expect("Building from typed values");
 
         if let Ok(()) = transport.push(&peer, request).await {
-            return connection_id;
+            return;
         }
 
         let backoff_duration = backoff.next_backoff().unwrap_or(MAX_ELAPSED_TIME);
@@ -318,5 +320,410 @@ impl SlotManager {
                 new_slot
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::backtrace::Backtrace;
+
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_p2p_test_utils::{
+        consensus::U64Artifact,
+        mocks::{MockTransport, MockValidatedPoolReader},
+    };
+    use ic_protobuf::proxy::ProtoProxy;
+    use ic_quic_transport::SendError;
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use mockall::Sequence;
+
+    use super::*;
+
+    /// Verify that initial validated pool is sent to peers.
+    #[test]
+    fn initial_validated_pool_is_sent_to_all_peers() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_transport = MockTransport::new();
+            let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
+            mock_transport
+                .expect_peers()
+                .return_const(vec![(NODE_1, ConnId::from(1))]);
+            mock_transport
+                .expect_push()
+                .times(1)
+                .returning(move |n, _| {
+                    push_tx.send(*n).unwrap();
+                    Ok(())
+                });
+            // Initial validated pool contains one element.
+            mock_reader
+                .expect_get_all_validated_by_filter()
+                .returning(|_| Box::new(std::iter::once(1)));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
+
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            ConsensusManagerSender::run(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_transport),
+                rx,
+            );
+            assert_eq!(push_rx.blocking_recv().unwrap(), NODE_1);
+        });
+    }
+
+    /// Verify that advert is sent to multiple peers.
+    #[test]
+    fn send_advert_to_all_peers() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_transport = MockTransport::new();
+            let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
+            mock_transport
+                .expect_peers()
+                .return_const(vec![(NODE_1, ConnId::from(1)), (NODE_2, ConnId::from(2))]);
+            mock_transport
+                .expect_push()
+                .times(2)
+                .returning(move |n, _| {
+                    push_tx.send(*n).unwrap();
+                    Ok(())
+                });
+            mock_reader
+                .expect_get_all_validated_by_filter()
+                .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
+
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
+            ConsensusManagerSender::run(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_transport),
+                rx,
+            );
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&1),
+            ))
+            .unwrap();
+            let first_push_node = push_rx.blocking_recv().unwrap();
+            let second_push_node = push_rx.blocking_recv().unwrap();
+            assert!(
+                first_push_node == NODE_1 && second_push_node == NODE_2
+                    || first_push_node == NODE_2 && second_push_node == NODE_1
+            );
+        });
+    }
+
+    /// Verify that increasing connection id causes advert to be resent.
+    #[test]
+    fn resend_advert_to_reconnected_peer() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_transport = MockTransport::new();
+            let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
+            let mut seq = Sequence::new();
+
+            mock_transport
+                .expect_peers()
+                .times(1)
+                .return_once(|| vec![(NODE_1, ConnId::from(1)), (NODE_2, ConnId::from(2))])
+                .in_sequence(&mut seq);
+            mock_transport
+                .expect_peers()
+                .times(1)
+                .returning(|| vec![(NODE_1, ConnId::from(3)), (NODE_2, ConnId::from(2))])
+                .in_sequence(&mut seq);
+            mock_transport.expect_peers().return_const(vec![]);
+            mock_transport
+                .expect_push()
+                .times(3)
+                .returning(move |n, _| {
+                    push_tx.send(*n).unwrap();
+                    Ok(())
+                });
+            mock_reader
+                .expect_get_all_validated_by_filter()
+                .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
+
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
+            ConsensusManagerSender::run(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_transport),
+                rx,
+            );
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&1),
+            ))
+            .unwrap();
+
+            // Received two messages from NODE_1 because of reconnection.
+            let pushes = [
+                push_rx.blocking_recv().unwrap(),
+                push_rx.blocking_recv().unwrap(),
+                push_rx.blocking_recv().unwrap(),
+            ];
+            assert_eq!(pushes.iter().filter(|&&n| n == NODE_1).count(), 2);
+            assert_eq!(pushes.iter().filter(|&&n| n == NODE_2).count(), 1);
+        });
+    }
+
+    /// Verify failed send is retried.
+    #[test]
+    fn retry_peer_error() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_transport = MockTransport::new();
+            let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
+            let mut seq = Sequence::new();
+
+            mock_transport
+                .expect_peers()
+                .return_const(vec![(NODE_1, ConnId::from(1))]);
+            // Let transport push fail a few times.
+            mock_transport
+                .expect_push()
+                .times(5)
+                .returning(move |_, _| {
+                    Err(SendError::ConnectionNotFound {
+                        reason: String::new(),
+                    })
+                })
+                .in_sequence(&mut seq);
+            mock_transport
+                .expect_push()
+                .times(1)
+                .returning(move |n, _| {
+                    push_tx.send(*n).unwrap();
+                    Ok(())
+                });
+            mock_reader
+                .expect_get_all_validated_by_filter()
+                .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
+
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
+            ConsensusManagerSender::run(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_transport),
+                rx,
+            );
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&1),
+            ))
+            .unwrap();
+            // Verify that we successfully retried.
+            assert_eq!(push_rx.blocking_recv().unwrap(), NODE_1);
+        });
+    }
+
+    /// Verify commit id increases with new adverts/purge events.
+    #[test]
+    fn increasing_commit_id() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_transport = MockTransport::new();
+            let (commit_id_tx, mut commit_id_rx) = tokio::sync::mpsc::unbounded_channel();
+
+            mock_transport
+                .expect_peers()
+                .return_const(vec![(NODE_1, ConnId::from(1))]);
+            mock_transport
+                .expect_push()
+                .times(3)
+                .returning(move |_, r| {
+                    let advert: AdvertUpdate<U64Artifact> =
+                        pb::AdvertUpdate::proxy_decode(&r.into_body()).unwrap();
+                    commit_id_tx.send(advert.commit_id).unwrap();
+                    Ok(())
+                });
+            mock_reader
+                .expect_get_all_validated_by_filter()
+                .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
+
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
+            ConsensusManagerSender::run(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_transport),
+                rx,
+            );
+            // Send advert and verify commit it.
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&1),
+            ))
+            .unwrap();
+            assert_eq!(commit_id_rx.blocking_recv().unwrap().get(), 0);
+
+            // Send second advert and observe commit id bump.
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&2),
+            ))
+            .unwrap();
+            assert_eq!(commit_id_rx.blocking_recv().unwrap().get(), 1);
+            // Send purge and new advert and observe commit id increase by 2.
+            tx.blocking_send(ArtifactProcessorEvent::Purge(2)).unwrap();
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&3),
+            ))
+            .unwrap();
+            assert_eq!(commit_id_rx.blocking_recv().unwrap().get(), 3);
+        });
+    }
+
+    /// Verify that duplicate Advert event does not cause sending twice.
+    #[test]
+    fn send_same_advert_twice() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_transport = MockTransport::new();
+            let (commit_id_tx, mut commit_id_rx) = tokio::sync::mpsc::unbounded_channel();
+
+            mock_transport
+                .expect_peers()
+                .return_const(vec![(NODE_1, ConnId::from(1))]);
+            mock_transport
+                .expect_push()
+                .times(2)
+                .returning(move |_, r| {
+                    let advert: AdvertUpdate<U64Artifact> =
+                        pb::AdvertUpdate::proxy_decode(&r.into_body()).unwrap();
+                    commit_id_tx.send(advert.commit_id).unwrap();
+                    Ok(())
+                });
+            mock_reader
+                .expect_get_all_validated_by_filter()
+                .returning(|_| Box::new(std::iter::empty()));
+            mock_reader
+                .expect_get_validated_by_identifier()
+                .returning(|id| Some(*id));
+
+            let (tx, rx) = tokio::sync::mpsc::channel(100);
+            ConsensusManagerSender::run(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_transport),
+                rx,
+            );
+            // Send advert and verify commit id.
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&1),
+            ))
+            .unwrap();
+            assert_eq!(commit_id_rx.blocking_recv().unwrap().get(), 0);
+            // Send same advert again. This should be noop.
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&1),
+            ))
+            .unwrap();
+            // Check that new advert is advertised with correct commit id.
+            tx.blocking_send(ArtifactProcessorEvent::Advert(
+                U64Artifact::message_to_advert(&2),
+            ))
+            .unwrap();
+            assert_eq!(commit_id_rx.blocking_recv().unwrap().get(), 2);
+        });
+    }
+
+    /// Test that we can take more slots than SLOT_TABLE_THRESHOLD
+    #[test]
+    fn slot_manager_unrestricted() {
+        let mut sm = SlotManager::new(
+            no_op_logger(),
+            ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+        );
+
+        // Take more than SLOT_TABLE_THRESHOLD number of slots
+        for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
+            assert_eq!(sm.take_free_slot().get(), i);
+        }
+        // Give back all the slots.
+        for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
+            sm.give_slot(SlotNumber::from(i));
+        }
+        // Check that we get the slot that was returned last
+        assert_eq!(sm.take_free_slot().get(), SLOT_TABLE_THRESHOLD * 5 - 1);
     }
 }

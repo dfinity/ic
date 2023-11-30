@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
 use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
-use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder, LedgerArgument};
+use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
@@ -97,6 +97,15 @@ pub fn test(env: TestEnv) {
             .with_initial_balance(account1, 1_000_000_000u64)
             .with_transfer_fee(1_000)
             .with_feature_flags(FeatureFlags { icrc2: true })
+            .with_archive_options(ArchiveOptions {
+                trigger_threshold: 2,
+                num_blocks_to_archive: 4,
+                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
+                max_message_size_bytes: Some(128 * 1024),
+                controller_id: agent.ledger_canister_id.into(),
+                cycles_for_archive_creation: Some(10_000_000_000_000),
+                max_transactions_per_response: None,
+            })
             .build();
         install_icrc1_ledger(&env, &mut ledger, &LedgerArgument::Init(init_args.clone())).await;
 
@@ -213,7 +222,7 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
         assert_eq!(
-            Nat::from(1_000_000_000u64 - amount) - init_args.transfer_fee,
+            Nat::from(1_000_000_000u64 - amount) - init_args.transfer_fee.clone(),
             agent.balance_of(account1, CallMode::Query).await.unwrap()
         );
         assert_eq!(
@@ -226,8 +235,18 @@ pub fn test(env: TestEnv) {
             length: Nat::from(10),
         };
         let blocks_response = agent.get_blocks(blocks_request).await.unwrap();
-        assert_eq!(Nat::from(0), blocks_response.first_index);
         assert_eq!(Nat::from(2), blocks_response.chain_length);
+        assert_eq!(blocks_response.archived_blocks.len(), 1);
+        assert_eq!(blocks_response.archived_blocks[0].start, Nat::from(0));
+        assert_eq!(blocks_response.archived_blocks[0].length, Nat::from(2));
+        let archived_blocks = agent
+            .get_blocks_from_archive(blocks_response.archived_blocks[0].clone())
+            .await
+            .unwrap();
+
+        let (last_block_hash, last_block_index) = agent.get_certified_chain_tip().await.unwrap();
+        assert_eq!(archived_blocks.blocks[1].hash(), last_block_hash);
+        assert_eq!(Nat::from(1), last_block_index);
 
         let data_certificate = agent.get_data_certificate().await.unwrap();
         assert!(data_certificate.certificate.is_some());
@@ -242,7 +261,7 @@ pub fn test(env: TestEnv) {
 
         assert_eq!(
             hash_tree.lookup(&[b"tip_hash"]),
-            Found(&mleaf(blocks_response.blocks[1].hash()))
+            Found(&mleaf(archived_blocks.blocks[1].hash()))
         );
 
         let cert = serde_cbor::from_slice(&data_certificate.certificate.unwrap()).unwrap();
@@ -250,14 +269,15 @@ pub fn test(env: TestEnv) {
             agent.verify_root_hash(&cert, &hash_tree.digest().0).await,
             Ok(_)
         );
+        let spender = Account {
+            owner: other_agent_principal,
+            subaccount: None,
+        };
 
         let _block = agent
             .approve(ApproveArgs {
                 from_subaccount: None,
-                spender: Account {
-                    owner: other_agent_principal,
-                    subaccount: None,
-                },
+                spender,
                 amount: Nat::from(u64::MAX),
                 expected_allowance: None,
                 expires_at: None,
@@ -268,6 +288,23 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap()
             .unwrap();
+
+        // Test get_blocks directly from the ledger.
+        let (last_block_hash, last_block_index) = agent.get_certified_chain_tip().await.unwrap();
+        let blocks_request = GetBlocksRequest {
+            start: Nat::from(2),
+            length: Nat::from(1),
+        };
+        let blocks_response = agent.get_blocks(blocks_request).await.unwrap();
+        assert_eq!(last_block_hash, blocks_response.blocks[0].hash());
+        assert_eq!(last_block_index, 2);
+
+        let allowance = agent
+            .allowance(account1, spender, CallMode::Query)
+            .await
+            .unwrap();
+        assert_eq!(allowance.allowance, Nat::from(u64::MAX));
+
         const TRANSFER_FROM_AMOUNT: u64 = 10_000;
         let _block = other_agent
             .transfer_from(TransferFromArgs {
@@ -286,6 +323,14 @@ pub fn test(env: TestEnv) {
         assert_eq!(
             Nat::from(TRANSFER_FROM_AMOUNT),
             agent.balance_of(account3, CallMode::Query).await.unwrap()
+        );
+        let allowance = agent
+            .allowance(account1, spender, CallMode::Query)
+            .await
+            .unwrap();
+        assert_eq!(
+            allowance.allowance,
+            Nat::from(u64::MAX - TRANSFER_FROM_AMOUNT) - init_args.transfer_fee
         );
     });
 }

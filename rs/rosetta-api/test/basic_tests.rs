@@ -556,6 +556,8 @@ async fn verify_account_search(
                 if from != to {
                     index(to, hb.index);
                 }
+                // https://github.com/rust-lang/rust-clippy/issues/4530
+                #[allow(clippy::unnecessary_unwrap)]
                 if spender.is_some() && spender.unwrap() != from && spender.unwrap() != to {
                     index(spender.unwrap(), hb.index);
                 }

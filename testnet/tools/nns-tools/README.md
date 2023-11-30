@@ -219,7 +219,7 @@ index eac116ade0..0f1b13121f 100644
          )
      });
 +    */
- 
+
      // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
      let recovery_dir = env.get_dependency_path("rs/tests");
 ```
@@ -369,54 +369,6 @@ Once the proposal(s) have been made, take a note of the proposal ID (printed at 
 
 You will need to notify people about this proposal so that they know to vote on it.
 Jump back to the [release runbook in Notion][1].
-
-## Troubleshooting `nns_dev_testnet.sh`
-
-This section is on the verge of becoming obsolete :tada:.
-
-### Could not fetch catch up package
-
-If you seem to be stuck on "6. Recover the NNS subnet to the first
-unassigned node", check out the log mentioned at that step
-(6_nns_recovery_log.txt). You may see many lines similar to the following:
-
-```
-Mar 21 00:11:30.904 INFO Try: 21. Could not fetch CUP: failed to get catch up package: Request failed for http://[2a00:fb01:400:42:5000:f9ff:fe05:faa0]:8080/_/catch_up_package: hyper::Error(Connect, ConnectError("tcp connect error", Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }))
-Mar 21 00:11:30.904 INFO Recovery CUP not yet present, retrying...
-```
-
-If so, try contacting someone on the Consensus team (E.g. Leo Eichhorn
-and Christian Müller) on the #eng-testing Slack channel.
-E.g. [here](https://dfinity.slack.com/archives/C018WHN6R2L/p1679358521278899).
-
-A few failed attempts is not bad. Therefore, if you haven't been waiting
-that long, no need to immediately call for backup. (You might want
-to start drafting a plea for help while you are waiting.)
-
-### Crash on "2. Deploy an IC to the testnet."
-
-Look at the end of the indicated log. If you see
-
-```
-EXIT received, killing all jobs
-```
-
-it might help if you try on another testnet.
-
-### Password prompt on "2. Step 2: Create subnet from the unassigned nodes"
-
-You may be prompted for a password. E.g.
-
-```
-admin@2607:f6f0:3004:1:5000:31ff:fe30:eabd's password:
-```
-
-At this point, the script is just waiting for something to happen. If you wait
-long enough, it will probably succeed. To get past this check, do `Ctrl-C` to
-break out of the script. Then, run the command again, except, prepend
-`STEPS=[3-7] ` to it. This will forcibly move onto the next step. This is safe
-to do assuming that the thing the script was waiting for actually succeed, which
-it usually does after enough time has passed. TODO: How much time is needed?
 
 ## Getting test coverage data with `get_test_coverage.sh`
 

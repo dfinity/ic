@@ -123,7 +123,7 @@ lazy_static! {
                 restricted_countries: None,
                 start_time: GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
                 duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
-                neurons_fund_investment_icp: Some(Tokens::from_tokens(100)),
+                neurons_fund_investment_icp: if IS_MATCHED_FUNDING_ENABLED { None } else { Some(Tokens::from_tokens(100)) },
                 neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED { Some(true) } else { None },
             }),
             governance_parameters: Some(GovernanceParameters {
@@ -1308,9 +1308,9 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
         .swap_parameters
         .clone();
 
-    // Set the Neurons Fund investment to zero
+    // Disable Neurons Fund participation
     if let Some(s) = &mut swap_parameters {
-        s.neurons_fund_investment_icp = Some(Tokens::from_tokens(0));
+        s.neurons_fund_participation = Some(false);
         if s.minimum_icp.is_some() {
             s.minimum_direct_participation_icp = s.minimum_icp;
         }

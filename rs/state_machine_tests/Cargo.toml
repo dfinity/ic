@@ -14,11 +14,12 @@ ciborium = { workspace = true }
 clap = { workspace = true }
 hex = "0.4.2"
 ic-config = { path = "../config" }
+ic-consensus = { path = "../consensus" }
 ic-constants = { path = "../constants" }
-ic-crypto = { path = "../crypto" }
 ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
 ic-crypto-extended-bip32 = { path = "../crypto/extended_bip32" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
+ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-crypto-internal-seed = { path = "../crypto/internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
@@ -29,6 +30,7 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment/" }
 ic-ic00-types = { path = "../types/ic00_types" }
+ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
@@ -48,10 +50,13 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
+ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-state-machine-client = "3.0"
 ic-types = { path = "../types/types" }
+ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
+rand = "0.8.4"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -68,4 +73,7 @@ maplit = "1.0.2"
 
 [dev-dependencies]
 proptest = "1.0"
+ic-base-types = { path = "../types/base_types" }
 ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
+ic-test-utilities = { path = "../test_utilities" }
+ic-universal-canister = { path = "../universal_canister/lib" }

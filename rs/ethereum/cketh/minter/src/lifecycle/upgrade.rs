@@ -3,13 +3,12 @@ use crate::logs::INFO;
 use crate::state::audit::{process_event, replay_events, EventType};
 use crate::state::mutate_state;
 use crate::state::STATE;
+use crate::storage::total_event_count;
 use candid::{CandidType, Deserialize, Nat};
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
 
-#[derive(
-    CandidType, serde::Serialize, Deserialize, Clone, Debug, Default, Encode, Decode, PartialEq, Eq,
-)]
+#[derive(CandidType, Deserialize, Clone, Debug, Default, Encode, Decode, PartialEq, Eq)]
 pub struct UpgradeArg {
     #[cbor(n(0), with = "crate::cbor::nat::option")]
     pub next_transaction_nonce: Option<Nat>,
@@ -33,9 +32,12 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {
 
     let end = ic_cdk::api::instruction_counter();
 
+    let event_count = total_event_count();
+    let instructions_consumed = end - start;
+
     log!(
         INFO,
-        "[upgrade]: upgrade consumed {} instructions",
-        end - start
+        "[upgrade]: replaying {event_count} events consumed {instructions_consumed} instructions ({} instructions per event on average)",
+        instructions_consumed / event_count
     );
 }

@@ -38,8 +38,12 @@ ensure_variable_set NEURON_ID
 ensure_variable_set WALLET_CANISTER
 ensure_variable_set PEM
 
+CONFIG_FILE="${CONFIG_FILE:-"$NNS_TOOLS_DIR"/sns_default_test_init_params_v2.yml}"
+
+echo "Using SNS config file: $CONFIG_FILE"
+
 # Install the sns binary corresponding to the latest NNS Governance canister
-SNS_CLI_VERSION=$(nns_canister_git_version "${NNS_URL}" "governance")
+SNS_CLI_VERSION=${GIT_COMMIT:-$(nns_canister_git_version "${NNS_URL}" "governance")}
 install_binary sns "$SNS_CLI_VERSION" "$MY_DOWNLOAD_DIR"
 
 PERMUTATIONS=$(python3 \
@@ -136,7 +140,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
     # propose new SNS
     echo "Proposing new SNS!" | tee -a "${LOG_FILE}"
 
-    if ! propose_new_sns "$NNS_URL" "$NEURON_ID"; then
+    if ! propose_new_sns "$NNS_URL" "$NEURON_ID" "$CONFIG_FILE"; then
         print_red "Failed to create a new SNS via 1-proposal initialization with mainnet version!"
     else
 
@@ -161,7 +165,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
 
         echo "Participate in Swap to commit it (this spawns the archive canister) ..." | tee -a $LOG_FILE
-        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 30000
+        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
         if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
@@ -184,7 +188,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
     # propose new SNS
     echo "Proposing new SNS!" | tee -a "${LOG_FILE}"
 
-    if ! propose_new_sns "$NNS_URL" "$NEURON_ID"; then
+    if ! propose_new_sns "$NNS_URL" "$NEURON_ID" "$CONFIG_FILE"; then
         print_red "Failed to create a new SNS via 1-proposal initialization with new version!"
     else
 
@@ -209,7 +213,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
 
         echo "Participate in Swap to commit it (this spawns the archive canister) ..." | tee -a $LOG_FILE
-        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 30000
+        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
         if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then

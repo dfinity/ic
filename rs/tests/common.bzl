@@ -18,15 +18,16 @@ DEPENDENCIES = [
     "//rs/certification",
     "//rs/config",
     "//rs/constants",
-    "//rs/crypto",
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/cup_explorer",
     "//rs/cycles_account_manager",
     "//rs/http_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
+    "//rs/ic_os/deterministic_ips",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/proto",
@@ -110,7 +111,6 @@ DEPENDENCIES = [
     "@crate_index//:humantime",
     "@crate_index//:hyper",
     "@crate_index//:hyper-rustls",
-    "@crate_index//:hyper-tls",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
@@ -128,8 +128,8 @@ DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:prost",
     "@crate_index//:quickcheck",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:rayon",
     "@crate_index//:rcgen",
     "@crate_index//:regex",
@@ -165,6 +165,7 @@ GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
 GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
+    "//ic-os:scripts/build-bootstrap-config-image.sh",
 ]
 
 MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
@@ -347,14 +348,6 @@ BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
 
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
-GUESTOS_MALICIOUS_RUNTIME_DEPS = [
-    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.cas-url",
-    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.sha256",
-    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.cas-url",
-    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.sha256",
-    "//ic-os:scripts/build-bootstrap-config-image.sh",
-]
-
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests:http_uvm_config_image",
 ]
@@ -367,6 +360,21 @@ CUSTOM_DOMAINS_RUNTIME_DEPS = [
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
 
 STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync_test_canister"]
+
+IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
+                                       NNS_CANISTER_RUNTIME_DEPS + \
+                                       BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + \
+                                       MAINNET_REVISION_RUNTIME_DEPS + \
+                                       GRAFANA_RUNTIME_DEPS + [
+    "//rs/sns/cli:sns",
+    "//rs/tests:recovery/binaries",
+    "//rs/tests/nns:secret_key.pem",
+    "@dfx",
+    "@idl2json",
+    "@sns_quill//:sns-quill",
+    "@candid//:didc",
+    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+]
 
 def _symlink_dir(ctx):
     dirname = ctx.attr.name

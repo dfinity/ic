@@ -9,8 +9,9 @@ use ic_embedders::{CompilationResult, SerializedModule, SerializedModuleBytes};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
-        CheckpointSerialization, MappingSerialization, PageAllocatorSerialization,
-        PageMapSerialization, StorageSerialization,
+        CheckpointSerialization, MappingSerialization, OverlayFileSerialization,
+        OverlayIndicesSerialization, PageAllocatorSerialization, PageMapSerialization,
+        StorageSerialization,
     },
     Global, NumWasmPages,
 };
@@ -105,14 +106,14 @@ pub struct MemorySerialization {
     pub num_wasm_pages: NumWasmPages,
 }
 
+// This trait is implemented here for all `Serialization` structs to avoid dependency of
+// the replicated-state module on the canister-sandbox module.
 impl EnumerateInnerFileDescriptors for MemorySerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         self.page_map.enumerate_fds(fds);
     }
 }
 
-// The trait is implemented here to avoid dependency of relicated-state on
-// canister-sandbox.
 impl EnumerateInnerFileDescriptors for PageMapSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         self.storage.enumerate_fds(fds);
@@ -120,8 +121,6 @@ impl EnumerateInnerFileDescriptors for PageMapSerialization {
     }
 }
 
-// The trait is implemented here to avoid dependency of relicated-state on
-// canister-sandbox.
 impl EnumerateInnerFileDescriptors for CheckpointSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         if let Some(mapping) = self.mapping.as_mut() {
@@ -130,25 +129,34 @@ impl EnumerateInnerFileDescriptors for CheckpointSerialization {
     }
 }
 
-// The trait is implemented here to avoid dependency of relicated-state on
-// canister-sandbox.
 impl EnumerateInnerFileDescriptors for StorageSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         self.base.enumerate_fds(fds);
-        // TODO(IC-1306): Enumerate overlay fds
+        for overlay in &mut self.overlays {
+            overlay.enumerate_fds(fds);
+        }
     }
 }
 
-// The trait is implemented here to avoid dependency of relicated-state on
-// canister-sandbox.
+impl EnumerateInnerFileDescriptors for OverlayFileSerialization {
+    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
+        self.mapping.enumerate_fds(fds);
+        self.index.enumerate_fds(fds);
+    }
+}
+
+impl EnumerateInnerFileDescriptors for OverlayIndicesSerialization {
+    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
+        fds.push(&mut self.file_descriptor.fd);
+    }
+}
+
 impl EnumerateInnerFileDescriptors for MappingSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         fds.push(&mut self.file_descriptor.fd);
     }
 }
 
-// The trait is implemented here to avoid dependency of relicated-state on
-// canister-sandbox.
 impl EnumerateInnerFileDescriptors for PageAllocatorSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         fds.push(&mut self.fd.fd);

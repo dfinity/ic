@@ -55,7 +55,7 @@ mod csp_tests {
         let message = "Hello world!".as_bytes();
 
         let signature = csp
-            .sign(AlgorithmId::Ed25519, message, key_id)
+            .sign(AlgorithmId::Ed25519, message.to_vec(), key_id)
             .expect("error signing message");
 
         let verification = csp.verify(&signature, message, AlgorithmId::Ed25519, public_key);
@@ -71,7 +71,7 @@ mod csp_tests {
 
         let signature = csp
             .handshake_signer()
-            .tls_sign(message, &key_id)
+            .tls_sign(message.to_vec(), key_id)
             .expect("error signing message with TLS private key");
 
         let public_key = ed25519_csp_pubkey_from_tls_pubkey_cert(&cert);
@@ -90,10 +90,9 @@ mod csp_tests {
 
     fn csp_with_tls_key_pair() -> (Csp, TlsPublicKeyCert) {
         const NODE_1: u64 = 4241;
-        const NOT_AFTER: &str = "99991231235959Z";
         let csp = Csp::builder_for_test().build();
         let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .gen_tls_key_pair(node_test_id(NODE_1))
             .expect("error generating TLS key pair");
         (csp, cert)
     }

@@ -715,7 +715,7 @@ impl GossipImpl {
             .start_timer();
         let channel_id = self.transport_channel_mapper.map(&message);
         let message_label: &'static str = (&message).into();
-        let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
+        let message = TransportPayload(pb::GossipMessage::proxy_encode(message));
         match self.transport.send(&peer_id, channel_id, message) {
             Ok(()) => self
                 .metrics
@@ -1008,8 +1008,9 @@ where
 pub mod tests {
     use super::*;
     use crate::download_prioritization::DownloadPrioritizerError;
-    use ic_interfaces::artifact_manager::{ArtifactManager, OnArtifactError};
     use ic_interfaces::consensus_pool::ConsensusPoolCache;
+    use ic_interfaces::p2p::artifact_manager::{ArtifactManager, OnArtifactError};
+    use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use ic_interfaces_registry::RegistryClient;
     use ic_interfaces_transport::TransportChannelId;
     use ic_logger::{LoggerImpl, ReplicaLogger};
@@ -1019,7 +1020,6 @@ pub mod tests {
     use ic_test_utilities::consensus::fake::FakeSigner;
     use ic_test_utilities::port_allocation::allocate_ports;
     use ic_test_utilities::{
-        consensus::MockConsensusCache,
         consensus::{fake::*, make_genesis},
         p2p::*,
         thread_transport::*,
@@ -1224,7 +1224,7 @@ pub mod tests {
         let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
         registry_client.update_to_latest_version();
 
-        let mut mock_consensus_cache = MockConsensusCache::new();
+        let mut mock_consensus_cache = MockConsensusPoolCache::new();
         mock_consensus_cache
             .expect_get_oldest_registry_version_in_use()
             .returning(move || RegistryVersion::from(1));
@@ -1290,7 +1290,7 @@ pub mod tests {
 
         // Create consensus cache which returns CUP with version 1, the registry version
         // which contains the subnet record with all replicas.
-        let mut mock_consensus_cache = MockConsensusCache::new();
+        let mut mock_consensus_cache = MockConsensusPoolCache::new();
         let consensus_registry_client = registry_client.clone();
         mock_consensus_cache
             .expect_get_oldest_registry_version_in_use()

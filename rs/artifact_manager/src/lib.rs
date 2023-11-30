@@ -100,10 +100,12 @@ pub mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
-    artifact_pool::{
-        ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
-        UnvalidatedArtifactEvent, ValidatedPoolReader,
+    p2p::{
+        artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
+        consensus::{
+            ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
+            ValidatedPoolReader,
+        },
     },
     time_source::SysTimeSource,
 };
@@ -117,7 +119,7 @@ use std::sync::{
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use std::time::Duration;
 
-type ArtifactEventSender<Artifact> = Sender<UnvalidatedArtifactEvent<Artifact>>;
+type ArtifactEventSender<Artifact> = Sender<UnvalidatedArtifactMutation<Artifact>>;
 
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
@@ -266,7 +268,7 @@ fn process_messages<
     time_source: Arc<SysTimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Box<S>,
-    receiver: Receiver<UnvalidatedArtifactEvent<Artifact>>,
+    receiver: Receiver<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -294,13 +296,17 @@ fn process_messages<
         time_source.update_time().ok();
         let ChangeResult {
             adverts,
-            purged: _,
+            purged,
             poll_immediately,
         } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
         for advert in adverts {
             metrics.outbound_artifact_bytes.observe(advert.size as f64);
             send_advert(ArtifactProcessorEvent::Advert(advert));
+        }
+
+        for advert in purged {
+            send_advert(ArtifactProcessorEvent::Purge(advert));
         }
         last_on_state_change_result = poll_immediately;
     }
@@ -312,7 +318,7 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 /// The struct contains all relevant interfaces for P2P to operate.
 pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
     /// To send the process requests
-    pub sender: Sender<UnvalidatedArtifactEvent<Artifact>>,
+    pub sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
     /// Reference to the artifact client.
     /// TODO: long term we can remove the 'ArtifactClient' and directly use
     /// 'ValidatedPoolReader' and ' PriorityFnAndFilterProducer' traits.
@@ -327,7 +333,7 @@ pub fn create_ingress_handlers<
     send_advert: S,
     time_source: Arc<SysTimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
-    priority_fn_and_filter_producer: G,
+    priority_fn_and_filter_producer: Arc<G>,
     ingress_handler: Arc<
         dyn ChangeSetProducer<
                 PoolIngress,
@@ -345,9 +351,8 @@ pub fn create_ingress_handlers<
         Box::new(client),
         send_advert,
     );
-
     (
-        ArtifactClientHandle::<IngressArtifact> {
+        ArtifactClientHandle {
             sender,
             pool_reader: Box::new(pool_readers::IngressClient::new(
                 ingress_pool,
@@ -369,7 +374,8 @@ pub fn create_consensus_handlers<
     S: Fn(ArtifactProcessorEvent<ConsensusArtifact>) + Send + 'static,
 >(
     send_advert: S,
-    (consensus, consensus_gossip): (C, G),
+    consensus: C,
+    consensus_gossip: Arc<G>,
     time_source: Arc<SysTimeSource>,
     consensus_pool: Arc<RwLock<PoolConsensus>>,
     metrics_registry: MetricsRegistry,
@@ -382,7 +388,7 @@ pub fn create_consensus_handlers<
         send_advert,
     );
     (
-        ArtifactClientHandle::<ConsensusArtifact> {
+        ArtifactClientHandle {
             sender,
             pool_reader: Box::new(pool_readers::ConsensusClient::new(
                 consensus_pool,
@@ -407,7 +413,8 @@ pub fn create_certification_handlers<
     S: Fn(ArtifactProcessorEvent<CertificationArtifact>) + Send + 'static,
 >(
     send_advert: S,
-    (certifier, certifier_gossip): (C, G),
+    certifier: C,
+    certifier_gossip: Arc<G>,
     time_source: Arc<SysTimeSource>,
     certification_pool: Arc<RwLock<PoolCertification>>,
     metrics_registry: MetricsRegistry,
@@ -423,7 +430,7 @@ pub fn create_certification_handlers<
         send_advert,
     );
     (
-        ArtifactClientHandle::<CertificationArtifact> {
+        ArtifactClientHandle {
             sender,
             pool_reader: Box::new(pool_readers::CertificationClient::new(
                 certification_pool,
@@ -442,7 +449,8 @@ pub fn create_dkg_handlers<
     S: Fn(ArtifactProcessorEvent<DkgArtifact>) + Send + 'static,
 >(
     send_advert: S,
-    (dkg, dkg_gossip): (C, G),
+    dkg: C,
+    dkg_gossip: Arc<G>,
     time_source: Arc<SysTimeSource>,
     dkg_pool: Arc<RwLock<PoolDkg>>,
     metrics_registry: MetricsRegistry,
@@ -473,7 +481,8 @@ pub fn create_ecdsa_handlers<
     S: Fn(ArtifactProcessorEvent<EcdsaArtifact>) + Send + 'static,
 >(
     send_advert: S,
-    (ecdsa, ecdsa_gossip): (C, G),
+    ecdsa: C,
+    ecdsa_gossip: Arc<G>,
     time_source: Arc<SysTimeSource>,
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     metrics_registry: MetricsRegistry,
@@ -508,7 +517,8 @@ pub fn create_https_outcalls_handlers<
     S: Fn(ArtifactProcessorEvent<CanisterHttpArtifact>) + Send + 'static,
 >(
     send_advert: S,
-    (pool_manager, canister_http_gossip): (C, G),
+    pool_manager: C,
+    canister_http_gossip: Arc<G>,
     time_source: Arc<SysTimeSource>,
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
     metrics_registry: MetricsRegistry,

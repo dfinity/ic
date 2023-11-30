@@ -26,8 +26,8 @@ use ic_ic00_types::{
     UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
-    RegistryExecutionSettings, SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
+    SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
@@ -937,7 +937,6 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1039,7 +1038,6 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1136,7 +1134,6 @@ impl ExecutionTest {
         let maybe_canister_id = get_canister_id_if_install_code(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1187,7 +1184,6 @@ impl ExecutionTest {
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1239,7 +1235,10 @@ impl ExecutionTest {
     pub fn execute_message(&mut self, canister_id: CanisterId) {
         self.execute_slice(canister_id);
         self.state.as_mut().unwrap().metadata.batch_time += std::time::Duration::from_secs(1);
-        while self.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
+        while self.canister_state(canister_id).next_execution() == NextExecution::ContinueLong
+            || self.canister_state(canister_id).next_execution()
+                == NextExecution::ContinueInstallCode
+        {
             self.execute_slice(canister_id);
             self.state.as_mut().unwrap().metadata.batch_time += std::time::Duration::from_secs(1);
         }
@@ -1262,7 +1261,6 @@ impl ExecutionTest {
                 state.put_canister_states(canisters);
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
-                    execution_complexity: ExecutionComplexity::MAX,
                     subnet_available_memory: self.subnet_available_memory,
                     compute_allocation_used,
                 };
@@ -1286,7 +1284,6 @@ impl ExecutionTest {
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
-                    execution_complexity: ExecutionComplexity::MAX,
                     subnet_available_memory: self.subnet_available_memory,
                     compute_allocation_used,
                 };
@@ -1564,6 +1561,7 @@ pub struct ExecutionTestBuilder {
     time: Time,
     resource_saturation_scaling: usize,
     heap_delta_rate_limit: NumBytes,
+    upload_wasm_chunk_instructions: NumInstructions,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1604,6 +1602,7 @@ impl Default for ExecutionTestBuilder {
             time: mock_time(),
             resource_saturation_scaling: 1,
             heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
+            upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
         }
     }
 }
@@ -2038,6 +2037,7 @@ impl ExecutionTestBuilder {
             self.resource_saturation_scaling,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             self.heap_delta_rate_limit,
+            self.upload_wasm_chunk_instructions,
         );
         let (query_stats_collector, _) = init_query_stats(self.log.clone());
 

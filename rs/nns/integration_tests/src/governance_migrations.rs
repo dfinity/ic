@@ -3,7 +3,7 @@ use candid::{Decode, Encode};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::{
-    neuron_data_validation::{NeuronDataValidationSummary, ValidationIssue},
+    neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{
         manage_neuron_response::{Command, FollowResponse, SplitResponse},
         Topic,
@@ -20,15 +20,6 @@ use ic_state_machine_tests::StateMachine;
 use serde_bytes::ByteBuf;
 use std::time::Duration;
 
-fn should_ignore_issue(validation_issue: &ValidationIssue) -> bool {
-    // TODO: remove after inactive neurons are being copied.
-    matches!(
-        validation_issue,
-        ValidationIssue::InactiveNeuronCardinalityMismatch { .. }
-            | ValidationIssue::NeuronCopyValueNotMatch(_)
-    )
-}
-
 fn assert_no_validation_issues(state_machine: &StateMachine) {
     let response_bytes = query(
         state_machine,
@@ -40,14 +31,7 @@ fn assert_no_validation_issues(state_machine: &StateMachine) {
     let summary = Decode!(&response_bytes, NeuronDataValidationSummary).unwrap();
     assert_eq!(summary.current_validation_started_time_seconds, None);
     let current_issues_summary = summary.current_issues_summary.unwrap();
-    println!(
-        "Timestamp: {}",
-        current_issues_summary.last_updated_time_seconds
-    );
-    let mut real_issue_groups = current_issues_summary.issue_groups.clone();
-    real_issue_groups
-        .retain(|issue_group| !should_ignore_issue(issue_group.example_issues.first().unwrap()));
-    assert_eq!(real_issue_groups, vec![]);
+    assert_eq!(current_issues_summary.issue_groups, vec![]);
 }
 
 struct NeuronIndexesLens {

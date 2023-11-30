@@ -16,7 +16,7 @@ use dashmap::DashMap;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use tracing::info;
+use tracing::warn;
 use url::Url;
 
 use crate::{
@@ -268,11 +268,15 @@ pub trait Check: Send + Sync {
 
 pub struct Checker {
     http_client: Arc<dyn HttpClient>,
+    timeout: Duration,
 }
 
 impl Checker {
-    pub fn new(http_client: Arc<dyn HttpClient>) -> Self {
-        Self { http_client }
+    pub fn new(http_client: Arc<dyn HttpClient>, timeout: Duration) -> Self {
+        Self {
+            http_client,
+            timeout,
+        }
     }
 }
 
@@ -283,7 +287,8 @@ impl Check for Checker {
         let u = Url::from_str(&format!("https://{}:{}/api/v2/status", node.id, node.port))
             .map_err(|err| CheckError::Generic(err.to_string()))?;
 
-        let request = reqwest::Request::new(Method::GET, u);
+        let mut request = reqwest::Request::new(Method::GET, u);
+        *request.timeout_mut() = Some(self.timeout);
 
         // Execute request
         let start_time = Instant::now();
@@ -402,21 +407,23 @@ impl<T: Check> Check for WithMetricsCheck<T> {
             .with_label_values(&labels[1..4])
             .set(out.is_ok().into());
 
-        info!(
-            action = "check",
-            result,
-            duration,
-            block_height,
-            replica_version,
-            subnet_id,
-            node_id,
-            node_addr,
-            error = out.as_ref().err().map(|x| x.to_string()),
-        );
+        if let Err(e) = &out {
+            warn!(
+                action = "check",
+                result,
+                duration,
+                block_height,
+                replica_version,
+                subnet_id,
+                node_id,
+                node_addr,
+                error = e.to_string(),
+            );
+        }
 
         out
     }
 }
 
 #[cfg(test)]
-mod test;
+pub mod test;

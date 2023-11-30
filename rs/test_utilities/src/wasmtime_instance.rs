@@ -1,5 +1,4 @@
-use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
@@ -164,7 +163,7 @@ impl WasmtimeInstanceBuilder {
             embedder.config().feature_flags.wasm_native_stable_memory,
             embedder.config().max_sum_exported_function_name_lengths,
             Memory::new_for_testing(),
-            Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
+            Rc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,
         );
         let instruction_limit = api.slice_instruction_limit();

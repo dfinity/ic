@@ -31,7 +31,7 @@ fn should_generate_committee_signing_key_pair_and_store_keys() {
 
     assert_matches!(pk, CspPublicKey::MultiBls12_381(_));
     assert!(csp_vault
-        .sks_contains(&KeyId::try_from(&pk).unwrap())
+        .sks_contains(KeyId::try_from(&pk).unwrap())
         .is_ok());
     assert_eq!(
         csp_vault
@@ -196,7 +196,7 @@ fn should_multi_sign_and_verify_with_generated_key() {
         )
         .build();
     let sig = csp_vault
-        .multi_sign(AlgorithmId::MultiBls12_381, &msg, key_id)
+        .multi_sign(AlgorithmId::MultiBls12_381, msg.clone(), key_id)
         .expect("failed to generate signature");
 
     assert!(verifier
@@ -216,13 +216,13 @@ fn should_fail_to_multi_sign_with_unsupported_algorithm_id() {
         .expect("failed to generate keys");
     let key_id = KeyId::try_from(&csp_pub_key).unwrap();
 
-    let msg = [31; 41];
+    let msg = vec![31; 41];
 
     for algorithm_id in AlgorithmId::iter() {
         if algorithm_id != AlgorithmId::MultiBls12_381 {
             assert_eq!(
                 csp_vault
-                    .multi_sign(algorithm_id, &msg, key_id)
+                    .multi_sign(algorithm_id, msg.clone(), key_id)
                     .expect_err("Unexpected success."),
                 CspMultiSignatureError::UnsupportedAlgorithm {
                     algorithm: algorithm_id,
@@ -239,10 +239,10 @@ fn should_fail_to_multi_sign_if_secret_key_in_store_has_wrong_type() {
         .gen_node_signing_key_pair()
         .expect("failed to generate keys");
 
-    let msg = [31; 41];
+    let msg = vec![31; 41];
     let result = csp_vault.multi_sign(
         AlgorithmId::MultiBls12_381,
-        &msg,
+        msg,
         KeyId::try_from(&wrong_csp_pub_key).unwrap(),
     );
 

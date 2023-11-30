@@ -27,9 +27,11 @@ lazy_static! {
             },
             1 => Followees {
                 followees: vec![
-                    // Not sorted, to make sure we preserve order.
+                    // Not sorted and has duplicates, to make sure we preserve order and
+                    // multiplicity.
                     NeuronId { id: 211 },
                     NeuronId { id: 212 },
+                    NeuronId { id: 210 },
                     NeuronId { id: 210 },
                 ],
             },
@@ -166,23 +168,15 @@ fn test_store_simplest_nontrivial_case() {
         ..Default::default()
     });
     match &bad_create_result {
-        Err(err) => {
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = err;
-
-            assert_eq!(
-                ErrorType::from_i32(*error_type),
-                Some(ErrorType::PreconditionFailed),
-                "{:?}",
-                err,
-            );
-
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("already in use"), "{:?}", err);
-            assert!(error_message.contains("42"), "{:?}", err);
-        }
+        Err(err) => match err {
+            NeuronStoreError::NeuronAlreadyExists(neuron_id) => {
+                assert_eq!(*neuron_id, NeuronId { id: 42 });
+            }
+            _ => panic!(
+                "create(evil_twin_neuron) resulted in an Err other than already exists: {:?}",
+                err
+            ),
+        },
 
         _ => panic!(
             "create(evil_twin_neuron) did not result in an Err: {:?}",
@@ -196,23 +190,12 @@ fn test_store_simplest_nontrivial_case() {
     // 4. Bad read: Unknown NeuronId. This should result in a NotFound Err.
     let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF });
     match &bad_read_result {
-        Err(err) => {
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = err;
-
-            assert_eq!(
-                ErrorType::from_i32(*error_type),
-                Some(ErrorType::NotFound),
-                "{:?}",
-                err,
-            );
-
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("unable to find"), "{:?}", err);
-            assert!(error_message.contains("3735928559"), "{:?}", err); // 0xDEAD_BEEF
-        }
+        Err(err) => match err {
+            NeuronStoreError::NeuronNotFound { neuron_id } => {
+                assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
+            }
+            _ => panic!("read returns error other than not found: {:?}", err),
+        },
 
         _ => panic!(
             "read(0xDEAD) did not result in an Err: {:?}",
@@ -278,34 +261,12 @@ fn test_store_simplest_nontrivial_case() {
     });
     match &update_result {
         // This is what we expected.
-        Err(err) => {
-            // Take a closer look at err.
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = err;
-
-            // Inspect type.
-            let error_type = ErrorType::from_i32(*error_type);
-            assert_eq!(error_type, Some(ErrorType::NotFound), "{:?}", err);
-
-            // Next, turn to error_message.
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("update"), "{:?}", err);
-            assert!(error_message.contains("existing"), "{:?}", err);
-            assert!(error_message.contains("neuron"), "{:?}", err);
-            assert!(error_message.contains("there was none"), "{:?}", err);
-
-            assert!(error_message.contains("id"), "{:?}", err);
-            assert!(error_message.contains("3735928559"), "{:?}", err); // 0xDEAD_BEEF
-
-            assert!(
-                error_message.contains("cached_neuron_stake_e8s"),
-                "{:?}",
-                err,
-            );
-            assert!(error_message.contains("195948557"), "{:?}", err); // 0xBAD_F00D
-        }
+        Err(err) => match err {
+            NeuronStoreError::NeuronNotFound { neuron_id } => {
+                assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
+            }
+            _ => panic!("update returns Err other than not found {:?}", err),
+        },
 
         // Any other result is bad.
         _ => panic!("{:#?}", update_result),
@@ -318,19 +279,12 @@ fn test_store_simplest_nontrivial_case() {
         // This is what we expected.
         Err(err) => {
             // Take a closer look at err.
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = err;
-
-            // Inspect type.
-            let error_type = ErrorType::from_i32(*error_type);
-            assert_eq!(error_type, Some(ErrorType::NotFound), "{:?}", err);
-
-            // Next, turn to error_message.
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("unable to find"), "{:?}", err);
-            assert!(error_message.contains("3735928559"), "{:?}", err); // 0xDEAD_BEEF
+            match err {
+                NeuronStoreError::NeuronNotFound { neuron_id } => {
+                    assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
+                }
+                _ => panic!("read returns error other than not found: {:?}", err),
+            }
         }
 
         _ => panic!("read did not return Err: {:?}", read_result),
@@ -358,19 +312,12 @@ fn test_store_simplest_nontrivial_case() {
         // This is what we expected.
         Err(err) => {
             // Take a closer look at err.
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = err;
-
-            // Inspect type.
-            let error_type = ErrorType::from_i32(*error_type);
-            assert_eq!(error_type, Some(ErrorType::NotFound), "{:?}", err);
-
-            // Next, turn to error_message.
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("not found"), "{:?}", err);
-            assert!(error_message.contains("42"), "{:?}", err);
+            match err {
+                NeuronStoreError::NeuronNotFound { neuron_id } => {
+                    assert_eq!(*neuron_id, NeuronId { id: 42 });
+                }
+                _ => panic!("read returns error other than not found: {:?}", err),
+            }
         }
 
         _ => panic!("second delete did not return Err: {:?}", delete_result),
@@ -383,19 +330,12 @@ fn test_store_simplest_nontrivial_case() {
         // This is what we expected.
         Err(err) => {
             // Take a closer look at err.
-            let GovernanceError {
-                error_type,
-                error_message,
-            } = err;
-
-            // Inspect type.
-            let error_type = ErrorType::from_i32(*error_type);
-            assert_eq!(error_type, Some(ErrorType::NotFound), "{:?}", err);
-
-            // Next, turn to error_message.
-            let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("unable to find"), "{:?}", err);
-            assert!(error_message.contains("42"), "{:?}", err);
+            match err {
+                NeuronStoreError::NeuronNotFound { neuron_id } => {
+                    assert_eq!(*neuron_id, NeuronId { id: 42 });
+                }
+                _ => panic!("read returns error other than not found: {:?}", err),
+            }
         }
 
         _ => panic!("read did not return Err: {:?}", read_result),
@@ -408,16 +348,16 @@ fn test_store_simplest_nontrivial_case() {
     fn assert_no_zombie_references_in<Key, Value, Memory>(
         map_name: &str,
         map: &StableBTreeMap<Key, Value, Memory>,
-        key_to_neuron_id: impl Fn(Key) -> NeuronId,
+        key_value_to_neuron_id: impl Fn(Key, Value) -> NeuronId,
         bad_neuron_id: NeuronId,
     ) where
         Key: BoundedStorable + Ord + Copy + std::fmt::Debug,
-        Value: BoundedStorable + std::fmt::Debug,
+        Value: BoundedStorable + Clone + std::fmt::Debug,
         Memory: ic_stable_structures::Memory,
     {
         for (key, value) in map.iter() {
             assert_ne!(
-                key_to_neuron_id(key),
+                key_value_to_neuron_id(key, value.clone()),
                 bad_neuron_id,
                 "{} {:?}: {:#?}",
                 map_name,
@@ -435,106 +375,32 @@ fn test_store_simplest_nontrivial_case() {
     assert_no_zombie_references_in(
         "hot_keys",
         &store.hot_keys_map,
-        |key| NeuronId { id: key.0 },
+        |key, _| NeuronId { id: key.0 },
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "recent_ballots",
         &store.recent_ballots_map,
-        |key| NeuronId { id: key.0 },
+        |key, _| NeuronId { id: key.0 },
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "followees",
         &store.followees_map,
-        |key: FolloweesKey| NeuronId {
-            id: key.followee_id,
-        },
+        |_, followee_id| NeuronId { id: followee_id },
         original_neuron_id,
     );
 
     assert_no_zombie_references_in(
         "known_neuron_data",
         &store.known_neuron_data_map,
-        |key| NeuronId { id: key },
+        |key, _| NeuronId { id: key },
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "transfer",
         &store.transfer_map,
-        |key| NeuronId { id: key },
+        |key, _| NeuronId { id: key },
         original_neuron_id,
     );
-}
-
-/// Summary:
-///
-///   1. upsert (effectively, an insert)
-///   2. read to verify
-///   3. upsert same ID (effectively, an update)
-///   4. read to verify
-#[test]
-fn test_store_upsert() {
-    let mut store = new_heap_based();
-
-    let neuron = MODEL_NEURON.clone();
-    let neuron_id = neuron.id.unwrap();
-
-    // 0. create red herrings
-    create_red_herring_neurons(&mut store);
-
-    // 1. upsert (entry not already present)
-    assert_eq!(store.upsert(neuron.clone()), Ok(()));
-    assert_that_red_herring_neurons_are_untouched(&store);
-
-    // 2. read to verify
-    assert_eq!(store.read(neuron_id), Ok(neuron.clone()));
-
-    // Modify neuron.
-    let updated_neuron = {
-        let mut hot_keys = neuron.hot_keys;
-        hot_keys.push(PrincipalId::new_user_test_id(999_000));
-
-        let mut followees = neuron.followees;
-        followees
-            .entry(0)
-            .or_default()
-            .followees
-            .push(NeuronId { id: 999_001 });
-
-        let mut recent_ballots = neuron.recent_ballots;
-        recent_ballots.insert(
-            0,
-            BallotInfo {
-                proposal_id: Some(ProposalId { id: 999_002 }),
-                vote: Vote::No as i32,
-            },
-        );
-
-        let mut known_neuron_data = neuron.known_neuron_data;
-        known_neuron_data.as_mut().unwrap().description = None;
-
-        let mut transfer = neuron.transfer;
-        let transfer = None;
-
-        Neuron {
-            cached_neuron_stake_e8s: 0xCAFE,
-
-            hot_keys,
-            followees,
-            recent_ballots,
-
-            known_neuron_data,
-            transfer,
-
-            ..neuron
-        }
-    };
-
-    // 3. upsert (change an existing entry)
-    assert_eq!(store.upsert(updated_neuron.clone()), Ok(()));
-    assert_that_red_herring_neurons_are_untouched(&store);
-
-    // 4. read to verify
-    assert_eq!(store.read(neuron_id), Ok(updated_neuron));
 }

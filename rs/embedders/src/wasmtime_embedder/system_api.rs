@@ -7,10 +7,10 @@ use ic_config::{
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, HypervisorError, HypervisorResult, PerformanceCounterType,
-    StableGrowOutcome, SystemApi, TrapCode,
+    HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
+    TrapCode,
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_types::{Cycles, NumBytes, NumInstructions, NumPages, Time};
@@ -114,7 +114,6 @@ fn mark_writes_on_bytemap(
 
 struct Overhead {
     system_api_overhead: NumInstructions,
-    cpu_complexity: ic_types::CpuComplexity,
 }
 
 macro_rules! overhead {
@@ -122,15 +121,12 @@ macro_rules! overhead {
         match $metering_type {
             MeteringType::Old => Overhead {
                 system_api_overhead: system_api_complexity::overhead::old::$name,
-                cpu_complexity: system_api_complexity::cpu::$name,
             },
             MeteringType::New => Overhead {
                 system_api_overhead: system_api_complexity::overhead::new::$name,
-                cpu_complexity: system_api_complexity::cpu::$name,
             },
             MeteringType::None => Overhead {
                 system_api_overhead: system_api_complexity::overhead::old::$name,
-                cpu_complexity: system_api_complexity::cpu::$name,
             },
         }
     };
@@ -236,16 +232,12 @@ fn charge_for_system_api_call(
     mut overhead: Overhead,
     num_bytes: u64,
 ) -> HypervisorResult<()> {
-    let (system_api, log) = caller.data_mut().system_api_mut_log()?;
+    let system_api = caller.data_mut().system_api()?;
     if num_bytes > 0 {
         let bytes_charge = system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes));
         overhead.add_charge(bytes_charge)?;
     }
-    let complexity = ExecutionComplexity {
-        cpu: overhead.cpu_complexity,
-    };
 
-    observe_execution_complexity(log, system_api, complexity)?;
     charge_direct_fee(caller, overhead.system_api_overhead)
 }
 
@@ -291,36 +283,6 @@ fn charge_direct_fee(
         let system_api = &mut caller.data_mut().system_api_mut()?;
         instruction_counter = system_api.out_of_instructions(instruction_counter)?;
         store_value(&num_instructions_global, instruction_counter, caller)?;
-    }
-    Ok(())
-}
-
-/// Observe execution complexity.
-fn observe_execution_complexity(
-    log: &ReplicaLogger,
-    system_api: &mut SystemApiImpl,
-    complexity: ExecutionComplexity,
-) -> HypervisorResult<()> {
-    let canister_id = system_api.canister_id();
-
-    let total_complexity = system_api.execution_complexity() + &complexity;
-    match system_api.subnet_type() {
-        // Do not observe the execution complexity on the system subnets.
-        SubnetType::System => {}
-        SubnetType::Application | SubnetType::VerifiedApplication => {
-            let message_instruction_limit = system_api.message_instruction_limit();
-            if total_complexity.cpu_reached(message_instruction_limit) {
-                error!(
-                    log,
-                    "Canister {}: Error exceeding CPU complexity limit: (observed:{}, limit:{})",
-                    canister_id,
-                    total_complexity.cpu,
-                    message_instruction_limit,
-                );
-                return Err(HypervisorError::ExecutionComplexityLimitExceeded);
-            }
-            system_api.set_execution_complexity(total_complexity);
-        }
     }
     Ok(())
 }
@@ -1086,7 +1048,6 @@ pub(crate) fn syscalls(
                         STABLE_GROW,
                         metering_type
                     ),
-                    cpu_complexity: system_api_complexity::cpu::STABLE_GROW,
                 };
                 charge_for_cpu(&mut caller, overhead)?;
                 with_system_api(&mut caller, |s| {
@@ -1252,7 +1213,6 @@ pub(crate) fn syscalls(
 fn handle_overflow_when_calculating_overhead() {
     let mut fee = Overhead {
         system_api_overhead: NumInstructions::from(1000),
-        cpu_complexity: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
     };
 
     assert!(fee.add_charge(NumInstructions::from(500)).is_ok());
@@ -1263,7 +1223,6 @@ fn handle_overflow_when_calculating_overhead() {
 fn overhead_doesnt_overflow_under_practical_limits() {
     let mut fee = Overhead {
         system_api_overhead: NumInstructions::from(10000), // bigger than any static overhead
-        cpu_complexity: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
     };
 
     let dirty_page_overhead =

@@ -13,6 +13,11 @@ pub mod reward;
 pub mod sns_upgrade;
 pub mod types;
 
+// A special value that we put into reward_event_end_timestamp_seconds field to make the proposal
+// have RewardStatus::Settled, but is otherwise not valid, because it predates the genesis of any
+// SNS.
+pub const LEGACY_REWARD_EVENT_END_TIMESTAMP_SECONDS: u64 = 42;
+
 trait Len {
     fn len(&self) -> usize;
 }

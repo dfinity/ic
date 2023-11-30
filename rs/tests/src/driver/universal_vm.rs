@@ -110,7 +110,7 @@ impl UniversalVm {
         let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
         let res_request =
-            get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.farm_group_name)?;
+            get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.infra_group_name)?;
         let resource_group = allocate_resources(&farm, &res_request)?;
         let vm = resource_group
             .vms
@@ -127,7 +127,11 @@ impl UniversalVm {
         setup_ssh(env, config_ssh_dir.clone())?;
         let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
         create_universal_vm_config_image(env, &config_ssh_dir, &config_ssh_img, "SSH")?;
-        let ssh_config_img_file_id = farm.upload_file(config_ssh_img, CONF_SSH_IMG_FNAME)?;
+        let ssh_config_img_file_id = farm.upload_file(
+            &pot_setup.infra_group_name,
+            config_ssh_img,
+            CONF_SSH_IMG_FNAME,
+        )?;
         let mut image_ids = vec![ssh_config_img_file_id];
 
         // Setup config image
@@ -141,9 +145,9 @@ impl UniversalVm {
                 }
                 UniversalVmConfig::Img(config_img) => config_img.to_path_buf(),
             };
-            let file_id = id_of_file(config_img.clone())?;
+            let mut file_id = id_of_file(config_img.clone())?;
 
-            let upload = match farm.claim_file(&file_id)? {
+            let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
                 ClaimResult::FileClaimed(file_expiration) => {
                     if let Some(expiration) = file_expiration.expiration {
                         let now = Utc::now();
@@ -161,7 +165,8 @@ impl UniversalVm {
             };
 
             if upload {
-                let file_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
+                file_id =
+                    farm.upload_file(&pot_setup.infra_group_name, config_img, CONF_IMG_FNAME)?;
                 info!(env.logger(), "Uploaded image: {}", file_id);
             } else {
                 info!(
@@ -173,13 +178,13 @@ impl UniversalVm {
         }
 
         farm.attach_disk_images(
-            &pot_setup.farm_group_name,
+            &pot_setup.infra_group_name,
             &self.name,
             "usb-storage",
             image_ids,
         )?;
 
-        farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
+        farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
         Ok(())
     }
 }

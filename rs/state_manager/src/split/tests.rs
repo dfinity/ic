@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    checkpoint::make_checkpoint, tip::spawn_tip_thread, ManifestMetrics, StateManagerMetrics,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    checkpoint::make_checkpoint, tip::spawn_tip_thread, CheckpointMetrics, ManifestMetrics,
+    StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
@@ -12,7 +12,8 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map::TestPageAllocatorFileDescriptorImpl, ReplicatedState, SystemMetadata,
+    page_map::TestPageAllocatorFileDescriptorImpl, CheckpointLoadingMetrics, ReplicatedState,
+    SystemMetadata,
 };
 use ic_state_layout::{
     ProtoFileWith, StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR,
@@ -122,13 +123,13 @@ fn read_write_roundtrip() {
         let (tmp, _) = new_state_layout(log.clone());
         let root = tmp.path().to_path_buf();
         let metrics_registry = MetricsRegistry::new();
-        let layout = StateLayout::try_new(log.clone(), root, &metrics_registry).unwrap();
+        let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
         let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
         // Sanity check: ensure that we have a single checkpoint.
         assert_eq!(1, layout.checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the original checkpoint.
-        let metrics = StateManagerMetrics::new(&metrics_registry);
+        let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
         let manifest_metrics = &metrics.manifest_metrics;
         let (manifest_before, height_before) = compute_manifest(&layout, manifest_metrics, &log);
 
@@ -147,6 +148,7 @@ fn read_write_roundtrip() {
             &cp,
             &mut thread_pool,
             fd_factory,
+            &Config::new(root),
             &metrics,
             log.clone(),
         )
@@ -284,7 +286,7 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
                 // `batch_time` should be the provided `new_subnet_batch_time` (if `Some`); or
                 // else the original subnet's `batch_time`.
                 expected.batch_time = new_subnet_batch_time.unwrap_or(batch_time);
-                assert_eq!(expected, deserialize_system_metadata(&root, height_b))
+                assert_eq!(expected, deserialize_system_metadata(&root, height_b, &log))
             } else {
                 // All other files should be unmodified (`subnet_queues.pbuf` was never
                 // populated in this test, so it happens to be identical).
@@ -323,7 +325,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let metrics_registry = MetricsRegistry::new();
     let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
     let tip_handler = layout.capture_tip_handler();
-    let state_manager_metrics = StateManagerMetrics::new(&metrics_registry);
+    let state_manager_metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
         tip_handler,
@@ -527,7 +529,7 @@ fn compute_manifest_for_root(root: &Path, log: &ReplicaLogger) -> (Manifest, Hei
     let layout = StateLayout::try_new(log.clone(), root.to_path_buf(), &metrics_registry).unwrap();
 
     // Compute the manifest of the original checkpoint.
-    let metrics = StateManagerMetrics::new(&metrics_registry);
+    let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
     let manifest_metrics = &metrics.manifest_metrics;
     compute_manifest(&layout, manifest_metrics, log)
 }
@@ -541,7 +543,7 @@ fn deserialize_split_from(root: &Path, height: Height) -> SubnetId {
     subnet_id_try_from_protobuf(split_from.deserialize().unwrap().subnet_id.unwrap()).unwrap()
 }
 
-fn deserialize_system_metadata(root: &Path, height: Height) -> SystemMetadata {
+fn deserialize_system_metadata(root: &Path, height: Height, log: &ReplicaLogger) -> SystemMetadata {
     let system_metadata: ProtoFileWith<
         ic_protobuf::state::system_metadata::v1::SystemMetadata,
         ReadOnly,
@@ -550,5 +552,11 @@ fn deserialize_system_metadata(root: &Path, height: Height) -> SystemMetadata {
         .join(StateLayout::checkpoint_name(height))
         .join(SYSTEM_METADATA_FILE)
         .into();
-    system_metadata.deserialize().unwrap().try_into().unwrap()
+    (
+        system_metadata.deserialize().unwrap(),
+        &CheckpointMetrics::new(&MetricsRegistry::new(), log.clone())
+            as &dyn CheckpointLoadingMetrics,
+    )
+        .try_into()
+        .unwrap()
 }

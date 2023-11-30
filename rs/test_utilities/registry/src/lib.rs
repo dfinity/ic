@@ -2,15 +2,14 @@ use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::LocalStoreCertifiedTimeReader;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetFeatures, SubnetListRecord,
-    SubnetRecord,
+    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -120,7 +119,7 @@ pub fn insert_initial_dkg_transcript(
         .expect("Failed to add subnet record.");
 }
 
-pub fn add_subnet_record(
+pub fn add_single_subnet_record(
     registry_data_provider: &Arc<ProtoRegistryDataProvider>,
     version: u64,
     subnet_id: SubnetId,
@@ -134,10 +133,20 @@ pub fn add_subnet_record(
             Some(record),
         )
         .expect("Failed to add subnet record.");
+}
+
+pub fn add_subnet_list_record(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    version: u64,
+    subnet_ids: Vec<SubnetId>,
+) {
+    let registry_version = RegistryVersion::from(version);
     let subnet_list_record = SubnetListRecord {
-        subnets: vec![subnet_id.get().into_vec()],
+        subnets: subnet_ids
+            .into_iter()
+            .map(|subnet_id| subnet_id.get().into_vec())
+            .collect(),
     };
-    // Set subnetwork list
     registry_data_provider
         .add(
             make_subnet_list_record_key().as_str(),
@@ -145,6 +154,16 @@ pub fn add_subnet_record(
             Some(subnet_list_record),
         )
         .unwrap();
+}
+
+pub fn add_subnet_record(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    version: u64,
+    subnet_id: SubnetId,
+    record: SubnetRecord,
+) {
+    add_single_subnet_record(registry_data_provider, version, subnet_id, record);
+    add_subnet_list_record(registry_data_provider, version, vec![subnet_id]);
 }
 
 /// Provides a `SubnetRecord` to unit tests
@@ -167,7 +186,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_instructions_per_message: 5_000_000_000,
         max_instructions_per_round: 7_000_000_000,
         max_instructions_per_install_code: 200_000_000_000,
-        features: Some(SubnetFeatures::default()),
+        features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
@@ -190,6 +209,27 @@ impl Default for SubnetRecordBuilder {
 impl SubnetRecordBuilder {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn with_max_ingress_bytes_per_message(
+        mut self,
+        max_ingress_bytes_per_message: u64,
+    ) -> Self {
+        self.record.max_ingress_bytes_per_message = max_ingress_bytes_per_message;
+        self
+    }
+
+    pub fn with_max_ingress_messages_per_block(
+        mut self,
+        max_ingress_messages_per_block: u64,
+    ) -> Self {
+        self.record.max_ingress_messages_per_block = max_ingress_messages_per_block;
+        self
+    }
+
+    pub fn with_max_block_payload_size(mut self, max_block_payload_size: u64) -> Self {
+        self.record.max_block_payload_size = max_block_payload_size;
+        self
     }
 
     pub fn from(committee: &[NodeId]) -> Self {
@@ -232,7 +272,7 @@ impl SubnetRecordBuilder {
     }
 
     pub fn with_features(mut self, features: SubnetFeatures) -> Self {
-        self.record.features = Some(features);
+        self.record.features = Some(features.into());
         self
     }
 

@@ -11,11 +11,10 @@ use ic_crypto_ecdsa_secp256k1::RecoveryId;
 use ic_ic00_types::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
-use serde::{Deserialize, Serialize};
 
 const EIP1559_TX_ID: u8 = 2;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 #[cbor(transparent)]
 pub struct AccessList(#[n(0)] pub Vec<AccessListItem>);
 
@@ -37,11 +36,11 @@ impl rlp::Encodable for AccessList {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 #[cbor(transparent)]
 pub struct StorageKey(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 pub struct AccessListItem {
     /// Accessed address
     #[n(0)]
@@ -65,7 +64,7 @@ impl rlp::Encodable for AccessListItem {
 }
 
 /// <https://eips.ethereum.org/EIPS/eip-1559>
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct Eip1559TransactionRequest {
     #[n(0)]
     pub chain_id: u64,
@@ -95,7 +94,7 @@ impl rlp::Encodable for Eip1559TransactionRequest {
     }
 }
 
-#[derive(Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+#[derive(Default, Clone, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct Eip1559Signature {
     #[n(0)]
     pub signature_y_parity: bool,
@@ -116,18 +115,70 @@ impl rlp::Encodable for Eip1559Signature {
 /// Immutable signed EIP-1559 transaction.
 /// Use `Eip1559TransactionRequest::sign()` to create a newly signed transaction or
 /// `SignedEip1559TransactionRequest::from()` if the signature is already known
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SignedEip1559TransactionRequest {
+    inner: InnerSignedTransactionRequest,
+    /// Hash of the signed transaction. Since computation of the hash is an expensive operation,
+    /// which involves RLP encoding and Keccak256, the value is computed once upon instantiation
+    /// and memoized. It is safe to memoize the hash because the transaction is immutable.
+    /// Note: Serialization should ignore this field and deserialization should call
+    /// the constructor to create the correct value.
+    memoized_hash: Hash,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
+struct InnerSignedTransactionRequest {
     #[n(0)]
     transaction: Eip1559TransactionRequest,
     #[n(1)]
     signature: Eip1559Signature,
-    // TODO FI-984: transaction hash should be computed only once
+}
+
+impl rlp::Encodable for InnerSignedTransactionRequest {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_unbounded_list();
+        self.transaction.rlp_inner(s);
+        s.append(&self.signature);
+        //ignore memoized_hash
+        s.finalize_unbounded_list();
+    }
+}
+
+impl InnerSignedTransactionRequest {
+    /// An EIP-1559 transaction is encoded as follows
+    /// 0x02 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list, signature_y_parity, signature_r, signature_s]),
+    /// where `||` denotes string concatenation.
+    pub fn raw_bytes(&self) -> Vec<u8> {
+        use rlp::Encodable;
+        let mut rlp = self.rlp_bytes().to_vec();
+        rlp.insert(0, self.transaction.transaction_type());
+        rlp
+    }
+}
+
+impl<C> minicbor::Encode<C> for SignedEip1559TransactionRequest {
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        e: &mut minicbor::Encoder<W>,
+        ctx: &mut C,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
+        e.encode_with(&self.inner, ctx)?;
+        Ok(())
+    }
+}
+
+impl<'b, C> minicbor::Decode<'b, C> for SignedEip1559TransactionRequest {
+    fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
+        d.decode_with(ctx)
+            .map(|inner: InnerSignedTransactionRequest| {
+                Self::new(inner.transaction, inner.signature)
+            })
+    }
 }
 
 /// Immutable finalized transaction.
 /// Use `SignedEip1559TransactionRequest::try_finalize()` to create a finalized transaction.
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct FinalizedEip1559Transaction {
     #[n(0)]
     transaction: SignedEip1559TransactionRequest,
@@ -152,11 +203,16 @@ impl FinalizedEip1559Transaction {
         &self.receipt.transaction_hash
     }
 
+    pub fn transaction(&self) -> &Eip1559TransactionRequest {
+        self.transaction.transaction()
+    }
+
+    pub fn transaction_price(&self) -> TransactionPrice {
+        self.transaction.transaction().transaction_price()
+    }
+
     pub fn effective_transaction_fee(&self) -> Wei {
-        self.receipt
-            .effective_gas_price
-            .transaction_cost(self.receipt.gas_used)
-            .expect("ERROR: overflow during transaction fee calculation")
+        self.receipt.effective_transaction_fee()
     }
 
     pub fn transaction_status(&self) -> &TransactionStatus {
@@ -166,48 +222,44 @@ impl FinalizedEip1559Transaction {
 
 impl From<(Eip1559TransactionRequest, Eip1559Signature)> for SignedEip1559TransactionRequest {
     fn from((transaction, signature): (Eip1559TransactionRequest, Eip1559Signature)) -> Self {
-        Self {
-            transaction,
-            signature,
-        }
+        Self::new(transaction, signature)
     }
 }
 
 impl rlp::Encodable for SignedEip1559TransactionRequest {
     fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_unbounded_list();
-        self.transaction.rlp_inner(s);
-        s.append(&self.signature);
-        s.finalize_unbounded_list();
+        s.append(&self.inner);
     }
 }
 
 impl SignedEip1559TransactionRequest {
-    /// An EIP-1559 transaction is encoded as follows
-    /// 0x02 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list, signature_y_parity, signature_r, signature_s]),
-    /// where `||` denotes string concatenation.
-    pub fn raw_bytes(&self) -> Vec<u8> {
-        use rlp::Encodable;
-        let mut rlp = self.rlp_bytes().to_vec();
-        rlp.insert(0, self.transaction.transaction_type());
-        rlp
+    pub fn new(transaction: Eip1559TransactionRequest, signature: Eip1559Signature) -> Self {
+        let inner = InnerSignedTransactionRequest {
+            transaction,
+            signature,
+        };
+        let hash = Hash(ic_crypto_sha3::Keccak256::hash(inner.raw_bytes()));
+        Self {
+            inner,
+            memoized_hash: hash,
+        }
     }
 
     pub fn raw_transaction_hex(&self) -> String {
-        format!("0x{}", hex::encode(self.raw_bytes()))
+        format!("0x{}", hex::encode(self.inner.raw_bytes()))
     }
 
     /// If included in a block, this hash value is used as reference to this transaction.
     pub fn hash(&self) -> Hash {
-        Hash(ic_crypto_sha3::Keccak256::hash(self.raw_bytes()))
+        self.memoized_hash
     }
 
     pub fn transaction(&self) -> &Eip1559TransactionRequest {
-        &self.transaction
+        &self.inner.transaction
     }
 
     pub fn nonce(&self) -> TransactionNonce {
-        self.transaction.nonce
+        self.transaction().nonce
     }
 
     pub fn try_finalize(
@@ -221,16 +273,18 @@ impl SignedEip1559TransactionRequest {
                 receipt.transaction_hash
             ));
         }
-        if self.transaction.max_fee_per_gas < receipt.effective_gas_price {
+        if self.transaction().max_fee_per_gas < receipt.effective_gas_price {
             return Err(format!(
                 "transaction max_fee_per_gas {} is smaller than effective_gas_price {}",
-                self.transaction.max_fee_per_gas, receipt.effective_gas_price
+                self.transaction().max_fee_per_gas,
+                receipt.effective_gas_price
             ));
         }
-        if self.transaction.gas_limit < receipt.gas_used {
+        if self.transaction().gas_limit < receipt.gas_used {
             return Err(format!(
                 "transaction gas limit {} is smaller than gas used {}",
-                self.transaction.gas_limit, receipt.gas_used
+                self.transaction().gas_limit,
+                receipt.gas_used
             ));
         }
         Ok(FinalizedEip1559Transaction {
@@ -304,10 +358,7 @@ impl Eip1559TransactionRequest {
             s,
         };
 
-        Ok(SignedEip1559TransactionRequest {
-            transaction: self,
-            signature: sig,
-        })
+        Ok(SignedEip1559TransactionRequest::new(self, sig))
     }
 }
 
@@ -381,33 +432,44 @@ impl TransactionPrice {
         }
     }
 }
-
-pub fn estimate_transaction_price(fee_history: &FeeHistory) -> TransactionPrice {
+#[derive(Debug, PartialEq, Eq)]
+pub enum TransactionPriceEstimationError {
+    InvalidFeeHistory(String),
+    Overflow(String),
+}
+pub fn estimate_transaction_price(
+    fee_history: &FeeHistory,
+) -> Result<TransactionPrice, TransactionPriceEstimationError> {
     // average value between the `minSuggestedMaxPriorityFeePerGas`
     // used by Metamask, see
     // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
     const MIN_MAX_PRIORITY_FEE_PER_GAS: WeiPerGas = WeiPerGas::new(1_500_000_000); //1.5 gwei
     const TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
-    let base_fee_of_next_finalized_block = *fee_history
-        .base_fee_per_gas
-        .last()
-        .expect("base_fee_per_gas should not be empty to be able to evaluate transaction price");
+    let base_fee_of_next_finalized_block = *fee_history.base_fee_per_gas.last().ok_or(
+        TransactionPriceEstimationError::InvalidFeeHistory(
+            "base_fee_per_gas should not be empty to be able to evaluate transaction price"
+                .to_string(),
+        ),
+    )?;
     let max_priority_fee_per_gas = {
         let mut rewards: Vec<&WeiPerGas> = fee_history.reward.iter().flatten().collect();
         let historic_max_priority_fee_per_gas =
-            **median(&mut rewards).expect("should be non-empty with rewards of the last 5 blocks");
+            **median(&mut rewards).ok_or(TransactionPriceEstimationError::InvalidFeeHistory(
+                "should be non-empty with rewards of the last 5 blocks".to_string(),
+            ))?;
         historic_max_priority_fee_per_gas.max(MIN_MAX_PRIORITY_FEE_PER_GAS)
     };
     let max_fee_per_gas = base_fee_of_next_finalized_block
         .checked_mul(2_u8)
-        .expect("ERROR: overflow during transaction price estimation")
-        .checked_add(max_priority_fee_per_gas)
-        .expect("ERROR: overflow during transaction price estimation");
-    TransactionPrice {
+        .and_then(|base_fee_estimate| base_fee_estimate.checked_add(max_priority_fee_per_gas))
+        .ok_or(TransactionPriceEstimationError::Overflow(
+            "ERROR: overflow during transaction price estimation".to_string(),
+        ))?;
+    Ok(TransactionPrice {
         gas_limit: TRANSACTION_GAS_LIMIT,
         max_fee_per_gas,
         max_priority_fee_per_gas,
-    }
+    })
 }
 
 fn median<T: Ord>(values: &mut [T]) -> Option<&T> {

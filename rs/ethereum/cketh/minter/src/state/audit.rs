@@ -1,7 +1,7 @@
 pub use super::event::{Event, EventType};
 use super::State;
+use crate::state::transactions::Reimbursed;
 use crate::storage::{record_event, with_event_iter};
-use crate::transactions::Reimbursed;
 
 /// Updates the state to reflect the given state transition.
 // public because it's used in tests since process_event
@@ -17,7 +17,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 .expect("applying upgrade event should succeed");
         }
         EventType::AcceptedDeposit(eth_event) => {
-            state.record_event_to_mint(eth_event.clone());
+            state.record_event_to_mint(eth_event);
         }
         EventType::InvalidDeposit {
             event_source,
@@ -67,18 +67,20 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             withdrawal_id,
             transaction_receipt,
         } => {
-            state
-                .eth_transactions
-                .record_finalized_transaction(*withdrawal_id, transaction_receipt.clone());
+            state.record_finalized_transaction(withdrawal_id, transaction_receipt);
         }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
             withdrawal_id,
             reimbursed_in_block,
             reimbursed_amount: _,
+            transaction_hash: _,
         }) => {
             state
                 .eth_transactions
                 .record_finalized_reimbursement(*withdrawal_id, *reimbursed_in_block);
+        }
+        EventType::SkippedBlock(block_number) => {
+            state.record_skipped_block(*block_number);
         }
     }
 }

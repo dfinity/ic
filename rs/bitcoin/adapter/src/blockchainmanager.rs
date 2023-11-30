@@ -1668,7 +1668,7 @@ pub mod test {
         let mut sync_queue: LinkedHashSet<BlockHash> =
             headers.iter().map(|h| h.block_hash()).collect();
         let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
-        assert!(matches!(result, None));
+        assert!(result.is_none());
         assert_eq!(sync_queue.len(), 1);
         assert_eq!(retry_queue.len(), 0);
     }

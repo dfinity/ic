@@ -13,6 +13,7 @@ pub mod group;
 pub mod ic;
 pub mod log_events;
 pub mod logger;
+pub mod nested;
 pub mod node_software_version;
 pub mod plan;
 pub mod port_allocator;

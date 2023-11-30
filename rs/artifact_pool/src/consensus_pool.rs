@@ -9,13 +9,13 @@ use crate::{
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
-    artifact_pool::{ChangeResult, MutablePool, ValidatedPoolReader},
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
         ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    time_source::TimeSource,
+    p2p::consensus::{ChangeResult, MutablePool, ValidatedPoolReader},
+    time_source::RealClock,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::linear_buckets;
@@ -388,6 +388,7 @@ impl ConsensusPoolImpl {
                 Duration::from_secs(config.purging_interval_secs),
                 registry,
                 log,
+                Arc::new(RealClock),
             )
         });
 
@@ -442,24 +443,6 @@ impl ConsensusPoolImpl {
             backup: None,
             log,
         }
-    }
-
-    pub fn new_from_cup_without_bytes(
-        node_id: NodeId,
-        subnet_id: SubnetId,
-        catch_up_package: CatchUpPackage,
-        config: ArtifactPoolConfig,
-        registry: ic_metrics::MetricsRegistry,
-        log: ReplicaLogger,
-    ) -> ConsensusPoolImpl {
-        Self::new(
-            node_id,
-            subnet_id,
-            (&catch_up_package).into(),
-            config,
-            registry,
-            log,
-        )
     }
 
     /// Get a copy of ConsensusPoolCache.
@@ -528,7 +511,6 @@ impl ConsensusPoolImpl {
         &self,
         backup: &Backup,
         latest_finalization_height: Height,
-        time_source: &dyn TimeSource,
         mut artifacts_for_backup: Vec<ConsensusMessage>,
     ) {
         // Find the highest finalization among the new artifacts
@@ -579,7 +561,7 @@ impl ConsensusPoolImpl {
             }
         }
 
-        backup.store(time_source, artifacts_for_backup);
+        backup.store(artifacts_for_backup);
     }
 }
 
@@ -616,11 +598,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(
-        &mut self,
-        time_source: &dyn TimeSource,
-        change_set: ChangeSet,
-    ) -> ChangeResult<ConsensusArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
@@ -632,11 +610,8 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         for change_action in change_set {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
-                    adverts.push(ConsensusArtifact::message_to_advert(&to_add));
-                    validated_ops.insert(ValidatedConsensusArtifact {
-                        msg: to_add,
-                        timestamp: time_source.get_relative_time(),
-                    });
+                    adverts.push(ConsensusArtifact::message_to_advert(&to_add.msg));
+                    validated_ops.insert(to_add);
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
@@ -699,12 +674,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         let purged = self.apply_changes_validated(validated_ops);
 
         if let Some(backup) = &self.backup {
-            self.backup_artifacts(
-                backup,
-                latest_finalization_height,
-                time_source,
-                artifacts_for_backup,
-            );
+            self.backup_artifacts(backup, latest_finalization_height, artifacts_for_backup);
         }
 
         if !updates.is_empty() {
@@ -931,7 +901,8 @@ mod tests {
     use crate::backup::{BackupAge, PurgingError};
 
     use super::*;
-    use ic_interfaces::artifact_pool::UnvalidatedArtifact;
+    use ic_interfaces::p2p::consensus::UnvalidatedArtifact;
+    use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
@@ -954,12 +925,30 @@ mod tests {
     use prost::Message;
     use std::{collections::HashMap, convert::TryFrom, fs, io::Read, path::Path, sync::RwLock};
 
+    fn new_from_cup_without_bytes(
+        node_id: NodeId,
+        subnet_id: SubnetId,
+        catch_up_package: CatchUpPackage,
+        config: ArtifactPoolConfig,
+        registry: ic_metrics::MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> ConsensusPoolImpl {
+        ConsensusPoolImpl::new(
+            node_id,
+            subnet_id,
+            (&catch_up_package).into(),
+            config,
+            registry,
+            log,
+        )
+    }
+
     #[test]
     fn test_timestamp() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let time_0 = time_source.get_relative_time();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1001,7 +990,7 @@ mod tests {
                 ChangeAction::MoveToValidated(msg_0),
                 ChangeAction::RemoveFromUnvalidated(msg_1),
             ];
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
 
             // Check timestamp is carried over for msg_0.
             assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), None);
@@ -1017,7 +1006,7 @@ mod tests {
     fn test_adverts_are_created_for_aggregates() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1058,34 +1047,33 @@ mod tests {
 
             let changeset = vec![
                 ChangeAction::MoveToValidated(random_beacon_2.clone()),
-                ChangeAction::AddToValidated(random_beacon_3.clone()),
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: random_beacon_3.clone(),
+                    timestamp: time_source.get_relative_time(),
+                }),
             ];
-            let result = pool.apply_changes(time_source.as_ref(), changeset);
+            let result = pool.apply_changes(changeset);
             assert!(result.purged.is_empty());
             assert_eq!(result.adverts.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(result.adverts[0].id, random_beacon_2.get_id());
             assert_eq!(result.adverts[1].id, random_beacon_3.get_id());
 
-            let result = pool.apply_changes(
-                time_source.as_ref(),
-                vec![ChangeAction::PurgeValidatedBelow(Height::from(3))],
-            );
+            let result =
+                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(result.adverts.is_empty());
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.purged.len(), 3);
             assert!(result.purged.contains(&random_beacon_2.get_id()));
             assert!(result.poll_immediately);
 
-            let result = pool.apply_changes(
-                time_source.as_ref(),
-                vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))],
-            );
+            let result =
+                pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
             assert!(result.adverts.is_empty());
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
 
-            let result = pool.apply_changes(time_source.as_ref(), vec![]);
+            let result = pool.apply_changes(vec![]);
             assert!(!result.poll_immediately);
         })
     }
@@ -1094,7 +1082,7 @@ mod tests {
     fn test_shares_are_not_relayed() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1131,9 +1119,12 @@ mod tests {
 
             let changeset = vec![
                 ChangeAction::MoveToValidated(random_beacon_share_2.clone()),
-                ChangeAction::AddToValidated(random_beacon_share_3.clone()),
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: random_beacon_share_3.clone(),
+                    timestamp: time_source.get_relative_time(),
+                }),
             ];
-            let result = pool.apply_changes(time_source.as_ref(), changeset);
+            let result = pool.apply_changes(changeset);
             // share 3 should be added to the validated pool and create an advert
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
@@ -1142,10 +1133,8 @@ mod tests {
             assert!(result.poll_immediately);
             assert_eq!(result.adverts[0].id, random_beacon_share_3.get_id());
 
-            let result = pool.apply_changes(
-                time_source.as_ref(),
-                vec![ChangeAction::PurgeValidatedBelow(Height::from(3))],
-            );
+            let result =
+                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(result.adverts.is_empty());
             // purging genesis CUP & beacon + 2 validated beacon shares
             assert_eq!(result.purged.len(), 4);
@@ -1159,7 +1148,7 @@ mod tests {
     fn test_insert_remove() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1191,7 +1180,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let node = node_test_id(3);
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node,
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1323,10 +1312,14 @@ mod tests {
             );
 
             pool.apply_changes(
-                time_source.as_ref(),
                 messages
                     .into_iter()
-                    .map(|m| ChangeAction::AddToValidated(m))
+                    .map(|msg| {
+                        ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                            msg,
+                            timestamp: time_source.get_relative_time(),
+                        })
+                    })
                     .collect(),
             );
 
@@ -1370,7 +1363,7 @@ mod tests {
     fn test_metrics() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1399,31 +1392,34 @@ mod tests {
 
             // creates a fake block proposal for the given block
             let fake_block_proposal = |block: &Block| {
-                ChangeAction::AddToValidated(
-                    BlockProposal::fake(block.clone(), node_test_id(333)).into_message(),
-                )
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: BlockProposal::fake(block.clone(), node_test_id(333)).into_message(),
+                    timestamp: time_source.get_relative_time(),
+                })
             };
 
             // creates a fake notarization for the given block
             let fake_notarization = |block: &Block| {
-                ChangeAction::AddToValidated(
-                    Notarization::fake(NotarizationContent::new(
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: Notarization::fake(NotarizationContent::new(
                         block.height(),
                         ic_types::crypto::crypto_hash(block),
                     ))
                     .into_message(),
-                )
+                    timestamp: time_source.get_relative_time(),
+                })
             };
 
             // creates a fake finalization for the given block
             let fake_finalization = |block: &Block| {
-                ChangeAction::AddToValidated(
-                    Finalization::fake(FinalizationContent::new(
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: Finalization::fake(FinalizationContent::new(
                         block.height(),
                         ic_types::crypto::crypto_hash(block),
                     ))
                     .into_message(),
-                )
+                    timestamp: time_source.get_relative_time(),
+                })
             };
 
             // extracts the notarization metric from the registry
@@ -1454,14 +1450,11 @@ mod tests {
             //
             let block = fake_block(3, 0);
 
-            pool.apply_changes(
-                time_source.as_ref(),
-                vec![
-                    fake_block_proposal(&block),
-                    fake_notarization(&block),
-                    fake_finalization(&block),
-                ],
-            );
+            pool.apply_changes(vec![
+                fake_block_proposal(&block),
+                fake_notarization(&block),
+                fake_finalization(&block),
+            ]);
 
             let metric = get_metric();
             assert_eq!(metric.get_sample_count(), 0_u64);
@@ -1473,16 +1466,13 @@ mod tests {
             let block1 = fake_block(4, 0);
             let block2 = fake_block(4, 1);
 
-            pool.apply_changes(
-                time_source.as_ref(),
-                vec![
-                    fake_block_proposal(&block1),
-                    fake_notarization(&block1),
-                    fake_block_proposal(&block2),
-                    fake_notarization(&block2),
-                    fake_finalization(&block2),
-                ],
-            );
+            pool.apply_changes(vec![
+                fake_block_proposal(&block1),
+                fake_notarization(&block1),
+                fake_block_proposal(&block2),
+                fake_notarization(&block2),
+                fake_finalization(&block2),
+            ]);
 
             let metric = get_metric();
             assert_eq!(metric.get_sample_count(), 1_u64);
@@ -1493,14 +1483,11 @@ mod tests {
             //
             let block = fake_block(5, 0);
 
-            pool.apply_changes(
-                time_source.as_ref(),
-                vec![
-                    fake_block_proposal(&block),
-                    fake_notarization(&block),
-                    fake_finalization(&block),
-                ],
-            );
+            pool.apply_changes(vec![
+                fake_block_proposal(&block),
+                fake_notarization(&block),
+                fake_finalization(&block),
+            ]);
 
             let metric = get_metric();
             assert_eq!(metric.get_sample_count(), 2_u64);
@@ -1520,7 +1507,7 @@ mod tests {
                 .path()
                 .join(subnet_id.to_string())
                 .join(ic_types::ReplicaVersion::default().to_string());
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1540,6 +1527,7 @@ mod tests {
                 purging_interval,
                 MetricsRegistry::new(),
                 no_op_logger(),
+                time_source.clone(),
             ));
 
             // All tests in this group work on artifacts inside the same group, so we extend
@@ -1659,10 +1647,15 @@ mod tests {
                 cup.clone().into_message(),
             ]
             .into_iter()
-            .map(ChangeAction::AddToValidated)
+            .map(|msg| {
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg,
+                    timestamp: time_source.get_relative_time(),
+                })
+            })
             .collect();
 
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
             // We sync the backup before checking the asserts to make sure all backups have
             // been written.
             pool.backup.as_ref().unwrap().sync_backup();
@@ -1823,7 +1816,7 @@ mod tests {
             time_source
                 .set_time(time_source.get_relative_time() + purging_interval)
                 .unwrap();
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.apply_changes(Vec::new());
             pool.backup.as_ref().unwrap().sync_purging();
 
             // Make sure the subnet directory is empty, as we purged everything.
@@ -1836,7 +1829,7 @@ mod tests {
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.apply_changes(Vec::new());
             pool.backup.as_ref().unwrap().sync_purging();
             assert!(!path.exists());
         })
@@ -1869,7 +1862,7 @@ mod tests {
             let backup_dir = tempfile::Builder::new().tempdir().unwrap();
             let subnet_id = subnet_test_id(0);
             let path = backup_dir.path().join(format!("{:?}", subnet_id));
-            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
@@ -1907,6 +1900,7 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
                 Box::new(FakeAge { map: map.clone() }),
+                time_source.clone(),
             ));
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
@@ -1941,11 +1935,16 @@ mod tests {
 
             let changeset = vec![random_beacon.into_message(), random_tape.into_message()]
                 .into_iter()
-                .map(ChangeAction::AddToValidated)
+                .map(|msg| {
+                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                        msg,
+                        timestamp: time_source.get_relative_time(),
+                    })
+                })
                 .collect();
 
             // Apply changes
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
@@ -1970,10 +1969,15 @@ mod tests {
                 finalization.into_message(),
             ]
             .into_iter()
-            .map(ChangeAction::AddToValidated)
+            .map(|msg| {
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg,
+                    timestamp: time_source.get_relative_time(),
+                })
+            })
             .collect();
 
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
@@ -1990,7 +1994,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.apply_changes(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2006,7 +2010,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.apply_changes(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2022,7 +2026,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.apply_changes(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2039,7 +2043,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(time_source.as_ref(), Vec::new());
+            pool.apply_changes(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 

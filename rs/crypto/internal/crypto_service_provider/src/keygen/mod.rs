@@ -25,12 +25,8 @@ impl CspKeyGenerator for Csp {
         self.csp_vault.gen_committee_signing_key_pair()
     }
 
-    fn gen_tls_key_pair(
-        &self,
-        node_id: NodeId,
-        not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
-        self.csp_vault.gen_tls_key_pair(node_id, not_after)
+    fn gen_tls_key_pair(&self, node_id: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+        self.csp_vault.gen_tls_key_pair(node_id)
     }
 }
 
@@ -119,7 +115,7 @@ pub mod utils {
     pub fn mega_public_key_from_proto(
         proto: &PublicKeyProto,
     ) -> Result<MEGaPublicKey, MEGaPublicKeyFromProtoError> {
-        let curve_type = match AlgorithmIdProto::from_i32(proto.algorithm) {
+        let curve_type = match AlgorithmIdProto::try_from(proto.algorithm).ok() {
             Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
             alg_id => Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm {
                 algorithm_id: alg_id,

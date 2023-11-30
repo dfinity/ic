@@ -4,7 +4,7 @@ set -euo pipefail
 set -x
 
 function help {
-    echo >&2 "Usage: $0 <commit_id> (icp-ledger-archive|ledger) <arg>?"
+    echo >&2 "Usage: $0 <commit_id> (icp-ledger-archive|icp-ledger-archive-1|ledger) <arg>?"
 }
 
 if (($# != 2)) && (($# != 3)); then
@@ -12,13 +12,12 @@ if (($# != 2)) && (($# != 3)); then
     exit 1
 fi
 
-if [ "$2" != "icp-ledger-archive" ] && [ "$2" != "ledger" ]; then
+if [ "$2" != "icp-ledger-archive" ] && [ "$2" != "icp-ledger-archive-1" ] && [ "$2" != "ledger" ]; then
     help
     exit 2
 fi
 
-rm -rf candid && git clone https://github.com/dfinity/candid.git && cd candid && cargo build && cd target/debug && sudo cp didc /ic/bin/ && sudo chmod +x /ic/bin/didc && cd ~
-sudo apt update && sudo apt install sqlite3 xxd
+sudo apt update && sudo apt install sqlite3
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 COMMIT_ID="$1"

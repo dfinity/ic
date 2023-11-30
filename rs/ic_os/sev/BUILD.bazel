@@ -16,12 +16,12 @@ rust_library(
             "@crate_index//:sev",
         ],
     }) + [
-        "//rs/ic_os/sev_interfaces",
         "//rs/interfaces/registry",
         "//rs/registry/helpers",
         "//rs/registry/subnet_features",
         "//rs/types/base_types",
-        "@crate_index//:openssl",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:sha2",
@@ -40,5 +40,6 @@ rust_test(
     deps = [
         ":sev",
         "@crate_index//:assert_matches",
+        "@crate_index//:tempfile",
     ],
 )

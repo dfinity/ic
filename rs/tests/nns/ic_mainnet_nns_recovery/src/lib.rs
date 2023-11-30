@@ -269,6 +269,13 @@ fn setup_recovered_nns(
         principal,
     );
 
+    let xrc_mock_canister_id = install_xrc_mock_canister(
+        env.clone(),
+        recovered_nns_node.clone(),
+        new_subnet_node.clone(),
+        principal,
+    );
+
     let boundary_node_url = bn_thread.join().unwrap();
 
     write_sh_lib(
@@ -276,6 +283,7 @@ fn setup_recovered_nns(
         neuron_id,
         new_subnet_node,
         wallet_canister_id,
+        xrc_mock_canister_id,
         boundary_node_url,
     );
 }
@@ -340,6 +348,92 @@ fn support_snses(
     wallet_canister_id
 }
 
+fn install_xrc_mock_canister(
+    env: TestEnv,
+    recovered_nns_node: IcNodeSnapshot,
+    new_subnet_node: IcNodeSnapshot,
+    principal: PrincipalId,
+) -> CanisterId {
+    let xrc_mock_canister_id =
+        create_canister_from_icp(env.clone(), recovered_nns_node, principal, 10);
+
+    let xrc_mock_wasm: PathBuf = fs::canonicalize(
+        env.get_dependency_path("rs/rosetta-api/tvl/xrc_mock/xrc_mock_canister.wasm"),
+    )
+    .unwrap();
+
+    let subnet_url = new_subnet_node.get_public_url();
+
+    // Trick dfx into believing the candid UI canister has already been installed.
+    // Without this dfx is going to try install the candid UI canister and will fail.
+    //
+    // Sanitize the URL
+    // from: http://[2a00:fb01:400:42:506f:4cff:fe07:400a]:8080/
+    // to:   http____2a00_fb01_400_42_506f_4cff_fe07_400a__8080_
+    let sanitized_subnet_url = subnet_url
+        .to_string()
+        .replace(|c: char| !c.is_ascii_alphanumeric(), "_");
+    let dfx_json_path = env.get_path("dfx.json");
+    fs::write(
+        dfx_json_path,
+        r#"{
+            "canisters": {
+                "__Candid_UI": {
+                    "candid": "fake",
+                    "wasm": "fake",
+                    "type": "custom",
+                    "remote": {
+                        "id": { "<URL>": "aaaaa-aa" }
+                    }
+                }
+            }
+        }"#
+        .replace("<URL>", &sanitized_subnet_url),
+    )
+    .unwrap();
+
+    let logger: Logger = env.logger();
+    let dfx_path: PathBuf =
+        fs::canonicalize(env.clone().get_dependency_path("external/dfx/dfx")).unwrap();
+    let home = fs::canonicalize(env.base_path()).unwrap();
+    let mut cmd = Command::new(dfx_path.clone());
+    cmd.env("HOME", home.clone())
+        .current_dir(home.clone())
+        .arg("canister")
+        .arg("--network")
+        .arg(subnet_url.to_string())
+        .arg("install")
+        .arg("--wasm")
+        .arg(xrc_mock_wasm)
+        .arg("--argument")
+        .arg(
+            "(record { response = variant {
+            ExchangeRate = record {
+             rate = 100_000_000_000: nat64;
+             metadata = opt record {
+                decimals = 9: nat32;
+                base_asset_num_received_rates = 7: nat64;
+                base_asset_num_queried_sources = 7: nat64;
+                quote_asset_num_received_rates = 7: nat64;
+                quote_asset_num_queried_sources = 7: nat64;
+                standard_deviation = 0: nat64;
+                forex_timestamp = null } } } })",
+        )
+        .arg(xrc_mock_canister_id.to_string());
+    info!(logger, "{cmd:?} ...");
+    let out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+
+    if !out.status.success() {
+        panic!("Failed to run '{cmd:?}'");
+    }
+
+    xrc_mock_canister_id
+}
+
 /// Start an IC and install the initial NNS.
 fn setup_ic(env: TestEnv) {
     InternetComputer::new()
@@ -402,30 +496,6 @@ fn setup_boundary_node(
         .unwrap()
         .get_snapshot()
         .unwrap();
-
-    info!(
-        logger,
-        "Waiting until the ic-registry-replicator on {BOUNDARY_NODE_NAME} has finished local store initialization ..."
-    );
-    retry(
-        logger.clone(),
-        Duration::from_secs(500),
-        Duration::from_secs(5),
-        || {
-            boundary_node.block_on_bash_script(
-                r#"
-                    set -e
-                    until journalctl -u ic-registry-replicator -g "Finished local store initialization"; do
-                        sleep 1
-                    done
-                    sudo systemctl restart control-plane.service
-                "#
-            )
-        },
-    )
-    .unwrap_or_else(|e| {
-        panic!("The ic-registry-replicator on {BOUNDARY_NODE_NAME} didn't finish local store initialization in time. Error: {e:?}")
-    });
 
     let recovered_nns_node_id = recovered_nns_node.node_id;
     boundary_node.block_on_bash_script(&format!(r#"
@@ -612,7 +682,7 @@ fn with_ledger_account_for_tests(env: TestEnv, account_id: AccountIdentifier) {
     ic_replay(env, |cmd| {
         cmd.arg("with-ledger-account-for-tests")
             .arg(account_id.to_string())
-            .arg((1_000_000 * E8).to_string());
+            .arg((1_000_000_000 * E8).to_string());
     });
     info!(logger, "Our principal now has 1 million ICP");
 }
@@ -746,11 +816,7 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    // TODO: replace the next code line with the following commented line
-    // once the mainnet ic-recovery contains the commits we need.
-    // let ic_recovery_path = env.get_path(IC_RECOVERY);
-    let ic_recovery_path = env.get_dependency_path("rs/recovery/ic-recovery");
-
+    let ic_recovery_path = env.get_path(IC_RECOVERY);
     let mut cmd = Command::new(ic_recovery_path);
     cmd.arg("--skip-prompts")
         .arg("--dir")
@@ -1181,14 +1247,14 @@ fn set_default_subnets(
     info!(logger, "Set authorized subnetworks {subnet_id:?}.");
 }
 
-fn create_cycles_wallet(
+fn create_canister_from_icp(
     env: TestEnv,
     recovered_nns_node: IcNodeSnapshot,
     principal: PrincipalId,
-    new_subnet_node_url: Url,
+    amount: u64,
 ) -> CanisterId {
-    let logger = env.logger();
-    let dfx_path = env.clone().get_dependency_path("external/dfx/dfx");
+    let logger: Logger = env.logger();
+    let dfx_path: PathBuf = env.clone().get_dependency_path("external/dfx/dfx");
     let recovered_nns_url = recovered_nns_node.get_public_url();
     let home = env.base_path();
     let mut cmd = Command::new(dfx_path.clone());
@@ -1199,13 +1265,17 @@ fn create_cycles_wallet(
         .arg("create-canister")
         .arg(principal.to_string())
         .arg("--amount")
-        .arg("10000");
+        .arg(amount.to_string());
     info!(logger, "{cmd:?} ...");
     let out = cmd
         .output()
         .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
     std::io::stdout().write_all(&out.stdout).unwrap();
     std::io::stderr().write_all(&out.stderr).unwrap();
+
+    if !out.status.success() {
+        panic!("Failed to run '{cmd:?}'");
+    }
 
     let prefix: &str = "Canister created with id: \"";
     let wallet_canister_id: CanisterId = match std::str::from_utf8(&out.stdout)
@@ -1225,8 +1295,21 @@ fn create_cycles_wallet(
         }
         _ => panic!("Couldn't parse canister ID!"),
     };
-    info!(logger, "WALLET_CANISTER = {wallet_canister_id}");
+    wallet_canister_id
+}
 
+fn create_cycles_wallet(
+    env: TestEnv,
+    recovered_nns_node: IcNodeSnapshot,
+    principal: PrincipalId,
+    new_subnet_node_url: Url,
+) -> CanisterId {
+    let logger = env.logger();
+    let wallet_canister_id =
+        create_canister_from_icp(env.clone(), recovered_nns_node, principal, 10000);
+    info!(logger, "WALLET_CANISTER = {wallet_canister_id}");
+    let dfx_path: PathBuf = env.clone().get_dependency_path("external/dfx/dfx");
+    let home = env.base_path();
     let mut cmd = Command::new(dfx_path.clone());
     cmd.env("HOME", home.clone())
         .arg("-q")
@@ -1241,6 +1324,9 @@ fn create_cycles_wallet(
         .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
     std::io::stdout().write_all(&out.stdout).unwrap();
     std::io::stderr().write_all(&out.stderr).unwrap();
+    if !out.status.success() {
+        panic!("Failed to run '{cmd:?}'");
+    }
 
     let mut cmd = Command::new(dfx_path);
     cmd.env("HOME", home)
@@ -1256,6 +1342,9 @@ fn create_cycles_wallet(
         .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
     std::io::stdout().write_all(&out.stdout).unwrap();
     std::io::stderr().write_all(&out.stderr).unwrap();
+    if !out.status.success() {
+        panic!("Failed to run '{cmd:?}'");
+    }
 
     wallet_canister_id
 }
@@ -1313,6 +1402,7 @@ fn write_sh_lib(
     neuron_id: NeuronId,
     new_subnet_node: IcNodeSnapshot,
     wallet_canister_id: CanisterId,
+    xrc_mock_canister_id: CanisterId,
     boundary_node_url: Url,
 ) {
     let logger: slog::Logger = env.clone().logger();
@@ -1325,10 +1415,19 @@ fn write_sh_lib(
     let new_subnet_node_url = new_subnet_node.get_public_url();
     let neuron_id_number = neuron_id.0;
     let wallet_canister_id_str = wallet_canister_id.to_string();
+    let xrc_mock_canister_id_str = xrc_mock_canister_id.to_string();
     let sns_quill =
         fs::canonicalize(env.get_dependency_path("external/sns_quill/sns-quill")).unwrap();
     let idl2json = fs::canonicalize(env.get_dependency_path("external/idl2json/idl2json")).unwrap();
     let dfx_home = fs::canonicalize(env.base_path()).unwrap();
+    let didc_dir = fs::canonicalize(env.get_dependency_path("external/candid"))
+        .unwrap()
+        .display()
+        .to_string();
+    let dfx_dir = fs::canonicalize(env.get_dependency_path("external/dfx"))
+        .unwrap()
+        .display()
+        .to_string();
     fs::write(
         set_testnet_env_vars_sh_path.clone(),
         format!(
@@ -1339,9 +1438,11 @@ fn write_sh_lib(
              export NEURON_ID={neuron_id_number:?};\n\
              export SUBNET_URL=\"{new_subnet_node_url}\";\n\
              export WALLET_CANISTER=\"{wallet_canister_id_str}\";\n\
+             export XRC_MOCK_CANISTER=\"{xrc_mock_canister_id_str}\";\n\
              export SNS_QUILL={sns_quill:?};\n\
              export IDL2JSON={idl2json:?};\n\
              export DFX_HOME={dfx_home:?};\n\
+             export PATH=\"{didc_dir}:{dfx_dir}:$PATH\";\n\
             "
         ),
     )

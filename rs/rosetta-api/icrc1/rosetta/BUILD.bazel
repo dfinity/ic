@@ -21,7 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:hex",
     "@crate_index//:serde_cbor",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:lazy_static",
     "@crate_index//:url",
     "@crate_index//:http",
@@ -32,6 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
+    "//rs/rosetta-api",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icrc1/tokens_u64",
@@ -43,7 +44,6 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//packages/ic-starter-tests",
-    "//rs/rosetta-api",
     "//rs/test_utilities/load_wasm",
     "//rs/types/ic00_types",
     "//rs/rosetta-api/icrc1/test_utils",

@@ -516,7 +516,7 @@ pub(crate) fn proto_response<R, M>(r: R) -> (Response<Body>, usize)
 where
     M: ProtoProxy<R>,
 {
-    let buf = M::proxy_encode(r).expect("Could not serialize response");
+    let buf = M::proxy_encode(r);
     let size_bytes = buf.len();
 
     // Headers borrowed from Spring Framework -- https://bit.ly/32EDqoo -- and Google's Protobuf

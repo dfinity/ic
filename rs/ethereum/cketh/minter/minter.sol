@@ -7,8 +7,7 @@ pragma solidity 0.8.18;
  * @notice This smart contract deposits incoming ETH to the ckETH minter account and emits deposit events.
  */
 contract CkEthDeposit {
-
-    address payable private cketh_minter_main_address;
+    address payable private immutable cketh_minter_main_address;
 
     event ReceivedEth(address indexed from, uint256 value, bytes32 indexed principal);
 
@@ -20,8 +19,8 @@ contract CkEthDeposit {
     }
 
     /**
-     * @dev Return ckETH minter main address. 
-     * @return address of ckETH minter main address. 
+     * @dev Return ckETH minter main address.
+     * @return address of ckETH minter main address.
      */
     function getMinterAddress() public view returns (address) {
         return cketh_minter_main_address;
@@ -34,4 +33,4 @@ contract CkEthDeposit {
         emit ReceivedEth(msg.sender, msg.value, _principal);
         cketh_minter_main_address.transfer(msg.value);
     }
-} 
+}

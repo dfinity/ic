@@ -21,7 +21,7 @@ use std::{
 };
 
 use axum::{routing::any, Router};
-use ic_interfaces::state_sync_client::StateSyncClient;
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::Transport;
@@ -67,7 +67,7 @@ pub fn build_axum_router(
     ));
 
     let (tx, rx) = tokio::sync::mpsc::channel(20);
-    let advert_handler_state = Arc::new(StateSyncAdvertHandler::new(log, tx, metrics));
+    let advert_handler_state = Arc::new(StateSyncAdvertHandler::new(log, tx));
 
     let app = Router::new()
         .route(STATE_SYNC_CHUNK_PATH, any(state_sync_chunk_handler))

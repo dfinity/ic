@@ -33,6 +33,9 @@ pub struct Cli {
 
     #[command(flatten, next_help_heading = "cache")]
     pub cache: CacheConfig,
+
+    #[command(flatten, next_help_heading = "retry")]
+    pub retry: RetryConfig,
 }
 
 #[derive(Args)]
@@ -43,7 +46,7 @@ pub struct RegistryConfig {
 
     /// The path to the NNS public key file
     #[clap(long)]
-    pub nns_pub_key_pem: PathBuf,
+    pub nns_pub_key_pem: Option<PathBuf>,
 
     /// The delay between NNS polls in milliseconds
     #[clap(long, default_value = "5000")]
@@ -56,41 +59,62 @@ pub struct RegistryConfig {
     /// Whether to disable internal registry replicator
     #[clap(long, default_value = "false")]
     pub disable_registry_replicator: bool,
+
+    /// Minimum snapshot version age to be useful for initial publishing, in seconds
+    #[clap(long, default_value = "10")]
+    pub min_version_age: u64,
 }
 
 #[derive(Args)]
 pub struct ListenConfig {
-    // Port to listen for HTTP
+    /// Port to listen for HTTP
     #[clap(long, default_value = "80")]
     pub http_port: u16,
 
-    // Port to listen for HTTPS
+    /// Port to listen for HTTPS
     #[cfg(feature = "tls")]
     #[clap(long, default_value = "443")]
     pub https_port: u16,
 
-    // Timeout for the whole HTTP request in seconds
-    #[clap(long, default_value = "4")]
+    /// Timeout for the whole HTTP request in seconds
+    #[clap(long, default_value = "600")]
     pub http_timeout: u64,
 
-    // Timeout for the HTTP connect phase in seconds
+    /// Timeout for the whole HTTP request in seconds when doing health checks
+    #[clap(long, default_value = "3")]
+    pub http_timeout_check: u64,
+
+    /// Timeout for the HTTP connect phase in seconds
     #[clap(long, default_value = "2")]
     pub http_timeout_connect: u64,
+
+    /// Max number of in-flight requests that can be served in parallel
+    /// If this is exceeded - new requests would be throttled
+    #[clap(long, default_value = "512")]
+    pub max_concurrency: usize,
+
+    /// How frequently to send TCP/HTTP2 keepalives, in seconds
+    #[clap(long, default_value = "15")]
+    pub http_keepalive: u64,
+
+    /// How long to wait for a keepalive response, in seconds
+    #[clap(long, default_value = "3")]
+    pub http_keepalive_timeout: u64,
+
+    /// How long to keep idle outgoing connections open
+    #[clap(long, default_value = "10")]
+    pub http_idle_timeout: u64,
 }
 
 #[derive(Args)]
 pub struct HealthChecksConfig {
-    // How frequently to run node checks in seconds
+    /// How frequently to run node checks in seconds
     #[clap(long, default_value = "10")]
     pub check_interval: u64,
 
-    // How many attempts to do when checking a node
+    /// How many attempts to do when checking a node
     #[clap(long, default_value = "3")]
     pub check_retries: u32,
-
-    // How long to wait between retries in seconds
-    #[clap(long, default_value = "1")]
-    pub check_retry_interval: u64,
 
     /// Minimum registry version snapshot to process
     #[clap(long, default_value = "0")]
@@ -158,11 +182,24 @@ pub struct CacheConfig {
     pub cache_size_bytes: Option<u64>,
     /// Maximum size of a single cached response item in bytes
     #[clap(long, default_value = "65536")]
-    pub cache_max_item_size_bytes: usize,
+    pub cache_max_item_size_bytes: u64,
     /// Time-to-live for cache entries in seconds
     #[clap(long, default_value = "1")]
     pub cache_ttl_seconds: u64,
     /// Whether to cache non-anonymous requests
     #[clap(long, default_value = "false")]
     pub cache_non_anonymous: bool,
+}
+
+#[derive(Args)]
+pub struct RetryConfig {
+    /// How many times to retry a failed request.
+    /// Should be in range [0..10], value of 0 disables the retries.
+    /// If there are less healthy nodes in the subnet - then less retries would be done.
+    #[clap(long, default_value = "2", value_parser = clap::value_parser!(u8).range(0..11))]
+    pub retry_count: u8,
+
+    /// Whether to retry update calls
+    #[clap(long, default_value = "false")]
+    pub retry_update_call: bool,
 }

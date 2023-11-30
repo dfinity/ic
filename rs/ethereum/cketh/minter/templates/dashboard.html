@@ -25,6 +25,15 @@
 {% endmatch %}
 {%- endmacro %}
 
+{% macro format_opt_timestamp(maybe_ts) -%}
+{% match maybe_ts %}
+  {%- when Some with (ts) -%}
+  {{ ts|timestamp_to_datetime }}
+  {%- when None -%}
+  N/A
+{% endmatch %}
+{%- endmacro %}
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -81,38 +90,12 @@
             width: 63ch;
             font-family: monospace;
         }
-
-        .warning-msg {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 3px 3px 3px 3px;
-        }
-        .warning-msg {
-            color: #9F6000;
-            background-color: #FEEFB3;
-        }
-        .fa {
-            display: inline-block;
-            font: inherit;
-            text-rendering: auto;
-        }
-        .fa-warning:before {
-            content: "\0026A0"
-        }
-
     </style>
 </head>
 
 <body>
     <div class="background">
         <div class="content">
-            <div class="warning-msg">
-                <i class="fa fa-warning"></i>
-                <strong>Work in progress</strong>: the minter is under active development and may be reinstalled
-                from scratch at any time, which implies losing any current state!<br/>
-                Please refer to the <a href="https://forum.dfinity.org/t/22819">forum post</a> for more information
-                or if you have any feedback.
-            </div>
             <h3 id="metadata">Metadata</h3>
             <table>
                 <tbody>
@@ -140,6 +123,22 @@
                         <th>Next nonce</th>
                         <td>{{ next_transaction_nonce }}</td>
                     </tr>
+                    <tr id="minimum-withdrawal-amount">
+                        <th>Minimum withdrawal amount (Wei)</th>
+                        <td>{{ minimum_withdrawal_amount }}</td>
+                    </tr>
+                    <tr id="eth-balance">
+                        <th>Total ETH managed (Wei)</th>
+                        <td>{{ eth_balance.eth_balance() }}</td>
+                    </tr>
+                    <tr id="total-effective-tx-fees">
+                        <th>Total effective transaction fees (Wei)</th>
+                        <td>{{ eth_balance.total_effective_tx_fees() }}</td>
+                    </tr>
+                    <tr id="total-unspent-tx-fees">
+                        <th>Total unspent transaction fees (Wei)</th>
+                        <td>{{ eth_balance.total_unspent_tx_fees() }}</td>
+                    </tr>
                 </tbody>
             </table>
 
@@ -162,6 +161,18 @@
                     <tr id="last-synced-block-number">
                         <th>Last synced block number</th>
                         <td>{% call etherscan_block_link(last_synced_block) %}</td>
+                    </tr>
+                    {% if !skipped_blocks.is_empty() -%}
+                    <tr id="skipped-blocks">
+                        <th>Skipped blocks</th>
+                        <td>{% for block in skipped_blocks -%}
+                            {% call etherscan_block_link(block) %}{% if !loop.last %}, {% endif %}
+                            {%- endfor %}</td>
+                    </tr>
+                    {%- endif %}
+                    <tr id="first-synced-block-number">
+                        <th>First synced block number</th>
+                        <td>{% call etherscan_block_link(first_synced_block) %}</td>
                     </tr>
                 </tbody>
             </table>
@@ -253,6 +264,7 @@
                     <th>Ledger Burn Index</th>
                     <th>Destination</th>
                     <th>Amount (Wei)</th>
+                    <th>Created At</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -261,6 +273,7 @@
                     <td class="numeric">{{ withdrawal.ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(withdrawal.destination) %}</td>
                     <td class="numeric">{{ withdrawal.withdrawal_amount }}</td>
+                    <td>{% call format_opt_timestamp(withdrawal.created_at) %}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -329,6 +342,7 @@
                         <th>Ledger Burn Index</th>
                         <th>Ledger Mint Index</th>
                         <th>Value (Wei)</th>
+                        <th>Txn Hash</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -337,6 +351,7 @@
                         <td class="numeric">{{ r.withdrawal_id }}</td>
                         <td class="numeric">{{ r.reimbursed_in_block }}</td>
                         <td class="numeric">{{ r.reimbursed_amount }}</td>
+                        <td>{% if r.transaction_hash.is_some() %}{% call etherscan_tx_link(r.transaction_hash.unwrap()) %}{% else%}N/A{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

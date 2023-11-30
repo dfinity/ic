@@ -8,8 +8,8 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash/fuzz/check_witness_equality_utils",
     "//rs/protobuf",
     "@crate_index//:libfuzzer-sys",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
 ]
 
 rust_fuzz_test_binary(

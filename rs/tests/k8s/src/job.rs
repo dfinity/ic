@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::api::core::v1::{
-    Container, PersistentVolumeClaim, PersistentVolumeClaimVolumeSource, PodSpec, PodTemplateSpec,
-    Volume, VolumeDevice, VolumeMount,
+    Container, PersistentVolumeClaimVolumeSource, PodSpec, PodTemplateSpec, Volume, VolumeMount,
 };
-use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
+use kube::api::{ObjectMeta, PostParams};
 use kube::Api;
 use tracing::*;
 
@@ -14,6 +14,7 @@ pub async fn create_job(
     image: &str,
     command: Vec<&str>,
     volume: Option<(&str, &str)>,
+    owner: OwnerReference,
 ) -> Result<Job> {
     info!("Creating job {}", name);
     if api.get(name).await.is_ok() {
@@ -66,6 +67,7 @@ pub async fn create_job(
     let job = Job {
         metadata: ObjectMeta {
             name: Some(name.to_string()),
+            owner_references: vec![owner].into(),
             ..Default::default()
         },
         spec: Some(jobspec),

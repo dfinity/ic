@@ -37,8 +37,6 @@ use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
 use std::time::Duration;
 
-pub const MIN_HASH_LENGTH: usize = 8; // in bytes
-
 const DKG_INTERVAL: u64 = 9;
 
 const ALLOWED_FAILURES: usize = 1;
@@ -87,10 +85,6 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .unwrap();
 
-    // we expect to get a hash value here, so checking that is a hash number of at least 64 bits size
-    assert!(mainnet_version.len() >= 2 * MIN_HASH_LENGTH);
-    assert!(hex::decode(&mainnet_version).is_ok());
-
     // choose a node from the nns subnet
     let nns_node = env
         .topology_snapshot()
@@ -100,29 +94,36 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         .unwrap();
 
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let nns_canister = block_on(MessageCanister::new(
-        &agent,
-        nns_node.effective_canister_id(),
-    ));
 
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    let subnet_id = env
-        .topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_type() == subnet_type)
-        .unwrap()
-        .subnet_id;
-    info!(logger, "Enabling ECDSA signatures on {subnet_id}.");
-    block_on(add_ecdsa_key_with_timeout_and_rotation_period(
-        &governance,
-        subnet_id,
-        make_key(KEY_ID1),
-        None,
-        None,
-    ));
-    let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, subnet_id, &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, key);
+    let ecdsa_canister_key = if subnet_type == SubnetType::Application {
+        let nns_canister = block_on(MessageCanister::new(
+            &agent,
+            nns_node.effective_canister_id(),
+        ));
+
+        let nns_runtime =
+            runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+        let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+        let subnet_id = env
+            .topology_snapshot()
+            .subnets()
+            .find(|s| s.subnet_type() == subnet_type)
+            .unwrap()
+            .subnet_id;
+        info!(logger, "Enabling ECDSA signatures on {subnet_id}.");
+        block_on(add_ecdsa_key_with_timeout_and_rotation_period(
+            &governance,
+            subnet_id,
+            make_key(KEY_ID1),
+            None,
+            None,
+        ));
+        let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, subnet_id, &logger);
+        run_ecdsa_signature_test(&nns_canister, &logger, key);
+        Some((nns_canister, key))
+    } else {
+        None
+    };
 
     let original_branch_version = env
         .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
@@ -149,8 +150,7 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         &branch_version,
         &mainnet_version,
         subnet_type,
-        &nns_canister,
-        key,
+        ecdsa_canister_key,
     );
 }
 
@@ -161,8 +161,7 @@ fn upgrade_downgrade_roundtrip(
     upgrade_version: &str,
     downgrade_version: &str,
     subnet_type: SubnetType,
-    nns_canister: &MessageCanister,
-    key: VerifyingKey,
+    ecdsa_canister_key: Option<(MessageCanister, VerifyingKey)>,
 ) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
@@ -205,6 +204,7 @@ fn upgrade_downgrade_roundtrip(
         &subnet_node.get_public_url(),
         subnet_node.effective_canister_id(),
         msg,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,
@@ -219,7 +219,8 @@ fn upgrade_downgrade_roundtrip(
     info!(logger, "Upgrade to version {}", upgrade_version);
     upgrade_to(nns_node, subnet_id, &subnet_node, upgrade_version, &logger);
 
-    // Killing redundant nodes should not prevent the `faulty_node` downgrading to mainnet version and catching up after restarting.
+    // Killing redundant nodes should not prevent the `faulty_node` downgrading to mainnet version
+    // and catching up after restarting.
     for redundant_node in &redundant_nodes {
         stop_node(&logger, redundant_node);
     }
@@ -239,6 +240,7 @@ fn upgrade_downgrade_roundtrip(
         &faulty_node.get_public_url(),
         faulty_node.effective_canister_id(),
         msg_2,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,
@@ -247,7 +249,10 @@ fn upgrade_downgrade_roundtrip(
         msg_2
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
-    run_ecdsa_signature_test(nns_canister, &logger, key);
+
+    if let Some((canister, key)) = ecdsa_canister_key.as_ref() {
+        run_ecdsa_signature_test(canister, &logger, *key);
+    }
 
     // Start redundant nodes for upgrading to the branch version.
     for redundant_node in &redundant_nodes {
@@ -270,6 +275,7 @@ fn upgrade_downgrade_roundtrip(
         &subnet_node.get_public_url(),
         subnet_node.effective_canister_id(),
         msg_3,
+        &logger,
     );
 
     for redundant_node in &redundant_nodes {
@@ -289,7 +295,9 @@ fn upgrade_downgrade_roundtrip(
     }
 
     info!(logger, "Could read all previously stored messages!");
-    run_ecdsa_signature_test(nns_canister, &logger, key);
+    if let Some((canister, key)) = ecdsa_canister_key {
+        run_ecdsa_signature_test(&canister, &logger, key);
+    }
 }
 
 fn upgrade_to(

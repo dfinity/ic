@@ -333,9 +333,14 @@ impl NeuronBuilder {
         self
     }
 
-    pub fn set_managers(mut self, managers: neuron::Followees) -> Self {
+    pub fn insert_managers(mut self, managers: neuron::Followees) -> Self {
         self.followees
             .insert(Topic::NeuronManagement as i32, managers);
+        self
+    }
+
+    pub fn insert_followees(mut self, topic: Topic, followees: neuron::Followees) -> Self {
+        self.followees.insert(topic as i32, followees);
         self
     }
 
@@ -1049,6 +1054,12 @@ impl NNSBuilder {
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {
         self.environment_builder.set_start_time(seconds);
+        self
+    }
+
+    pub fn push_mock_reply(mut self, canister_call_reply: CanisterCallReply) -> Self {
+        self.environment_builder
+            .push_mock_reply(canister_call_reply);
         self
     }
 

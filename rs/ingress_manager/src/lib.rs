@@ -14,6 +14,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusTime,
     execution_environment::IngressHistoryReader,
     ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -112,6 +113,7 @@ impl IngressManagerMetrics {
 /// advertizes, purges ingresses, and selects the ingresses to be included in
 /// the blocks.
 pub struct IngressManager {
+    time_source: Arc<dyn TimeSource>,
     consensus_time: Arc<dyn ConsensusTime>,
     ingress_hist_reader: Box<dyn IngressHistoryReader>,
     ingress_payload_cache: Arc<RwLock<IngressPayloadCache>>,
@@ -134,6 +136,7 @@ impl IngressManager {
     #[allow(clippy::too_many_arguments)]
     /// Constructs an IngressManager
     pub fn new(
+        time_source: Arc<dyn TimeSource>,
         consensus_time: Arc<dyn ConsensusTime>,
         ingress_hist_reader: Box<dyn IngressHistoryReader>,
         ingress_pool: Arc<RwLock<dyn IngressPoolSelect>>,
@@ -165,6 +168,7 @@ impl IngressManager {
             Arc::new(HttpRequestVerifierImpl::new(ingress_signature_crypto)) as Arc<_>
         };
         Self {
+            time_source,
             consensus_time,
             ingress_hist_reader,
             ingress_payload_cache: Arc::new(RwLock::new(BTreeMap::new())),
@@ -233,6 +237,7 @@ impl IngressManager {
 pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+    use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client::client::RegistryClientImpl;
@@ -240,12 +245,13 @@ pub(crate) mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
-        consensus::MockConsensusTime,
         crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
         history::MockIngressHistory,
+        mock_time,
         state::ReplicatedStateBuilder,
         types::ids::{node_test_id, subnet_test_id},
+        FastForwardTimeSource,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
@@ -320,8 +326,11 @@ pub(crate) mod tests {
                     metrics_registry.clone(),
                     log.clone(),
                 )));
+                let time_source = FastForwardTimeSource::new();
+                time_source.set_time(mock_time()).unwrap();
                 run(
                     IngressManager::new(
+                        time_source,
                         consensus_time,
                         ingress_hist_reader,
                         ingress_pool.clone(),

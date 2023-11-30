@@ -15,14 +15,16 @@ def _run_system_test(ctx):
         content = """#!/bin/bash
             set -eEuo pipefail
             RUNFILES="$PWD"
+            KUBECONFIG=$RUNFILES/${{KUBECONFIG:-}}
             VERSION_FILE="$(cat $VERSION_FILE_PATH)"
             cd "$TEST_TMPDIR"
             mkdir root_env
             cp -Rs "$RUNFILES" root_env/dependencies/
             cp -v "$VERSION_FILE" root_env/dependencies/volatile-status.txt
-            "$RUNFILES/{test_executable}" --working-dir . --group-base-name {group_base_name} {no_summary_report} "$@" run
+            "$RUNFILES/{test_executable}" --working-dir . {k8s} --group-base-name {group_base_name} {no_summary_report} "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
+            k8s = "--k8s" if ctx.attr.k8s else "",
             group_base_name = ctx.label.name,
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
         ),
@@ -34,9 +36,12 @@ def _run_system_test(ctx):
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
+    if ctx.attr.k8s:
+        env["KUBECONFIG"] = ctx.file._k8sconfig.path
+
     # version_file_path contains the "direct" path to the volatile status file.
     # The wrapper script copies this file instead of receiving ing as bazel dependency to not invalidate the cache.
-    runtime_deps = [depset([ctx.file.version_file_path])]
+    runtime_deps = [depset([ctx.file.version_file_path, ctx.file._k8sconfig])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
@@ -71,6 +76,8 @@ run_system_test = rule(
         "src": attr.label(executable = True, cfg = "exec"),
         "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
         "env": attr.string_dict(allow_empty = True),
+        "k8s": attr.bool(default = False, doc = "Use k8s as infra provider."),
+        "_k8sconfig": attr.label(allow_single_file = True, default = "@kubeconfig//:kubeconfig.yaml"),
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.label_keyed_string_dict(allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
@@ -97,6 +104,9 @@ def system_test(
         colocated_test_driver_vm_forward_ssh_agent = False,
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
+        uses_setupos_dev = False,
+        uses_hostos_dev_test = False,
+        k8s = False,
         env_inherit = [],
         **kwargs):
     """Declares a system-test.
@@ -123,6 +133,9 @@ def system_test(
       For example: [ "performance" ]
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
+      uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
+      uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
+      k8s: use k8s infra provider.
       env_inherit: specifies additional environment variables to inherit from the external environment when the test is executed by bazel test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
@@ -148,6 +161,8 @@ def system_test(
     _env_deps = {}
 
     _guestos = "//ic-os/guestos/envs/dev:"
+    _hostos = "//ic-os/hostos/envs/dev:"
+    _setupos = "//ic-os/setupos/envs/dev:"
 
     # Always add version.txt for now as all test use it even that they don't declare they use dev image.
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
@@ -159,7 +174,14 @@ def system_test(
         _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256"
 
-        _env_deps["//ic-os:scripts/build-bootstrap-config-image.sh"] = "ENV_DEPS__BUILD_BOOTSTRAP_CONFIG_IMAGE"
+    if uses_hostos_dev_test:
+        _env_deps[_hostos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
+        _env_deps[_hostos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256"
+
+    if uses_setupos_dev:
+        _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
+        _env_deps["//rs/ic_os/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
+        _env_deps["//rs/ic_os/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
 
     if uses_guestos_dev_test:
         _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
@@ -179,6 +201,7 @@ def system_test(
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
         env_inherit = env_inherit,
+        k8s = k8s,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         timeout = test_timeout,
@@ -214,6 +237,7 @@ def system_test(
         env_deps = _env_deps,
         env_inherit = env_inherit,
         env = env,
+        k8s = k8s,
         tags = tags + ["requires-network", "system_test"] +
                ([] if "experimental_system_test_colocation" in tags else ["manual"]),
         timeout = test_timeout,

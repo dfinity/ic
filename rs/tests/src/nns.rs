@@ -1,4 +1,11 @@
 //! Contains methods and structs that support settings up the NNS.
+
+use ic_types::hostos_version::HostosVersion;
+use registry_canister::mutations::{
+    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
+    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+};
+
 use crate::driver::test_env_api::HasPublicApiUrl;
 use crate::driver::test_env_api::IcNodeSnapshot;
 use crate::util::{create_agent, runtime_from_url};
@@ -28,7 +35,6 @@ use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{p2p, CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload;
@@ -84,7 +90,7 @@ pub async fn await_proposal_execution(
             .await
             .unwrap_or_else(|| panic!("could not obtain proposal status"));
 
-        match ProposalStatus::from_i32(proposal_info.status).unwrap() {
+        match ProposalStatus::try_from(proposal_info.status).unwrap() {
             ProposalStatus::Open => {
                 // This proposal is still open
                 info!(log, "{:?} is open...", proposal_id,)
@@ -569,7 +575,7 @@ pub async fn submit_create_application_subnet_proposal(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
-        ingress_bytes_per_block_soft_cap: config.ingress_bytes_per_block_soft_cap,
+        ingress_bytes_per_block_soft_cap: Default::default(),
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
@@ -592,7 +598,7 @@ pub async fn submit_create_application_subnet_proposal(
         max_instructions_per_message: scheduler.max_instructions_per_message.get(),
         max_instructions_per_round: scheduler.max_instructions_per_round.get(),
         max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
-        features: SubnetFeatures::default(),
+        features: Default::default(),
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
@@ -654,4 +660,88 @@ pub async fn submit_update_unassigned_node_version_proposal(
     )
     .await
     .expect("submit_update_unassigned_node_version_proposal failed")
+}
+
+/// Submits a proposal for electing or unelecting HostOS versions.
+///
+/// # Arguments
+///
+/// * `governance`          - Governance canister
+/// * `sender`              - Sender of the proposal
+/// * `neuron_id`           - ID of the proposing neuron. This neuron
+///   will automatically vote in favor of the proposal.
+/// * `version`             - HostOS software version to elect
+/// * `sha256`              - Claimed SHA256 of the HostOS image file
+/// * `upgrade_urls`        - URLs leading to the HostOS image file
+/// * `versions_to_unelect` - HostOS versions to remove from registry
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_elected_hostos_versions_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    version: &HostosVersion,
+    sha256: String,
+    upgrade_urls: Vec<String>,
+    versions_to_unelect: Vec<String>,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::UpdateElectedHostosVersions,
+        UpdateElectedHostosVersionsPayload {
+            hostos_version_to_elect: Some(String::from(version)),
+            release_package_sha256_hex: Some(sha256.clone()),
+            release_package_urls: upgrade_urls,
+            hostos_versions_to_unelect: versions_to_unelect,
+        },
+        format!(
+            "Elect HostOS version: '{}' with hash: '{}'",
+            String::from(version),
+            sha256
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_elected_hostos_versions_proposal failed")
+}
+
+/// Submits a proposal for updating nodes to a HostOS version.
+///
+/// # Arguments
+///
+/// * `governance`  - Governance canister
+/// * `sender`      - Sender of the proposal
+/// * `neuron_id`   - ID of the proposing neuron. This neuron will automatically
+///   vote in favor of the proposal.
+/// * `version`     - HostOS software version
+/// * `node_ids`   - List of Node ID to be updated
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_nodes_hostos_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    version: HostosVersion,
+    node_ids: Vec<NodeId>,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::UpdateNodesHostosVersion,
+        UpdateNodesHostosVersionPayload {
+            node_ids: node_ids.clone(),
+            hostos_version_id: Some(String::from(version.clone())),
+        },
+        format!(
+            "Update nodes '{:#?}' to HostOS version '{}'",
+            node_ids,
+            String::from(version)
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_nodes_hostos_version_proposal failed")
 }

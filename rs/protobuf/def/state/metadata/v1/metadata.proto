@@ -189,6 +189,12 @@ message StopCanisterCallTree {
   StopCanisterCall call = 2;
 }
 
+message RawRandContext {
+  state.queues.v1.Request request = 1;
+  Time time = 2;
+  uint64 execution_round_id = 3;
+}
+
 message SubnetCallContextManager {
   uint64 next_callback_id = 1;
   reserved 2;
@@ -209,6 +215,7 @@ message SubnetCallContextManager {
   repeated InstallCodeCallTree install_code_calls = 13;
   uint64 next_stop_canister_call_id = 14;
   repeated StopCanisterCallTree stop_canister_calls = 15;
+  repeated RawRandContext raw_rand_contexts = 16;
 }
 
 message SubnetMetrics {
@@ -234,6 +241,22 @@ message BitcoinGetSuccessorsFollowUpResponses {
 message NodePublicKeyEntry {
   types.v1.NodeId node_id = 1;
   bytes public_key = 2;
+}
+
+message NodeBlockmakerStats {
+  types.v1.NodeId node_id = 1;
+  uint64 blocks_proposed_total = 2;
+  uint64 blocks_not_proposed_total = 3;
+}
+
+message BlockmakerStatsMap {
+  repeated NodeBlockmakerStats node_stats = 1;
+  uint64 blocks_proposed_total = 2;
+  uint64 blocks_not_proposed_total = 3;
+}
+
+message BlockmakerMetricsTimeSeries {
+  map<uint64, BlockmakerStatsMap> time_stamp_map = 1;
 }
 
 message SystemMetadata {
@@ -274,6 +297,8 @@ message SystemMetadata {
   repeated BitcoinGetSuccessorsFollowUpResponses bitcoin_get_successors_follow_up_responses = 18;
 
   repeated NodePublicKeyEntry node_public_keys = 19;
+
+  BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 }
 
 message StableMemory {

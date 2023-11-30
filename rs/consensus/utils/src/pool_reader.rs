@@ -313,23 +313,25 @@ impl<'a> PoolReader<'a> {
         self.get_highest_catch_up_package().height()
     }
 
-    /// Get a valid random beacon at the given height if it exists.
+    /// Get a valid random beacon at the given height if it exists. Note that we would also return
+    /// the random beacons below the CUP height if they still exists. This should help slower
+    /// nodes to deliver batches even if they have already received the new CUP. This helps because
+    /// purging keeps a couple of heights below the latest CUP.
     pub fn get_random_beacon(&self, height: Height) -> Option<RandomBeacon> {
-        match height.cmp(&self.get_catch_up_height()) {
-            Ordering::Less => None,
-            Ordering::Equal => Some(
+        if height == self.get_catch_up_height() {
+            Some(
                 self.get_highest_catch_up_package()
                     .content
                     .random_beacon
                     .as_ref()
                     .clone(),
-            ),
-            Ordering::Greater => self
-                .pool
+            )
+        } else {
+            self.pool
                 .validated()
                 .random_beacon()
                 .get_only_by_height(height)
-                .ok(),
+                .ok()
         }
     }
 

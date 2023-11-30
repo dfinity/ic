@@ -224,7 +224,7 @@ impl QuerySchedulerCore {
         canister.average_query_duration =
             (canister.average_query_duration + average_query_duration) / 2;
 
-        canister.leftover.extend(leftover.into_iter());
+        canister.leftover.extend(leftover);
         canister.active_threads -= 1;
 
         if !canister.has_been_scheduled

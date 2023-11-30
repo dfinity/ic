@@ -328,9 +328,20 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             .maximum_direct_participation_icp
             .and_then(|tokens| tokens.e8s);
 
-        let neurons_fund_investment_icp_e8s = swap_parameters
-            .neurons_fund_investment_icp
-            .and_then(|tokens| tokens.e8s);
+        let neurons_fund_investment_icp_e8s = if IS_MATCHED_FUNDING_ENABLED {
+            if let Some(neurons_fund_investment_icp) = swap_parameters.neurons_fund_investment_icp {
+                defects.push(format!(
+                    "neurons_fund_investment_icp ({:?}) is deprecated; please \
+                        set neurons_fund_participation instead.",
+                    neurons_fund_investment_icp,
+                ));
+            }
+            None
+        } else {
+            swap_parameters
+                .neurons_fund_investment_icp
+                .and_then(|tokens| tokens.e8s)
+        };
 
         let min_icp_e8s = swap_parameters.minimum_icp.and_then(|tokens| tokens.e8s);
 
@@ -491,12 +502,8 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             );
 
         // TODO NNS1-2687: move this check to sns/init
-        if IS_MATCHED_FUNDING_ENABLED {
-            if swap_parameters.neurons_fund_participation.is_none() {
-                defects.push("Error: neurons_fund_participation must be specified.".to_string());
-            }
-        } else if swap_parameters.neurons_fund_participation.is_some() {
-            defects.push("Error: neurons_fund_participation must not be specified until Matched Funding is enabled.".to_string());
+        if IS_MATCHED_FUNDING_ENABLED && swap_parameters.neurons_fund_participation.is_none() {
+            defects.push("Error: neurons_fund_participation must be specified.".to_string());
         }
 
         if !defects.is_empty() {

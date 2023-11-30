@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::Error;
+use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::Body,
@@ -21,41 +22,34 @@ use http_body::Body as HttpBody;
 use ic_types::{messages::ReplicaHealthStatus, CanisterId};
 use jemalloc_ctl::{epoch, stats};
 use prometheus::{
-    register_histogram_vec_with_registry, register_int_counter_vec_with_registry,
-    register_int_gauge_vec_with_registry, register_int_gauge_with_registry, Encoder, HistogramOpts,
-    HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry, TextEncoder,
+    proto::MetricFamily, register_histogram_vec_with_registry,
+    register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
+    IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
-    cache::CacheStatus,
+    cache::{Cache, CacheStatus},
     core::Run,
+    retry::RetryResult,
     routes::{ErrorCause, RequestContext},
-    snapshot::Node,
+    snapshot::{Node, RegistrySnapshot},
 };
 
 const KB: f64 = 1024.0;
 
-pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.1, 0.2, 0.4, 0.8, 2.0, 4.0];
-pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] =
-    &[128.0, 256.0, 512.0, KB, 2.0 * KB, 4.0 * KB, 8.0 * KB];
-pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] =
-    &[1.0 * KB, 8.0 * KB, 64.0 * KB, 256.0 * KB, 512.0 * KB];
+pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.2, 1.0, 2.0];
+pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] = &[128.0, KB, 2.0 * KB, 4.0 * KB, 8.0 * KB];
+pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] = &[1.0 * KB, 8.0 * KB, 64.0 * KB, 256.0 * KB];
 
 // https://prometheus.io/docs/instrumenting/exposition_formats/#basic-info
 const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 
-const LABELS_HTTP: &[&str] = &[
-    "request_type",
-    "status_code",
-    "subnet_id",
-    "node_id",
-    "error_cause",
-    "cache_status",
-    "cache_bypass",
-];
+const NODE_ID_LABEL: &str = "node_id";
+const SUBNET_ID_LABEL: &str = "subnet_id";
 
 pub struct MetricsCache {
     buffer: Vec<u8>,
@@ -70,18 +64,91 @@ impl MetricsCache {
     }
 }
 
+// Iterates over given metric families and removes metrics that have
+// node_id+subnet_id labels and where the corresponding nodes are
+// not present in the registry snapshot
+fn remove_stale_nodes(
+    snapshot: Arc<RegistrySnapshot>,
+    mut mfs: Vec<MetricFamily>,
+) -> Vec<MetricFamily> {
+    for mf in mfs.iter_mut() {
+        // Iterate over the metrics in the metric family
+        let metrics = mf
+            .take_metric()
+            .into_iter()
+            .filter(|v| {
+                // See if this metric has node_id/subnet_id labels
+                let node_id = v
+                    .get_label()
+                    .iter()
+                    .find(|&v| v.get_name() == NODE_ID_LABEL)
+                    .map(|x| x.get_value());
+
+                let subnet_id = v
+                    .get_label()
+                    .iter()
+                    .find(|&v| v.get_name() == SUBNET_ID_LABEL)
+                    .map(|x| x.get_value());
+
+                // Check if we got both node_id and subnet_id labels
+                match (node_id, subnet_id) {
+                    (Some(node_id), Some(subnet_id)) => snapshot
+                        .nodes
+                        // Check if the node_id is in the snapshot
+                        .get(node_id)
+                        // Check if its subnet_id matches, otherwise the metric needs to be removed
+                        .map(|x| x.subnet_id.to_string() == subnet_id)
+                        .unwrap_or(false),
+
+                    // Otherwise just pass this metric through
+                    _ => true,
+                }
+            })
+            .collect();
+
+        mf.set_metric(metrics);
+    }
+
+    mfs
+}
+
 pub struct MetricsRunner {
-    cache: Arc<RwLock<MetricsCache>>,
+    metrics_cache: Arc<RwLock<MetricsCache>>,
     registry: Registry,
     encoder: TextEncoder,
 
+    cache: Option<Arc<Cache>>,
+    cache_items: IntGauge,
+    cache_size: IntGauge,
+
     mem_allocated: IntGauge,
     mem_resident: IntGauge,
+
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 // Snapshots & encodes the metrics for the handler to export
 impl MetricsRunner {
-    pub fn new(cache: Arc<RwLock<MetricsCache>>, registry: Registry) -> Self {
+    pub fn new(
+        metrics_cache: Arc<RwLock<MetricsCache>>,
+        registry: Registry,
+        cache: Option<Arc<Cache>>,
+        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    ) -> Self {
+        let cache_items = register_int_gauge_with_registry!(
+            format!("cache_items"),
+            format!("Number of items in the request cache"),
+            registry
+        )
+        .unwrap();
+
+        let cache_size = register_int_gauge_with_registry!(
+            format!("cache_size"),
+            format!("Size of items in the request cache in bytes"),
+            registry
+        )
+        .unwrap();
+
         let mem_allocated = register_int_gauge_with_registry!(
             format!("memory_allocated"),
             format!("Allocated memory in bytes"),
@@ -97,11 +164,15 @@ impl MetricsRunner {
         .unwrap();
 
         Self {
-            cache,
+            metrics_cache,
             registry,
             encoder: TextEncoder::new(),
+            cache,
+            cache_items,
+            cache_size,
             mem_allocated,
             mem_resident,
+            published_registry_snapshot,
         }
     }
 }
@@ -116,13 +187,32 @@ impl Run for MetricsRunner {
         self.mem_resident
             .set(stats::resident::read().unwrap() as i64);
 
+        // Gather cache stats if it's enabled, otherwise set to zero
+        let (cache_items, cache_size) = match self.cache.as_ref() {
+            Some(v) => {
+                v.housekeep().await;
+                (v.len(), v.size())
+            }
+
+            None => (0, 0),
+        };
+
+        self.cache_items.set(cache_items as i64);
+        self.cache_size.set(cache_size as i64);
+
         // Get a snapshot of metrics
-        let metric_families = self.registry.gather();
+        let mut metric_families = self.registry.gather();
+
+        // If we have a published snapshot - use it to remove the metrics not present anymore
+        if let Some(snapshot) = self.published_registry_snapshot.load_full() {
+            metric_families = remove_stale_nodes(snapshot, metric_families);
+        }
 
         // Take a write lock, truncate the vector and encode the metrics into it
-        let mut cache = self.cache.write().await;
-        cache.buffer.clear();
-        self.encoder.encode(&metric_families, &mut cache.buffer)?;
+        let mut metrics_cache = self.metrics_cache.write().await;
+        metrics_cache.buffer.clear();
+        self.encoder
+            .encode(&metric_families, &mut metrics_cache.buffer)?;
 
         Ok(())
     }
@@ -154,13 +244,20 @@ impl<D, E> MetricsBody<D, E> {
             content_length.and_then(|x| x.to_str().ok().and_then(|x| x.parse::<u64>().ok()))
         });
 
-        Self {
+        let mut body = Self {
             inner: Box::pin(body),
             callback: Box::new(callback),
             callback_done: AtomicBool::new(false),
             expected_size,
             bytes_sent: 0,
+        };
+
+        // If the size is known and zero - just execute the callback now, it won't be called anywhere else
+        if expected_size == Some(0) {
+            body.do_callback(Ok(()));
         }
+
+        body
     }
 
     // In certain cases the users of HttpBody trait can cause us to run callbacks more than once
@@ -346,7 +443,7 @@ impl MetricParamsCheck {
         );
         opts.buckets = HTTP_DURATION_BUCKETS.to_vec();
 
-        let labels = &["status", "node_id", "subnet_id", "addr"];
+        let labels = &["status", NODE_ID_LABEL, SUBNET_ID_LABEL, "addr"];
 
         Self {
             counter: register_int_counter_vec_with_registry!(
@@ -379,10 +476,20 @@ pub struct HttpMetricParams {
     pub durationer: HistogramVec,
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
+    pub cache_counter: IntCounterVec,
+    pub retry_counter: IntCounterVec,
 }
 
 impl HttpMetricParams {
     pub fn new(registry: &Registry, action: &str) -> Self {
+        const LABELS_HTTP: &[&str] = &[
+            "request_type",
+            "status_code",
+            SUBNET_ID_LABEL,
+            NODE_ID_LABEL,
+            "error_cause",
+        ];
+
         Self {
             action: action.to_string(),
 
@@ -417,6 +524,22 @@ impl HttpMetricParams {
                 format!("Records the size of {action} responses"),
                 LABELS_HTTP,
                 HTTP_RESPONSE_SIZE_BUCKETS.to_vec(),
+                registry
+            )
+            .unwrap(),
+
+            cache_counter: register_int_counter_vec_with_registry!(
+                format!("{action}_cache"),
+                format!("Counts cache results"),
+                &["cache_status", "cache_bypass"],
+                registry
+            )
+            .unwrap(),
+
+            retry_counter: register_int_counter_vec_with_registry!(
+                format!("{action}_retry"),
+                format!("Counts per-subnet retry results"),
+                &["subnet_id", "success"],
                 registry
             )
             .unwrap(),
@@ -487,6 +610,7 @@ pub async fn metrics_middleware(
         .unwrap_or_default();
 
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
+    let retry_result = response.extensions().get::<RetryResult>().cloned();
     let canister_id = response.extensions().get::<CanisterId>().cloned();
     let node = response.extensions().get::<Node>().cloned();
     let cache_status = response
@@ -508,6 +632,8 @@ pub async fn metrics_middleware(
         durationer,
         request_sizer,
         response_sizer,
+        cache_counter,
+        retry_counter,
     } = metric_params;
 
     // Closure that gets called when the response body is fully read (or an error occurs)
@@ -532,16 +658,21 @@ pub async fn metrics_middleware(
         let cache_status_lbl = &cache_status.to_string();
         let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
 
-        // TODO Potential cardinality is about 8M which is a lot
-        // Check over a long period in PROD and measure
+        // TODO Potential cardinality is up to 900K which is a lot
+        // In reality it's less thank 80K which is still high
+        // Check over a long period
         let labels = &[
-            request_type.as_str(),            // x4
-            status_code.as_str(),             // x27 average
-            subnet_id_lbl.as_str(),           // x37 but since each node is in a single subnet -> x1
-            node_id_lbl.as_str(),             // x550
-            error_cause_lbl.as_str(),         // x15 but not sure if all errors would ever manifest
-            cache_status_lbl.as_str(),        // x4
-            cache_bypass_reason_lbl.as_str(), // x5 but since it relates only to BYPASS cache status -> total for 2 fields is x9
+            request_type.as_str(),    // x3
+            status_code.as_str(),     // x27 but usually x8
+            subnet_id_lbl.as_str(),   // x37 but since each node is in a single subnet -> x1
+            node_id_lbl.as_str(),     // x550
+            error_cause_lbl.as_str(), // x15 but usually x6
+        ];
+
+        // Cardinality x9
+        let labels_cache = &[
+            cache_status_lbl.as_str(),        // x5
+            cache_bypass_reason_lbl.as_str(), // x6 but since it relates only to BYPASS cache status -> total for 2 fields is x10
         ];
 
         counter.with_label_values(labels).inc();
@@ -552,6 +683,16 @@ pub async fn metrics_middleware(
         response_sizer
             .with_label_values(labels)
             .observe(response_size as f64);
+        cache_counter.with_label_values(labels_cache).inc();
+
+        let retry_result = retry_result.clone();
+
+        // Count the retry if one happened
+        if let Some(v) = &retry_result {
+            retry_counter
+                .with_label_values(&[subnet_id_lbl.as_str(), if v.success { "yes" } else { "no" }])
+                .inc();
+        }
 
         info!(
             action,
@@ -570,6 +711,8 @@ pub async fn metrics_middleware(
             full_duration,
             request_size = ctx.request_size,
             response_size,
+            retry_count = &retry_result.as_ref().map(|x| x.retries),
+            retry_success = &retry_result.map(|x| x.success.to_string()),
             body_error = body_result.err(),
             %cache_status,
             cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
@@ -600,3 +743,6 @@ pub async fn metrics_handler(
         cache.read().await.buffer.clone(),
     )
 }
+
+#[cfg(test)]
+pub mod test;

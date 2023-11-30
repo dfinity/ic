@@ -150,7 +150,7 @@ fn test_copy_inactive_neurons_to_stable_memory() {
             .copy_inactive_neurons_to_stable_memory_migration
             .unwrap_or_default();
 
-        let status = MigrationStatus::from_i32(last_migration.status.unwrap_or_default())
+        let status = MigrationStatus::try_from(last_migration.status.unwrap_or_default())
             .unwrap_or_default();
 
         if status == MigrationStatus::Unspecified {
@@ -177,7 +177,7 @@ fn test_copy_inactive_neurons_to_stable_memory() {
     // Step 3: Verify results.
 
     // Step 3.1: Assert that the copying was eventually successful.
-    let status = MigrationStatus::from_i32(*last_migration.status.as_ref().unwrap()).unwrap();
+    let status = MigrationStatus::try_from(*last_migration.status.as_ref().unwrap()).unwrap();
     assert_eq!(status, MigrationStatus::Succeeded);
 
     // Step 3.2: Assert that there is now a large number of neurons in stable memory.
@@ -229,7 +229,7 @@ fn download_golden_nns_state(destination: &Path) {
         .arg("-oStrictHostKeyChecking=no")
         .arg("-v")
         .arg(source.clone())
-        .arg(destination.clone())
+        .arg(destination)
         .output()
         .unwrap_or_else(|err| {
             panic!(
@@ -254,9 +254,9 @@ fn untar(source: &Path, destination: &Path) {
     // Actually untar.
     let tar_out = Command::new("tar")
         .arg("-xf")
-        .arg(source.clone())
+        .arg(source)
         .arg("-C")
-        .arg(destination.clone())
+        .arg(destination)
         .output()
         .unwrap_or_else(|err| panic!("Could not unpack {:?}: {}", source, err));
 

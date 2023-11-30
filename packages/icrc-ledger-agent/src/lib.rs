@@ -1,13 +1,24 @@
 use candid::{Decode, Encode, Nat, Principal};
-use ic_agent::hash_tree::{Label, LookupResult};
-use ic_agent::{Agent, Certificate};
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use ic_agent::{
+    hash_tree::{Label, LookupResult},
+    Agent,
+};
+use ic_cbor::CertificateToCbor;
+use ic_certification::{
+    hash_tree::{HashTreeNode, SubtreeLookupResult},
+    Certificate, HashTree,
+};
 use icrc_ledger_types::icrc::generic_value::Hash;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{DataCertificate, GetBlocksRequest, GetBlocksResponse};
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::BlockRange,
+};
 
 #[derive(Debug)]
 pub enum Icrc1AgentError {
@@ -181,6 +192,26 @@ impl Icrc1Agent {
         )
     }
 
+    /// Returns the allowance of the `spender` from the `account`.
+    pub async fn allowance(
+        &self,
+        account: Account,
+        spender: Account,
+        mode: CallMode,
+    ) -> Result<Allowance, Icrc1AgentError> {
+        let args = AllowanceArgs { account, spender };
+        Ok(match mode {
+            CallMode::Query => Decode!(
+                &self.query("icrc2_allowance", &Encode!(&args)?).await?,
+                Allowance
+            )?,
+            CallMode::Update => Decode!(
+                &self.update("icrc2_allowance", &Encode!(&args)?).await?,
+                Allowance
+            )?,
+        })
+    }
+
     pub async fn transfer_from(
         &self,
         args: TransferFromArgs,
@@ -197,6 +228,29 @@ impl Icrc1Agent {
         Ok(Decode!(
             &self.query("get_blocks", &Encode!(&args)?).await?,
             GetBlocksResponse
+        )?)
+    }
+
+    pub async fn get_blocks_from_archive(
+        &self,
+        archived_blocks: ArchivedRange<QueryBlockArchiveFn>,
+    ) -> Result<BlockRange, Icrc1AgentError> {
+        let args = GetBlocksRequest {
+            start: archived_blocks.start,
+            length: archived_blocks.length,
+        };
+        Ok(Decode!(
+            &self
+                .agent
+                .query(
+                    &archived_blocks.callback.canister_id,
+                    &archived_blocks.callback.method
+                )
+                .with_arg(Encode!(&args)?)
+                .call()
+                .await
+                .map_err(Icrc1AgentError::AgentError)?,
+            BlockRange
         )?)
     }
 
@@ -241,5 +295,81 @@ impl Icrc1Agent {
             ));
         }
         Ok(())
+    }
+
+    /// Returns the last block in the chain and this block's index.
+    /// Returns an error the block does not pass validation against the IC certificate.
+    pub async fn get_certified_chain_tip(&self) -> Result<(Hash, BlockIndex), Icrc1AgentError> {
+        let DataCertificate {
+            certificate,
+            hash_tree,
+        } = self.get_data_certificate().await?;
+        let certificate = if let Some(certificate) = certificate {
+            match Certificate::from_cbor(certificate.as_slice()) {
+                Ok(certificate) => certificate,
+                Err(e) => {
+                    return Err(Icrc1AgentError::VerificationFailed(format!(
+                        "Unable to deserialize CBOR encoded Certificate: {}",
+                        e
+                    )));
+                }
+            }
+        } else {
+            return Err(Icrc1AgentError::VerificationFailed(
+                "Certificate not found in the DataCertificate".to_string(),
+            ));
+        };
+        let hash_tree: HashTree = match ciborium::de::from_reader(hash_tree.as_slice()) {
+            Ok(hash_tree) => hash_tree,
+            Err(e) => {
+                return Err(Icrc1AgentError::VerificationFailed(format!(
+                    "Unable to deserialize CBOR encoded hash_tree: {}",
+                    e
+                )))
+            }
+        };
+        self.verify_root_hash(&certificate, &hash_tree.digest())
+            .await?;
+
+        let last_block_hash_vec = lookup_leaf(&hash_tree, "tip_hash")?;
+        let last_block_hash: Hash = match last_block_hash_vec.clone().try_into() {
+            Ok(last_block_hash) => last_block_hash,
+            Err(_) => {
+                return Err(Icrc1AgentError::VerificationFailed(format!(
+                "DataCertificate last_block_hash bytes: {}, cannot be decoded as last_block_hash",
+                hex::encode(last_block_hash_vec)
+            )))
+            }
+        };
+
+        let last_block_index_vec = lookup_leaf(&hash_tree, "last_block_index")?;
+        let last_block_index_bytes: [u8; 8] = match last_block_index_vec.clone().try_into() {
+            Ok(last_block_index_bytes) => last_block_index_bytes,
+            Err(_) => {
+                return Err(Icrc1AgentError::VerificationFailed(format!(
+                    "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
+                    hex::encode(last_block_index_vec)
+                )))
+            }
+        };
+        let last_block_index = u64::from_be_bytes(last_block_index_bytes);
+
+        Ok((last_block_hash, Nat::from(last_block_index)))
+    }
+}
+
+fn lookup_leaf(hash_tree: &HashTree, leaf_name: &str) -> Result<Vec<u8>, Icrc1AgentError> {
+    match hash_tree.lookup_subtree([leaf_name.as_bytes()]) {
+        SubtreeLookupResult::Found(tree) => match tree.as_ref() {
+            HashTreeNode::Leaf(result) => Ok(result.clone()),
+            _ => Err(Icrc1AgentError::VerificationFailed(format!(
+                "`{}` value in the hash_tree should be a leaf",
+                leaf_name
+            ))),
+        },
+        _ => Err(Icrc1AgentError::VerificationFailed(format!(
+            "`{}` not found in the response hash_tree",
+            leaf_name
+        ))),
     }
 }

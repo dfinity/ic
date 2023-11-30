@@ -228,7 +228,7 @@ impl HasPrometheus for TestEnv {
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);
-        let group_name = GroupSetup::read_attribute(self).farm_group_name;
+        let group_name = GroupSetup::read_attribute(self).infra_group_name;
         sync_prometheus_config_dir(
             prometheus_config_dir.clone(),
             group_name.clone(),

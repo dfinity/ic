@@ -1,14 +1,13 @@
+use std::collections::HashMap;
+use std::convert::Infallible;
 use std::{
     collections::{HashSet, VecDeque},
     sync::{Arc, Mutex},
 };
 
-use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
-        UnvalidatedArtifact, ValidatedPoolReader,
-    },
-    time_source::TimeSource,
+use ic_interfaces::p2p::consensus::{
+    ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+    ValidatedPoolReader,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{
@@ -18,16 +17,24 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct U64Artifact;
 
 impl ArtifactKind for U64Artifact {
     // Does not matter
     const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
     // Id==Message
+    type PbMessage = u64;
+    type PbIdError = Infallible;
+    type PbMessageError = Infallible;
+    type PbAttributeError = Infallible;
+    type PbFilterError = Infallible;
     type Message = u64;
+    type PbId = u64;
     type Id = u64;
+    type PbAttribute = ();
     type Attribute = ();
+    type PbFilter = ();
     type Filter = ();
 
     /// The function converts a U64ArtifactMessage to an advert for a
@@ -48,8 +55,8 @@ pub struct TestConsensus<Artifact: ArtifactKind> {
     node_id: NodeId,
     adverts: Arc<Mutex<VecDeque<Artifact::Message>>>,
     purge: Arc<Mutex<VecDeque<Artifact::Id>>>,
-    received_remove: Arc<Mutex<HashSet<Artifact::Id>>>,
-    received_unvalidated: Arc<Mutex<HashSet<Artifact::Id>>>,
+    received_remove_count: Arc<Mutex<HashMap<Artifact::Id, u16>>>,
+    received_unvalidated_count: Arc<Mutex<HashMap<Artifact::Id, u16>>>,
     pool: Arc<Mutex<HashSet<Artifact::Id>>>,
 }
 
@@ -57,23 +64,28 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
     type ChangeSet = (Vec<u64>, Vec<u64>);
 
     fn insert(&mut self, msg: UnvalidatedArtifact<u64>) {
-        self.received_unvalidated
+        self.received_unvalidated_count
             .lock()
             .unwrap()
-            .insert(msg.message);
+            .entry(msg.message)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+
         self.pool.lock().unwrap().insert(msg.message);
     }
 
     fn remove(&mut self, id: &u64) {
-        self.received_remove.lock().unwrap().insert(*id);
+        self.received_remove_count
+            .lock()
+            .unwrap()
+            .entry(*id)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+
         self.pool.lock().unwrap().remove(id);
     }
 
-    fn apply_changes(
-        &mut self,
-        _time_source: &dyn TimeSource,
-        change_set: Self::ChangeSet,
-    ) -> ChangeResult<U64Artifact> {
+    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
         let mut pool = self.pool.lock().unwrap();
         let mut poll_immediately = false;
         for add in &change_set.0 {
@@ -113,8 +125,8 @@ impl TestConsensus<U64Artifact> {
             node_id,
             adverts: Arc::new(Mutex::new(VecDeque::new())),
             purge: Arc::new(Mutex::new(VecDeque::new())),
-            received_remove: Arc::new(Mutex::new(HashSet::new())),
-            received_unvalidated: Arc::new(Mutex::new(HashSet::new())),
+            received_remove_count: Arc::new(Mutex::new(HashMap::new())),
+            received_unvalidated_count: Arc::new(Mutex::new(HashMap::new())),
             pool: Arc::new(Mutex::new(HashSet::new())),
         }
     }
@@ -129,20 +141,29 @@ impl TestConsensus<U64Artifact> {
         self.purge.lock().unwrap().push_back(id);
     }
 
-    pub fn received_advert(&self, id: u64) -> bool {
-        self.received_unvalidated
+    pub fn received_advert_once(&self, id: u64) -> bool {
+        self.received_unvalidated_count
             .lock()
             .unwrap()
-            .iter()
-            .any(|&x| x == id)
+            .get(&id)
+            .is_some_and(|&count| count == 1)
     }
 
-    pub fn received_remove(&self, id: u64) -> bool {
-        self.received_remove
+    pub fn received_advert_count(&self, id: u64) -> u16 {
+        self.received_unvalidated_count
             .lock()
             .unwrap()
-            .iter()
-            .any(|&x| x == id)
+            .get(&id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn received_remove_once(&self, id: u64) -> bool {
+        self.received_remove_count
+            .lock()
+            .unwrap()
+            .get(&id)
+            .is_some_and(|&count| count == 1)
     }
 
     pub fn pool(&self) -> HashSet<u64> {

@@ -9,7 +9,7 @@ Before=systemd-networkd-wait-online.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/generate-network-config.sh
+ExecStart=/opt/ic/bin/hostos_tool generate-network-config
 
 [Install]
 WantedBy=systemd-networkd.service

@@ -1,9 +1,9 @@
 //! The module contains implementations of the 'ArtifactClient' trait for all
 //! P2P clients that require consensus over their artifacts.
 
-use ic_interfaces::{
+use ic_interfaces::p2p::{
     artifact_manager::ArtifactClient,
-    artifact_pool::{PriorityFnAndFilterProducer, ValidatedPoolReader},
+    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
 };
 use ic_types::{
     artifact::*,
@@ -29,12 +29,12 @@ pub struct ConsensusClient<Pool, T> {
     /// reference counting.
     pool: Arc<RwLock<Pool>>,
     /// The `ConsensusGossip` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> ConsensusClient<Pool, T> {
     /// The constructor creates a `ConsensusClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -98,7 +98,7 @@ pub struct IngressClient<Pool, T> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
@@ -107,7 +107,7 @@ impl<Pool, T> IngressClient<Pool, T> {
     /// The constructor creates an `IngressClient` instance.
     pub fn new(
         pool: Arc<RwLock<Pool>>,
-        priority_fn_and_filter: T,
+        priority_fn_and_filter: Arc<T>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
@@ -157,12 +157,12 @@ pub struct CertificationClient<Pool, T> {
     /// reference counting.
     pool: Arc<RwLock<Pool>>,
     /// The `PriorityFnAndFilterProducer` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> CertificationClient<Pool, T> {
     /// The constructor creates a `CertificationClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -230,12 +230,12 @@ pub struct DkgClient<Pool, T> {
     /// counting.
     pool: Arc<RwLock<Pool>>,
     /// The `DkgGossip` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> DkgClient<Pool, T> {
     /// The constructor creates a `DkgClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -278,11 +278,11 @@ impl<
 /// The ECDSA client.
 pub struct EcdsaClient<Pool, T> {
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> EcdsaClient<Pool, T> {
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -319,11 +319,11 @@ impl<
 /// The CanisterHttp Client
 pub struct CanisterHttpClient<Pool, T> {
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> CanisterHttpClient<Pool, T> {
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,

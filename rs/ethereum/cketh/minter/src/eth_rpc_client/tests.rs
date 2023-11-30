@@ -13,7 +13,6 @@ mod eth_rpc_client {
             providers,
             &[
                 RpcNodeProvider::Sepolia(SepoliaProvider::Ankr),
-                RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
                 RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode)
             ]
         );
@@ -29,6 +28,7 @@ mod eth_rpc_client {
             providers,
             &[
                 RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
+                RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
                 RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare)
             ]
         );
@@ -36,15 +36,15 @@ mod eth_rpc_client {
 }
 
 mod multi_call_results {
-    use crate::eth_rpc_client::providers::{RpcNodeProvider, SepoliaProvider};
+    use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
 
-    const ANKR: RpcNodeProvider = RpcNodeProvider::Sepolia(SepoliaProvider::Ankr);
-    const BLOCK_PI: RpcNodeProvider = RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi);
-    const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode);
+    const ANKR: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Ankr);
+    const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::PublicNode);
+    const CLOUDFLARE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare);
 
     mod reduce_with_equality {
         use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, BLOCK_PI};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
         use ic_cdk::api::call::RejectionCode;
 
@@ -65,7 +65,7 @@ mod multi_call_results {
                     }),
                 ),
                 (
-                    BLOCK_PI,
+                    PUBLIC_NODE,
                     Err(HttpOutcallError::IcError {
                         code: RejectionCode::SysTransient,
                         message: "transient".to_string(),
@@ -89,7 +89,7 @@ mod multi_call_results {
                     }),
                 ),
                 (
-                    BLOCK_PI,
+                    PUBLIC_NODE,
                     Ok(JsonRpcResult::Error {
                         code: -32000,
                         message: "nonce too low".to_string(),
@@ -106,7 +106,7 @@ mod multi_call_results {
         fn should_be_inconsistent_when_different_ok_results() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (ANKR, Ok(JsonRpcResult::Result("hello".to_string()))),
-                (BLOCK_PI, Ok(JsonRpcResult::Result("world".to_string()))),
+                (PUBLIC_NODE, Ok(JsonRpcResult::Result("world".to_string()))),
             ]);
 
             let reduced = results.clone().reduce_with_equality();
@@ -125,7 +125,7 @@ mod multi_call_results {
                     }),
                 ),
                 (
-                    BLOCK_PI,
+                    PUBLIC_NODE,
                     Err(HttpOutcallError::IcError {
                         code: RejectionCode::CanisterReject,
                         message: "reject".to_string(),
@@ -157,7 +157,7 @@ mod multi_call_results {
                     }),
                 ),
                 (
-                    BLOCK_PI,
+                    PUBLIC_NODE,
                     Ok(JsonRpcResult::Error {
                         code: -32700,
                         message: "insufficient funds for gas * price + value".to_string(),
@@ -180,7 +180,7 @@ mod multi_call_results {
         fn should_be_consistent_ok_result() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (ANKR, Ok(JsonRpcResult::Result("0x01".to_string()))),
-                (BLOCK_PI, Ok(JsonRpcResult::Result("0x01".to_string()))),
+                (PUBLIC_NODE, Ok(JsonRpcResult::Result("0x01".to_string()))),
             ]);
 
             let reduced = results.clone().reduce_with_equality();
@@ -191,7 +191,7 @@ mod multi_call_results {
 
     mod reduce_with_min_by_key {
         use crate::eth_rpc::{Block, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, BLOCK_PI};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, PUBLIC_NODE};
         use crate::eth_rpc_client::MultiCallResults;
         use crate::numeric::{BlockNumber, Wei};
 
@@ -206,7 +206,7 @@ mod multi_call_results {
                     })),
                 ),
                 (
-                    BLOCK_PI,
+                    PUBLIC_NODE,
                     Ok(JsonRpcResult::Result(Block {
                         number: BlockNumber::new(0x411cd9),
                         base_fee_per_gas: Wei::new(0x10),
@@ -228,7 +228,7 @@ mod multi_call_results {
 
     mod reduce_with_stable_majority_by_key {
         use crate::eth_rpc::{FeeHistory, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, BLOCK_PI, PUBLIC_NODE};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, CLOUDFLARE, PUBLIC_NODE};
         use crate::eth_rpc_client::MultiCallError::ConsistentJsonRpcError;
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
         use crate::numeric::{BlockNumber, WeiPerGas};
@@ -238,8 +238,8 @@ mod multi_call_results {
             let results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
-                    (BLOCK_PI, Ok(JsonRpcResult::Result(fee_history()))),
                     (PUBLIC_NODE, Ok(JsonRpcResult::Result(fee_history()))),
+                    (CLOUDFLARE, Ok(JsonRpcResult::Result(fee_history()))),
                 ]);
 
             let reduced =
@@ -259,11 +259,14 @@ mod multi_call_results {
                     fees[index_majority].oldest_block
                 );
                 let majority_fee = fees[index_majority].clone();
-                let [ankr_fee_history, block_pi_fee_history, public_node_fee_history] = fees;
+                let [ankr_fee_history, cloudflare_fee_history, public_node_fee_history] = fees;
                 let results: MultiCallResults<FeeHistory> =
                     MultiCallResults::from_non_empty_iter(vec![
                         (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
-                        (BLOCK_PI, Ok(JsonRpcResult::Result(block_pi_fee_history))),
+                        (
+                            CLOUDFLARE,
+                            Ok(JsonRpcResult::Result(cloudflare_fee_history)),
+                        ),
                         (
                             PUBLIC_NODE,
                             Ok(JsonRpcResult::Result(public_node_fee_history)),
@@ -283,7 +286,7 @@ mod multi_call_results {
                 oldest_block: BlockNumber::new(0x10f73fd),
                 ..fee_history()
             };
-            let block_pi_fee_history = FeeHistory {
+            let cloudflare_fee_history = FeeHistory {
                 oldest_block: BlockNumber::new(0x10f73fc),
                 ..fee_history()
             };
@@ -294,10 +297,6 @@ mod multi_call_results {
             let three_distinct_results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
-                    (
-                        BLOCK_PI,
-                        Ok(JsonRpcResult::Result(block_pi_fee_history.clone())),
-                    ),
                     (
                         PUBLIC_NODE,
                         Ok(JsonRpcResult::Result(public_node_fee_history.clone())),
@@ -325,8 +324,8 @@ mod multi_call_results {
                 MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
                     (
-                        BLOCK_PI,
-                        Ok(JsonRpcResult::Result(block_pi_fee_history.clone())),
+                        PUBLIC_NODE,
+                        Ok(JsonRpcResult::Result(cloudflare_fee_history.clone())),
                     ),
                 ]);
 
@@ -339,7 +338,10 @@ mod multi_call_results {
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
                         (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
-                        (BLOCK_PI, Ok(JsonRpcResult::Result(block_pi_fee_history))),
+                        (
+                            PUBLIC_NODE,
+                            Ok(JsonRpcResult::Result(cloudflare_fee_history))
+                        ),
                     ])
                 ))
             );
@@ -358,7 +360,6 @@ mod multi_call_results {
             let results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(fee.clone()))),
-                    (BLOCK_PI, Ok(JsonRpcResult::Result(fee.clone()))),
                     (
                         PUBLIC_NODE,
                         Ok(JsonRpcResult::Result(inconsistent_fee.clone())),
@@ -373,7 +374,6 @@ mod multi_call_results {
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
                         (ANKR, Ok(JsonRpcResult::Result(fee.clone()))),
-                        (BLOCK_PI, Ok(JsonRpcResult::Result(fee))),
                         (PUBLIC_NODE, Ok(JsonRpcResult::Result(inconsistent_fee))),
                     ])
                 ))
@@ -385,7 +385,6 @@ mod multi_call_results {
             let results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
-                    (BLOCK_PI, Ok(JsonRpcResult::Result(fee_history()))),
                     (
                         PUBLIC_NODE,
                         Ok(JsonRpcResult::Error {
@@ -427,6 +426,74 @@ mod multi_call_results {
                     vec![WeiPerGas::new(0x5f5e100)],
                 ],
             }
+        }
+    }
+
+    mod has_http_outcall_error_matching {
+        use super::*;
+        use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
+        use ic_cdk::api::call::RejectionCode;
+        use proptest::prelude::any;
+        use proptest::proptest;
+
+        proptest! {
+            #[test]
+            fn should_not_match_when_consistent_json_rpc_error(code in any::<i64>(), message in ".*") {
+                let error: MultiCallError<String> = MultiCallError::ConsistentJsonRpcError {
+                    code,
+                    message,
+                };
+                let always_true = |_outcall_error: &HttpOutcallError| true;
+
+                assert!(!error.has_http_outcall_error_matching(always_true));
+            }
+        }
+
+        #[test]
+        fn should_match_when_consistent_http_outcall_error() {
+            let error: MultiCallError<String> =
+                MultiCallError::ConsistentHttpOutcallError(HttpOutcallError::IcError {
+                    code: RejectionCode::SysTransient,
+                    message: "message".to_string(),
+                });
+            let always_true = |_outcall_error: &HttpOutcallError| true;
+            let always_false = |_outcall_error: &HttpOutcallError| false;
+
+            assert!(error.has_http_outcall_error_matching(always_true));
+            assert!(!error.has_http_outcall_error_matching(always_false));
+        }
+
+        #[test]
+        fn should_match_on_single_inconsistent_result_with_outcall_error() {
+            let always_true = |_outcall_error: &HttpOutcallError| true;
+            let error_with_no_outcall_error =
+                MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(1))),
+                    (
+                        CLOUDFLARE,
+                        Ok(JsonRpcResult::Error {
+                            code: -32700,
+                            message: "error".to_string(),
+                        }),
+                    ),
+                    (PUBLIC_NODE, Ok(JsonRpcResult::Result(1))),
+                ]));
+            assert!(!error_with_no_outcall_error.has_http_outcall_error_matching(always_true));
+
+            let error_with_outcall_error =
+                MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(1))),
+                    (
+                        CLOUDFLARE,
+                        Err(HttpOutcallError::IcError {
+                            code: RejectionCode::SysTransient,
+                            message: "message".to_string(),
+                        }),
+                    ),
+                    (PUBLIC_NODE, Ok(JsonRpcResult::Result(1))),
+                ]));
+            assert!(error_with_outcall_error.has_http_outcall_error_matching(always_true));
         }
     }
 }

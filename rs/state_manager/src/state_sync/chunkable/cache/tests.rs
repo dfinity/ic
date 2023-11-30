@@ -24,7 +24,7 @@ impl TestEnvironment {
     fn new(log: ReplicaLogger) -> Self {
         let root_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
         let cache = Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log.clone())));
-        let metrics = StateManagerMetrics::new(&MetricsRegistry::new());
+        let metrics = StateManagerMetrics::new(&MetricsRegistry::new(), log.clone());
         let state_layout = StateLayout::try_new(
             log.clone(),
             root_dir.path().to_owned(),

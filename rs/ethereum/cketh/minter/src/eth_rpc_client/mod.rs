@@ -146,7 +146,7 @@ impl EthRpcClient {
                     block,
                     include_full_transactions: false,
                 },
-                ResponseSizeEstimate::new(6 * 1024),
+                ResponseSizeEstimate::new(12 * 1024),
             )
             .await;
         results.reduce_with_equality()
@@ -281,6 +281,25 @@ pub enum MultiCallError<T> {
     InconsistentResults(MultiCallResults<T>),
 }
 
+impl<T> MultiCallError<T> {
+    pub fn has_http_outcall_error_matching<P: Fn(&HttpOutcallError) -> bool>(
+        &self,
+        predicate: P,
+    ) -> bool {
+        match self {
+            MultiCallError::ConsistentHttpOutcallError(error) => predicate(error),
+            MultiCallError::ConsistentJsonRpcError { .. } => false,
+            MultiCallError::InconsistentResults(results) => {
+                results.results.values().any(|result| match result {
+                    Ok(JsonRpcResult::Result(_)) => false,
+                    Ok(JsonRpcResult::Error { .. }) => false,
+                    Err(error) => predicate(error),
+                })
+            }
+        }
+    }
+}
+
 impl<T: Debug + PartialEq> MultiCallResults<T> {
     pub fn reduce_with_equality(self) -> Result<T, MultiCallError<T>> {
         let mut results = self.all_ok()?.into_iter();
@@ -379,9 +398,13 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                 } else {
                     let error =
                         MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
-                            first.1.into_iter().chain(second.1.into_iter()).map(
-                                |(provider, result)| (provider, Ok(JsonRpcResult::Result(result))),
-                            ),
+                            first
+                                .1
+                                .into_iter()
+                                .chain(second.1)
+                                .map(|(provider, result)| {
+                                    (provider, Ok(JsonRpcResult::Result(result)))
+                                }),
                         ));
                     log!(
                         INFO,

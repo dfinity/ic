@@ -19,15 +19,15 @@ use axum::{
 use bytes::Bytes;
 use candid::Principal;
 use http::{
-    header::{HeaderName, HeaderValue, CONTENT_TYPE},
+    header::{HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE},
     Method,
 };
+use http_body::Body as HttpBody;
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId,
 };
 use lazy_static::lazy_static;
-use rand::seq::SliceRandom;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tower_governor::errors::GovernorError;
@@ -45,9 +45,11 @@ use {
 
 use crate::{
     cache::CacheStatus,
-    http::{reqwest_error_infer, HttpClient},
-    persist::Routes,
-    snapshot::Node,
+    core::MAX_REQUEST_BODY_SIZE,
+    http::{read_streaming_body, reqwest_error_infer, HttpClient},
+    persist::{RouteSubnet, Routes},
+    retry::RetryResult,
+    snapshot::{Node, RegistrySnapshot},
 };
 
 // TODO which one to use?
@@ -70,6 +72,16 @@ const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id"
 const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
@@ -107,10 +119,11 @@ impl fmt::Display for RequestType {
 }
 
 // Categorized possible causes for request processing failures
-// Use String and not Error since it's not cloneable
+// Not using Error as inner type since it's not cloneable
 #[derive(Debug, Clone)]
 pub enum ErrorCause {
-    UnableToReadBody,
+    UnableToReadBody(String),
+    PayloadTooLarge(usize),
     UnableToParseCBOR(String), // TODO just use MalformedRequest?
     MalformedRequest(String),
     MalformedResponse(String),
@@ -131,7 +144,8 @@ impl ErrorCause {
     pub fn status_code(&self) -> StatusCode {
         match self {
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::UnableToReadBody => StatusCode::BAD_REQUEST,
+            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
             Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
             Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
             Self::MalformedResponse(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -151,6 +165,8 @@ impl ErrorCause {
     pub fn details(&self) -> Option<String> {
         match self {
             Self::Other(x) => Some(x.clone()),
+            Self::PayloadTooLarge(x) => Some(format!("maximum body size is {x} bytes")),
+            Self::UnableToReadBody(x) => Some(x.clone()),
             Self::UnableToParseCBOR(x) => Some(x.clone()),
             Self::MalformedRequest(x) => Some(x.clone()),
             Self::MalformedResponse(x) => Some(x.clone()),
@@ -161,13 +177,24 @@ impl ErrorCause {
             _ => None,
         }
     }
+
+    pub fn retriable(&self) -> bool {
+        matches!(
+            self,
+            Self::ReplicaErrorDNS(_)
+                | Self::ReplicaErrorConnect
+                | Self::ReplicaTLSErrorOther(_)
+                | Self::ReplicaTLSErrorCert(_)
+        )
+    }
 }
 
 impl fmt::Display for ErrorCause {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Other(_) => write!(f, "general_error"),
-            Self::UnableToReadBody => write!(f, "unable_to_read_body"),
+            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
+            Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
             Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
             Self::MalformedRequest(_) => write!(f, "malformed_request"),
             Self::MalformedResponse(_) => write!(f, "malformed_response"),
@@ -274,7 +301,7 @@ pub trait Proxy: Sync + Send {
 
 #[async_trait]
 pub trait Lookup: Sync + Send {
-    async fn lookup(&self, id: &CanisterId) -> Result<Node, ErrorCause>;
+    async fn lookup_subnet(&self, id: &CanisterId) -> Result<Arc<RouteSubnet>, ErrorCause>;
 }
 
 #[async_trait]
@@ -284,7 +311,7 @@ pub trait Health: Sync + Send {
 
 #[async_trait]
 pub trait RootKey: Sync + Send {
-    async fn root_key(&self) -> Vec<u8>;
+    async fn root_key(&self) -> Option<Vec<u8>>;
 }
 
 // Router that helps handlers do their job by looking up in routing table
@@ -293,19 +320,19 @@ pub trait RootKey: Sync + Send {
 pub struct ProxyRouter {
     http_client: Arc<dyn HttpClient>,
     published_routes: Arc<ArcSwapOption<Routes>>,
-    root_key: Vec<u8>,
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl ProxyRouter {
     pub fn new(
         http_client: Arc<dyn HttpClient>,
         published_routes: Arc<ArcSwapOption<Routes>>,
-        root_key: Vec<u8>,
+        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     ) -> Self {
         Self {
             http_client,
             published_routes,
-            root_key,
+            published_registry_snapshot,
         }
     }
 }
@@ -354,7 +381,10 @@ impl Proxy for ProxyRouter {
 
 #[async_trait]
 impl Lookup for ProxyRouter {
-    async fn lookup(&self, canister_id: &CanisterId) -> Result<Node, ErrorCause> {
+    async fn lookup_subnet(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<Arc<RouteSubnet>, ErrorCause> {
         let subnet = self
             .published_routes
             .load_full()
@@ -362,21 +392,16 @@ impl Lookup for ProxyRouter {
             .lookup(canister_id.get_ref().0)
             .ok_or(ErrorCause::SubnetNotFound)?; // Requested canister route wasn't found
 
-        // Pick random node
-        let node = subnet
-            .nodes
-            .choose(&mut rand::thread_rng())
-            .ok_or(ErrorCause::NoHealthyNodes)? // No healhy nodes in subnet
-            .clone();
-
-        Ok(node)
+        Ok(subnet)
     }
 }
 
 #[async_trait]
 impl RootKey for ProxyRouter {
-    async fn root_key(&self) -> Vec<u8> {
-        self.root_key.clone()
+    async fn root_key(&self) -> Option<Vec<u8>> {
+        self.published_registry_snapshot
+            .load_full()
+            .map(|x| x.nns_public_key.clone())
     }
 }
 
@@ -385,9 +410,7 @@ impl Health for ProxyRouter {
     async fn health(&self) -> ReplicaHealthStatus {
         // Return healthy state if we have at least one healthy replica node
         // TODO increase threshold? change logic?
-        let rt = self.published_routes.load_full();
-
-        match rt {
+        match self.published_routes.load_full() {
             Some(rt) => {
                 if rt.node_count > 0 {
                     ReplicaHealthStatus::Healthy
@@ -498,6 +521,25 @@ pub async fn validate_request(
     Ok(next.run(request).await)
 }
 
+/// Middlware runs before response compression phase and adds a content-length header
+/// if one is missing and exact body size is known.
+///
+/// TODO this is a temporary workaround until CompressionLayer and/or Axum is fixed:
+/// 1) Axum adds Content-Length only to the responses generated by handler, not middleware
+/// 2) CompressionLayer does not pass-through the size_hint() to the inner body even if no compression is requested
+///
+/// Without Content-Length header or exact size_hint the response is always chunked
+pub async fn pre_compression(request: Request<Body>, next: Next<Body>) -> Response {
+    let mut response = next.run(request).await;
+    if response.headers().get(CONTENT_LENGTH).is_none() {
+        if let Some(v) = response.body().size_hint().exact() {
+            response.headers_mut().insert(CONTENT_LENGTH, v.into());
+        }
+    }
+
+    response
+}
+
 // Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     canister_id: Path<String>,
@@ -520,10 +562,7 @@ pub async fn preprocess_request(
 
     // Consume body
     let (parts, body) = request.into_parts();
-    let body = hyper::body::to_bytes(body)
-        .await
-        .map_err(|_| ErrorCause::UnableToReadBody)?
-        .to_vec();
+    let body = read_streaming_body(body, MAX_REQUEST_BODY_SIZE).await?;
 
     // Parse the request body
     let envelope: ICRequestEnvelope = serde_cbor::from_slice(&body)
@@ -543,7 +582,7 @@ pub async fn preprocess_request(
     };
 
     // Reconstruct request back from parts
-    let mut request = Request::from_parts(parts, hyper::Body::from(body));
+    let mut request = Request::from_parts(parts, Body::from(body));
 
     // Inject variables into the request
     request.extensions_mut().insert(ctx.clone());
@@ -554,29 +593,33 @@ pub async fn preprocess_request(
 
     // Inject context into the response for access by other middleware
     response.extensions_mut().insert(ctx);
-    response.extensions_mut().insert(canister_id);
+
+    // Inject canister_id if it's not there already (could be overriden by other middleware)
+    if response.extensions().get::<CanisterId>().is_none() {
+        response.extensions_mut().insert(canister_id);
+    }
 
     Ok(response)
 }
 
-// Middleware: looks up the node in the routing table
-pub async fn lookup_node(
+// Middleware: looks up the target subnet in the routing table
+pub async fn lookup_subnet(
     State(lk): State<Arc<dyn Lookup>>,
     Extension(canister_id): Extension<CanisterId>,
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Try to look up a target node using the canister id
-    let node = lk.lookup(&canister_id).await?;
+    // Try to look up a target subnet using the canister id
+    let subnet = lk.lookup_subnet(&canister_id).await?;
 
-    // Inject node into request
-    request.extensions_mut().insert(node.clone());
+    // Inject subnet into request
+    request.extensions_mut().insert(Arc::clone(&subnet));
 
     // Pass request to the next processor
     let mut response = next.run(request).await;
 
-    // Inject node into the response for access by other middleware
-    response.extensions_mut().insert(node);
+    // Inject subnet into the response for access by other middleware
+    response.extensions_mut().insert(subnet);
 
     Ok(response)
 }
@@ -628,14 +671,48 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         );
     }
 
+    if let Some(ctx) = response.extensions().get::<RequestContext>().cloned() {
+        response.headers_mut().insert(
+            HEADER_IC_REQUEST_TYPE,
+            HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
+        );
+
+        ctx.canister_id.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_CANISTER_ID,
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+            )
+        });
+
+        ctx.sender.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_SENDER,
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+            )
+        });
+
+        ctx.method_name.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_METHOD_NAME,
+                HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
+            )
+        });
+    }
+
+    let retry_result = response.extensions().get::<RetryResult>().cloned();
+    if let Some(v) = retry_result {
+        response.headers_mut().insert(
+            HEADER_IC_RETRIES,
+            HeaderValue::from_maybe_shared(Bytes::from(v.retries.to_string())).unwrap(),
+        );
+    }
+
     response
 }
 
 // Handler: emit an HTTP status code that signals the service's state
 pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {
-    let health = h.health().await;
-
-    if health == ReplicaHealthStatus::Healthy {
+    if h.health().await == ReplicaHealthStatus::Healthy {
         StatusCode::NO_CONTENT
     } else {
         StatusCode::SERVICE_UNAVAILABLE
@@ -650,7 +727,7 @@ pub async fn status(
 
     let status = HttpStatusResponse {
         ic_api_version: IC_API_VERSION.to_string(),
-        root_key: Some(rk.root_key().await.into()),
+        root_key: rk.root_key().await.map(|x| x.into()),
         impl_version: None,
         impl_hash: None,
         replica_health_status: Some(health),
@@ -683,7 +760,6 @@ pub async fn handle_call(
     request: Request<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Proxy the request
-    // All variables are defined if we got here, otherwise upper layers would refuse request earlier
     let resp = p
         .proxy(ctx.request_type, request, node, canister_id)
         .await?;

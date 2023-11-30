@@ -39,7 +39,7 @@ pub trait ThresholdSignatureCspClient {
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         public_coefficients: CspPublicCoefficients,
     ) -> Result<CspSignature, CspThresholdSignError>;
 

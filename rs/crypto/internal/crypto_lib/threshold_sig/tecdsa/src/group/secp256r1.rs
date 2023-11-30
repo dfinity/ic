@@ -59,7 +59,7 @@ impl Scalar {
             return None;
         }
 
-        let mut extended = vec![0; 2 * Self::BYTES];
+        let mut extended = [0; 2 * Self::BYTES];
         let offset = extended.len() - bytes.len();
         extended[offset..].copy_from_slice(bytes); // zero pad
 
@@ -196,6 +196,7 @@ impl Point {
     }
 
     /// Add two points
+    #[inline]
     pub fn add(&self, other: &Self) -> Self {
         Self::new(self.p + other.p)
     }
@@ -206,6 +207,7 @@ impl Point {
     }
 
     /// Perform point doubling
+    #[inline]
     pub fn double(&self) -> Self {
         Self::new(self.p.double())
     }
@@ -216,6 +218,7 @@ impl Point {
     }
 
     /// Scalar multiplication
+    #[inline]
     pub fn mul(&self, scalar: &Scalar) -> Self {
         Self::new(self.p * scalar.s)
     }
@@ -247,6 +250,7 @@ impl Point {
     }
 
     /// Constant time conditional selection
+    #[inline(always)]
     pub fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
         Self {
             p: p256::ProjectivePoint::conditional_select(&a.p, &b.p, choice),

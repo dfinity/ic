@@ -1,6 +1,6 @@
 use crate::{
-    governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
-    logs::{ERROR, INFO},
+    governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
+    logs::INFO,
     pb::{
         sns_root_types::{
             set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
@@ -40,6 +40,7 @@ use ic_ic00_types::CanisterInstallModeError;
 use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
 use ic_nervous_system_proto::pb::v1::Percentage;
+use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -296,6 +297,17 @@ impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
     }
 }
 
+lazy_static! {
+    static ref DEFAULT_NERVOUS_SYSTEM_PARAMETERS: NervousSystemParameters =
+        NervousSystemParameters::default();
+}
+
+impl Default for &NervousSystemParameters {
+    fn default() -> Self {
+        &DEFAULT_NERVOUS_SYSTEM_PARAMETERS
+    }
+}
+
 /// Some constants that define upper bound (ceiling) and lower bounds (floor) for some of
 /// the nervous system parameters as well as the default values for the nervous system
 /// parameters (until we initialize them). We can't implement Default since it conflicts
@@ -366,9 +378,15 @@ impl NervousSystemParameters {
     /// that is required for the proposal to be adopted. For example, if this field
     /// is 300bp, then the proposal can only be adopted if the number of "yes
     /// votes" is greater than or equal to 3% of the total voting power.
-    pub const MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER: Percentage = Percentage {
-        basis_points: Some(300),
-    };
+    pub const MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER: Percentage =
+        Percentage::from_basis_points(300); // 3%
+
+    /// The proportion of "yes votes" as basis points of the exercised voting power
+    /// that is required for the proposal to be adopted. For example, if this field
+    /// is 5000bp, then the proposal can only be adopted if the number of "yes
+    /// votes" is greater than or equal to 50% of the exercised voting power.
+    pub const MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER: Percentage =
+        Percentage::from_basis_points(5_000); // 50%
 
     pub fn with_default_values() -> Self {
         Self {
@@ -852,7 +870,7 @@ impl NervousSystemParameters {
 
         for permission in &neuron_permission_list.permissions {
             if !grantable_permissions.contains(&permission) {
-                illegal_permissions.insert(NeuronPermissionType::from_i32(*permission));
+                illegal_permissions.insert(NeuronPermissionType::try_from(*permission).ok());
             }
         }
 
@@ -925,24 +943,6 @@ impl From<CanisterInstallModeError> for GovernanceError {
     }
 }
 
-/// Converts a Vote integer enum value into a typed enum value.
-impl From<i32> for Vote {
-    fn from(vote_integer: i32) -> Vote {
-        match Vote::from_i32(vote_integer) {
-            Some(v) => v,
-            None => {
-                log!(
-                    ERROR,
-                    "{}Vote::from invoked with unexpected value {}.",
-                    log_prefix(),
-                    vote_integer
-                );
-                Vote::Unspecified
-            }
-        }
-    }
-}
-
 impl Vote {
     /// Returns whether this vote is eligible for voting rewards.
     pub(crate) fn eligible_for_rewards(&self) -> bool {
@@ -950,6 +950,14 @@ impl Vote {
             Vote::Unspecified => false,
             Vote::Yes => true,
             Vote::No => true,
+        }
+    }
+
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::Yes => Self::No,
+            Self::No => Self::Yes,
+            Self::Unspecified => Self::Unspecified,
         }
     }
 }
@@ -1557,6 +1565,35 @@ pub fn is_registered_function_id(
     }
 }
 
+// This is almost a copy n' paste from NNS. The main difference (as of
+// 2023-11-17) is to account for the fact that here in SNS,
+// total_available_e8s_equivalent is optional. (Therefore, an extra
+// unwrap_or_default call is added.)
+impl RewardEvent {
+    /// Calculates the total_available_e8s_equivalent in this event that should
+    /// be "rolled over" into the next `RewardEvent`.
+    ///
+    /// Behavior:
+    /// - If rewards were distributed for this event, then no available_icp_e8s
+    ///   should be rolled over, so this function returns 0.
+    /// - Otherwise, this function returns
+    ///   `total_available_e8s_equivalent`.
+    pub(crate) fn e8s_equivalent_to_be_rolled_over(&self) -> u64 {
+        if self.rewards_rolled_over() {
+            self.total_available_e8s_equivalent.unwrap_or_default()
+        } else {
+            0
+        }
+    }
+
+    // Not copied from NNS: fn rounds_since_last_distribution_to_be_rolled_over
+
+    /// Whether this is a "rollover event", where no rewards were distributed.
+    pub(crate) fn rewards_rolled_over(&self) -> bool {
+        self.settled_proposals.is_empty()
+    }
+}
+
 /// Summarizes a RewardEvent. Suitable for logging, because the string is
 /// bounded in size.
 impl fmt::Display for RewardEvent {
@@ -1862,8 +1899,8 @@ impl TryFrom<NeuronPermissionList> for BTreeSet<NeuronPermissionType> {
             .permissions
             .into_iter()
             .map(|p| {
-                NeuronPermissionType::from_i32(p)
-                    .ok_or_else(|| format!("Invalid permission: {}", p))
+                NeuronPermissionType::try_from(p)
+                    .map_err(|err| format!("Invalid permission: {}, err: {}", p, err))
             })
             .collect()
     }
@@ -1885,7 +1922,7 @@ impl From<NeuronPermissionList> for Vec<Result<NeuronPermissionType, i32>> {
         permissions
             .permissions
             .into_iter()
-            .map(|p| NeuronPermissionType::from_i32(p).ok_or(p))
+            .map(|p| NeuronPermissionType::try_from(p).map_err(|_| p))
             .collect()
     }
 }

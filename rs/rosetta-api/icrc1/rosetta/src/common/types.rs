@@ -182,6 +182,7 @@ const ERROR_CODE_INVALID_NETWORK_ID: u32 = 1;
 const ERROR_CODE_UNABLE_TO_FIND_BLOCK: u32 = 2;
 const ERROR_CODE_INVALID_BLOCK_IDENTIFIER: u32 = 3;
 const ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE: u32 = 4;
+const ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER: u32 = 5;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -230,6 +231,16 @@ impl Error {
             code: ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE,
             message: "Failed to build block response".into(),
             description: Some(description),
+            retriable: false,
+            details: None,
+        }
+    }
+
+    pub fn invalid_transaction_identifier() -> Self {
+        Self {
+            code: ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER,
+            message: "Invalid transaction identifier provided".into(),
+            description: Some("Invalid transaction identifier provided.".into()),
             retriable: false,
             details: None,
         }
@@ -665,6 +676,76 @@ fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> {
     u64::try_from(millis).context("Failed to convert timestamp to milliseconds")
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct BlockTransactionRequest {
+    pub block_identifier: BlockIdentifier,
+    pub transaction_identifier: TransactionIdentifier,
+    pub network_identifier: NetworkIdentifier,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct BlockTransactionResponse {
+    pub transaction: Transaction,
+}
+
+impl BlockTransactionResponse {
+    pub fn builder() -> BlockTransactionResponseBuilder {
+        BlockTransactionResponseBuilder::new()
+    }
+}
+
+#[derive(Default)]
+pub struct BlockTransactionResponseBuilder {
+    transaction: Option<ic_icrc1::Transaction<U64>>,
+    effective_fee: Option<U64>,
+    currency: Option<Currency>,
+}
+
+impl BlockTransactionResponseBuilder {
+    pub fn new() -> Self {
+        Self {
+            transaction: None,
+            effective_fee: None,
+            currency: None,
+        }
+    }
+
+    pub fn with_transaction(mut self, transaction: ic_icrc1::Transaction<U64>) -> Self {
+        self.transaction = Some(transaction);
+        self
+    }
+
+    pub fn with_effective_fee(mut self, effective_fee: U64) -> Self {
+        self.effective_fee = Some(effective_fee);
+        self
+    }
+
+    pub fn with_currency(mut self, currency: Currency) -> Self {
+        self.currency = Some(currency);
+        self
+    }
+
+    pub fn build(self) -> anyhow::Result<BlockTransactionResponse> {
+        let transaction = self
+            .transaction
+            .context("A transaction is required to build a response.")?;
+        let currency = self
+            .currency
+            .clone()
+            .context("A currency is required to build a response.")?;
+        let mut tx_builder = Transaction::builder()
+            .with_currency(currency)
+            .with_transaction(transaction);
+        if let Some(effective_fee) = self.effective_fee {
+            tx_builder = tx_builder.with_effective_fee(effective_fee);
+        }
+
+        let transaction = tx_builder.build()?;
+
+        Ok(BlockTransactionResponse { transaction })
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -958,6 +1039,54 @@ mod test {
                             }
                         },
                         None => "A RosettaBlock is required to build a response.",
+                    };
+
+                    assert_eq!(error.to_string(), expected_error);
+                },
+            };
+        }
+
+        #[test]
+        fn test_block_transaction_response_builder(
+            block in prop::option::of(blocks_strategy(arb_small_amount())),
+            currency in prop::option::of(currency_strategy()),
+        ) {
+            let mut builder = BlockTransactionResponse::builder();
+            if let Some(block) = &block {
+                builder = builder.with_transaction(block.transaction.clone());
+                if let Some(effective_fee) = block.effective_fee {
+                    builder = builder.with_effective_fee(effective_fee);
+                }
+            }
+
+            if let Some(currency) = &currency {
+                builder = builder.with_currency(currency.clone());
+            }
+
+            match builder.build() {
+                Ok(built_block_response) => {
+                    // Safe to unwrap here as building was successful.
+                    let block = block.unwrap();
+                    let currency = currency.unwrap();
+
+                    let expected_response = BlockTransactionResponse {
+                        transaction: build_expected_transaction(block.transaction, currency, block.effective_fee)
+                    };
+
+                    assert_eq!(built_block_response, expected_response);
+                },
+                Err(error) => {
+                    let expected_error = match block {
+                        Some(_) => {
+                            if currency.is_none() {
+                                "A currency is required to build a response."
+                            } else {
+                                // If the other fields are set, (currently) the only error that could
+                                // occur would be the inability to determine the fee.
+                                "Unable to determine fee"
+                            }
+                        },
+                        None => "A transaction is required to build a response.",
                     };
 
                     assert_eq!(error.to_string(), expected_error);

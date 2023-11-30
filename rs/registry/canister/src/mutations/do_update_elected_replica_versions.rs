@@ -213,7 +213,7 @@ pub struct UpdateElectedReplicaVersionsPayload {
 
 impl UpdateElectedReplicaVersionsPayload {
     pub fn is_electing_a_version(&self) -> Result<bool, String> {
-        let elect_params = vec![
+        let elect_params = [
             self.replica_version_to_elect.as_ref(),
             self.release_package_sha256_hex.as_ref(),
             self.release_package_urls.get(0),

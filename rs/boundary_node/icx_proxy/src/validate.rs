@@ -79,11 +79,9 @@ mod tests {
     use crate::http::request::HttpRequest;
     use crate::http::response::HttpResponse;
     use candid::Principal;
+    use hyper::Uri;
     use ic_agent::{
-        agent::http_transport::{
-            hyper::{Body, Uri},
-            HyperReplicaV2Transport,
-        },
+        agent::http_transport::hyper_transport::{hyper::Body, HyperReplicaV2Transport},
         Agent,
     };
 
@@ -92,8 +90,8 @@ mod tests {
     #[test]
     fn validate_nop() {
         let canister_id = Principal::from_text("wwc2m-2qaaa-aaaac-qaaaa-cai").unwrap();
-        let uri = Uri::from_static("http://www.example.com");
-        let transport = HyperReplicaV2Transport::<Body>::create(uri.clone()).unwrap();
+        let url = "http://www.example.com";
+        let transport = HyperReplicaV2Transport::<Body>::create(url).unwrap();
         let agent = Agent::builder().with_transport(transport).build().unwrap();
         let validator = Validator::new();
 
@@ -101,7 +99,7 @@ mod tests {
             &agent,
             &canister_id,
             &HttpRequest {
-                uri,
+                uri: Uri::from_static(url),
                 method: String::from("GET"),
                 body: Vec::new(),
                 headers: Vec::new(),

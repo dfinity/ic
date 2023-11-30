@@ -558,12 +558,12 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         CanisterMessage::Ingress(Arc::new(v.try_into()?)),
                     ),
                     PbInput::Task(val) => {
-                        let task = PbCanisterTask::from_i32(val).ok_or(
+                        let task = PbCanisterTask::try_from(val).map_err(|_| {
                             ProxyDecodeError::ValueOutOfRange {
                                 typ: "CanisterTask",
                                 err: format!("Unexpected value of canister task: {}", val),
-                            },
-                        )?;
+                            }
+                        })?;
                         let task = match task {
                             PbCanisterTask::Unspecified => {
                                 return Err(ProxyDecodeError::ValueOutOfRange {

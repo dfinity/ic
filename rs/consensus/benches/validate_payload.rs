@@ -21,12 +21,14 @@ use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_pool::MutablePool,
+    batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool},
+    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    p2p::consensus::MutablePool,
     time_source::TimeSource,
     validation::ValidationResult,
 };
+use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
@@ -35,7 +37,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis, MockConsensusTime},
+    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis},
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -53,6 +55,7 @@ use ic_types::{
     crypto::Signed,
     ingress::{IngressState, IngressStatus},
     signature::*,
+    time::UNIX_EPOCH,
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
 };
 use std::sync::{Arc, RwLock};
@@ -104,10 +107,10 @@ where
 
         let committee = vec![node_test_id(0)];
         let summary = dkg::Summary::fake();
-        let mut consensus_pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),
-            make_genesis(summary),
+            (&make_genesis(summary)).into(),
             pool_config.clone(),
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
@@ -139,6 +142,7 @@ where
         );
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let ingress_manager = Arc::new(IngressManager::new(
+            time_source.clone(),
             Arc::new(MockConsensusTime::new()),
             Box::new(ingress_hist_reader),
             ingress_pool,
@@ -154,6 +158,7 @@ where
 
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             subnet_test_id(0),
+            node_test_id(0),
             registry_client,
             ingress_manager,
             Arc::new(FakeXNetPayloadBuilder::new()),
@@ -274,11 +279,12 @@ fn add_past_blocks(
 
         parent = block.clone();
         let proposal = BlockProposal::fake(block, node_test_id(i));
-        changeset.push(ChangeAction::AddToValidated(proposal.into_message()));
+        changeset.push(ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+            msg: proposal.into_message(),
+            timestamp: UNIX_EPOCH,
+        }));
     }
-    let time_source = FastForwardTimeSource::new();
-    consensus_pool.apply_changes(time_source.as_ref(), changeset);
-
+    consensus_pool.apply_changes(changeset);
     parent
 }
 
@@ -305,12 +311,16 @@ fn validate_payload(
         registry_version: RegistryVersion::from(1),
         certified_height: Height::from(CERTIFIED_HEIGHT),
     };
+    let proposal_context = ProposalContext {
+        proposer: node_test_id(0),
+        validation_context: &validation_context,
+    };
 
     payload_builder.validate_payload(
         Height::from(CERTIFIED_HEIGHT + 1),
+        &proposal_context,
         payload,
         &past_payloads,
-        &validation_context,
     )
 }
 

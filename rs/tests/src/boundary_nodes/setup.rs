@@ -109,9 +109,6 @@ pub fn setup_ic_with_bn(
     ))
     .unwrap_or_else(|_| panic!("Failed to poll registry. This is not an {bn_type:#?} error. It is a test environment issue."));
     info!(log, "Latest registry {latest}: {routes:?}");
-    info!(log, "Waiting for routes file");
-    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
     match bn_type {
         BoundaryNodeType::BoundaryNode => {
             let bn = env
@@ -124,12 +121,6 @@ pub fn setup_ic_with_bn(
                 log,
                 "Boundary node {bn_name} has IPv4 {:?}",
                 bn.block_on_ipv4().unwrap()
-            );
-            let cmd_output = bn.block_on_bash_script(&sleep_command);
-            info!(
-                log,
-                "Boundary node {bn_name} ran `{sleep_command}`: '{}'",
-                cmd_output.unwrap().trim(),
             );
             info!(log, "Checking BN health");
             bn.await_status_is_healthy()
@@ -152,12 +143,6 @@ pub fn setup_ic_with_bn(
                 log,
                 "Api Boundary node {bn_name} has IPv4 {:?}",
                 bn.block_on_ipv4().unwrap()
-            );
-            let cmd_output = bn.block_on_bash_script(&sleep_command);
-            info!(
-                log,
-                "Api boundary node {bn_name} ran `{sleep_command}`: '{}'",
-                cmd_output.unwrap().trim(),
             );
             info!(log, "Checking API BN health");
             bn.await_status_is_healthy()

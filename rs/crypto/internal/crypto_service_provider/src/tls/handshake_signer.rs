@@ -21,15 +21,11 @@ struct CspTlsHandshakeSignerImpl {
 }
 
 impl TlsHandshakeCspVault for CspTlsHandshakeSignerImpl {
-    fn gen_tls_key_pair(
-        &self,
-        _node: NodeId,
-        _not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+    fn gen_tls_key_pair(&self, _node: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         unimplemented!("CspTlsHandshakeSigner on purpose supports only tls_sign()-operation")
     }
 
-    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+    fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
         self.csp_vault.tls_sign(message, key_id)
     }
 }

@@ -2,7 +2,7 @@ use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
-use crate::transactions::{EthWithdrawalRequest, Reimbursed};
+use crate::state::transactions::{EthWithdrawalRequest, Reimbursed};
 use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
 use minicbor::{Decode, Encode};
 
@@ -90,6 +90,9 @@ pub enum EventType {
     /// The minter successfully reimbursed a failed withdrawal.
     #[n(12)]
     ReimbursedEthWithdrawal(#[n(0)] Reimbursed),
+    /// The minter could not scrap the logs for that block.
+    #[n(13)]
+    SkippedBlock(#[n(0)] BlockNumber),
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq)]

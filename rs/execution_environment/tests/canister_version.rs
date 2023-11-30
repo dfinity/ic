@@ -1,9 +1,15 @@
 use ic00::CanisterSettingsArgsBuilder;
+use ic_config::execution_environment;
+use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::{
+    IngressState, IngressStatus, PrincipalId, StateMachine, StateMachineBuilder,
+    StateMachineConfig, UserError,
+};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 
@@ -17,14 +23,65 @@ fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
         .canister_version
 }
 
+/// This function implements the functionality of `StateMachine::execute_ingress_as`
+/// and additionally asserts that DTS is used iff the parameter `dts` is true.
+fn execute_ingress_with_dts(
+    env: &StateMachine,
+    sender: PrincipalId,
+    canister_id: CanisterId,
+    method: impl ToString,
+    payload: Vec<u8>,
+    dts: bool,
+) -> Result<WasmResult, UserError> {
+    const MAX_TICKS: usize = 100;
+    let msg_id = env.send_ingress(sender, canister_id, method, payload);
+    for tick in 0..MAX_TICKS {
+        match env.ingress_status(&msg_id) {
+            IngressStatus::Known {
+                state: IngressState::Completed(result),
+                ..
+            } => {
+                assert!(dts == (tick > 0));
+                return Ok(result);
+            }
+            IngressStatus::Known {
+                state: IngressState::Failed(error),
+                ..
+            } => return Err(error),
+            _ => {
+                env.tick();
+            }
+        }
+    }
+    panic!(
+        "Did not get answer to ingress {} after {} state machine ticks",
+        msg_id, MAX_TICKS,
+    )
+}
+
 /// Creates, installs, and possibly reinstall/upgrades (depends on `mode`) the canister code
 /// compiled from its WAT representation;
 /// and checks the canister version after each of these operations
-fn test(wat: &str, mode: CanisterInstallMode) {
+fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bool) {
     let test_canister = wat::parse_str(wat).expect("invalid WAT");
 
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig {
+        scheduler_config: SchedulerConfig {
+            max_instructions_per_install_code_slice: 100_000.into(),
+            max_instructions_per_slice: 100_000.into(),
+            install_code_rate_limit: 1_000_000_000_000_000.into(),
+            ..subnet_config.scheduler_config
+        },
+        ..subnet_config
+    };
+    let config = StateMachineConfig::new(subnet_config, execution_environment::Config::default());
+
     // set up StateMachine
-    let env = StateMachine::new();
+    let env = StateMachineBuilder::new()
+        .with_config(Some(config))
+        .with_subnet_type(SubnetType::Application)
+        .build();
 
     let user_id = user_test_id(7).get();
 
@@ -57,7 +114,8 @@ fn test(wat: &str, mode: CanisterInstallMode) {
     assert_eq!(get_canister_version(&env, canister_id), 0);
 
     // install test_canister via ingress from user_id
-    env.execute_ingress_as(
+    execute_ingress_with_dts(
+        &env,
         user_id,
         ic00::IC_00,
         Method::InstallCode,
@@ -71,19 +129,27 @@ fn test(wat: &str, mode: CanisterInstallMode) {
             None,
         )
         .encode(),
+        dts_install,
     )
     .unwrap();
     // check canister_version
     assert_eq!(get_canister_version(&env, canister_id), 1);
 
     if mode != CanisterInstallMode::Install {
+        let dts = match mode {
+            CanisterInstallMode::Reinstall => dts_install,
+            CanisterInstallMode::Upgrade => dts_upgrade,
+            CanisterInstallMode::Install => panic!("unreachable"),
+        };
         // install test_canister via ingress from user_id
-        env.execute_ingress_as(
+        execute_ingress_with_dts(
+            &env,
             user_id,
             ic00::IC_00,
             Method::InstallCode,
             InstallCodeArgs::new(mode, canister_id, test_canister, vec![], None, None, None)
                 .encode(),
+            dts,
         )
         .unwrap();
         // check canister_version
@@ -91,27 +157,55 @@ fn test(wat: &str, mode: CanisterInstallMode) {
     }
 }
 
-fn canister_wat(b1: bool, b2: bool, b3: bool, b4: bool) -> String {
-    let start = "    (start $noop)\n";
-    let init = "    (export \"canister_init\" (func $noop))\n";
-    let pre = "    (export \"canister_pre_upgrade\" (func $noop))\n";
-    let post = "    (export \"canister_post_upgrade\" (func $noop))\n";
+fn canister_wat(b1: Option<bool>, b2: Option<bool>, b3: Option<bool>, b4: Option<bool>) -> String {
     let mut res = r#"(module
     (func $noop
-        return)
+      return
+    )
+    (func $loop
+      (local $i i64)
+      (loop $my_loop
+        ;; add one to $i
+        local.get $i
+        i64.const 1
+        i64.add
+        local.set $i
+        ;; loop if $i is less than 100_000
+        local.get $i
+        i64.const 100_000
+        i64.lt_s
+        br_if $my_loop
+      )
+    )
 "#
     .to_string();
-    if b1 {
-        res.push_str(start);
+    if let Some(dts) = b1 {
+        if dts {
+            res.push_str("    (start $loop)\n");
+        } else {
+            res.push_str("    (start $noop)\n");
+        }
     }
-    if b2 {
-        res.push_str(init);
+    if let Some(dts) = b2 {
+        if dts {
+            res.push_str("    (export \"canister_init\" (func $loop))\n");
+        } else {
+            res.push_str("    (export \"canister_init\" (func $noop))\n");
+        }
     }
-    if b3 {
-        res.push_str(pre);
+    if let Some(dts) = b3 {
+        if dts {
+            res.push_str("    (export \"canister_pre_upgrade\" (func $loop))\n");
+        } else {
+            res.push_str("    (export \"canister_pre_upgrade\" (func $noop))\n");
+        }
     }
-    if b4 {
-        res.push_str(post);
+    if let Some(dts) = b4 {
+        if dts {
+            res.push_str("    (export \"canister_post_upgrade\" (func $loop))\n");
+        } else {
+            res.push_str("    (export \"canister_post_upgrade\" (func $noop))\n");
+        }
     }
     let end = ")\n".to_string();
     res.push_str(&end);
@@ -120,14 +214,17 @@ fn canister_wat(b1: bool, b2: bool, b3: bool, b4: bool) -> String {
 
 #[test]
 fn canister_version() {
-    for b1 in [false, true] {
-        for b2 in [false, true] {
-            for b3 in [false, true] {
-                for b4 in [false, true] {
+    let opts = [None, Some(false), Some(true)];
+    for b1 in opts {
+        for b2 in opts {
+            for b3 in opts {
+                for b4 in opts {
                     let test_canister: &str = &canister_wat(b1, b2, b3, b4);
-                    test(test_canister, Install);
-                    test(test_canister, Reinstall);
-                    test(test_canister, Upgrade);
+                    let dts_install = b1 == Some(true) || b2 == Some(true);
+                    let dts_upgrade = b1 == Some(true) || b3 == Some(true) || b4 == Some(true);
+                    test(test_canister, Install, dts_install, dts_upgrade);
+                    test(test_canister, Reinstall, dts_install, dts_upgrade);
+                    test(test_canister, Upgrade, dts_install, dts_upgrade);
                 }
             }
         }

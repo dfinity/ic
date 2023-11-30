@@ -331,10 +331,10 @@ pub fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
 mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces::p2p::consensus::MutablePool;
+    use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::message_routing::MockMessageRouting;
     use ic_types::{crypto::CryptoHash, CryptoHashOfState};
     use std::sync::{Arc, RwLock};
 
@@ -343,7 +343,6 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
-                time_source,
                 state_manager,
                 ..
             } = dependencies(pool_config, 1);
@@ -446,7 +445,7 @@ mod tests {
             );
 
             // No more purge action when called again
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
             let pool_reader = PoolReader::new(&pool);
             let changeset = purger.on_state_change(&pool_reader);
             assert_eq!(changeset.len(), 0);

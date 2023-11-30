@@ -44,6 +44,14 @@ type FractionalDeveloperVotingPower = record {
 type GetAllowedPrincipalsResponse = record {
   allowed_principals : vec principal;
 };
+type GetDeployedSnsByProposalIdRequest = record { proposal_id : nat64 };
+type GetDeployedSnsByProposalIdResponse = record {
+  get_deployed_sns_by_proposal_id_result : opt GetDeployedSnsByProposalIdResult;
+};
+type GetDeployedSnsByProposalIdResult = variant {
+  Error : SnsWasmError;
+  DeployedSns : DeployedSns;
+};
 type GetNextSnsVersionRequest = record {
   governance_canister_id : opt principal;
   current_version : opt SnsVersion;
@@ -200,6 +208,9 @@ service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasmRequest) -> (AddWasmResponse);
   deploy_new_sns : (DeployNewSnsRequest) -> (DeployNewSnsResponse);
   get_allowed_principals : (record {}) -> (GetAllowedPrincipalsResponse) query;
+  get_deployed_sns_by_proposal_id : (GetDeployedSnsByProposalIdRequest) -> (
+      GetDeployedSnsByProposalIdResponse,
+    ) query;
   get_latest_sns_version_pretty : (null) -> (vec record { text; text }) query;
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,

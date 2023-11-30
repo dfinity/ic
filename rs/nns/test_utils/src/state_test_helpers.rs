@@ -20,7 +20,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
 use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, SECONDS_PER_DAY};
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -891,7 +891,7 @@ pub fn nns_propose_upgrade_nns_canister(
 
     // Construct main proposal content. To wit, specify that the WASM is to be installed in the
     // target canister.
-    let payload = Encode!(&ChangeCanisterProposal::new(
+    let payload = Encode!(&ChangeCanisterRequest::new(
         true, // stop_before_installing,
         CanisterInstallMode::Upgrade,
         target_canister_id,

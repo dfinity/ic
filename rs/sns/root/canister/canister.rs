@@ -11,7 +11,7 @@ use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     serve_logs, serve_logs_v2, serve_metrics, NANO_SECONDS_PER_SECOND,
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_root::{
     logs::{ERROR, INFO},
@@ -191,7 +191,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
 
 #[candid_method(update)]
 #[update]
-fn change_canister(proposal: ChangeCanisterProposal) {
+fn change_canister(request: ChangeCanisterRequest) {
     log!(INFO, "change_canister");
     assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
 
@@ -209,10 +209,9 @@ fn change_canister(proposal: ChangeCanisterProposal) {
     //
     // To implement "acknowledge without actually completing the work", we use
     // spawn to do the real work in the background.
-    assert_change_canister_proposal_is_valid(&proposal);
     CanisterRuntime::spawn_future(ic_nervous_system_root::change_canister::change_canister::<
         CanisterRuntime,
-    >(proposal));
+    >(request));
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used
@@ -313,15 +312,6 @@ fn assert_state_is_valid(state: &SnsRootCanister) {
     assert!(state.swap_canister_id.is_some());
 }
 
-fn assert_change_canister_proposal_is_valid(proposal: &ChangeCanisterProposal) {
-    assert!(
-        proposal.authz_changes.is_empty(),
-        "Invalid ChangeCanisterProposal: the authz_changes field is not supported \
-         and should be left empty, but was not. proposal: {:?}",
-        proposal
-    );
-}
-
 fn assert_eq_governance_canister_id(id: PrincipalId) {
     STATE.with(|state: &RefCell<SnsRootCanister>| {
         let state = state.borrow();
@@ -397,7 +387,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_nervous_system_common::MethodAuthzChange;
 
     /// A test that fails if the API was updated but the candid definition was not.
     #[test]
@@ -421,27 +410,5 @@ mod tests {
                  rs/sns/root to update canister/root.did."
             )
         }
-    }
-
-    #[test]
-    #[should_panic]
-    fn no_authz() {
-        let canister_id = CanisterId::from(1);
-
-        let mut proposal = ChangeCanisterProposal::new(
-            false, // stop before_installing
-            ic_ic00_types::CanisterInstallMode::Upgrade,
-            canister_id,
-        );
-
-        proposal.authz_changes.push(MethodAuthzChange {
-            canister: canister_id,
-            method_name: "foo".to_string(),
-            principal: None,
-            operation: ic_nervous_system_common::AuthzChangeOp::Deauthorize,
-        });
-
-        // This should panic.
-        assert_change_canister_proposal_is_valid(&proposal);
     }
 }

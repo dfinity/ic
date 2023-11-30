@@ -387,7 +387,7 @@ fn test_claim_neuron_happy() {
             _ => panic!("Unexpected command response when claiming neuron"),
         };
         assert_eq!(
-            ErrorType::from_i32(error.error_type).unwrap(),
+            ErrorType::try_from(error.error_type).unwrap(),
             ErrorType::InsufficientFunds,
             "{:#?}",
             error,
@@ -1276,6 +1276,7 @@ async fn zero_total_reward_shares() {
             distributed_e8s_equivalent: 0,
             end_timestamp_seconds: Some(1),
             rounds_since_last_distribution: Some(1),
+            total_available_e8s_equivalent: None,
         }),
         sns_metadata: Some(SnsMetadata {
             logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
@@ -1492,6 +1493,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             distributed_e8s_equivalent: 0,
             end_timestamp_seconds: Some(1),
             rounds_since_last_distribution: Some(1),
+            total_available_e8s_equivalent: None,
         }),
 
         sns_metadata: Some(SnsMetadata {
@@ -1982,7 +1984,7 @@ fn test_neuron_add_non_grantable_permission_fails() {
         };
 
         assert_eq!(
-            ErrorType::from_i32(error.error_type).unwrap(),
+            ErrorType::try_from(error.error_type).unwrap(),
             ErrorType::AccessControlList
         );
 

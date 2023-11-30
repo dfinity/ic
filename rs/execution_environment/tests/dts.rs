@@ -336,7 +336,7 @@ const ACTUAL_EXECUTION_COST: u128 = match EmbeddersConfig::new()
     .feature_flags
     .wasm_native_stable_memory
 {
-    FlagStatus::Enabled => 988_892,
+    FlagStatus::Enabled => 988_890,
     FlagStatus::Disabled => 868_892,
 };
 
@@ -415,11 +415,10 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance is \
-             {} cycles and the freezing threshold 0 cycles",
+             please top up the canister with at least {} additional cycles",
             canister_id,
-            normal_ingress_cost,
-            initial_balance - install_code_ingress_cost - max_execution_cost,
+            normal_ingress_cost
+                - (initial_balance - install_code_ingress_cost - max_execution_cost),
         )
     );
 
@@ -472,12 +471,10 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance is \
-             {} cycles and the freezing threshold {} cycles",
+             please top up the canister with at least {} additional cycles",
             canister_id,
-            normal_ingress_cost,
-            initial_balance - install_code_ingress_cost - max_execution_cost,
-            freezing_threshold,
+            (freezing_threshold + normal_ingress_cost)
+                - (initial_balance - install_code_ingress_cost - max_execution_cost),
         )
     );
 
@@ -577,7 +574,7 @@ fn dts_pending_upgrade_with_heartbeat() {
     let result = env.await_ingress(read, 10).unwrap();
 
     let mut expected = vec![12; 10]; // heartbeat
-    expected.extend([13; 5].iter()); // global timer
+    expected.extend([78; 5].iter()); // global timer is disabled after upgrade
     expected.extend([78; 5].iter()); // work()
     assert_eq!(result, WasmResult::Reply(expected));
 }

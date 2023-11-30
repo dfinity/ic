@@ -43,7 +43,7 @@ mod sign_common {
             )
             .build();
 
-        let result = csp.sign(AlgorithmId::Ed25519, b"msg", KeyId::from(KEY_ID));
+        let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
 
         assert!(result.unwrap_err().is_secret_key_not_found());
     }
@@ -60,7 +60,7 @@ mod sign_common {
             )
             .build();
 
-        let _ = csp.sign(AlgorithmId::Ed25519, b"msg", KeyId::from(KEY_ID));
+        let _ = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
     }
 }
 
@@ -82,7 +82,7 @@ mod sign_ed25519 {
             .build();
 
         assert_eq!(
-            csp.sign(AlgorithmId::Ed25519, &msg, KeyId::from(KEY_ID))
+            csp.sign(AlgorithmId::Ed25519, msg, KeyId::from(KEY_ID))
                 .unwrap(),
             sig
         );
@@ -105,7 +105,7 @@ mod sign_ed25519 {
             )
             .build();
 
-        let result = csp.sign(AlgorithmId::Ed25519, b"msg", KeyId::from(KEY_ID));
+        let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
 
         assert!(result.unwrap_err().is_invalid_argument());
     }
@@ -664,7 +664,7 @@ mod verify_ed25519 {
                 .as_ref()
                 .sign(
                     AlgorithmId::Ed25519,
-                    msg,
+                    msg.to_vec(),
                     KeyId::try_from(&pk).expect("Failed to convert CspPublicKey to KeyId"),
                 )
                 .expect("Failed to generate a signature");
@@ -807,7 +807,7 @@ mod multi {
         let message = b"Three turtle doves";
         let key_id = KeyId::try_from(&public_key).unwrap();
         let signature = csp
-            .sign(AlgorithmId::MultiBls12_381, message, key_id)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id)
             .expect("Signing failed");
         assert!(verifier
             .verify(&signature, message, AlgorithmId::MultiBls12_381, public_key)
@@ -824,8 +824,12 @@ mod multi {
         let incompatible_signature = {
             let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
             let incompatible_key_id = KeyId::try_from(&incompatible_public_key).unwrap();
-            csp.sign(incompatible_algorithm, message, incompatible_key_id)
-                .expect("Signing failed")
+            csp.sign(
+                incompatible_algorithm,
+                message.to_vec(),
+                incompatible_key_id,
+            )
+            .expect("Signing failed")
         };
 
         let result = verifier.verify(&incompatible_signature, message, algorithm, public_key);
@@ -842,7 +846,7 @@ mod multi {
         let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
         let message = b"Three turtle doves";
         let signature = csp
-            .sign(algorithm, message, key_id)
+            .sign(algorithm, message.to_vec(), key_id)
             .expect("Signing failed");
 
         let result = verifier.verify(&signature, message, algorithm, incompatible_public_key);
@@ -868,10 +872,10 @@ mod multi {
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
         let signature1 = csp1
-            .sign(AlgorithmId::MultiBls12_381, message, key_id1)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id1)
             .expect("Signing failed");
         let signature2 = csp2
-            .sign(AlgorithmId::MultiBls12_381, message, key_id2)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id2)
             .expect("Signing failed");
         let combined_signature = verifier
             .combine_sigs(
@@ -911,10 +915,10 @@ mod multi {
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
         let signature1 = csp1
-            .sign(AlgorithmId::MultiBls12_381, message, key_id1)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id1)
             .expect("Signing failed");
         let signature2 = csp2
-            .sign(AlgorithmId::MultiBls12_381, message, key_id2)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id2)
             .expect("Signing failed");
         let combined_signature = verifier
             .combine_sigs(
@@ -952,7 +956,7 @@ mod multi {
 
         // A compatible signature:
         let signature1 = csp1
-            .sign(AlgorithmId::MultiBls12_381, &message, key_id1)
+            .sign(AlgorithmId::MultiBls12_381, message, key_id1)
             .expect("Signing failed");
 
         // Combining should fail:

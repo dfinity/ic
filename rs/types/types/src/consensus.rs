@@ -1114,15 +1114,15 @@ impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
 /// contains only the attributes for each variant. The attributes are the values
 /// that are used in the p2p layer to determine whether an artifact is
 /// interesting to a replica before fetching the full artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConsensusMessageAttribute {
     Finalization(CryptoHashOf<Block>),
     Notarization(CryptoHashOf<Block>),
     Empty(()),
 }
 
-impl From<&ConsensusMessageAttribute> for pb::ConsensusMessageAttribute {
-    fn from(value: &ConsensusMessageAttribute) -> Self {
+impl From<ConsensusMessageAttribute> for pb::ConsensusMessageAttribute {
+    fn from(value: ConsensusMessageAttribute) -> Self {
         use pb::consensus_message_attribute::Kind;
         let kind = match value.clone() {
             ConsensusMessageAttribute::Finalization(hash) => {
@@ -1141,9 +1141,9 @@ impl From<&ConsensusMessageAttribute> for pb::ConsensusMessageAttribute {
     }
 }
 
-impl TryFrom<&pb::ConsensusMessageAttribute> for ConsensusMessageAttribute {
+impl TryFrom<pb::ConsensusMessageAttribute> for ConsensusMessageAttribute {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::ConsensusMessageAttribute) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ConsensusMessageAttribute) -> Result<Self, Self::Error> {
         use pb::consensus_message_attribute::Kind;
         let Some(kind) = value.kind.clone() else {
             return Err(ProxyDecodeError::MissingField(

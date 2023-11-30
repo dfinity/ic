@@ -30,7 +30,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mock! {
     pub Scheduler {}
-    trait Scheduler {
+    impl Scheduler for Scheduler {
         type State = ReplicatedState;
         fn execute_round(
             &self,
@@ -50,7 +50,7 @@ struct StateMachineTestFixture {
     stream_builder: Box<dyn StreamBuilder>,
     initial_state: ReplicatedState,
     network_topology: NetworkTopology,
-    metrics: Arc<MessageRoutingMetrics>,
+    metrics: MessageRoutingMetrics,
     metrics_registry: MetricsRegistry,
 }
 
@@ -63,7 +63,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
     let state_manager = FakeStateManager::new();
     let (_height, initial_state) = state_manager.take_tip();
     let metrics_registry = MetricsRegistry::new();
-    let metrics = Arc::new(MessageRoutingMetrics::new(&metrics_registry));
+    let metrics = MessageRoutingMetrics::new(&metrics_registry);
 
     let round = ExecutionRound::from(initial_height.get() + 1);
     let round_type = if provided_batch.requires_full_state_hash {

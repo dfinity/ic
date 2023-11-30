@@ -10,11 +10,11 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifactEvent,
     consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
 };
+use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
@@ -36,13 +36,13 @@ use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
-    consensus::MockConsensusCache,
     crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
     mock_time,
     state::ReplicatedStateBuilder,
     types::ids::{node_test_id, subnet_test_id},
 };
 use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     batch::{BatchPayload, RawQueryStats, ValidationContext},
     consensus::{
@@ -60,7 +60,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{CertificateDelegation, SignedIngressContent, UserQuery},
     signature::ThresholdSignature,
-    CryptoHashOfPartialState, Height, RegistryVersion, Time,
+    CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
@@ -242,13 +242,9 @@ pub fn basic_state_manager_mock() -> MockStateManager {
     mock_state_manager
 }
 
-pub fn dummy_timestamp() -> Time {
-    Time::from_nanos_since_unix_epoch(1_690_000_000_000_000_000)
-}
-
 // Basic mock consensus pool cache at height 1.
-pub fn basic_consensus_pool_cache() -> MockConsensusCache {
-    let mut mock_consensus_cache = MockConsensusCache::new();
+pub fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
+    let mut mock_consensus_cache = MockConsensusPoolCache::new();
     mock_consensus_cache
         .expect_finalized_block()
         .returning(move || {
@@ -406,7 +402,7 @@ pub fn start_http_endpoint(
     pprof_collector: Arc<dyn PprofCollector>,
 ) -> (
     IngressFilterHandle,
-    Receiver<UnvalidatedArtifactEvent<IngressArtifact>>,
+    Receiver<UnvalidatedArtifactMutation<IngressArtifact>>,
     QueryExecutionHandle,
 ) {
     let metrics = MetricsRegistry::new();

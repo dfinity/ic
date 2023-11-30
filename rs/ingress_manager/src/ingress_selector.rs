@@ -511,10 +511,10 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
     use ic_interfaces::{
-        artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
-        time_source::{SysTimeSource, TimeSource},
+        p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+        time_source::TimeSource,
     };
     use ic_test_utilities::{
         cycles_account_manager::CyclesAccountManagerBuilder,
@@ -661,16 +661,13 @@ mod tests {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(
-                            &SysTimeSource::new(),
-                            vec![ChangeAction::MoveToValidated((
-                                message_id.clone(),
-                                node_test_id(0),
-                                m.count_bytes(),
-                                (),
-                                crypto_hash(m.binary()).get(),
-                            ))],
-                        );
+                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                            message_id.clone(),
+                            node_test_id(0),
+                            m.count_bytes(),
+                            (),
+                            crypto_hash(m.binary()).get(),
+                        ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.contains(&message_id));
                     });
@@ -850,16 +847,13 @@ mod tests {
                         timestamp: time_source.get_relative_time(),
                     });
                     let ingress_size1 = ingress_msg1.count_bytes();
-                    ingress_pool.apply_changes(
-                        &SysTimeSource::new(),
-                        vec![ChangeAction::MoveToValidated((
-                            message_id,
-                            node_test_id(0),
-                            ingress_size1,
-                            (),
-                            crypto_hash(ingress_msg1.binary()).get(),
-                        ))],
-                    );
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        message_id,
+                        node_test_id(0),
+                        ingress_size1,
+                        (),
+                        crypto_hash(ingress_msg1.binary()).get(),
+                    ))]);
                 });
 
                 // get ingress message in payload
@@ -909,16 +903,13 @@ mod tests {
                         timestamp: time_source.get_relative_time(),
                     });
                     let ingress_size1 = ingress_msg1.count_bytes();
-                    ingress_pool.apply_changes(
-                        &SysTimeSource::new(),
-                        vec![ChangeAction::MoveToValidated((
-                            message_id,
-                            node_test_id(0),
-                            ingress_size1,
-                            (),
-                            crypto_hash(ingress_msg1.binary()).get(),
-                        ))],
-                    );
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        message_id,
+                        node_test_id(0),
+                        ingress_size1,
+                        (),
+                        crypto_hash(ingress_msg1.binary()).get(),
+                    ))]);
                 });
 
                 // get ingress message in payload
@@ -984,16 +975,13 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(
-                        &SysTimeSource::new(),
-                        vec![ChangeAction::MoveToValidated((
-                            message_id,
-                            node_test_id(0),
-                            ingress_msg1.count_bytes(),
-                            (),
-                            crypto_hash(ingress_msg1.binary()).get(),
-                        ))],
-                    );
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        message_id,
+                        node_test_id(0),
+                        ingress_msg1.count_bytes(),
+                        (),
+                        crypto_hash(ingress_msg1.binary()).get(),
+                    ))]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1001,16 +989,13 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(
-                        &SysTimeSource::new(),
-                        vec![ChangeAction::MoveToValidated((
-                            message_id,
-                            node_test_id(0),
-                            ingress_msg2.count_bytes(),
-                            (),
-                            crypto_hash(ingress_msg2.binary()).get(),
-                        ))],
-                    );
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        message_id,
+                        node_test_id(0),
+                        ingress_msg2.count_bytes(),
+                        (),
+                        crypto_hash(ingress_msg2.binary()).get(),
+                    ))]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1072,16 +1057,13 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(
-                        &SysTimeSource::new(),
-                        vec![ChangeAction::MoveToValidated((
-                            message_id,
-                            node_test_id(0),
-                            ingress_msg1.count_bytes(),
-                            (),
-                            crypto_hash(ingress_msg1.binary()).get(),
-                        ))],
-                    );
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        message_id,
+                        node_test_id(0),
+                        ingress_msg1.count_bytes(),
+                        (),
+                        crypto_hash(ingress_msg1.binary()).get(),
+                    ))]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1089,16 +1071,13 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(
-                        &SysTimeSource::new(),
-                        vec![ChangeAction::MoveToValidated((
-                            message_id,
-                            node_test_id(0),
-                            ingress_msg2.count_bytes(),
-                            (),
-                            crypto_hash(ingress_msg2.binary()).get(),
-                        ))],
-                    );
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        message_id,
+                        node_test_id(0),
+                        ingress_msg2.count_bytes(),
+                        (),
+                        crypto_hash(ingress_msg2.binary()).get(),
+                    ))]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1257,31 +1236,25 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(
-                        &SysTimeSource::new(),
-                        vec![ChangeAction::MoveToValidated((
-                            message_id1,
-                            node_test_id(0),
-                            ingress_msg1.count_bytes(),
-                            (),
-                            crypto_hash(ingress_msg1.binary()).get(),
-                        ))],
-                    );
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        message_id1,
+                        node_test_id(0),
+                        ingress_msg1.count_bytes(),
+                        (),
+                        crypto_hash(ingress_msg1.binary()).get(),
+                    ))]);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(
-                        &SysTimeSource::new(),
-                        vec![ChangeAction::MoveToValidated((
-                            message_id2,
-                            node_test_id(0),
-                            ingress_msg2.count_bytes(),
-                            (),
-                            crypto_hash(ingress_msg2.binary()).get(),
-                        ))],
-                    );
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        message_id2,
+                        node_test_id(0),
+                        ingress_msg2.count_bytes(),
+                        (),
+                        crypto_hash(ingress_msg2.binary()).get(),
+                    ))]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1454,16 +1427,13 @@ mod tests {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(
-                            &SysTimeSource::new(),
-                            vec![ChangeAction::MoveToValidated((
-                                message_id.clone(),
-                                node_test_id(0),
-                                m.count_bytes(),
-                                (),
-                                crypto_hash(m.binary()).get(),
-                            ))],
-                        );
+                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                            message_id.clone(),
+                            node_test_id(0),
+                            m.count_bytes(),
+                            (),
+                            crypto_hash(m.binary()).get(),
+                        ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.contains(&message_id));
                     });
@@ -1835,16 +1805,16 @@ mod tests {
                     peer_id: node_test_id(0),
                     timestamp: mock_time(),
                 });
-                ingress_pool.write().unwrap().apply_changes(
-                    &SysTimeSource::new(),
-                    vec![ChangeAction::MoveToValidated((
+                ingress_pool
+                    .write()
+                    .unwrap()
+                    .apply_changes(vec![ChangeAction::MoveToValidated((
                         msg_id,
                         node_test_id(0),
                         0,
                         (),
                         msg_hash,
-                    ))],
-                );
+                    ))]);
 
                 let validation_context = ValidationContext {
                     registry_version: RegistryVersion::new(1),

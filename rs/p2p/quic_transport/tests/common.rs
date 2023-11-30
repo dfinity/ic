@@ -5,7 +5,7 @@ use std::{
 
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
-use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
+use ic_icos_sev::{ValidateAttestationError, ValidateAttestedStream};
 use ic_p2p_test_utils::{temp_crypto_component_with_tls_keys, RegistryConsensusHandle};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::rustls::{ClientConfig, ServerConfig};
@@ -81,7 +81,7 @@ impl TlsConfig for PeerRestrictedTlsConfig {
         registry_version: RegistryVersion,
     ) -> Result<ServerConfig, TlsConfigError> {
         let allowed_clients = SomeOrAllNodes::Some(BTreeSet::from_iter(
-            self.allowed_peers.lock().unwrap().clone().into_iter(),
+            self.allowed_peers.lock().unwrap().clone(),
         ));
         self.crypto.server_config(allowed_clients, registry_version)
     }

@@ -23,7 +23,7 @@ impl Serialize for PrometheusFileSdConfig {
     where
         S: Serializer,
     {
-        serializer.collect_seq(self.configs.clone().into_iter())
+        serializer.collect_seq(self.configs.clone())
     }
 }
 
@@ -54,6 +54,9 @@ const IC_NAME: &str = "ic";
 const IC_NODE: &str = "ic_node";
 const IC_SUBNET: &str = "ic_subnet";
 const JOB: &str = "job";
+const DC: &str = "dc";
+const NODE_PROVIDER_ID: &str = "node_provider_id";
+const NODE_OPERATOR_ID: &str = "node_operator_id";
 
 pub fn map_target_group(target_groups: BTreeSet<TargetDto>) -> BTreeSet<PrometheusStaticConfig> {
     target_groups
@@ -77,6 +80,9 @@ pub fn map_target_group(target_groups: BTreeSet<TargetDto>) -> BTreeSet<Promethe
                         }
                         labels.insert(JOB.into(), job.to_string());
                         labels.extend(tg.custom_labels.clone().into_iter());
+                        labels.insert(DC.into(), tg.dc_id.clone());
+                        labels.insert(NODE_PROVIDER_ID.into(), tg.node_provider_id.to_string());
+                        labels.insert(NODE_OPERATOR_ID.into(), tg.operator_id.to_string());
                         labels
                     },
                 })

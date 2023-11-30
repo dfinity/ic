@@ -60,6 +60,9 @@ pub enum StateError {
     /// Message enqueuing failed due to full in/out queue.
     QueueFull { capacity: usize },
 
+    /// Message enqueuing failed due to full ingress history.
+    IngressHistoryFull { capacity: usize },
+
     /// Canister is stopped, not accepting any messages.
     CanisterStopped(CanisterId),
 
@@ -214,6 +217,7 @@ impl PeekableOutputIterator for OutputIterator<'_> {
 
 pub const LABEL_VALUE_CANISTER_NOT_FOUND: &str = "CanisterNotFound";
 pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
+pub const LABEL_VALUE_INGRESS_HISTORY_FULL: &str = "IngressHistoryFull";
 pub const LABEL_VALUE_CANISTER_STOPPED: &str = "CanisterStopped";
 pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
 pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
@@ -231,6 +235,7 @@ impl StateError {
         match self {
             StateError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
+            StateError::IngressHistoryFull { .. } => LABEL_VALUE_INGRESS_HISTORY_FULL,
             StateError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
             StateError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
             StateError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
@@ -256,6 +261,9 @@ impl std::fmt::Display for StateError {
             }
             StateError::QueueFull { capacity } => {
                 write!(f, "Maximum queue capacity {} reached", capacity)
+            }
+            StateError::IngressHistoryFull { capacity } => {
+                write!(f, "Maximum ingress history capacity {} reached", capacity)
             }
             StateError::CanisterStopped(canister_id) => {
                 write!(f, "Canister {} is stopped", canister_id)
@@ -296,6 +304,32 @@ impl std::fmt::Display for StateError {
                     "Bitcoin: Attempted to push a response for callback id {} without an in-flight corresponding request",
                     callback_id
                 )
+            }
+        }
+    }
+}
+
+impl From<&StateError> for ErrorCode {
+    fn from(err: &StateError) -> Self {
+        match err {
+            StateError::CanisterNotFound(_) => ErrorCode::CanisterNotFound,
+            StateError::CanisterStopped(_) => ErrorCode::CanisterStopped,
+            StateError::CanisterStopping(_) => ErrorCode::CanisterStopping,
+            StateError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
+            StateError::UnknownSubnetMethod(_) => ErrorCode::CanisterMethodNotFound,
+            StateError::InvalidSubnetPayload => ErrorCode::InvalidManagementPayload,
+            StateError::QueueFull { .. } => ErrorCode::CanisterQueueFull,
+            StateError::IngressHistoryFull { .. } => ErrorCode::IngressHistoryFull,
+            StateError::OutOfMemory { .. } => ErrorCode::CanisterOutOfMemory,
+
+            // These errors cannot happen when pushing a request or ingress:
+            //
+            //  * `InvariantBroken` is only produced by `check_invariants()`; and
+            //  * `.*NonMatchingResponse` is only produced for responses.
+            StateError::InvariantBroken { .. }
+            | StateError::NonMatchingResponse { .. }
+            | StateError::BitcoinNonMatchingResponse { .. } => {
+                unreachable!("Not a user error: {}", err)
             }
         }
     }
@@ -750,15 +784,12 @@ impl ReplicatedState {
 
     /// Updates the byte size of responses in streams for each canister.
     fn update_stream_responses_size_bytes(&mut self) {
-        let stream_responses_size_bytes = self.metadata.streams.responses_size_bytes();
-        for (canister_id, canister_state) in self.canister_states.iter_mut() {
-            canister_state.set_stream_responses_size_bytes(
-                stream_responses_size_bytes
-                    .get(canister_id)
-                    .cloned()
-                    .unwrap_or_default(),
-            )
+        for (canister_id, responses_size_bytes) in self.metadata.streams.responses_size_bytes() {
+            if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
+                canister_state.set_stream_responses_size_bytes(*responses_size_bytes);
+            }
         }
+        Arc::make_mut(&mut self.metadata.streams).prune_zero_responses_size_bytes()
     }
 
     /// Returns the number of canisters in this `ReplicatedState`.

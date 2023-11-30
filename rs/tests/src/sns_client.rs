@@ -64,7 +64,7 @@ use crate::{
 };
 
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
-pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 150_000 * E8;
+pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 250_000 * E8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsClient {
@@ -111,7 +111,7 @@ impl SnsClient {
         let request = sns_request_provider.get_sns_governance_mode();
         let res = sns_agent.call_and_parse(&request).await.result().unwrap();
         info!(log, "Received {res:?}");
-        let actual_mode = Mode::from_i32(res.mode.unwrap()).unwrap();
+        let actual_mode = Mode::try_from(res.mode.unwrap()).unwrap();
         assert_eq!(governance_mode, actual_mode);
     }
 
@@ -289,7 +289,7 @@ impl SnsClient {
 
         let sns_client = SnsClient {
             sns_canisters,
-            /// TODO: Provide a wallet canister for static testnet?
+            // TODO: Provide a wallet canister for static testnet?
             wallet_canister_id: PrincipalId::from_str("aaaaa-aa").unwrap(),
             sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };
@@ -335,10 +335,8 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
         }),
         swap_parameters: Some(SwapParameters {
             minimum_participants: Some(100),
-            minimum_icp: Some(Tokens::from_tokens(500_000)),
-            maximum_icp: Some(Tokens::from_tokens(1_000_000)),
-            minimum_direct_participation_icp: None, // TODO NNS1-2590: Populate this
-            maximum_direct_participation_icp: None, // TODO NNS1-2590: Populate this
+            minimum_direct_participation_icp: Some(Tokens::from_tokens(500_000)),
+            maximum_direct_participation_icp: Some(Tokens::from_tokens(1_000_000)),
             minimum_participant_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S)),
             maximum_participant_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S)),
             neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
@@ -350,8 +348,11 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
             // With a start time of None, NNS Governance in the test configuration should start the swap immediately.
             start_time: None,
             duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
-            neurons_fund_investment_icp: Some(Tokens::from_tokens(100)),
             neurons_fund_participation: Some(true),
+            // Deprecated fields
+            minimum_icp: None,
+            maximum_icp: None,
+            neurons_fund_investment_icp: None,
         }),
         ledger_parameters: Some(LedgerParameters {
             transaction_fee: Some(Tokens::from_e8s(100_000)),
@@ -391,32 +392,17 @@ pub fn test_create_service_nervous_system_proposal(
         .as_ref()
         .unwrap()
         .clone();
-    let neurons_fund_investment_icp_e8s = swap_parameters
-        .neurons_fund_investment_icp
-        .as_ref()
-        .unwrap()
-        .e8s();
     CreateServiceNervousSystem {
         swap_parameters: Some(
             ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
                 minimum_participants: Some(min_participants),
-                minimum_icp: Some(Tokens::from_e8s(
-                    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S + neurons_fund_investment_icp_e8s,
-                )),
-                maximum_icp: Some(Tokens::from_e8s(
-                    SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S + neurons_fund_investment_icp_e8s,
-                )),
                 minimum_participant_icp: Some(Tokens::from_e8s(
                     SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
                 )),
                 maximum_participant_icp: Some(Tokens::from_e8s(
                     SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
                 )),
-                ..openchat_parameters
-                    .swap_parameters
-                    .as_ref()
-                    .unwrap()
-                    .clone()
+                ..swap_parameters
             },
         ),
         ..openchat_parameters

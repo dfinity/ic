@@ -1,23 +1,23 @@
 use anyhow::Result;
 use async_std::io;
-use futures::{pin_mut, Stream, StreamExt, TryStreamExt};
+use futures::{pin_mut, TryStreamExt};
 use k8s_openapi::api::core::v1::Event;
 use kube::{
-    runtime::{metadata_watcher, watcher, WatchStreamExt},
-    Api, Client, Config,
+    runtime::{watcher, WatchStreamExt},
+    Api, Client,
 };
 use std::time::Duration;
 use tracing::*;
 
 pub async fn wait_for_event(
     client: Client,
+    namespace: &str,
     message: &str,
     kind: &str,
     name: &str,
-    ns: &str,
     timeout: u64,
 ) -> Result<()> {
-    let events: Api<Event> = Api::namespaced(client, ns);
+    let events: Api<Event> = Api::namespaced(client, namespace);
     let wc = watcher::Config::default();
     let ew = watcher(events, wc).applied_objects();
 

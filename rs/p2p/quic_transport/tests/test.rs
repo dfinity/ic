@@ -105,30 +105,30 @@ fn test_real_socket() {
         let socket_1: SocketAddr = "127.0.1.1:4100".parse().unwrap();
         let socket_2: SocketAddr = "127.0.2.1:4100".parse().unwrap();
 
-        let transport_1 = Arc::new(QuicTransport::build(
+        let transport_1 = Arc::new(QuicTransport::start(
             &log,
             &MetricsRegistry::default(),
-            rt.handle().clone(),
+            rt.handle(),
             node_crypto_1,
             registry_handler.registry_client.clone(),
             sev_handshake_1,
             NODE_1,
             topology_watcher.clone(),
             Either::Left::<_, DummyUdpSocket>(socket_1),
-            Some(ConnectivityChecker::router()),
+            ConnectivityChecker::router(),
         ));
 
-        let transport_2 = Arc::new(QuicTransport::build(
+        let transport_2 = Arc::new(QuicTransport::start(
             &log,
             &MetricsRegistry::default(),
-            rt.handle().clone(),
+            rt.handle(),
             node_crypto_2,
             registry_handler.registry_client.clone(),
             sev_handshake_2,
             NODE_2,
             topology_watcher,
             Either::Left::<_, DummyUdpSocket>(socket_2),
-            Some(ConnectivityChecker::router()),
+            ConnectivityChecker::router(),
         ));
 
         registry_handler.add_node(

@@ -1,8 +1,6 @@
 use ic_base_types::NumBytes;
 use ic_interfaces::{
-    batch_payload::{
-        iterator_to_bytes, BatchPayloadBuilder as BatchPayloadBuilderTrait, PastPayload,
-    },
+    batch_payload::{iterator_to_bytes, BatchPayloadBuilder, PastPayload, ProposalContext},
     consensus::PayloadValidationError,
     validation::ValidationResult,
 };
@@ -12,7 +10,7 @@ use mockall::*;
 mock! {
     pub BatchPayloadBuilder {}
 
-    trait BatchPayloadBuilderTrait {
+    impl BatchPayloadBuilder for BatchPayloadBuilder {
         fn build_payload<'a>(
             &self,
             height: Height,
@@ -24,9 +22,9 @@ mock! {
         fn validate_payload<'a>(
             &self,
             height: Height,
+            proposal_context: &ProposalContext<'a>,
             payload: &[u8],
             past_payloads: &[PastPayload<'a>],
-            context: &ValidationContext,
         ) -> ValidationResult<PayloadValidationError>;
     }
 }

@@ -155,6 +155,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
         }
 
+        // https://github.com/rust-lang/rust-clippy/issues/4530
+        #[allow(clippy::unnecessary_unwrap)]
         if first_block.is_some() && first_block.as_ref().unwrap().index > 0 {
             let first_block = first_block.unwrap();
             let queried_block = canister_access

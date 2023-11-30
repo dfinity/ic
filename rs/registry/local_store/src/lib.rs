@@ -237,7 +237,7 @@ fn changelog_entry_try_from_proto(value: PbChangelogEntry) -> Result<ChangelogEn
 }
 
 fn key_mutation_try_from_proto(value: &PbKeyMutation) -> Result<KeyMutation, io::Error> {
-    let mut_type = match MutationType::from_i32(value.mutation_type) {
+    let mut_type = match MutationType::try_from(value.mutation_type).ok() {
         Some(v) => v,
         None => {
             return Err(io::Error::new(

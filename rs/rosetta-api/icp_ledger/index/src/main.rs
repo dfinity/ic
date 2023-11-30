@@ -1,7 +1,7 @@
 use candid::{candid_method, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, query};
+use ic_cdk_macros::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
@@ -40,8 +40,8 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNTIDENTIFIER_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNTIDENTIFIER_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(60);
-const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(10);
+const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
+const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
@@ -239,6 +239,11 @@ fn init(init_arg: InitArg) {
     set_build_index_timer(Duration::from_secs(1));
 }
 
+#[post_upgrade]
+fn post_upgrade() {
+    set_build_index_timer(Duration::from_secs(1));
+}
+
 async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse, String> {
     let ledger_id = with_state(|state| state.ledger_id);
     let req = GetBlocksArgs {
@@ -339,8 +344,12 @@ pub async fn build_index() -> Result<(), String> {
     log!(P0, "[build_index]: received {} blocks", tx_indexed_count);
     append_blocks(res.blocks)?;
     let wait_time = compute_wait_time(tx_indexed_count);
-    log!(P0, "[build_index]: new wait time is {:?}", wait_time);
-    ic_cdk::eprintln!("Indexed: {} waiting : {:?}", tx_indexed_count, wait_time);
+    log!(
+        P1,
+        "[build_index]: Indexed: {} waiting : {:?}",
+        tx_indexed_count,
+        wait_time
+    );
     mutate_state(|state| state.last_wait_time = wait_time);
     ScopeGuard::into_inner(failure_guard);
     set_build_index_timer(wait_time);

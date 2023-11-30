@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-askama = "0.11.1"
+askama = { workspace = true }
 async-trait = "0.1.68"
 bytes = { workspace = true }
 byte-unit = "4.0.14"
@@ -66,6 +66,7 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
+ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-protobuf = { path = "../../protobuf" }

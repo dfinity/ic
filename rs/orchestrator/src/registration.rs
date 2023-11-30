@@ -600,10 +600,10 @@ fn metrics_config_to_endpoint(
 }
 
 fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> OrchestratorResult<String> {
-    let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|_e| {
+    let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|err| {
         OrchestratorError::invalid_configuration_error(format!(
-            "Could not parse IP-address: {}",
-            ip_addr
+            "Could not parse IP-address {}: {}",
+            ip_addr, err
         ))
     })?;
     if parsed_ip_addr.is_loopback() {
@@ -630,9 +630,9 @@ fn generate_nonce() -> Vec<u8> {
         .to_vec()
 }
 
-/// Get a chip_id from SNP guest firmware by calling the snptool.
-/// If snptool returns the error "unable to open /dev/sev-guest",
-/// it could be that the guest is not SEV-SNP enabled. Return an empty chip_id in that case.
+/// Get a chip_id from SNP guest firmware via SEV library.
+/// If SEV-SNP in not enabled on the guest, return None.
+/// In other cases, return the error and notify the Node Provider.
 fn get_snp_chip_id() -> OrchestratorResult<Option<Vec<u8>>> {
     match get_chip_id() {
         // Chip_id returned successfully
@@ -782,7 +782,7 @@ mod tests {
         mock! {
             pub KeyRotationCryptoComponent{}
 
-            pub trait KeyManager {
+            impl KeyManager for KeyRotationCryptoComponent {
                 fn check_keys_with_registry(
                     &self,
                     registry_version: RegistryVersion,
@@ -798,7 +798,7 @@ mod tests {
                 ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
             }
 
-            pub trait BasicSigner<MessageId> {
+            impl BasicSigner<MessageId> for KeyRotationCryptoComponent {
                 fn sign_basic(
                     &self,
                     message: &MessageId,
@@ -807,7 +807,7 @@ mod tests {
                 ) -> CryptoResult<BasicSigOf<MessageId>>;
             }
 
-            pub trait ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> {
+            impl ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> for KeyRotationCryptoComponent {
                 fn verify_combined_threshold_sig_by_public_key(
                     &self,
                     signature: &CombinedThresholdSigOf<CatchUpContentProtobufBytes>,
@@ -818,7 +818,7 @@ mod tests {
             }
 
             #[async_trait]
-            pub trait TlsHandshake {
+            impl TlsHandshake for KeyRotationCryptoComponent {
                 async fn perform_tls_server_handshake(
                     &self,
                     tcp_stream: TcpStream,

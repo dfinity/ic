@@ -24,9 +24,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 {
     fn ecdsa_sign_share(
         &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
+        derivation_path: ExtendedDerivationPath,
+        hashed_message: Vec<u8>,
+        nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         kappa_unmasked_raw: IDkgTranscriptInternalBytes,
         lambda_masked_raw: IDkgTranscriptInternalBytes,
@@ -53,9 +53,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         let start_time = self.metrics.now();
         let result = self.ecdsa_sign_share_internal(
-            derivation_path,
-            hashed_message,
-            nonce,
+            &derivation_path,
+            &hashed_message[..],
+            &nonce,
             &key,
             &kappa_unmasked,
             &lambda_masked,

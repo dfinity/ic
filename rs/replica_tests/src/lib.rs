@@ -11,10 +11,7 @@ use ic_ic00_types::{
     CanisterIdRecord, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     IC_00,
 };
-use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifactEvent,
-    execution_environment::{IngressHistoryReader, QueryHandler},
-};
+use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
@@ -34,8 +31,9 @@ use ic_test_utilities::{
     universal_canister::UNIVERSAL_CANISTER_WASM,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::artifact_kind::IngressArtifact;
 use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
+    artifact_kind::IngressArtifact,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
@@ -47,8 +45,7 @@ use slog_scope::info;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::{
     convert::TryFrom,
@@ -65,14 +62,14 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &CrossbeamSender<UnvalidatedArtifactEvent<IngressArtifact>>,
+    ingress_tx: &CrossbeamSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifactEvent::Insert((msg, node_test_id(1))))
+        .send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
         .unwrap();
 
     let start = Instant::now();
@@ -152,7 +149,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub ingress_sender: CrossbeamSender<UnvalidatedArtifactEvent<IngressArtifact>>,
+    pub ingress_sender: CrossbeamSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -228,7 +225,6 @@ pub fn get_ic_config() -> IcConfig {
         SubnetConfig::new(
             subnet_index,
             subnet_nodes,
-            None,
             None,
             None,
             None,

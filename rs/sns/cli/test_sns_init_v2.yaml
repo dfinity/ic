@@ -108,5 +108,4 @@ Swap:
     start_time: 12:00 UTC
     duration: 7 days
 
-    neurons_fund_investment_icp: 10 tokens
     neurons_fund_participation: true

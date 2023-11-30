@@ -33,7 +33,7 @@
 //! };
 //!
 //! // Encode.
-//! let bytes: Vec<u8> = pb::Block::proxy_encode(b).unwrap();
+//! let bytes: Vec<u8> = pb::Block::proxy_encode(b);
 //!
 //! // Decode.
 //! assert_eq!(
@@ -45,7 +45,7 @@
 //! );
 //! ```
 
-use prost::{DecodeError, EncodeError};
+use prost::DecodeError;
 use std::convert::{Infallible, TryFrom, TryInto};
 use std::error::Error;
 
@@ -57,7 +57,7 @@ mod tests;
 /// convert from one to the other and back.
 pub trait ProtoProxy<T> {
     /// Encodes `t` into a vector via this proxy.
-    fn proxy_encode(t: T) -> Result<Vec<u8>, EncodeError>;
+    fn proxy_encode(t: T) -> Vec<u8>;
 
     /// Decodes a `T` from a slice via this proxy.
     fn proxy_decode(bytes: &[u8]) -> Result<T, ProxyDecodeError>;
@@ -69,9 +69,8 @@ where
     M: prost::Message + TryInto<T> + Default,
     M::Error: Into<ProxyDecodeError>,
 {
-    fn proxy_encode(t: T) -> Result<Vec<u8>, EncodeError> {
-        let mut buf = vec![];
-        t.into().encode(&mut buf).map(|()| buf)
+    fn proxy_encode(t: T) -> Vec<u8> {
+        t.into().encode_to_vec()
     }
 
     fn proxy_decode(bytes: &[u8]) -> Result<T, ProxyDecodeError> {

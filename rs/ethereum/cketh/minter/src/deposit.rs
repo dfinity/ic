@@ -1,6 +1,6 @@
 use crate::address::Address;
 use crate::eth_logs::{report_transaction_error, ReceivedEthEventError};
-use crate::eth_rpc::BlockSpec;
+use crate::eth_rpc::{BlockSpec, HttpOutcallError};
 use crate::eth_rpc_client::EthRpcClient;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -37,7 +37,7 @@ async fn mint_cketh() {
                 to: event.principal.into(),
                 fee: None,
                 created_at_time: None,
-                memo: None,
+                memo: Some(event.clone().into()),
                 amount: candid::Nat::from(event.value),
             })
             .await
@@ -85,44 +85,69 @@ async fn mint_cketh() {
 
 /// Scraps Ethereum logs between `from` and `min(from + MAX_BLOCK_SPREAD, to)` since certain RPC providers
 /// require that the number of blocks queried is no greater than MAX_BLOCK_SPREAD.
-/// Returns the last block number that was scraped (which is `min(from + MAX_BLOCK_SPREAD, to)`).
+/// Returns the last block number that was scraped (which is `min(from + MAX_BLOCK_SPREAD, to)`) if there
+/// was no error when querying the providers, otherwise returns `None`.
 async fn scrap_eth_logs_range_inclusive(
     contract_address: Address,
     from: BlockNumber,
     to: BlockNumber,
-) -> BlockNumber {
+) -> Option<BlockNumber> {
     /// The maximum block spread is introduced by Cloudflare limits.
     /// https://developers.cloudflare.com/web3/ethereum-gateway/
     const MAX_BLOCK_SPREAD: u16 = 800;
     match from.cmp(&to) {
-        Ordering::Less => {
+        Ordering::Less | Ordering::Equal => {
             let max_to = from
                 .checked_add(BlockNumber::from(MAX_BLOCK_SPREAD))
                 .unwrap_or(BlockNumber::MAX);
-            let last_scraped_block_number = min(max_to, to);
+            let mut last_block_number = min(max_to, to);
             log!(
                 DEBUG,
                 "Scrapping ETH logs from block {:?} to block {:?}...",
                 from,
-                last_scraped_block_number
+                last_block_number
             );
 
-            let (transaction_events, errors) = match crate::eth_logs::last_received_eth_events(
-                contract_address,
-                from,
-                last_scraped_block_number,
-            )
-            .await
-            {
-                Ok((events, errors)) => (events, errors),
-                Err(e) => {
-                    log!(
+            let (transaction_events, errors) = loop {
+                match crate::eth_logs::last_received_eth_events(
+                    contract_address,
+                    from,
+                    last_block_number,
+                )
+                .await
+                {
+                    Ok((events, errors)) => break (events, errors),
+                    Err(e) => {
+                        log!(
                         INFO,
-                        "Failed to get ETH logs from block {from} to block {last_scraped_block_number}: {e:?}",
+                        "Failed to get ETH logs from block {from} to block {last_block_number}: {e:?}",
                     );
-                    return from;
-                }
+                        if e.has_http_outcall_error_matching(
+                            HttpOutcallError::is_response_too_large,
+                        ) {
+                            if from == last_block_number {
+                                mutate_state(|s| {
+                                    process_event(s, EventType::SkippedBlock(last_block_number));
+                                    s.last_scraped_block_number = last_block_number;
+                                });
+                                return Some(last_block_number);
+                            } else {
+                                let new_last_block_number = from
+                                    .checked_add(last_block_number
+                                            .checked_sub(from)
+                                            .expect("last_scraped_block_number is greater or equal than from")
+                                            .div_by_two())
+                                    .expect("must be less than last_scraped_block_number");
+                                log!(INFO, "Too many logs received in range [{from}, {last_block_number}]. Will retry with range [{from}, {new_last_block_number}]");
+                                last_block_number = new_last_block_number;
+                                continue;
+                            }
+                        }
+                        return None;
+                    }
+                };
             };
+
             let has_new_events = !transaction_events.is_empty();
             for event in transaction_events {
                 log!(
@@ -171,15 +196,8 @@ async fn scrap_eth_logs_range_inclusive(
                 }
                 report_transaction_error(error);
             }
-            mutate_state(|s| s.last_scraped_block_number = last_scraped_block_number);
-            last_scraped_block_number
-        }
-        Ordering::Equal => {
-            log!(
-                DEBUG,
-                "[scrap_eth_logs] Skipping scrapping ETH logs: no new blocks",
-            );
-            to
+            mutate_state(|s| s.last_scraped_block_number = last_block_number);
+            Some(last_block_number)
         }
         Ordering::Greater => {
             ic_cdk::trap(&format!(
@@ -221,12 +239,18 @@ pub async fn scrap_eth_logs() {
         let next_block_to_query = last_scraped_block_number
             .checked_increment()
             .unwrap_or(BlockNumber::MAX);
-        last_scraped_block_number = scrap_eth_logs_range_inclusive(
+        last_scraped_block_number = match scrap_eth_logs_range_inclusive(
             contract_address,
             next_block_to_query,
             last_block_number,
         )
-        .await;
+        .await
+        {
+            Some(last_scraped_block_number) => last_scraped_block_number,
+            None => {
+                return;
+            }
+        };
     }
 }
 

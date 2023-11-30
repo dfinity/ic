@@ -59,7 +59,7 @@ impl Scalar {
             return None;
         }
 
-        let mut extended = vec![0; 2 * Self::BYTES];
+        let mut extended = [0; 2 * Self::BYTES];
         let offset = extended.len() - bytes.len();
         extended[offset..].copy_from_slice(bytes); // zero pad
 
@@ -191,21 +191,25 @@ impl Point {
     /// Perform multi-exponentiation
     ///
     /// Equivalent to p1*s1 + p2*s2
+    #[inline]
     pub fn lincomb(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
         Self::new(k256::ProjectivePoint::lincomb(&p1.p, &s1.s, &p2.p, &s2.s))
     }
 
     /// Add two points
+    #[inline]
     pub fn add(&self, other: &Self) -> Self {
         Self::new(self.p + other.p)
     }
 
     /// Subtract two points
+    #[inline]
     pub fn sub(&self, other: &Self) -> Self {
         Self::new(self.p - other.p)
     }
 
     /// Perform point doubling
+    #[inline]
     pub fn double(&self) -> Self {
         Self::new(self.p.double())
     }
@@ -216,6 +220,7 @@ impl Point {
     }
 
     /// Scalar multiplication
+    #[inline]
     pub fn mul(&self, scalar: &Scalar) -> Self {
         Self::new(self.p * scalar.s)
     }
@@ -245,6 +250,7 @@ impl Point {
     }
 
     /// Constant time conditional selection
+    #[inline(always)]
     pub fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
         Self {
             p: k256::ProjectivePoint::conditional_select(&a.p, &b.p, choice),

@@ -2,16 +2,10 @@ use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
 use ic_types::artifact::StateSyncMessage;
-use prometheus::{
-    exponential_buckets, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
-};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use tokio_metrics::TaskMonitor;
 
 use crate::ongoing::DownloadChunkError;
-
-const HANDLER_LABEL: &str = "handler";
-pub(crate) const CHUNK_HANDLER_LABEL: &str = "chunk";
-pub(crate) const ADVERT_HANDLER_LABEL: &str = "advert";
 
 const CHUNK_DOWNLOAD_STATUS_LABEL: &str = "status";
 const CHUNK_DOWNLOAD_STATUS_MORE_NEEDED: &str = "more_needed";
@@ -51,20 +45,12 @@ impl StateSyncManagerMetrics {
 }
 #[derive(Debug, Clone)]
 pub struct StateSyncManagerHandlerMetrics {
-    pub request_duration: HistogramVec,
     pub compression_ratio: Histogram,
 }
 
 impl StateSyncManagerHandlerMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            request_duration: metrics_registry.histogram_vec(
-                "state_sync_manager_request_duration",
-                "State sync manager request handler duration.",
-                // 1ms, 10ms, 100ms, 1s
-                exponential_buckets(0.001, 10.0, 4).unwrap(),
-                &[HANDLER_LABEL],
-            ),
             compression_ratio: metrics_registry.histogram(
                 "state_sync_manager_chunk_compression_ratio",
                 "State sync manager chunk compression ratio.",
@@ -77,6 +63,8 @@ impl StateSyncManagerHandlerMetrics {
 pub(crate) struct OngoingStateSyncMetrics {
     pub download_task_monitor: TaskMonitor,
     pub allowed_parallel_downloads: IntGauge,
+    pub chunk_size_compressed_total: IntCounter,
+    pub chunk_size_decompressed_total: IntCounter,
     pub chunks_to_download_calls_total: IntCounter,
     pub chunks_to_download_total: IntCounter,
     pub peers_serving_state: IntGauge,
@@ -95,6 +83,14 @@ impl OngoingStateSyncMetrics {
             allowed_parallel_downloads: metrics_registry.int_gauge(
                 "state_sync_manager_allowed_parallel_downloads",
                 "Number outstanding download requests that are allowed.",
+            ),
+            chunk_size_compressed_total: metrics_registry.int_counter(
+                "state_sync_manager_chunk_size_compressed_total",
+                "Sum of all chunks received from transport.",
+            ),
+            chunk_size_decompressed_total: metrics_registry.int_counter(
+                "state_sync_manager_chunk_size_decompressed_total",
+                "Sum of all chunks received after decompresssion.",
             ),
             chunks_to_download_calls_total: metrics_registry.int_counter(
                 "state_sync_manager_chunks_to_download_calls_total",

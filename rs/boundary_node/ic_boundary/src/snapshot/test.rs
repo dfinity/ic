@@ -2,22 +2,45 @@ use super::*;
 
 use std::net::{IpAddr, Ipv4Addr};
 
+use ic_certification_test_utils::CertificateData::*;
+use ic_certification_test_utils::*;
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
+use ic_crypto_tree_hash::Digest;
 use ic_protobuf::registry::{
+    crypto::v1::PublicKey as PublicKeyProto,
     node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
     subnet::v1::SubnetListRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_crypto_tls_cert_key, make_node_record_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key, make_node_record_key,
+    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities_registry::test_subnet_record;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, RegistryVersion};
+use rand::Rng;
+
+fn new_random_certified_data() -> Digest {
+    let mut random_certified_data: [u8; 32] = [0; 32];
+    rand::thread_rng().fill(&mut random_certified_data);
+    Digest(random_certified_data)
+}
+
+pub fn new_threshold_key() -> ThresholdSigPublicKey {
+    let (_, pk, _) = CertificateBuilder::new(CanisterData {
+        canister_id: CanisterId::from_u64(1),
+        certified_data: new_random_certified_data(),
+    })
+    .build();
+
+    pk
+}
 
 // Generate a fake registry client with some data
 pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
@@ -25,12 +48,22 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
     let data_provider = ProtoRegistryDataProvider::new();
     let reg_ver = RegistryVersion::new(1);
 
+    let nns_subnet_id = subnet_test_id(0);
+
     // Add NNS subnet
     data_provider
         .add(
             ROOT_SUBNET_ID_KEY,
             reg_ver,
-            Some(ic_types::subnet_id_into_protobuf(subnet_test_id(0))),
+            Some(ic_types::subnet_id_into_protobuf(nns_subnet_id)),
+        )
+        .unwrap();
+
+    data_provider
+        .add(
+            &make_crypto_threshold_signing_pubkey_key(nns_subnet_id),
+            reg_ver,
+            Some(PublicKeyProto::from(new_threshold_key())),
         )
         .unwrap();
 
@@ -144,14 +177,14 @@ pub fn create_nodes() -> Vec<(&'static str, IpAddr, u16)> {
 async fn test_routing_table() -> Result<(), Error> {
     let rt = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(Arc::clone(&rt), reg);
+    let mut runner = Runner::new(Arc::clone(&rt), reg, Duration::ZERO);
     runner.run().await?;
     let rt = rt.load_full().unwrap();
 
     assert_eq!(rt.registry_version, 1);
     assert_eq!(rt.subnets.len(), 4);
 
-    let subnets = vec![
+    let subnets = [
         (
             "yndj2-3ybaa-aaaaa-aaaap-yai",
             ("rwlgt-iiaaa-aaaaa-aaaaa-cai", "chwmy-2yaaa-aaaaa-pii7q-cai"),

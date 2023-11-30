@@ -43,6 +43,7 @@ parking_lot = "0.12.1"
 prost = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3"
+rayon = "1.8"
 rcgen = "0.10.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -58,7 +59,6 @@ strum_macros = { workspace = true }
 tarpc = { version = "0.32", features = ["full"] }
 tempfile = "3.1.0"
 time = "0.3.20"
-threadpool = "1.8.1"
 tokio = { workspace = true }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { version = "0.7.4", features = ["codec"] }
@@ -82,7 +82,8 @@ ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs"
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = "1.4.0"
-mockall = "0.7.2"
+num_cpus = "1.16"
+mockall = { workspace = true }
 proptest = "1.0"
 proptest-derive = "0.3.0"
 rsa = "0.9"

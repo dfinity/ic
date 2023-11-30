@@ -2,14 +2,12 @@ use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::{
-    wasm_utils::{
-        validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, wasm_transform::Module,
-        Segments,
-    },
+    wasm_utils::{validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, Segments},
     WasmtimeEmbedder,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_wasm_transform::Module;
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;

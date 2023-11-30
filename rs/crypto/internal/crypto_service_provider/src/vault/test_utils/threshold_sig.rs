@@ -47,7 +47,7 @@ pub fn test_threshold_signatures(
     let signatures: Result<Vec<CspSignature>, CspThresholdSignError> = signers
         .iter()
         .map(|(csp_vault, key_id)| {
-            csp_vault.threshold_sign(AlgorithmId::ThresBls12_381, message, *key_id)
+            csp_vault.threshold_sign(AlgorithmId::ThresBls12_381, message.to_vec(), *key_id)
         })
         .collect();
     let signatures = signatures.expect("Signing failed");
@@ -59,7 +59,7 @@ pub fn test_threshold_signatures(
                 if let Some((csp_vault, key_id)) = signers.get(0) {
                     assert!(
                         csp_vault
-                            .threshold_sign(algorithm_id, message, *key_id)
+                            .threshold_sign(algorithm_id, message.to_vec(), *key_id)
                             .is_err(),
                         "Managed to threshold sign with algorithm ID {:?}",
                         algorithm_id
@@ -79,7 +79,7 @@ pub fn test_threshold_signatures(
             );
             assert!(
                 csp_vault
-                    .threshold_sign(AlgorithmId::ThresBls12_381, message, wrong_key_id)
+                    .threshold_sign(AlgorithmId::ThresBls12_381, message.to_vec(), wrong_key_id)
                     .is_err(),
                 "A randomly generated key_id managed to sign"
             );

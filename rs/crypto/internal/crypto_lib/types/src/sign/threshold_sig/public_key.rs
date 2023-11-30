@@ -1,5 +1,8 @@
 //! Data types for threshold public keys.
 use crate::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
+use crate::sign::threshold_sig::public_key::bls12_381::{
+    CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError, PublicKeyBytes,
+};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
@@ -23,15 +26,13 @@ impl From<&CspNiDkgTranscript> for CspThresholdSigPublicKey {
     // panic on empty coefficients is currently specific to converting
     // the transcript to the contained threshold signature public key.
     fn from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Self {
-        match csp_ni_dkg_transcript {
-            CspNiDkgTranscript::Groth20_Bls12_381(transcript) => Self::ThresBls12_381(
-                transcript
-                    .public_coefficients
-                    .coefficients
-                    .get(0)
-                    .copied()
-                    .expect("coefficients empty"),
-            ),
+        match PublicKeyBytes::try_from(csp_ni_dkg_transcript) {
+            Ok(public_key_bytes) => Self::ThresBls12_381(public_key_bytes),
+            Err(err) => match err {
+                CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty => {
+                    panic!("coefficients empty")
+                }
+            },
         }
     }
 }
@@ -110,6 +111,32 @@ pub mod bls12_381 {
     impl Hash for PublicKeyBytes {
         fn hash<H: Hasher>(&self, state: &mut H) {
             self.0[..].hash(state);
+        }
+    }
+
+    /// Converting an NI-DKG transcript to a BLS 12 381 public key bytes struct failed.
+    #[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+    pub enum CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError {
+        #[error("coefficients empty")]
+        CoefficientsEmpty,
+    }
+
+    impl TryFrom<&CspNiDkgTranscript> for PublicKeyBytes {
+        type Error = CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError;
+
+        fn try_from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Result<Self, Self::Error> {
+            match csp_ni_dkg_transcript {
+                CspNiDkgTranscript::Groth20_Bls12_381(transcript) => Ok(
+                    transcript
+                        .public_coefficients
+                        .coefficients
+                        .get(0)
+                        .copied()
+                        .ok_or(
+                            CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty,
+                        )?,
+                ),
+            }
         }
     }
 }

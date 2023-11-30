@@ -10,10 +10,10 @@ use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionCount};
 use crate::state::audit::{process_event, EventType};
-use crate::state::{mutate_state, read_state, State, TaskType};
-use crate::transactions::{
+use crate::state::transactions::{
     create_transaction, CreateTransactionError, Reimbursed, ReimbursementRequest,
 };
+use crate::state::{mutate_state, read_state, State, TaskType};
 use crate::tx::{estimate_transaction_price, TransactionPrice};
 use candid::Nat;
 use futures::future::join_all;
@@ -57,11 +57,12 @@ pub async fn process_reimbursement() {
                 owner: reimbursement_request.to,
                 subaccount: reimbursement_request
                     .to_subaccount
+                    .as_ref()
                     .map(|subaccount| subaccount.0),
             },
             fee: None,
             created_at_time: None,
-            memo: None,
+            memo: Some(reimbursement_request.clone().into()),
             amount: Nat::from(reimbursement_request.reimbursed_amount),
         };
         let block_index = match client.transfer(args).await {
@@ -90,6 +91,7 @@ pub async fn process_reimbursement() {
                     withdrawal_id: reimbursement_request.withdrawal_id,
                     reimbursed_in_block: LedgerMintIndex::new(block_index),
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
+                    transaction_hash: reimbursement_request.transaction_hash,
                 }),
             )
         });
@@ -128,7 +130,16 @@ pub async fn process_retrieve_eth_requests() {
             return;
         }
     };
-    let transaction_price = estimate_transaction_price(&fee_history);
+    let transaction_price = match estimate_transaction_price(&fee_history) {
+        Ok(transaction_price) => transaction_price,
+        Err(e) => {
+            log!(
+                INFO,
+                "Failed estimating transaction price to process ETH requests: {e:?}",
+            );
+            return;
+        }
+    };
     let max_transaction_fee = transaction_price.max_transaction_fee();
     log!(
         INFO,

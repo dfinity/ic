@@ -400,7 +400,7 @@ fn check_ballots(
     let ballots = info.ballots;
     assert!(!ballots.is_empty());
     let ballot = &ballots[&(neuron.neuron_id).id];
-    (ballot.voting_power, Vote::from(ballot.vote))
+    (ballot.voting_power, Vote::try_from(ballot.vote).unwrap())
 }
 
 fn get_yes_votes(state_machine: &mut StateMachine, proposal_id: &ProposalId) -> u64 {

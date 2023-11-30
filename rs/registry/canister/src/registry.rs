@@ -209,7 +209,7 @@ impl Registry {
             //    INSERT entry is removed, the newly connected clients won't
             //    fail because of an UPDATE in the first survived entry with the
             //    same key.
-            m.mutation_type = match Type::from_i32(m.mutation_type).unwrap() {
+            m.mutation_type = match Type::try_from(m.mutation_type).unwrap() {
                 Type::Insert | Type::Update | Type::Upsert => Type::Upsert,
                 Type::Delete => Type::Delete,
             } as i32;
@@ -256,7 +256,7 @@ impl Registry {
                 let latest = self
                     .get_last(key)
                     .filter(|registry_value| !registry_value.deletion_marker);
-                match (Type::from_i32(m.mutation_type), latest) {
+                match (Type::try_from(m.mutation_type).ok(), latest) {
                     (None, _) => Err(Error::MalformedMessage(format!(
                         "Unknown mutation type {} for key {:?}.",
                         m.mutation_type, m.key
@@ -376,7 +376,7 @@ impl Registry {
         assert!(self.changelog.is_empty());
         assert_eq!(self.version, 0);
 
-        let repr_version = ReprVersion::from_i32(stable_repr.version).unwrap_or_else(|| {
+        let repr_version = ReprVersion::try_from(stable_repr.version).unwrap_or_else(|_| {
             panic!(
                 "Version {} of stable registry representation is not supported by this canister",
                 stable_repr.version

@@ -53,17 +53,17 @@ fn spawn_transport(
     registry_handle.registry_client.reload();
     registry_handle.registry_client.update_to_latest_version();
 
-    let transport = Arc::new(QuicTransport::build(
+    let transport = Arc::new(QuicTransport::start(
         &log,
         &MetricsRegistry::default(),
-        rt,
+        &rt,
         tls,
         registry_handle.registry_client.clone(),
         sev,
         node_id,
         watch_rx,
         Either::<_, DummyUdpSocket>::Left(node_addr),
-        Some(Router::new().route("/", any(pong))),
+        Router::new().route("/", any(pong)),
     ));
     (transport, node_id, node_addr)
 }

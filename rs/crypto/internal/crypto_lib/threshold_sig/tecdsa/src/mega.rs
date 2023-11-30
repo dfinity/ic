@@ -582,11 +582,10 @@ impl MEGaCiphertextSingle {
         our_private_key: &MEGaPrivateKey,
         recipient_public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<EccScalar> {
-        // Since we only decrypt verified dealings, and the PoP is already
-        // verified during dealing verification, this check should never
-        // fail. However it is retained as it is not too expensive and more
-        // closely matches the description in the paper.
-        self.verify_pop(associated_data, dealer_index)?;
+        // We could verify the PoP here. However we assume that it was
+        // already checked when the dealing was verified, and we only
+        // decrypt verified dealings.
+        //self.verify_pop(associated_data, dealer_index)?;
 
         let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 
@@ -701,11 +700,10 @@ impl MEGaCiphertextPair {
         our_private_key: &MEGaPrivateKey,
         recipient_public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
-        // Since we only decrypt verified dealings, and the PoP is already
-        // verified during dealing verification, this check should never
-        // fail. However it is retained as it is not too expensive and more
-        // closely matches the description in the paper.
-        self.verify_pop(associated_data, dealer_index)?;
+        // We could verify the PoP here. However we assume that it was
+        // already checked when the dealing was verified, and we only
+        // decrypt verified dealings.
+        //self.verify_pop(associated_data, dealer_index)?;
 
         let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 

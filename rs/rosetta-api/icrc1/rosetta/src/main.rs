@@ -8,7 +8,8 @@ use clap::{Parser, ValueEnum};
 use endpoints::{block, health, network_list, network_options, network_status};
 use http::Request;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::AnonymousIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
+    identity::AnonymousIdentity, Agent,
 };
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
@@ -25,6 +26,8 @@ use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{debug, error_span, info, Level, Span};
 use url::Url;
+
+use crate::endpoints::{block_transaction, mempool};
 
 mod endpoints;
 
@@ -308,6 +311,8 @@ async fn main() -> Result<()> {
         .route("/network/options", post(network_options))
         .route("/network/status", post(network_status))
         .route("/block", post(block))
+        .route("/block/transaction", post(block_transaction))
+        .route("/mempool", post(mempool))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())

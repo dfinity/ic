@@ -10,12 +10,12 @@ use ic_consensus::{
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -67,7 +67,7 @@ pub const PRIORITY_FN_REFRESH_INTERVAL: Duration = Duration::from_secs(3);
 /// Messages from a consensus instance are either artifacts to be
 /// delivered to peers, or to a timer expired event that should trigger
 /// consensus on_state_change.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum Input {
     Message(Message),
     TimerExpired(Time),
@@ -92,22 +92,30 @@ impl Ord for Input {
 /// We reverse the order so that Queue<Input> is a min heap.
 impl PartialOrd for Input {
     fn partial_cmp(&self, other: &Input) -> Option<Ordering> {
-        Some(self.timestamp().cmp(&other.timestamp()).reverse())
+        Some(self.cmp(other))
     }
 }
+
+impl PartialEq for Input {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Input {}
 
 /// The output of a consensus instance is just the Message type.
 pub type Output = Message;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
     Certification(CertificationMessage),
 }
 
-/// A Message is a tuple of ConsensusMessage with a timestamp.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A Message is a tuple of [`InputMessage`] with a timestamp.
+#[derive(Clone, Debug)]
 pub struct Message {
     pub(crate) message: InputMessage,
     pub(crate) timestamp: Time,
@@ -123,9 +131,17 @@ impl Ord for Message {
 /// We reverse the order so that Queue<Message> is a min-heap.
 impl PartialOrd for Message {
     fn partial_cmp(&self, other: &Message) -> Option<Ordering> {
-        Some(self.timestamp.cmp(&other.timestamp).reverse())
+        Some(self.cmp(other))
     }
 }
+
+impl PartialEq for Message {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Message {}
 
 /// Compare optional Time values, by treating None as "top" (i.e. greater
 /// than other values).
@@ -176,10 +192,10 @@ impl ConsensusDependencies {
         // let state_manager_arc = Rc::new(state_manager);
         let metrics_registry = MetricsRegistry::new();
 
-        let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new_from_cup_without_bytes(
+        let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
-            cup,
+            (&cup).into(),
             pool_config.clone(),
             metrics_registry.clone(),
             no_op_logger(),

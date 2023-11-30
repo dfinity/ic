@@ -28,6 +28,7 @@ use lazy_static::lazy_static;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
+use std::rc::Rc;
 use std::sync::Arc;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -103,7 +104,7 @@ fn test_api_for_update(
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Arc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler {}),
         log,
     )
 }

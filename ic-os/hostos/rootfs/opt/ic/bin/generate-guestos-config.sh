@@ -99,7 +99,7 @@ function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
     cmd+=(--elasticsearch_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
-    cmd+=(--ipv6_address "$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=1)")
+    cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     cmd+=(--name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_dns_name_servers --config=${DEPLOYMENT})")
     cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
@@ -117,12 +117,26 @@ function assemble_config_media() {
 
 function generate_guestos_config() {
     RESOURCES_MEMORY=$(/opt/ic/bin/fetch-property.sh --key=.resources.memory --metric=hostos_resources_memory --config=${DEPLOYMENT})
-    MAC_ADDRESS=$(/opt/ic/bin/generate-deterministic-mac.sh --index=1)
+    MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
+    # NOTE: `fetch-property` will error if the target is not found. Here we
+    # only want to act when the field is set.
+    CPU_MODE=$(jq -r ".resources.cpu" ${DEPLOYMENT})
+
+    CPU_DOMAIN="kvm"
+    CPU_SPEC="/opt/ic/share/kvm-cpu.xml"
+    if [ "${CPU_MODE}" == "qemu" ]; then
+        CPU_DOMAIN="qemu"
+        CPU_SPEC="/opt/ic/share/qemu-cpu.xml"
+    fi
 
     if [ ! -f "${OUTPUT}" ]; then
+        mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
+            -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
+            -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
             "${INPUT}" >"${OUTPUT}"
+        restorecon -R "$(dirname "$OUTPUT")"
         write_log "Generating GuestOS configuration file: ${OUTPUT}"
         write_metric "hostos_generate_guestos_config" \
             "1" \
@@ -168,7 +182,7 @@ function generate_sev_guestos_config() {
     INPUT="/opt/ic/share/sev_guestos.sh.template"
     OUTPUT="/var/lib/sev_guestos.sh"
     RESOURCES_MEMORY=$(/opt/ic/bin/fetch-property.sh --key=.resources.memory --metric=hostos_resources_memory --config=${DEPLOYMENT})
-    MAC_ADDRESS=$(/opt/ic/bin/generate-deterministic-mac.sh --index=1)
+    MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
     mount_guestos_image_and_copy_files
     unmount_guestos_image
 
@@ -176,6 +190,7 @@ function generate_sev_guestos_config() {
     INITRD="$BOOT_COMPONENTS_DIR/initrd.img"
     source "$BOOT_COMPONENTS_DIR"/extra_boot_args
     if [ ! -f "${OUTPUT}" ]; then
+        mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ kernel }}@${KERNEL}@" \
@@ -183,6 +198,7 @@ function generate_sev_guestos_config() {
             -e "s@{{ extra_boot_args }}@${EXTRA_BOOT_ARGS}@" \
             "${INPUT}" >"${OUTPUT}"
         chmod ug+x "${OUTPUT}"
+        restorecon -R "$(dirname "$OUTPUT")"
         write_log "Generating SEV GuestOS configuration file: ${OUTPUT}"
         write_metric "hostos_generate_sev_guestos_config" \
             "1" \

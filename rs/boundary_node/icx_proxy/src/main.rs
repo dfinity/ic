@@ -48,7 +48,7 @@ impl<R, E> InspectErr for Result<R, E> {
 #[derive(Parser)]
 struct Opts {
     /// The address to bind to.
-    #[clap(long, default_value = "127.0.0.1:3000")]
+    #[clap(long, default_value = "[::]:3000")]
     address: SocketAddr,
 
     /// A list of replica mappings from domains to socket addresses for replica upstreams.

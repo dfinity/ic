@@ -5,7 +5,7 @@ use crate::metrics::{
 };
 use byte_unit::Byte;
 use core::convert::TryFrom;
-use http::{uri::Scheme, Uri};
+use http::{header::USER_AGENT, uri::Scheme, HeaderValue, Uri};
 use hyper::{
     client::HttpConnector,
     header::{HeaderMap, ToStrError},
@@ -29,6 +29,9 @@ use tonic::{Request, Response, Status};
 const HEADERS_LIMIT: usize = 1_024;
 /// Hyper also limits the size of the HeaderName to 32768. https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations.
 const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
+
+/// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
+const USER_AGENT_ADPATER: &str = "ic/1.0";
 
 /// implements RPC
 pub struct CanisterHttp {
@@ -91,8 +94,8 @@ impl CanisterHttpService for CanisterHttp {
             ));
         }
 
-        let method = HttpMethod::from_i32(req.method)
-            .ok_or_else(|| {
+        let method = HttpMethod::try_from(req.method)
+            .map_err(|_| {
                 Status::new(
                     tonic::Code::InvalidArgument,
                     "Failed to get HTTP method".to_string(),
@@ -115,13 +118,17 @@ impl CanisterHttpService for CanisterHttp {
             })?;
 
         // Build Http Request.
-        let headers = validate_headers(req.headers).map_err(|err| {
+        let mut headers = validate_headers(req.headers).map_err(|err| {
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_REQUEST_HEADERS])
                 .inc();
             err
         })?;
+
+        // Add user-agent header if not present.
+        add_fallback_user_agent_header(&mut headers);
+
         let mut request_size = req.body.len();
         request_size += headers
             .iter()
@@ -361,7 +368,7 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     let headers: HeaderMap = HeaderMap::try_from(
         &raw_headers
             .into_iter()
-            .map(|h| (h.name, h.value))
+            .map(|h| (h.name.to_lowercase(), h.value))
             .collect::<HashMap<String, String>>(),
     )
     .map_err(|err| {
@@ -372,6 +379,17 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     })?;
 
     Ok(headers)
+}
+
+/// Adds a fallback user agent header if not already present in headermap
+fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
+    if !header_map
+        .iter()
+        .map(|h| h.0.as_str().to_lowercase())
+        .any(|h| h == USER_AGENT.as_str().to_lowercase())
+    {
+        header_map.insert(USER_AGENT, HeaderValue::from_static(USER_AGENT_ADPATER));
+    }
 }
 
 #[cfg(test)]

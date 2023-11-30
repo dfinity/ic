@@ -8,14 +8,14 @@ use crate::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
-    },
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
         IngressPoolThrottler, PoolSection, SelectResult, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
+    },
+    p2p::consensus::{
+        ChangeResult, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
@@ -296,11 +296,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
     }
 
     /// Apply changeset to the Ingress Pool
-    fn apply_changes(
-        &mut self,
-        _time_source: &dyn TimeSource,
-        change_set: ChangeSet,
-    ) -> ChangeResult<IngressArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<IngressArtifact> {
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for change_action in change_set {
@@ -502,8 +498,8 @@ impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPr
 mod tests {
     use super::*;
     use ic_constants::MAX_INGRESS_TTL;
-    use ic_interfaces::artifact_pool::MutablePool;
-    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+    use ic_interfaces::p2p::consensus::MutablePool;
+    use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::{
         mock_time, types::ids::node_test_id, types::messages::SignedIngressBuilder,
         FastForwardTimeSource,
@@ -708,7 +704,7 @@ mod tests {
                     )),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(changeset);
 
                 // Check moved message is returned as an advert
                 assert!(result.purged.is_empty());
@@ -773,7 +769,7 @@ mod tests {
                     )));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(changeset);
                 assert!(result.purged.is_empty());
                 // adverts are only created for own node id
                 assert_eq!(result.adverts.len(), initial_count / nodes);
@@ -782,7 +778,7 @@ mod tests {
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(changeset);
                 assert!(result.adverts.is_empty());
                 assert_eq!(result.purged.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);

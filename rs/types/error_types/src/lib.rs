@@ -64,11 +64,12 @@ impl From<ErrorCode> for RejectCode {
         match err {
             SubnetOversubscribed => SysFatal,
             MaxNumberOfCanistersReached => SysFatal,
-            CanisterOutputQueueFull => SysTransient,
+            CanisterQueueFull => SysTransient,
             IngressMessageTimeout => SysTransient,
             CanisterQueueNotEmpty => SysTransient,
             IngressHistoryFull => SysTransient,
             CanisterIdAlreadyExists => SysTransient,
+            StopCanisterRequestTimeout => SysTransient,
             CanisterInvalidController => CanisterError,
             CanisterNotFound => DestinationInvalid,
             CanisterMethodNotFound => DestinationInvalid,
@@ -128,11 +129,12 @@ impl From<ErrorCode> for RejectCode {
 pub enum ErrorCode {
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
-    CanisterOutputQueueFull = 201,
+    CanisterQueueFull = 201,
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
     CanisterIdAlreadyExists = 205,
+    StopCanisterRequestTimeout = 206,
     CanisterNotFound = 301,
     CanisterMethodNotFound = 302,
     CanisterAlreadyInstalled = 303,
@@ -184,11 +186,12 @@ impl TryFrom<u64> for ErrorCode {
         match err {
             101 => Ok(ErrorCode::SubnetOversubscribed),
             102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
-            201 => Ok(ErrorCode::CanisterOutputQueueFull),
+            201 => Ok(ErrorCode::CanisterQueueFull),
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
             205 => Ok(ErrorCode::CanisterIdAlreadyExists),
+            206 => Ok(ErrorCode::StopCanisterRequestTimeout),
             301 => Ok(ErrorCode::CanisterNotFound),
             302 => Ok(ErrorCode::CanisterMethodNotFound),
             303 => Ok(ErrorCode::CanisterAlreadyInstalled),
@@ -303,8 +306,9 @@ impl UserError {
             ErrorCode::CanisterWasmEngineError | ErrorCode::QueryCallGraphInternal => true,
             ErrorCode::SubnetOversubscribed
             | ErrorCode::MaxNumberOfCanistersReached
-            | ErrorCode::CanisterOutputQueueFull
+            | ErrorCode::CanisterQueueFull
             | ErrorCode::IngressMessageTimeout
+            | ErrorCode::StopCanisterRequestTimeout
             | ErrorCode::CanisterQueueNotEmpty
             | ErrorCode::CanisterNotFound
             | ErrorCode::CanisterMethodNotFound

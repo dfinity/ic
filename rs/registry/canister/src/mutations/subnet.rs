@@ -385,5 +385,5 @@ impl Registry {
 }
 
 fn vec_to_set<T: std::hash::Hash + std::cmp::Eq>(vector: Vec<T>) -> HashSet<T> {
-    HashSet::from_iter(vector.into_iter())
+    HashSet::from_iter(vector)
 }

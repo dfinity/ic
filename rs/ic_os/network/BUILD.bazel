@@ -1,0 +1,38 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/ic_os/config",
+    "//rs/ic_os/utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:hex",
+    "@crate_index//:ping",
+    "@crate_index//:regex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:serde_with",
+    "@crate_index//:sha2",
+]
+
+rust_library(
+    name = "network",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    aliases = {},
+    crate_name = "network",
+    edition = "2021",
+    proc_macro_deps = [],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test",
+    size = "small",
+    crate = ":network",
+    deps = DEPENDENCIES,
+)

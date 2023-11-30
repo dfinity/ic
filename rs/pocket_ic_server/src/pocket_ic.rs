@@ -1,70 +1,372 @@
-use crate::state_api::state::HasStateLabel;
-use crate::state_api::state::OpOut;
-use crate::state_api::state::StateLabel;
+use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::BlobStore;
 use crate::OpId;
 use crate::Operation;
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
-use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_sha2::Sha256;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_ic00_types::CanisterInstallMode;
-use ic_interfaces_state_manager::StateReader;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::Cycles;
-use ic_state_machine_tests::StateMachine;
-use ic_state_machine_tests::StateMachineBuilder;
-use ic_state_machine_tests::StateMachineConfig;
-use ic_state_machine_tests::Time;
-use ic_types::{CanisterId, PrincipalId};
-use pocket_ic::common::rest::RawAddCycles;
-use pocket_ic::common::rest::RawCanisterCall;
-use pocket_ic::common::rest::RawSetStableMemory;
-use pocket_ic::common::rest::{BinaryBlob, BlobCompression};
-use serde::Deserialize;
-use serde::Serialize;
-use std::{sync::Arc, time::SystemTime};
-use tempfile::TempDir;
+use ic_state_machine_tests::{
+    EcdsaCurve, EcdsaKeyId, IngressState, IngressStatus, StateMachine, StateMachineBuilder,
+    StateMachineConfig, Time,
+};
+use ic_test_utilities::types::ids::subnet_test_id;
+use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use itertools::Itertools;
+use pocket_ic::common::rest::{
+    self, BinaryBlob, BlobCompression, RawAddCycles, RawCanisterCall, RawEffectivePrincipal,
+    RawSetStableMemory, SubnetConfigSet, SubnetKind, Topology,
+};
+use rand::rngs::StdRng;
+use rand::Rng;
+use rand::SeedableRng;
+use serde::{Deserialize, Serialize};
+use std::iter::repeat;
+use std::str::FromStr;
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{Arc, RwLock},
+    time::SystemTime,
+};
 use tokio::runtime::Runtime;
 
+/// We assume that the maximum number of subnets on the mainnet is 1024.
+/// Used for generating canister ID ranges that do not appear on mainnet.
+pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
+
 pub struct PocketIc {
-    subnet: StateMachine,
+    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
+    routing_table: RoutingTable,
+    /// Constant, created on initialization.
+    pub topology: Topology,
+    // Used for choosing a random subnet when the user does not specify
+    // where a canister should be created. This value is seeded,
+    // so reproducibility is maintained.
+    randomness: StdRng,
 }
 
 impl PocketIc {
-    pub fn new(sm: StateMachine) -> Self {
-        Self { subnet: sm }
+    pub fn new(runtime: Arc<Runtime>, subnet_configs: SubnetConfigSet) -> Self {
+        let fixed_range_subnets = subnet_configs.get_named();
+        let flexible_subnets = {
+            let sys = repeat(SubnetKind::System).take(subnet_configs.system);
+            let app = repeat(SubnetKind::Application).take(subnet_configs.application);
+            sys.chain(app)
+        };
+
+        let mut range_gen = RangeGen::new();
+        let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
+        let mut subnet_ids = Vec::new();
+        let mut routing_table = RoutingTable::new();
+
+        for (subnet_counter, subnet_kind) in fixed_range_subnets
+            .into_iter()
+            .chain(flexible_subnets)
+            .enumerate()
+        {
+            let subnet_id = subnet_test_id(subnet_counter as u64);
+            subnet_ids.push(subnet_id);
+
+            let RangeConfig {
+                canister_id_ranges: ranges,
+                canister_allocation_range: alloc_range,
+            } = get_range_config(subnet_kind, &mut range_gen);
+
+            // Insert ranges and allocation range into routing table
+            for range in &ranges {
+                routing_table.insert(*range, subnet_id).unwrap();
+            }
+            if let Some(alloc_range) = alloc_range {
+                routing_table.insert(alloc_range, subnet_id).unwrap();
+            }
+
+            subnet_config_info.push(SubnetConfigInfo {
+                subnet_id,
+                ranges,
+                subnet_kind,
+            });
+        }
+
+        let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>> =
+            Arc::new(RwLock::new(BTreeMap::new()));
+        let mut topology = Topology(HashMap::new());
+
+        // Create all StateMachines and the topology from the subnet config infos.
+        for SubnetConfigInfo {
+            subnet_id,
+            ranges,
+            subnet_kind,
+        } in subnet_config_info
+        {
+            let subnet_config = SubnetConfig::new(conv_type(subnet_kind));
+            let hypervisor_config = execution_environment::Config {
+                default_provisional_cycles_balance: Cycles::new(0),
+                ..Default::default()
+            };
+            let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
+            let subnet_size = subnet_size(subnet_kind);
+            StateMachineBuilder::new()
+                .with_runtime(runtime.clone())
+                .with_config(Some(sm_config))
+                .with_subnet_id(subnet_id)
+                .with_subnet_list(subnet_ids.clone())
+                .with_subnet_size(subnet_size.try_into().unwrap())
+                .with_routing_table(routing_table.clone())
+                .with_registry_data_provider(registry_data_provider.clone())
+                .with_ecdsa_keys(vec![EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: format!("master_ecdsa_public_key_{}", subnet_id),
+                }])
+                .with_use_cost_scaling_flag(true)
+                .build_with_subnets(subnets.clone());
+
+            // What will be returned to the client:
+            let subnet_config = pocket_ic::common::rest::SubnetConfig {
+                subnet_kind,
+                size: subnet_size,
+                canister_ranges: ranges.iter().map(|r| from_range(r)).collect(),
+            };
+            topology.0.insert(subnet_id.get().0, subnet_config);
+        }
+
+        for subnet in subnets.read().unwrap().values() {
+            // Reload registry on the state machines to make sure
+            // the registry contains all subnet records
+            // added incrementally to the registry data provider
+            // when creating the individual state machines.
+            subnet.reload_registry();
+        }
+
+        Self {
+            subnets,
+            routing_table,
+            topology,
+            randomness: StdRng::seed_from_u64(42),
+        }
+    }
+
+    fn try_route_canister(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
+        let subnet_id = self.routing_table.route(canister_id.into());
+        subnet_id.map(|subnet_id| self.get_subnet_with_id(subnet_id).unwrap())
+    }
+
+    fn any_subnet(&self) -> Arc<StateMachine> {
+        self.subnets
+            .read()
+            .unwrap()
+            .values()
+            .next()
+            .unwrap()
+            .clone()
+    }
+
+    fn random_subnet(&mut self) -> Arc<StateMachine> {
+        // A new canister should be created on an app subnet by default.
+        // If there are no app subnets, fall back to system subnets.
+        // If there are none of these, install it on any subnet.
+        let random_app_subnet = self.get_random_subnet_of_type(rest::SubnetKind::Application);
+        if let Some(subnet) = random_app_subnet {
+            return subnet;
+        }
+        let random_system_subnet = self.get_random_subnet_of_type(rest::SubnetKind::System);
+        if let Some(subnet) = random_system_subnet {
+            return subnet;
+        }
+        // If there are no application or system subnets, return any subnet.
+        self.any_subnet()
+    }
+
+    fn get_subnet_with_id(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
+        self.subnets
+            .read()
+            .expect("Failed to get read lock on subnets")
+            .get(&subnet_id)
+            .cloned()
+    }
+
+    fn get_random_subnet_of_type(
+        &mut self,
+        subnet_type: rest::SubnetKind,
+    ) -> Option<Arc<StateMachine>> {
+        let subnets = self
+            .topology
+            .0
+            .iter()
+            .filter(|(_, config)| config.subnet_kind == subnet_type)
+            .collect_vec();
+        if !subnets.is_empty() {
+            let n = subnets.len();
+            let index = self.randomness.gen_range(0..n);
+            let (subnet_principal, _) = subnets[index];
+            let subnet_id = SubnetId::new(PrincipalId(*subnet_principal));
+            self.get_subnet_with_id(subnet_id)
+        } else {
+            None
+        }
     }
 }
+
 impl Default for PocketIc {
     fn default() -> Self {
-        let hypervisor_config = execution_environment::Config {
-            default_provisional_cycles_balance: Cycles::new(0),
-            ..Default::default()
-        };
-        let config =
-            StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
-        let sm = StateMachineBuilder::new().with_config(Some(config)).build();
-        Self::new(sm)
+        Self::new(
+            Runtime::new().unwrap().into(),
+            SubnetConfigSet {
+                application: 1,
+                ..Default::default()
+            },
+        )
     }
 }
 
 impl HasStateLabel for PocketIc {
     fn get_state_label(&self) -> StateLabel {
-        let subnet_state_hash = self
-            .subnet
-            .state_manager
-            .latest_state_certification_hash()
-            .map(|(_, h)| h.0)
-            .unwrap_or_else(|| [0u8; 32].to_vec());
         let mut hasher = Sha256::new();
-        let nanos = systemtime_to_unix_epoch_nanos(self.subnet.time());
-        hasher.write(&subnet_state_hash[..]);
-        // XXX: We should make the nonce part of the environment.
-        // hasher.write(&self.nonce.to_be_bytes());
-        hasher.write(&nanos.to_be_bytes());
+        for subnet in self.subnets.read().unwrap().values() {
+            let subnet_state_hash = subnet
+                .state_manager
+                .latest_state_certification_hash()
+                .map(|(_, h)| h.0)
+                .unwrap_or_else(|| [0u8; 32].to_vec());
+            let nanos = systemtime_to_unix_epoch_nanos(subnet.time());
+            hasher.write(&subnet_state_hash[..]);
+            hasher.write(&nanos.to_be_bytes());
+        }
         StateLabel(hasher.finish())
     }
+}
+
+fn conv_type(inp: rest::SubnetKind) -> SubnetType {
+    use rest::SubnetKind::*;
+    match inp {
+        Application | Fiduciary | SNS => SubnetType::Application,
+        Bitcoin | II | NNS | System => SubnetType::System,
+    }
+}
+
+fn subnet_size(subnet: SubnetKind) -> u64 {
+    use rest::SubnetKind::*;
+    match subnet {
+        Application => 13,
+        Fiduciary => 28,
+        SNS => 34,
+        Bitcoin => 13,
+        II => 28,
+        NNS => 40,
+        System => 13,
+    }
+}
+
+fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
+    let CanisterIdRange { start, end } = range;
+    let start = start.get().into();
+    let end = end.get().into();
+    rest::CanisterIdRange { start, end }
+}
+
+fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> RangeConfig {
+    use rest::SubnetKind::*;
+    match subnet_kind {
+        Application | System => {
+            let range = range_gen.next_range();
+            RangeConfig {
+                canister_id_ranges: vec![range],
+                canister_allocation_range: None,
+            }
+        }
+        Bitcoin => {
+            let canister_allocation_range = range_gen.next_range();
+            let range = gen_range("g3wsl-eqaaa-aaaan-aaaaa-cai", "2qqia-xyaaa-aaaan-p777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+        Fiduciary => {
+            let canister_allocation_range = range_gen.next_range();
+            let range = gen_range("mf7xa-laaaa-aaaar-qaaaa-cai", "qoznl-yiaaa-aaaar-7777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+        II => {
+            let canister_allocation_range = range_gen.next_range();
+            let range1 = gen_range("rdmx6-jaaaa-aaaaa-aaadq-cai", "rdmx6-jaaaa-aaaaa-aaadq-cai");
+            let range2 = gen_range("uc7f6-kaaaa-aaaaq-qaaaa-cai", "ijz7v-ziaaa-aaaaq-7777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range1, range2],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+        NNS => {
+            let canister_allocation_range = range_gen.next_range();
+            let range1 = gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai");
+            let range2 = gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range1, range2],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+        SNS => {
+            let canister_allocation_range = range_gen.next_range();
+            let range = gen_range("ybpmr-kqaaa-aaaaq-aaaaa-cai", "ekjw2-zyaaa-aaaaq-p777q-cai");
+            RangeConfig {
+                canister_id_ranges: vec![range],
+                canister_allocation_range: Some(canister_allocation_range),
+            }
+        }
+    }
+}
+
+/// A stateful helper for finding available canister ranges.
+#[derive(Default)]
+struct RangeGen {
+    range_offset: u64,
+}
+
+impl RangeGen {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Returns the next canister id range from the top
+    pub fn next_range(&mut self) -> CanisterIdRange {
+        let offset = (u64::MAX / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
+        self.range_offset += 1;
+        let start = offset * CANISTER_IDS_PER_SUBNET;
+        let end = ((offset + 1) * CANISTER_IDS_PER_SUBNET) - 1;
+        CanisterIdRange {
+            start: CanisterId::from_u64(start),
+            end: CanisterId::from_u64(end),
+        }
+    }
+}
+
+fn gen_range(start: &str, end: &str) -> CanisterIdRange {
+    CanisterIdRange {
+        start: CanisterId::from_str(start).unwrap(),
+        end: CanisterId::from_str(end).unwrap(),
+    }
+}
+
+struct RangeConfig {
+    /// Ranges for manual allocation where the user provides a canister_id.
+    pub canister_id_ranges: Vec<CanisterIdRange>,
+    /// Range for automatic allocation: The management canister chooses
+    /// a canister_id from this range.
+    pub canister_allocation_range: Option<CanisterIdRange>,
+}
+
+/// Internal struct used during initialization.
+struct SubnetConfigInfo {
+    pub subnet_id: SubnetId,
+    pub ranges: Vec<CanisterIdRange>,
+    pub subnet_kind: SubnetKind,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -85,9 +387,10 @@ impl Operation for SetTime {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        // XXX: for now, we use the StateMachine's time as the system time. Later, we will take
-        // StateMachine appart and have a system time that applies to all subnets.
-        pic.subnet.set_time(self.time.into());
+        // Sets the time on all subnets.
+        for subnet in pic.subnets.read().unwrap().values() {
+            subnet.set_time(self.time.into());
+        }
         OpOut::NoOutput
     }
 
@@ -103,7 +406,8 @@ impl Operation for GetTime {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        let nanos = systemtime_to_unix_epoch_nanos(pic.subnet.time());
+        // Time is kept in sync across subnets, so one can take any subnet.
+        let nanos = systemtime_to_unix_epoch_nanos(pic.any_subnet().time());
         OpOut::Time(nanos)
     }
 
@@ -113,18 +417,26 @@ impl Operation for GetTime {
 }
 
 #[derive(Clone, Debug, Copy)]
-pub struct RootKey;
+pub struct PubKey {
+    pub subnet_id: SubnetId,
+}
 
-impl Operation for RootKey {
+impl Operation for PubKey {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        let bytes = threshold_sig_public_key_to_der(pic.subnet.root_key()).unwrap();
-        OpOut::Bytes(bytes)
+        let subnet = pic.get_subnet_with_id(self.subnet_id);
+        match subnet {
+            Some(subnet) => {
+                let bytes = threshold_sig_public_key_to_der(subnet.root_key()).unwrap();
+                OpOut::Bytes(bytes)
+            }
+            None => OpOut::Error(PocketIcError::SubnetNotFound(self.subnet_id.get().0)),
+        }
     }
 
     fn id(&self) -> OpId {
-        OpId("root_key".to_string())
+        OpId(format!("root_key_{}", self.subnet_id))
     }
 }
 
@@ -135,7 +447,9 @@ impl Operation for Tick {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        pic.subnet.tick();
+        for subnet in pic.subnets.read().unwrap().values() {
+            subnet.execute_round();
+        }
         OpOut::NoOutput
     }
 
@@ -151,14 +465,54 @@ impl Operation for ExecuteIngressMessage {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        pic.subnet
-            .execute_ingress_as(
-                self.0.sender,
-                self.0.canister_id,
-                self.0.method,
-                self.0.payload,
-            )
-            .into()
+        let canister_call = self.0.clone();
+        let subnet = route_call(pic, canister_call);
+        match subnet {
+            Ok(subnet) => {
+                match subnet.submit_ingress_as(
+                    self.0.sender,
+                    self.0.canister_id,
+                    self.0.method,
+                    self.0.payload,
+                ) {
+                    Err(e) => {
+                        eprintln!("Failed to submit ingress message: {}", e);
+                        OpOut::Error(PocketIcError::BadIngressMessage(e))
+                    }
+                    Ok(msg_id) => {
+                        // Now, we execute on all subnets until we have the result
+                        let max_rounds = 100;
+                        for _i in 0..max_rounds {
+                            for subnet_ in pic.subnets.read().unwrap().values() {
+                                subnet_.execute_round();
+                            }
+                            match subnet.ingress_status(&msg_id) {
+                                IngressStatus::Known {
+                                    state: IngressState::Completed(result),
+                                    ..
+                                } => return Ok(result).into(),
+                                IngressStatus::Known {
+                                    state: IngressState::Failed(error),
+                                    ..
+                                } => {
+                                    return Err::<
+                                        ic_state_machine_tests::WasmResult,
+                                        ic_state_machine_tests::UserError,
+                                    >(error)
+                                    .into()
+                                }
+                                _ => {}
+                            }
+                        }
+                        panic!(
+                            "Failed to answer to ingress {} after {} xnet rounds.",
+                            msg_id, max_rounds
+                        );
+                    }
+                }
+            }
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
+        }
     }
 
     fn id(&self) -> OpId {
@@ -172,14 +526,19 @@ pub struct Query(pub CanisterCall);
 impl Operation for Query {
     type TargetType = PocketIc;
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        pic.subnet
-            .query_as(
-                self.0.sender,
-                self.0.canister_id,
-                self.0.method,
-                self.0.payload,
-            )
-            .into()
+        let canister_call = self.0.clone();
+        let subnet = route_call(pic, canister_call);
+        match subnet {
+            Ok(subnet) => subnet
+                .query_as(
+                    self.0.sender,
+                    self.0.canister_id,
+                    self.0.method,
+                    self.0.payload,
+                )
+                .into(),
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
+        }
     }
 
     fn id(&self) -> OpId {
@@ -188,8 +547,16 @@ impl Operation for Query {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
+pub enum EffectivePrincipal {
+    None,
+    SubnetId(SubnetId),
+    CanisterId(CanisterId),
+}
+
+#[derive(Clone, Debug)]
 pub struct CanisterCall {
+    pub effective_principal: EffectivePrincipal,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub method: String,
@@ -204,24 +571,57 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             canister_id,
             method,
             payload,
+            effective_principal,
         }: RawCanisterCall,
     ) -> Result<Self, Self::Error> {
-        match PrincipalId::try_from(sender) {
-            Ok(sender) => match CanisterId::try_from(canister_id) {
-                Ok(canister_id) => Ok(Self {
-                    sender,
-                    canister_id,
-                    method,
-                    payload,
-                }),
-                Err(_) => Err(ConversionError {
+        let effective_principal = match effective_principal {
+            RawEffectivePrincipal::SubnetId(subnet_id) => {
+                let sid = PrincipalId::try_from(subnet_id);
+                match sid {
+                    Ok(sid) => EffectivePrincipal::SubnetId(SubnetId::new(sid)),
+                    Err(_) => {
+                        return Err(ConversionError {
+                            message: "Bad subnet id".to_string(),
+                        })
+                    }
+                }
+            }
+            RawEffectivePrincipal::CanisterId(canister_id) => {
+                match CanisterId::try_from(canister_id) {
+                    Ok(canister_id) => EffectivePrincipal::CanisterId(canister_id),
+                    Err(_) => {
+                        return Err(ConversionError {
+                            message: "Bad effective canister id".to_string(),
+                        })
+                    }
+                }
+            }
+            RawEffectivePrincipal::None => EffectivePrincipal::None,
+        };
+        let sender = match PrincipalId::try_from(sender) {
+            Ok(sender) => sender,
+            Err(_) => {
+                return Err(ConversionError {
+                    message: "Bad sender principal".to_string(),
+                })
+            }
+        };
+        let canister_id = match CanisterId::try_from(canister_id) {
+            Ok(canister_id) => canister_id,
+            Err(_) => {
+                return Err(ConversionError {
                     message: "Bad canister id".to_string(),
-                }),
-            },
-            Err(_) => Err(ConversionError {
-                message: "Bad principal id".to_string(),
-            }),
-        }
+                })
+            }
+        };
+
+        Ok(CanisterCall {
+            effective_principal,
+            sender,
+            canister_id,
+            method,
+            payload,
+        })
     }
 }
 
@@ -231,8 +631,8 @@ impl CanisterCall {
         hasher.write(&self.payload);
         let hash = Digest(hasher.finish());
         OpId(format!(
-            "call({},{},{},{})",
-            self.sender, self.canister_id, self.method, hash
+            "call({:?},{},{},{},{})",
+            self.effective_principal, self.sender, self.canister_id, self.method, hash
         ))
     }
 }
@@ -290,7 +690,8 @@ impl Operation for SetStableMemory {
     type TargetType = PocketIc;
     fn compute(self, pocket_ic: &mut Self::TargetType) -> OpOut {
         pocket_ic
-            .subnet
+            .try_route_canister(self.canister_id)
+            .unwrap()
             .set_stable_memory(self.canister_id, &self.data);
         OpOut::NoOutput
     }
@@ -315,7 +716,12 @@ pub struct GetStableMemory {
 impl Operation for GetStableMemory {
     type TargetType = PocketIc;
     fn compute(self, pocket_ic: &mut Self::TargetType) -> OpOut {
-        OpOut::Bytes(pocket_ic.subnet.stable_memory(self.canister_id))
+        OpOut::Bytes(
+            pocket_ic
+                .try_route_canister(self.canister_id)
+                .unwrap()
+                .stable_memory(self.canister_id),
+        )
     }
 
     fn id(&self) -> OpId {
@@ -331,7 +737,10 @@ pub struct GetCyclesBalance {
 impl Operation for GetCyclesBalance {
     type TargetType = PocketIc;
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        let result = pic.subnet.cycle_balance(self.canister_id);
+        let result = pic
+            .try_route_canister(self.canister_id)
+            .unwrap()
+            .cycle_balance(self.canister_id);
         OpOut::Cycles(result)
     }
 
@@ -341,25 +750,28 @@ impl Operation for GetCyclesBalance {
 }
 
 #[derive(Clone, Debug)]
-pub struct CanisterExists {
+pub struct GetSubnet {
     pub canister_id: CanisterId,
 }
 
-impl Operation for CanisterExists {
+impl Operation for GetSubnet {
     type TargetType = PocketIc;
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        let result = pic
-            .subnet
-            .state_manager
-            .get_latest_state()
-            .take()
-            .canister_states
-            .contains_key(&self.canister_id);
-        OpOut::Bool(result)
+        let sm = pic.try_route_canister(self.canister_id);
+        match sm {
+            Some(sm) => {
+                if sm.canister_exists(self.canister_id) {
+                    OpOut::SubnetId(sm.get_subnet_id())
+                } else {
+                    OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id))
+                }
+            }
+            None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
+        }
     }
 
     fn id(&self) -> OpId {
-        OpId(format!("canister_exists({})", self.canister_id))
+        OpId(format!("get_subnet({})", self.canister_id))
     }
 }
 
@@ -398,50 +810,15 @@ impl Operation for AddCycles {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        let result = pic.subnet.add_cycles(self.canister_id, self.amount);
+        let result = pic
+            .try_route_canister(self.canister_id)
+            .unwrap()
+            .add_cycles(self.canister_id, self.amount);
         OpOut::Cycles(result)
     }
 
     fn id(&self) -> OpId {
         OpId(format!("add_cycles({},{})", self.canister_id, self.amount))
-    }
-}
-
-/// Writes a checkpoint directory to the disk.
-/// This directory is saved in the state graph, so a later
-/// call could copy the directory and name it -> named checkpoints.
-/// This operation, however, is only concerned with persisting the
-/// subnet state to disk and storing the directory in the graph.
-#[derive(Clone, Debug, Copy)]
-pub struct Checkpoint;
-
-impl Operation for Checkpoint {
-    type TargetType = PocketIc;
-    fn compute(self, pocket_ic: &mut Self::TargetType) -> OpOut {
-        pocket_ic.subnet.set_checkpoints_enabled(true);
-        pocket_ic.subnet.tick();
-        pocket_ic.subnet.set_checkpoints_enabled(false);
-
-        let state_dir = pocket_ic.subnet.state_dir.path();
-        // find most recent checkpoint in the state_dir/checkpoints/ directory
-        let checkpoint_dir = std::fs::read_dir(state_dir)
-            .expect("Failed to read state dir")
-            .max_by_key(|dir| {
-                dir.as_ref()
-                    .unwrap()
-                    .metadata()
-                    .unwrap()
-                    .modified()
-                    .unwrap()
-            })
-            .unwrap()
-            .unwrap()
-            .path();
-        OpOut::Checkpoint(checkpoint_dir.to_str().unwrap().to_string())
-    }
-
-    fn id(&self) -> OpId {
-        OpId("checkpoint".to_string())
     }
 }
 
@@ -477,7 +854,8 @@ impl Operation for InstallCanisterAsController {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        pic.subnet
+        pic.try_route_canister(self.canister_id)
+            .unwrap()
             .install_wasm_in_mode(self.canister_id, self.mode, self.module, self.payload)
             .into()
     }
@@ -490,23 +868,28 @@ impl Operation for InstallCanisterAsController {
 // ================================================================================================================= //
 // Helpers
 
-pub fn create_state_machine(state_dir: Option<TempDir>, runtime: Arc<Runtime>) -> StateMachine {
-    let hypervisor_config = execution_environment::Config {
-        default_provisional_cycles_balance: Cycles::new(0),
-        ..Default::default()
-    };
-    let config = StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
-    if let Some(state_dir) = state_dir {
-        StateMachineBuilder::new()
-            .with_config(Some(config))
-            .with_state_dir(state_dir)
-            .with_runtime(runtime)
-            .build()
-    } else {
-        StateMachineBuilder::new()
-            .with_config(Some(config))
-            .with_runtime(runtime)
-            .build()
+fn route_call(
+    pic: &mut PocketIc,
+    canister_call: CanisterCall,
+) -> Result<Arc<StateMachine>, String> {
+    let effective_principal = canister_call.effective_principal.clone();
+    match effective_principal {
+        EffectivePrincipal::SubnetId(subnet_id) => pic
+            .get_subnet_with_id(subnet_id)
+            .ok_or(format!("Subnet with ID {subnet_id} not found")),
+        EffectivePrincipal::CanisterId(effective_canister_id) => {
+            pic.try_route_canister(effective_canister_id).ok_or(format!(
+                "Desired canister ID {effective_canister_id} not contained on any subnet"
+            ))
+        }
+        EffectivePrincipal::None => {
+            if canister_call.canister_id == CanisterId::ic_00() {
+                Ok(pic.random_subnet())
+            } else {
+                pic.try_route_canister(canister_call.canister_id)
+                    .ok_or("Canister not found".into())
+            }
+        }
     }
 }
 
@@ -521,21 +904,45 @@ fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pocket_ic::WasmResult;
 
     #[test]
     fn state_label_test() {
+        // State label changes.
         let pic = PocketIc::default();
-
         let state0 = pic.get_state_label();
-        let canister_id = pic.subnet.create_canister(None);
+        let canister_id = pic.any_subnet().create_canister(None);
+        pic.any_subnet().add_cycles(canister_id, 2_000_000_000_000);
         let state1 = pic.get_state_label();
-        let _ = pic.subnet.delete_canister(canister_id);
+        pic.any_subnet().stop_canister(canister_id).unwrap();
+        pic.any_subnet().delete_canister(canister_id).unwrap();
         let state2 = pic.get_state_label();
 
-        assert!(state0 != state1);
-        assert!(state1 != state2);
-        assert!(state0 != state2);
+        assert_ne!(state0, state1);
+        assert_ne!(state1, state2);
+        assert_ne!(state0, state2);
+
+        // Empyt IC.
+        let pic = PocketIc::default();
+        let state1 = pic.get_state_label();
+        let pic = PocketIc::default();
+        let state2 = pic.get_state_label();
+
+        assert_eq!(state1, state2);
+
+        // Two ICs with the same state.
+        let pic = PocketIc::default();
+        let cid = pic.any_subnet().create_canister(None);
+        pic.any_subnet().add_cycles(cid, 2_000_000_000_000);
+        pic.any_subnet().stop_canister(cid).unwrap();
+        let state3 = pic.get_state_label();
+
+        let pic = PocketIc::default();
+        let cid = pic.any_subnet().create_canister(None);
+        pic.any_subnet().add_cycles(cid, 2_000_000_000_000);
+        pic.any_subnet().stop_canister(cid).unwrap();
+        let state4 = pic.get_state_label();
+
+        assert_eq!(state3, state4);
     }
 
     #[test]
@@ -553,69 +960,59 @@ mod tests {
     #[test]
     fn test_execute_message() {
         let (mut pic, canister_id) = new_pic_counter_installed();
+        let amount: u128 = 20_000_000_000_000;
+        let add_cycles = AddCycles {
+            canister_id,
+            amount,
+        };
+        add_cycles.compute(&mut pic);
 
         let update = ExecuteIngressMessage(CanisterCall {
             sender: PrincipalId::new_anonymous(),
             canister_id,
             method: "write".into(),
             payload: vec![],
+            effective_principal: EffectivePrincipal::None,
         });
 
         compute_assert_state_change(&mut pic, update);
     }
 
     #[test]
-    fn test_query() {
-        let (mut pic, canister_id) = new_pic_counter_installed();
-        let (query, update) = query_update_constructors(canister_id);
-
-        let OpOut::CanisterResult(Ok(WasmResult::Reply(initial_bytes))) =
-            compute_assert_state_immutable(&mut pic, query("read"))
-        else {
-            unreachable!()
-        };
-        compute_assert_state_change(&mut pic, update("write"));
-        let OpOut::CanisterResult(Ok(WasmResult::Reply(updated_bytes))) =
-            compute_assert_state_immutable(&mut pic, query("read"))
-        else {
-            unreachable!()
-        };
-
-        assert_eq!(updated_bytes[0], initial_bytes[0] + 1);
-    }
-
-    #[test]
-    fn test_cycles() {
+    fn test_cycles_burn_app_subnet() {
         let (mut pic, canister_id) = new_pic_counter_installed();
         let (_, update) = query_update_constructors(canister_id);
-
         let cycles_balance = GetCyclesBalance { canister_id };
-        let OpOut::Cycles(orig_balance) =
+        let OpOut::Cycles(initial_balance) =
             compute_assert_state_immutable(&mut pic, cycles_balance.clone())
         else {
             unreachable!()
         };
         compute_assert_state_change(&mut pic, update("write"));
-        let OpOut::Cycles(changed_balance) =
-            compute_assert_state_immutable(&mut pic, cycles_balance)
+        let OpOut::Cycles(new_balance) = compute_assert_state_immutable(&mut pic, cycles_balance)
         else {
             unreachable!()
         };
+        assert_ne!(initial_balance, new_balance);
+    }
 
-        // nothing is charged on a system subnet
-        assert_eq!(changed_balance, orig_balance);
+    #[test]
+    fn test_cycles_burn_system_subnet() {
+        let (mut pic, canister_id) = new_pic_counter_installed_system_subnet();
+        let (_, update) = query_update_constructors(canister_id);
 
-        let amount: u128 = 20_000_000_000_000;
-        let add_cycles = AddCycles {
-            canister_id,
-            amount,
-        };
-
-        let OpOut::Cycles(final_balance) = compute_assert_state_change(&mut pic, add_cycles) else {
+        let cycles_balance = GetCyclesBalance { canister_id };
+        let OpOut::Cycles(initial_balance) =
+            compute_assert_state_immutable(&mut pic, cycles_balance.clone())
+        else {
             unreachable!()
         };
-
-        assert_eq!(final_balance, changed_balance + amount);
+        compute_assert_state_change(&mut pic, update("write"));
+        let OpOut::Cycles(new_balance) = compute_assert_state_immutable(&mut pic, cycles_balance)
+        else {
+            unreachable!()
+        };
+        assert_eq!(initial_balance, new_balance);
     }
 
     fn query_update_constructors(
@@ -629,6 +1026,7 @@ mod tests {
             canister_id,
             method: method.into(),
             payload: vec![],
+            effective_principal: EffectivePrincipal::None,
         };
 
         let update = move |m: &str| ExecuteIngressMessage(call(m));
@@ -639,7 +1037,37 @@ mod tests {
 
     fn new_pic_counter_installed() -> (PocketIc, CanisterId) {
         let mut pic = PocketIc::default();
-        let canister_id = pic.subnet.create_canister(None);
+        let canister_id = pic.any_subnet().create_canister(None);
+
+        let amount: u128 = 20_000_000_000_000;
+        let add_cycles = AddCycles {
+            canister_id,
+            amount,
+        };
+        add_cycles.compute(&mut pic);
+
+        let module = counter_wasm();
+        let install_op = InstallCanisterAsController {
+            canister_id,
+            mode: CanisterInstallMode::Install,
+            module,
+            payload: vec![],
+        };
+
+        compute_assert_state_change(&mut pic, install_op);
+
+        (pic, canister_id)
+    }
+
+    fn new_pic_counter_installed_system_subnet() -> (PocketIc, CanisterId) {
+        let mut pic = PocketIc::new(
+            Runtime::new().unwrap().into(),
+            SubnetConfigSet {
+                ii: true,
+                ..Default::default()
+            },
+        );
+        let canister_id = pic.any_subnet().create_canister(None);
 
         let module = counter_wasm();
         let install_op = InstallCanisterAsController {
@@ -661,7 +1089,7 @@ mod tests {
         let state0 = pic.get_state_label();
         let res = op.compute(pic);
         let state1 = pic.get_state_label();
-        assert!(state0 != state1);
+        assert_ne!(state0, state1);
         res
     }
 

@@ -78,6 +78,8 @@ const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 const METRIC_TIMED_OUT_REQUESTS_TOTAL: &str = "mr_timed_out_requests_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
+const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
+const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
 
 const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
     "mr_wasm_custom_sections_memory_usage_bytes";
@@ -244,6 +246,7 @@ impl LatencyMetrics {
 }
 
 /// Metrics for [`MessageRoutingImpl`].
+#[derive(Clone)]
 pub(crate) struct MessageRoutingMetrics {
     /// Number of `deliver_batch()` calls, by status.
     deliver_batch_count: IntCounterVec,
@@ -260,6 +263,10 @@ pub(crate) struct MessageRoutingMetrics {
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     pub subnet_split_height: IntGaugeVec,
+    /// Number of blocks proposed.
+    pub blocks_proposed_total: IntCounter,
+    /// Number of blocks not proposed.
+    pub blocks_not_proposed_total: IntCounter,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -336,7 +343,14 @@ impl MessageRoutingMetrics {
                 "Height at which the subnet last split (if during the lifetime of this replica process).",
                 &["split_from"],
             ),
-
+            blocks_proposed_total: metrics_registry.int_counter(
+                BLOCKS_PROPOSED_TOTAL,
+                "Successfully proposed blocks (blocks that became part of the blockchain)."
+            ),
+            blocks_not_proposed_total: metrics_registry.int_counter(
+                BLOCKS_NOT_PROPOSED_TOTAL,
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R)."
+            ),
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
                 "canister_memory_usage_bytes",
                 "Total memory footprint of all canisters on this subnet.",
@@ -403,7 +417,7 @@ pub struct MessageRoutingImpl {
     last_seen_batch: RwLock<Height>,
     batch_sender: std::sync::mpsc::SyncSender<Batch>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    metrics: Arc<MessageRoutingMetrics>,
+    metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
     // Handle to the batch processor thread.  Stored so that in `drop`, we can wait
     // for it to exit. It must be declared after `batch_sender` so that the
@@ -424,7 +438,7 @@ struct BatchProcessorImpl {
     state_machine: Box<dyn StateMachine>,
     registry: Arc<dyn RegistryClient>,
     bitcoin_config: BitcoinConfig,
-    metrics: Arc<MessageRoutingMetrics>,
+    metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
@@ -480,18 +494,60 @@ pub(crate) type NodePublicKeys = BTreeMap<NodeId, Vec<u8>>;
 impl BatchProcessorImpl {
     fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        state_machine: Box<dyn StateMachine>,
-        registry: Arc<dyn RegistryClient>,
-        bitcoin_config: BitcoinConfig,
-        metrics: Arc<MessageRoutingMetrics>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        hypervisor_config: HypervisorConfig,
+        cycles_account_manager: Arc<CyclesAccountManager>,
+        subnet_id: SubnetId,
+        metrics: MessageRoutingMetrics,
+        metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
+        registry: Arc<dyn RegistryClient>,
         malicious_flags: MaliciousFlags,
-    ) -> Self {
+    ) -> BatchProcessorImpl {
+        let time_in_stream_metrics = Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
+            metrics_registry,
+        )));
+        let stream_handler = Box::new(routing::stream_handler::StreamHandlerImpl::new(
+            subnet_id,
+            hypervisor_config.clone(),
+            metrics_registry,
+            Arc::clone(&time_in_stream_metrics),
+            log.clone(),
+        ));
+        let vsr = Box::new(scheduling::valid_set_rule::ValidSetRuleImpl::new(
+            ingress_history_writer,
+            cycles_account_manager,
+            metrics_registry,
+            subnet_id,
+            log.clone(),
+        ));
+        let demux = Box::new(routing::demux::DemuxImpl::new(
+            vsr,
+            stream_handler,
+            certified_stream_store,
+            log.clone(),
+        ));
+        let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
+            subnet_id,
+            metrics_registry,
+            time_in_stream_metrics,
+            log.clone(),
+        ));
+        let state_machine = Box::new(StateMachineImpl::new(
+            scheduler,
+            demux,
+            stream_builder,
+            log.clone(),
+            metrics.clone(),
+        ));
+
         Self {
             state_manager,
             state_machine,
             registry,
-            bitcoin_config,
+            bitcoin_config: hypervisor_config.bitcoin,
             metrics,
             log,
             malicious_flags,
@@ -914,6 +970,15 @@ impl BatchProcessor for BatchProcessorImpl {
         let (network_topology, subnet_features, registry_execution_settings, node_public_keys) =
             self.read_registry(registry_version, state.metadata.own_subnet_id);
 
+        self.metrics.blocks_proposed_total.inc();
+        self.metrics
+            .blocks_not_proposed_total
+            .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
+        state
+            .metadata
+            .blockmaker_metrics_time_series
+            .observe(batch.time, &batch.blockmaker_metrics);
+
         let mut state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
@@ -1055,7 +1120,7 @@ impl MessageRoutingImpl {
     fn from_batch_processor(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         batch_processor: Box<dyn BatchProcessor>,
-        metrics: Arc<MessageRoutingMetrics>,
+        metrics: MessageRoutingMetrics,
         log: ReplicaLogger,
     ) -> Self {
         let (batch_sender, batch_receiver) = sync_channel(BATCH_QUEUE_BUFFER_SIZE);
@@ -1097,7 +1162,8 @@ impl MessageRoutingImpl {
         registry: Arc<dyn RegistryClient>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
-        let (batch_processor, metrics) = Self::new_components(
+        let metrics = MessageRoutingMetrics::new(metrics_registry);
+        let batch_processor = Box::new(BatchProcessorImpl::new(
             state_manager.clone(),
             certified_stream_store,
             ingress_history_writer,
@@ -1105,79 +1171,14 @@ impl MessageRoutingImpl {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
+            metrics.clone(),
             metrics_registry,
             log.clone(),
             registry,
             malicious_flags,
-        );
-
-        let batch_processor = Box::new(batch_processor);
-        Self::from_batch_processor(state_manager, batch_processor, Arc::clone(&metrics), log)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn new_components(
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
-        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
-        hypervisor_config: HypervisorConfig,
-        cycles_account_manager: Arc<CyclesAccountManager>,
-        subnet_id: SubnetId,
-        metrics_registry: &MetricsRegistry,
-        log: ReplicaLogger,
-        registry: Arc<dyn RegistryClient>,
-        malicious_flags: MaliciousFlags,
-    ) -> (BatchProcessorImpl, Arc<MessageRoutingMetrics>) {
-        let time_in_stream_metrics = Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
-            metrics_registry,
-        )));
-        let stream_handler = Box::new(routing::stream_handler::StreamHandlerImpl::new(
-            subnet_id,
-            hypervisor_config.clone(),
-            metrics_registry,
-            Arc::clone(&time_in_stream_metrics),
-            log.clone(),
-        ));
-        let vsr = Box::new(scheduling::valid_set_rule::ValidSetRuleImpl::new(
-            ingress_history_writer,
-            cycles_account_manager,
-            metrics_registry,
-            subnet_id,
-            log.clone(),
-        ));
-        let demux = Box::new(routing::demux::DemuxImpl::new(
-            vsr,
-            stream_handler,
-            certified_stream_store,
-            log.clone(),
-        ));
-        let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
-            subnet_id,
-            metrics_registry,
-            time_in_stream_metrics,
-            log.clone(),
-        ));
-        let metrics = Arc::new(MessageRoutingMetrics::new(metrics_registry));
-        let state_machine = Box::new(StateMachineImpl::new(
-            scheduler,
-            demux,
-            stream_builder,
-            log.clone(),
-            Arc::clone(&metrics),
         ));
 
-        let batch_processor = BatchProcessorImpl::new(
-            state_manager.clone(),
-            state_machine,
-            registry,
-            hypervisor_config.bitcoin,
-            Arc::clone(&metrics),
-            log.clone(),
-            malicious_flags,
-        );
-
-        (batch_processor, metrics)
+        Self::from_batch_processor(state_manager, batch_processor, metrics, log)
     }
 
     /// Creates a new `MessageRoutingImpl` for the given subnet using a fake
@@ -1204,14 +1205,9 @@ impl MessageRoutingImpl {
             Arc::clone(&state_manager),
             ingress_history_writer,
         );
-        let metrics = Arc::new(MessageRoutingMetrics::new(metrics_registry));
+        let metrics = MessageRoutingMetrics::new(metrics_registry);
 
-        Self::from_batch_processor(
-            state_manager,
-            Box::new(batch_processor),
-            Arc::clone(&metrics),
-            log,
-        )
+        Self::from_batch_processor(state_manager, Box::new(batch_processor), metrics, log)
     }
 
     fn inc_deliver_batch(&self, status: &str) {
@@ -1302,7 +1298,9 @@ impl SyncMessageRouting {
         registry: Arc<dyn RegistryClient>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
-        let (batch_processor, _metrics) = MessageRoutingImpl::new_components(
+        let metrics = MessageRoutingMetrics::new(metrics_registry);
+
+        let batch_processor = BatchProcessorImpl::new(
             state_manager.clone(),
             certified_stream_store,
             ingress_history_writer,
@@ -1310,12 +1308,12 @@ impl SyncMessageRouting {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
+            metrics,
             metrics_registry,
             log.clone(),
             registry,
             malicious_flags,
         );
-
         let batch_processor = Arc::new(Mutex::new(batch_processor));
 
         Self {

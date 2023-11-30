@@ -42,7 +42,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{p2p, Height, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
@@ -128,7 +128,7 @@ pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(NUMBER_OF_NODES),
         )
-        .with_unassigned_nodes(NUMBER_OF_NODES as i32)
+        .with_unassigned_nodes(NUMBER_OF_NODES)
         .setup_and_start(&test_env)
         .expect("Could not start IC!");
     test_env.topology_snapshot().subnets().for_each(|subnet| {
@@ -173,7 +173,7 @@ pub fn config(test_env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(NUMBER_OF_NODES),
         )
-        .with_unassigned_nodes(NUMBER_OF_NODES as i32)
+        .with_unassigned_nodes(NUMBER_OF_NODES)
         .setup_and_start(&test_env)
         .expect("Could not start IC!");
     test_env.topology_snapshot().subnets().for_each(|subnet| {
@@ -210,10 +210,11 @@ fn scale_cycles(cycles: Cycles) -> Cycles {
     }
 }
 
-pub(crate) async fn get_public_key_with_logger(
+pub(crate) async fn get_public_key_with_retries(
     key_id: EcdsaKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
+    retries: u64,
 ) -> Result<VerifyingKey, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
@@ -238,9 +239,9 @@ pub(crate) async fn get_public_key_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 20 {
+                if count < retries {
                     debug!(logger, "ecdsa_public_key returns {}, try again...", err);
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
                 } else {
                     return Err(err);
                 }
@@ -249,6 +250,14 @@ pub(crate) async fn get_public_key_with_logger(
     };
     info!(logger, "ecdsa_public_key returns {:?}", public_key);
     Ok(VerifyingKey::from_sec1_bytes(&public_key).expect("Response is not a valid public key"))
+}
+
+pub(crate) async fn get_public_key_with_logger(
+    key_id: EcdsaKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+) -> Result<VerifyingKey, AgentError> {
+    get_public_key_with_retries(key_id, msg_can, logger, 10).await
 }
 
 pub(crate) async fn execute_update_subnet_proposal(
@@ -376,7 +385,7 @@ pub(crate) async fn add_ecdsa_key_with_timeout_and_rotation_period(
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
         ecdsa_config: Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
+            quadruples_to_create_in_advance: 5,
             key_ids: vec![key_id],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
@@ -429,7 +438,7 @@ pub(crate) async fn create_new_subnet_with_keys(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
-        ingress_bytes_per_block_soft_cap: config.ingress_bytes_per_block_soft_cap,
+        ingress_bytes_per_block_soft_cap: Default::default(),
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
@@ -454,7 +463,7 @@ pub(crate) async fn create_new_subnet_with_keys(
         max_instructions_per_message: scheduler.max_instructions_per_message.get(),
         max_instructions_per_round: scheduler.max_instructions_per_round.get(),
         max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
-        features: SubnetFeatures::default(),
+        features: Default::default(),
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],

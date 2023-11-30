@@ -10,8 +10,9 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/tls_interfaces",
+    "//rs/protobuf",
     "//rs/types/types",
-    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:mockall",
     "@crate_index//:serde_bytes",
 ]
 

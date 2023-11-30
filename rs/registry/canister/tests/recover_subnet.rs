@@ -1,6 +1,6 @@
 use candid::Encode;
 use canister_test::{Canister, Runtime};
-use ic_base_types::{subnet_id_into_protobuf, PrincipalId, SubnetId};
+use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::Config;
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
@@ -33,14 +33,25 @@ use registry_canister::{
         do_recover_subnet::RecoverSubnetPayload,
     },
 };
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 mod common;
-use common::test_helpers::{
-    dummy_cup_for_subnet, get_cup_contents, get_subnet_holding_ecdsa_keys, get_subnet_record,
-    prepare_registry_with_nodes, set_up_universal_canister_as_governance,
-    setup_registry_synced_with_fake_client, wait_for_ecdsa_setup,
+use crate::common::test_helpers::{
+    dummy_cup_for_subnet, prepare_registry_with_nodes_and_valid_pks,
 };
+use common::test_helpers::{
+    get_cup_contents, get_subnet_holding_ecdsa_keys, get_subnet_record,
+    set_up_universal_canister_as_governance, setup_registry_synced_with_fake_client,
+    wait_for_ecdsa_setup,
+};
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
+use ic_nns_test_utils::registry::generate_nidkg_initial_transcript;
+use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
 
 /// Test that calling "recover_subnet" produces the expected Registry mutations,
 /// namely that a subnet's `CatchUpPackageContents` and node membership are
@@ -198,7 +209,8 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
 
         let runtime = Runtime::Local(local_runtime);
         // get some nodes for our tests
-        let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5, 0);
+        let (init_mutate, node_ids_and_valid_pks) = prepare_registry_with_nodes_and_valid_pks(5, 0);
+        let mut node_ids: Vec<NodeId> = node_ids_and_valid_pks.keys().cloned().collect();
 
         let key_1 = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
@@ -272,6 +284,9 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
             preconditions: vec![],
         };
 
+        let (threshold_signing_pk, cup_contents) =
+            subnet_threshold_sig_pubkey_and_cup_contents(node_ids_and_valid_pks);
+
         // Add the subnet we are recovering holding requested keys
         // Note, because these mutations are also synced with underlying IC registry, they
         // need a CUP
@@ -286,11 +301,11 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
             ),
             insert(
                 make_crypto_threshold_signing_pubkey_key(subnet_to_recover_subnet_id).as_bytes(),
-                encode_or_panic(&vec![]),
+                encode_or_panic(&threshold_signing_pk),
             ),
             insert(
                 make_catch_up_package_contents_key(subnet_to_recover_subnet_id).as_bytes(),
-                encode_or_panic(&dummy_cup_for_subnet(subnet_to_recover_nodes)),
+                encode_or_panic(&cup_contents),
             ),
         ];
 
@@ -404,7 +419,8 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
 
         let runtime = Runtime::Local(local_runtime);
         // get some nodes for our tests
-        let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5, 0);
+        let (init_mutate, node_ids_and_valid_pks) = prepare_registry_with_nodes_and_valid_pks(5, 0);
+        let mut node_ids: Vec<NodeId> = node_ids_and_valid_pks.keys().cloned().collect();
 
         let key_1 = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
@@ -466,6 +482,9 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
             preconditions: vec![],
         };
 
+        let (threshold_signing_pk, cup_contents) =
+            subnet_threshold_sig_pubkey_and_cup_contents(node_ids_and_valid_pks);
+
         // Add the subnet we are recovering holding requested keys
         // Note, because these mutations are also synced with underlying IC registry, they
         // need a CUP
@@ -480,11 +499,11 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
             ),
             insert(
                 make_crypto_threshold_signing_pubkey_key(subnet_to_recover_subnet_id).as_bytes(),
-                encode_or_panic(&vec![]),
+                encode_or_panic(&threshold_signing_pk),
             ),
             insert(
                 make_catch_up_package_contents_key(subnet_to_recover_subnet_id).as_bytes(),
-                encode_or_panic(&dummy_cup_for_subnet(subnet_to_recover_nodes)),
+                encode_or_panic(&cup_contents),
             ),
         ];
 
@@ -596,7 +615,8 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
 
         let runtime = Runtime::Local(local_runtime);
         // get some nodes for our tests
-        let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5, 0);
+        let (init_mutate, node_ids_and_valid_pks) = prepare_registry_with_nodes_and_valid_pks(5, 0);
+        let mut node_ids: Vec<NodeId> = node_ids_and_valid_pks.keys().cloned().collect();
 
         let subnet_to_recover_nodes = vec![node_ids.pop().unwrap()];
         let mut subnet_to_recover: SubnetRecord = CreateSubnetPayload {
@@ -634,6 +654,9 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
             .subnets
             .push(subnet_to_recover_subnet_id.get().into_vec());
 
+        let (threshold_signing_pk, cup_contents) =
+            subnet_threshold_sig_pubkey_and_cup_contents(node_ids_and_valid_pks);
+
         let mutations = vec![
             upsert(
                 make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
@@ -645,11 +668,11 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
             ),
             insert(
                 make_crypto_threshold_signing_pubkey_key(subnet_to_recover_subnet_id).as_bytes(),
-                encode_or_panic(&vec![]),
+                encode_or_panic(&threshold_signing_pk),
             ),
             insert(
                 make_catch_up_package_contents_key(subnet_to_recover_subnet_id).as_bytes(),
-                encode_or_panic(&dummy_cup_for_subnet(subnet_to_recover_nodes)),
+                encode_or_panic(&cup_contents),
             ),
         ];
 
@@ -705,4 +728,35 @@ pub async fn ecdsa_signing_subnet_list(
         make_ecdsa_signing_subnet_list_key(key_id).as_bytes(),
     )
     .await
+}
+
+fn subnet_threshold_sig_pubkey_and_cup_contents(
+    node_ids_and_valid_pks: BTreeMap<NodeId, ValidNodePublicKeys>,
+) -> (PublicKey, CatchUpPackageContents) {
+    let dealer_subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(187));
+    let registry_version = RegistryVersion::new(1);
+    let rng = &mut ReproducibleRng::new();
+
+    let receiver_keys: BTreeMap<NodeId, PublicKey> = node_ids_and_valid_pks
+        .iter()
+        .map(|(node_id, valid_pks)| (*node_id, valid_pks.dkg_dealing_encryption_key().clone()))
+        .collect();
+    let transcript = generate_nidkg_initial_transcript(
+        &receiver_keys,
+        dealer_subnet_id,
+        NiDkgTag::HighThreshold,
+        registry_version,
+        rng,
+    );
+    let threshold_signing_pk = PublicKey::from(
+        extract_threshold_sig_public_key(&transcript.internal_csp_transcript)
+            .expect("error extracting threshold sig public key from internal CSP transcript"),
+    );
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+            transcript,
+        )),
+        ..dummy_cup_for_subnet(node_ids_and_valid_pks.keys().cloned().collect())
+    };
+    (threshold_signing_pk, cup_contents)
 }

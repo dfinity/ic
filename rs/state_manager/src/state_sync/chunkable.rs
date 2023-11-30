@@ -580,7 +580,7 @@ impl IncompleteState {
             let src_file_index = manifest_old.chunk_table[*src_chunk_index].file_index;
             let entry = chunk_groups
                 .entry((dst_file_index as usize, src_file_index as usize))
-                .or_insert_with(Vec::new);
+                .or_default();
             entry.push((*dst_chunk_index, *src_chunk_index));
         }
 

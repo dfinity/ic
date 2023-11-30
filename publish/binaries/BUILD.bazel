@@ -3,10 +3,14 @@ load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 
 LINUX_ONLY = [
+    "metrics-proxy",
+    "sevctl",
     "snptool",
     "vsock_guest",
     "vsock_host",
     "guestos_tool",
+    "hostos_tool",
+    "setupos_tool",
 ]
 
 NO_STRIP = [
@@ -28,6 +32,7 @@ BINARIES = {
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
     "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
+    "hostos_tool": "//rs/ic_os/hostos_tool:hostos_tool",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
@@ -50,11 +55,15 @@ BINARIES = {
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
     "icx-proxy-dev": "//rs/boundary_node/icx_proxy:icx-proxy-dev",
     "log-vector-config-generator": "//rs/observability/log_vector_config_generator:log_vector_config_generator",
+    "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
+    "nfplot": "//rs/nervous_system/neurons_fund/nfplot",
     "orchestrator": "//rs/orchestrator",
     "prometheus-config-updater": "//rs/observability/prometheus_config_updater:prometheus_config_updater",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
+    "setupos_tool": "//rs/ic_os/setupos_tool:setupos_tool",
     "snptool": "//rs/ic_os/snptool:snptool",
     "sns": "//rs/sns/cli:sns",
+    "sns-audit": "//rs/sns/audit:sns-audit",
     "sns-test-feature": "//rs/sns/cli:sns--test_feature",
     "state-tool": "//rs/state_tool:state-tool",
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
@@ -90,6 +99,7 @@ BINARIES = {
             "//ic-os/boundary-guestos/envs:__subpackages__",
             "//ic-os/guestos/envs:__subpackages__",
             "//ic-os/hostos/envs:__subpackages__",
+            "//ic-os/setupos/envs:__subpackages__",
         ],
     )
     for name in BINARIES

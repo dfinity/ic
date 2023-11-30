@@ -1,11 +1,8 @@
 use super::*;
-use crate::{
-    pb::v1::{
-        governance::{followers_map::Followers, FollowersMap, Migration, Migrations},
-        settle_community_fund_participation, ExecuteNnsFunction, GovernanceError, Neuron,
-        OpenSnsTokenSwap, SettleCommunityFundParticipation,
-    },
-    storage::with_stable_neuron_store,
+use crate::pb::v1::{
+    governance::{followers_map::Followers, FollowersMap},
+    settle_community_fund_participation, ExecuteNnsFunction, GovernanceError, Neuron,
+    OpenSnsTokenSwap, SettleCommunityFundParticipation,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -13,12 +10,13 @@ use candid::{Decode, Encode};
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
-#[cfg(not(feature = "test"))]
+#[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+#[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
-#[cfg(not(feature = "test"))]
+#[cfg(feature = "test")]
 use ic_sns_init::pb::v1::{self as sns_init_pb};
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,
@@ -1088,13 +1086,12 @@ mod settle_neurons_fund_participation_request_tests {
     }
 } // end mod settle_neurons_fund_participation_request_tests
 
-#[cfg(not(feature = "test"))]
+#[cfg(feature = "test")]
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
+    use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
-    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1, IMAGE_2};
-
-    use super::*;
+    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
     //
@@ -1119,20 +1116,23 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         Some(original.as_ref().unwrap().basis_points.unwrap())
     }
 
+    #[cfg(feature = "test")]
     #[test]
     fn test_convert_from_valid() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
         // Step 2: Call the code under test.
-        let converted = SnsInitPayload::try_from(CREATE_SERVICE_NERVOUS_SYSTEM.clone()).unwrap();
+        let converted =
+            SnsInitPayload::try_from(CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone())
+                .unwrap();
 
         // Step 3: Inspect the result.
 
-        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .ledger_parameters
             .as_ref()
             .unwrap();
-        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .governance_parameters
             .as_ref()
             .unwrap();
@@ -1142,7 +1142,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             .as_ref()
             .unwrap();
 
-        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .swap_parameters
             .as_ref()
             .unwrap();
@@ -1172,11 +1172,12 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                     &original_governance_parameters.neuron_minimum_stake
                 ),
 
-                fallback_controller_principal_ids: CREATE_SERVICE_NERVOUS_SYSTEM
-                    .fallback_controller_principal_ids
-                    .iter()
-                    .map(|id| id.to_string())
-                    .collect(),
+                fallback_controller_principal_ids:
+                    CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                        .fallback_controller_principal_ids
+                        .iter()
+                        .map(|id| id.to_string())
+                        .collect(),
 
                 logo: Some(IMAGE_1.to_string(),),
                 url: Some("https://best.app".to_string(),),
@@ -1227,16 +1228,8 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
-                min_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
-                    None
-                } else {
-                    unwrap_tokens_e8s(&original_swap_parameters.minimum_icp)
-                },
-                max_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
-                    None
-                } else {
-                    unwrap_tokens_e8s(&original_swap_parameters.maximum_icp)
-                },
+                min_icp_e8s: None,
+                max_icp_e8s: None,
                 min_direct_participation_icp_e8s: unwrap_tokens_e8s(
                     &original_swap_parameters.minimum_direct_participation_icp
                 ),
@@ -1265,10 +1258,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             },
         );
 
-        let original_initial_token_distribution: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
-            .initial_token_distribution
-            .as_ref()
-            .unwrap();
+        let original_initial_token_distribution: &_ =
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .initial_token_distribution
+                .as_ref()
+                .unwrap();
         let original_developer_distribution: &_ = original_initial_token_distribution
             .developer_distribution
             .as_ref()
@@ -1336,13 +1330,14 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             ),
         );
 
-        let original_neuron_basket_construction_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
-            .swap_parameters
-            .as_ref()
-            .unwrap()
-            .neuron_basket_construction_parameters
-            .as_ref()
-            .unwrap();
+        let original_neuron_basket_construction_parameters =
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .swap_parameters
+                .as_ref()
+                .unwrap()
+                .neuron_basket_construction_parameters
+                .as_ref()
+                .unwrap();
 
         assert_eq!(
             converted.neuron_basket_construction_parameters.unwrap(),
@@ -1363,10 +1358,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         assert_eq!(converted.swap_due_timestamp_seconds, None);
     }
 
+    #[cfg(feature = "test")]
     #[test]
     fn test_convert_from_invalid() {
         // Step 1: Prepare the world: construct input.
-        let mut original = CREATE_SERVICE_NERVOUS_SYSTEM.clone();
+        let mut original = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
         let governance_parameters = original.governance_parameters.as_mut().unwrap();
 
         // Corrupt the data. The problem with this is that wait for quiet extension
@@ -1390,17 +1386,15 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     }
 }
 
-mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests {
+#[cfg(feature = "test")]
+mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
     use super::*;
     use crate::pb::v1::create_service_nervous_system::SwapParameters;
-    #[cfg(not(feature = "test"))]
     use ic_nervous_system_proto::pb::v1 as pb;
-    #[cfg(not(feature = "test"))]
-    use ic_sns_init::pb::v1::{sns_init_payload, NeuronsFundParticipants};
-    #[cfg(not(feature = "test"))]
-    use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
-    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM;
-    #[cfg(not(feature = "test"))]
+    use ic_sns_init::pb::v1::sns_init_payload;
+    use test_data::{
+        CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+    };
     use test_data::{IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
@@ -1411,54 +1405,44 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
     }
 
-    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_duration_seconds(original: &Option<pb::Duration>) -> Option<u64> {
         Some(original.as_ref().unwrap().seconds.unwrap())
     }
 
-    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_tokens_e8s(original: &Option<pb::Tokens>) -> Option<u64> {
         Some(original.as_ref().unwrap().e8s.unwrap())
     }
 
-    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_percentage_basis_points(original: &Option<pb::Percentage>) -> Option<u64> {
         Some(original.as_ref().unwrap().basis_points.unwrap())
     }
 
-    #[cfg(not(feature = "test"))]
     #[test]
     fn test_convert_from_valid() {
         // Step 1: Prepare the world. (In this case, trivial.)
+
+        use ic_sns_init::pb::v1::NeuronsFundParticipants;
+
+        use crate::governance::test_data::NEURONS_FUND_PARTICIPATION_CONSTRAINTS;
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
-        let neurons_fund_participants = vec![
-            CfParticipant {
-                hotkey_principal: PrincipalId::new_user_test_id(1).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(1, 10 * E8).unwrap()],
-            },
-            CfParticipant {
-                hotkey_principal: PrincipalId::new_user_test_id(2).to_string(),
-                cf_neurons: vec![
-                    CfNeuron::try_new(2, 11 * E8).unwrap(),
-                    CfNeuron::try_new(3, 12 * E8).unwrap(),
-                ],
-            },
-        ];
 
         let executed_create_service_nervous_system_proposal =
             ExecutedCreateServiceNervousSystemProposal {
                 current_timestamp_seconds,
-                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                    .clone(),
                 proposal_id,
-                neurons_fund_participants: neurons_fund_participants.clone(),
+                neurons_fund_participants: vec![],
                 random_swap_start_time: GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
                 },
-                neurons_fund_participation_constraints: None, // TODO[NNS1-2558]
+                neurons_fund_participation_constraints: Some(
+                    NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
+                ),
             };
 
         // Step 2: Call the code under test.
@@ -1467,11 +1451,11 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
 
         // Step 3: Inspect the result.
 
-        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .ledger_parameters
             .as_ref()
             .unwrap();
-        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .governance_parameters
             .as_ref()
             .unwrap();
@@ -1481,7 +1465,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             .as_ref()
             .unwrap();
 
-        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .swap_parameters
             .as_ref()
             .unwrap();
@@ -1509,11 +1493,12 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                     &original_governance_parameters.neuron_minimum_stake
                 ),
 
-                fallback_controller_principal_ids: CREATE_SERVICE_NERVOUS_SYSTEM
-                    .fallback_controller_principal_ids
-                    .iter()
-                    .map(|id| id.to_string())
-                    .collect(),
+                fallback_controller_principal_ids:
+                    CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                        .fallback_controller_principal_ids
+                        .iter()
+                        .map(|id| id.to_string())
+                        .collect(),
 
                 logo: Some(IMAGE_1.to_string(),),
                 url: Some("https://best.app".to_string(),),
@@ -1564,16 +1549,8 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
-                min_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
-                    None
-                } else {
-                    unwrap_tokens_e8s(&original_swap_parameters.minimum_icp)
-                },
-                max_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
-                    None
-                } else {
-                    unwrap_tokens_e8s(&original_swap_parameters.maximum_icp)
-                },
+                min_icp_e8s: None,
+                max_icp_e8s: None,
                 min_direct_participation_icp_e8s: unwrap_tokens_e8s(
                     &original_swap_parameters.minimum_direct_participation_icp
                 ),
@@ -1591,16 +1568,13 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
                 nns_proposal_id: Some(proposal_id),
                 neurons_fund_participants: Some(NeuronsFundParticipants {
-                    participants: neurons_fund_participants,
+                    participants: vec![],
                 }),
-                neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED {
-                    Some(true)
-                } else {
-                    None
-                },
+                neurons_fund_participation: Some(true),
 
-                // TODO[NNS1-2558]: Test these fields.
-                neurons_fund_participation_constraints: None,
+                neurons_fund_participation_constraints: Some(
+                    NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone()
+                ),
 
                 // We'll examine these later
                 initial_token_distribution: None,
@@ -1610,10 +1584,11 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             },
         );
 
-        let original_initial_token_distribution: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
-            .initial_token_distribution
-            .as_ref()
-            .unwrap();
+        let original_initial_token_distribution: &_ =
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .initial_token_distribution
+                .as_ref()
+                .unwrap();
         let original_developer_distribution: &_ = original_initial_token_distribution
             .developer_distribution
             .as_ref()
@@ -1681,13 +1656,14 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             ),
         );
 
-        let original_neuron_basket_construction_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
-            .swap_parameters
-            .as_ref()
-            .unwrap()
-            .neuron_basket_construction_parameters
-            .as_ref()
-            .unwrap();
+        let original_neuron_basket_construction_parameters =
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .swap_parameters
+                .as_ref()
+                .unwrap()
+                .neuron_basket_construction_parameters
+                .as_ref()
+                .unwrap();
 
         assert_eq!(
             converted.neuron_basket_construction_parameters.unwrap(),
@@ -1720,141 +1696,8 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         );
     }
 
-    // Test that if min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
-    // max_direct_participation_icp_e8s are Some, or vice versa, then the
-    // TryFrom<CreateServiceNervousSystem> for SnsInitPayload will "reconstruct"
-    // the missing fields.
-    #[test]
-    #[cfg(not(feature = "test"))]
-    fn test_convert_from_valid_swap_parameters_with_missing_max_direct_icp() {
-        // Step 1: Prepare the world. (In this case, trivial.)
-
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                minimum_icp: Some(pb::Tokens {
-                    e8s: Some(12_300_000_000),
-                }),
-                maximum_icp: Some(pb::Tokens {
-                    e8s: Some(25_000_000_000),
-                }),
-                minimum_direct_participation_icp: None,
-                maximum_direct_participation_icp: None,
-                neurons_fund_investment_icp: Some(pb::Tokens {
-                    e8s: Some(6_100_000_000),
-                }),
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let converted = SnsInitPayload::try_from(payload).unwrap();
-
-        // Step 3: Inspect the result.
-
-        assert_eq!(
-            converted.min_direct_participation_icp_e8s(),
-            12_300_000_000 - 6_100_000_000 // Subtract neurons_fund_investment_icp
-        );
-        assert_eq!(
-            converted.max_direct_participation_icp_e8s(),
-            25_000_000_000 - 6_100_000_000 // Subtract neurons_fund_investment_icp
-        );
-    }
-
-    // Test that if min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
-    // max_direct_participation_icp_e8s are Some, or vice versa, then the
-    // TryFrom<CreateServiceNervousSystem> for SnsInitPayload will "reconstruct"
-    // the missing fields.
-    #[test]
-    #[cfg(not(feature = "test"))]
-    fn test_convert_from_valid_swap_parameters_with_missing_max_icp() {
-        // Step 1: Prepare the world. (In this case, trivial.)
-
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                minimum_icp: None,
-                maximum_icp: None,
-                minimum_direct_participation_icp: Some(pb::Tokens {
-                    e8s: Some(12_300_000_000 - 6_100_000_000),
-                }),
-                maximum_direct_participation_icp: Some(pb::Tokens {
-                    e8s: Some(25_000_000_000 - 6_100_000_000),
-                }),
-                neurons_fund_investment_icp: Some(pb::Tokens {
-                    e8s: Some(6_100_000_000),
-                }),
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let converted = SnsInitPayload::try_from(payload).unwrap();
-
-        // Step 3: Inspect the result.
-
-        assert_eq!(
-            converted.min_icp_e8s(),
-            12_300_000_000 // Subtract neurons_fund_investment_icp
-        );
-        assert_eq!(
-            converted.max_icp_e8s(),
-            25_000_000_000 // Subtract neurons_fund_investment_icp
-        );
-    }
-
-    // TODO NNS1-2687: remove this test entirely
-    #[test]
-    #[cfg(not(feature = "test"))]
-    fn test_neurons_fund_participation_false_not_allowed() {
-        // Step 1: Prepare the world. (In this case, trivial.)
-
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                neurons_fund_participation: Some(false),
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let error = SnsInitPayload::try_from(payload).unwrap_err();
-
-        assert!(error.contains("neurons_fund_participation"));
-    }
-
-    // TODO NNS1-2687: remove this test entirely
-    #[test]
-    #[cfg(not(feature = "test"))]
-    fn test_neurons_fund_participation_true_not_allowed() {
-        // Step 1: Prepare the world. (In this case, trivial.)
-
-        // Step 2: Call the code under test.
-        let payload = CreateServiceNervousSystem {
-            swap_parameters: Some(SwapParameters {
-                neurons_fund_participation: Some(true),
-                ..CREATE_SERVICE_NERVOUS_SYSTEM
-                    .swap_parameters
-                    .clone()
-                    .unwrap()
-            }),
-            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
-        };
-        let error = SnsInitPayload::try_from(payload).unwrap_err();
-
-        assert!(error.contains("neurons_fund_participation"));
-    }
-
     // TODO NNS1-2687: remove this test once the check is moved to sns/init
     #[test]
-    #[cfg(feature = "test")]
     fn test_neurons_fund_participation_required() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
@@ -2085,519 +1928,6 @@ mod neuron_archiving_tests {
     } // end proptest
 }
 
-#[test]
-fn test_should_copy_next_batch_of_inactive_neurons_to_stable_memory_blank() {
-    let governance = Governance::new(
-        GovernanceProto::default(),
-        Box::new(MockEnvironment {
-            expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-            now: Arc::new(Mutex::new(0)),
-        }),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    assert!(governance.should_copy_next_batch_of_inactive_neurons_to_stable_memory());
-}
-
-#[test]
-fn test_should_copy_next_batch_of_inactive_neurons_to_stable_memory_migration_exists() {
-    let status_to_should_copy_next_batch = [
-        (None, true),
-        (Some(MigrationStatus::Unspecified as i32), true),
-        (Some(MigrationStatus::InProgress as i32), true),
-        (Some(MigrationStatus::Succeeded as i32), false),
-        (Some(MigrationStatus::Failed as i32), false),
-    ];
-
-    for (status, should_copy_next_batch) in status_to_should_copy_next_batch {
-        let governance = GovernanceProto {
-            migrations: Some(Migrations {
-                copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                    status,
-                    failure_reason: None,
-                    progress: None,
-                }),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        let governance = Governance::new(
-            governance,
-            Box::new(MockEnvironment {
-                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-                now: Arc::new(Mutex::new(0)),
-            }),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
-        );
-
-        assert_eq!(
-            governance.should_copy_next_batch_of_inactive_neurons_to_stable_memory(),
-            should_copy_next_batch,
-            "{:?}",
-            status,
-        );
-    }
-}
-
-const NOW_TIMESTAMP_SECONDS: u64 = 111_222_333_444_555;
-
-lazy_static! {
-    static ref ORIGINAL_HEAP_NEURONS: BTreeMap<u64, Neuron> = {
-        fn new_neuron(id: u64, maturity_e8s_equivalent: u64) -> Neuron {
-            Neuron {
-                id: Some(NeuronId { id }),
-                maturity_e8s_equivalent,
-
-                // Reached the dissolved state a "long" time ago, compared to NOW_TIMESTAMP_SECONDS.
-                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-
-                ..Default::default()
-            }
-        }
-
-        btreemap! {
-            1 => new_neuron(1, 0),
-            3 => new_neuron(3, 0),
-            4 => new_neuron(4, 0),
-            5 => new_neuron(5, 1_000), // active/do not archive
-            7 => new_neuron(7, 0),
-            12 => new_neuron(12, 0),
-            13 => new_neuron(13, 0),
-        }
-    };
-}
-
-/// A helper for the next handful or so of tests. This takes care of preparing
-/// the world and running the code under test. The expected result depends on
-/// the argument, and verifying it is a job that is left to the caller.
-#[must_use]
-fn copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(
-    last_neuron_id: NeuronId,
-) -> Migrations {
-    // Step 1: Prepare the world.
-    let governance_proto = GovernanceProto {
-        migrations: Some(Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(migration::Progress::LastNeuronId(
-                    // The only thing that isn't fixed.
-                    last_neuron_id,
-                )),
-            }),
-            ..Default::default()
-        }),
-        neurons: ORIGINAL_HEAP_NEURONS.clone(),
-        ..Default::default()
-    };
-    let mut governance = Governance::new(
-        governance_proto,
-        Box::new(MockEnvironment {
-            expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-            now: Arc::new(Mutex::new(NOW_TIMESTAMP_SECONDS)),
-        }),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    // Step 2: Run the code under test.
-    governance.copy_next_batch_of_inactive_neurons_to_stable_memory();
-
-    // Return new status for verification by caller.
-    governance.heap_data.migrations.clone().unwrap()
-}
-
-fn assert_copied_neurons(expected_neuron_ids: &[NeuronId]) {
-    with_stable_neuron_store(|stable_neuron_store| {
-        for id in 0..20 {
-            let neuron_id = NeuronId { id };
-            let read_result = stable_neuron_store.read(neuron_id);
-
-            if expected_neuron_ids.contains(&neuron_id) {
-                assert_eq!(
-                    read_result,
-                    Ok(ORIGINAL_HEAP_NEURONS.get(&id).unwrap().clone())
-                );
-                continue;
-            }
-
-            match &read_result {
-                Err(err) => {
-                    let GovernanceError {
-                        error_type,
-                        error_message,
-                    } = &err;
-
-                    assert_eq!(
-                        ErrorType::from_i32(*error_type),
-                        Some(ErrorType::NotFound),
-                        "{:#?}",
-                        err
-                    );
-
-                    let error_message = error_message.to_lowercase();
-                    assert!(error_message.contains("unable"), "{:#?}", err);
-                    assert!(error_message.contains(&format!("{}", id)), "{:#?}", err);
-                }
-                _ => panic!("{:?}", read_result),
-            }
-        }
-    });
-}
-
-/// This tests, and subsequent ones like it, make use of the fact that BATCH_LEN = 3 when being
-/// built as a test.
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_0() {
-    // Step 0: Verify pre-condition(s)
-    assert_eq!(COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN, 3);
-
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 0,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(migration::Progress::LastNeuronId(NeuronId { id: 4 })),
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[NeuronId { id: 1 }, NeuronId { id: 3 }, NeuronId { id: 4 }]);
-}
-
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_1() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 1,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(migration::Progress::LastNeuronId(NeuronId { id: 5 })),
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[
-        NeuronId { id: 3 },
-        NeuronId { id: 4 },
-        // 5 is scanned, but not copied, because it is active.
-    ]);
-}
-
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_2() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 2,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(migration::Progress::LastNeuronId(NeuronId { id: 5 })),
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[
-        NeuronId { id: 3 },
-        NeuronId { id: 4 },
-        // 5 is scanned, but not copied, because it is active.
-    ]);
-}
-
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_3() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 3,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(migration::Progress::LastNeuronId(NeuronId { id: 7 })),
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[
-        NeuronId { id: 4 },
-        // 5 is scanned, but not copied, because it is active.
-        NeuronId { id: 7 },
-    ]);
-}
-
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_4() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 4,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(migration::Progress::LastNeuronId(NeuronId { id: 12 })),
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[
-        // 5 is scanned, but not copied, because it is active.
-        NeuronId { id: 7 },
-        NeuronId { id: 12 },
-    ]);
-}
-
-/// Stop scanning 5.
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_5() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 5,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(migration::Progress::LastNeuronId(NeuronId { id: 13 })),
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[NeuronId { id: 7 }, NeuronId { id: 12 }, NeuronId { id: 13 }]);
-}
-
-/// This is the last time we'll see 7, and the last time that we have a "full" batch (i.e. scan
-/// range len = batch len).
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_6() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 6,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                // We are on the verge of success, but the code under test is not able to detect
-                // this. That would be detected during the next call. That scenario is tested a few
-                // tests later.
-                status: Some(MigrationStatus::InProgress as i32),
-                failure_reason: None,
-                progress: Some(migration::Progress::LastNeuronId(NeuronId { id: 13 })),
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[NeuronId { id: 7 }, NeuronId { id: 12 }, NeuronId { id: 13 }]);
-}
-
-/// No longer scanning 7. This is the first time that the scan range len (2) is smaller than the
-/// batch len (3). Now, completion is detected.
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_7() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 7,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                // New! This is the first test where we end with not InProgress. Not really sure how
-                // to force Failed.
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[NeuronId { id: 12 }, NeuronId { id: 13 }]);
-}
-
-/// One past an edge case. The result here is the same as that of the previous test.
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_8() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 8,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[NeuronId { id: 12 }, NeuronId { id: 13 }]);
-}
-
-/// Same result as the previous test case. This is because 8 and 11 are not much different from one
-/// another. What they have in common is that they are both between known NeuronIds.
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_11() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 11,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[NeuronId { id: 12 }, NeuronId { id: 13 }]);
-}
-
-/// Not yet at an edge, but close. Therefore, the len of the scan range is "much smaller", but
-/// is still nevertheless nonempty.
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_12() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 12,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[NeuronId { id: 13 }]);
-}
-
-/// An edge case. Here, no there are no neurons left to scan, but just barely.
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_13() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 13,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[]);
-}
-
-/// We have gone over the edge now. This gets the same result as the previous test.
-#[test]
-fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from_neuron_id_14() {
-    // Steps 1 and 2: Prepare the world and run the code under test.
-    let migrations =
-        copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(NeuronId {
-            id: 14,
-        });
-
-    // Step 3: Verify results.
-    assert_eq!(
-        migrations,
-        Migrations {
-            copy_inactive_neurons_to_stable_memory_migration: Some(Migration {
-                status: Some(MigrationStatus::Succeeded as i32),
-                failure_reason: None,
-                progress: None,
-            }),
-            ..Default::default()
-        },
-    );
-
-    assert_copied_neurons(&[]);
-}
-
 mod cast_vote_and_cascade_follow {
     use crate::{
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
@@ -2810,7 +2140,7 @@ fn governance_remove_neuron_updates_followee_index_correctly() {
 
     let entry = governance
         .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(2).unwrap());
+        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
     assert_eq!(entry, vec![NeuronId { id: 1 }]);
 
     let neuron = governance
@@ -2820,7 +2150,7 @@ fn governance_remove_neuron_updates_followee_index_correctly() {
 
     let entry = governance
         .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(2).unwrap());
+        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
     assert_eq!(entry, vec![]);
 }
 

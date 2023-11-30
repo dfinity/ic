@@ -157,6 +157,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
 
 impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestContext {
     type Error = ProxyDecodeError;
+
     fn try_from(context: pb_metadata::CanisterHttpRequestContext) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
@@ -197,8 +198,8 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 })
                 .collect(),
             body: context.body,
-            http_method: pb_metadata::HttpMethod::from_i32(context.http_method)
-                .ok_or(ProxyDecodeError::ValueOutOfRange {
+            http_method: pb_metadata::HttpMethod::try_from(context.http_method)
+                .map_err(|_| ProxyDecodeError::ValueOutOfRange {
                     typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
                     err: format!(
                         "{} is not one of the expected variants of HttpMethod",

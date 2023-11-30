@@ -5,9 +5,9 @@ use ic_consensus_utils::{
     active_high_threshold_transcript, aggregate, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateManager;
@@ -331,10 +331,9 @@ impl CertifierImpl {
     ) -> Vec<CertificationMessage> {
         state_hashes
             .iter()
-            .cloned()
             // Filter out all heights, where the current replica does not belong to the committee
             // and, hence, should not sign.
-            .filter(|(height, _)| {
+            .filter(|&(height, _)| {
                 self.membership
                     .node_belongs_to_threshold_committee(
                         self.replica_config.node_id,
@@ -351,11 +350,12 @@ impl CertifierImpl {
             })
             // Filter out all heights if we have a share signed by us already (this is a linear scan
             // through all shares of the same height, but is bound by the number of replicas).
-            .filter(|(height, _)| {
+            .filter(|&(height, _)| {
                 certification_pool
                     .shares_at_height(*height)
                     .all(|share| share.signed.signature.signer != self.replica_config.node_id)
             })
+            .cloned()
             .filter_map(|(height, hash)| {
                 let content = CertificationContent::new(hash);
                 let dkg_id =
@@ -474,7 +474,7 @@ impl CertifierImpl {
                         .filter_map(move |share| {
                             self.validate_share(certification_pool, hash, share)
                         })
-                        .chain(cert_change_set.into_iter()),
+                        .chain(cert_change_set),
                 )
             })
             .collect()
@@ -619,9 +619,8 @@ mod tests {
     use super::*;
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::certification::CertificationPool;
-    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -637,6 +636,7 @@ mod tests {
             CryptoHash, CryptoHashOf,
         },
         signature::*,
+        time::UNIX_EPOCH,
         CryptoHashOfPartialState, Height,
     };
 
@@ -644,7 +644,7 @@ mod tests {
         UnvalidatedArtifact::<CertificationMessage> {
             message,
             peer_id: node_test_id(0),
-            timestamp: SysTimeSource::new().get_relative_time(),
+            timestamp: UNIX_EPOCH,
         }
     }
 
@@ -748,7 +748,7 @@ mod tests {
                 }
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
+                cert_pool.apply_changes(change_set);
 
                 let prio_fn = certifier_gossip.get_priority_function(&cert_pool);
                 for (height, prio) in &[
@@ -824,7 +824,7 @@ mod tests {
                 // expect 5 change actions: 3 full certifications moved to validated section + 2
                 // shares, where no certification is available (at height 3)
                 assert_eq!(change_set.len(), 5);
-                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
+                cert_pool.apply_changes(change_set);
 
                 // if the minimum chain length is outside of the interval (60, 120),
                 // then you need to adjust the test values below.
@@ -869,10 +869,7 @@ mod tests {
                 let height = Height::from(1);
                 assert!(cert_pool.certification_at_height(height).is_some());
 
-                cert_pool.apply_changes(
-                    &SysTimeSource::new(),
-                    vec![ChangeAction::RemoveAllBelow(purge_height)],
-                );
+                cert_pool.apply_changes(vec![ChangeAction::RemoveAllBelow(purge_height)]);
 
                 let mut back_off_factor = 1;
                 loop {
@@ -951,7 +948,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
+                cert_pool.apply_changes(change_set);
 
                 // emulates a call from inside on_state_change
                 let mut messages = vec![];
@@ -1032,7 +1029,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
+                cert_pool.apply_changes(change_set);
 
                 assert_eq!(cert_pool.shares_at_height(Height::from(3)).count(), 6);
                 assert_eq!(
@@ -1183,7 +1180,7 @@ mod tests {
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 assert_eq!(change_set.len(), 1);
-                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
+                cert_pool.apply_changes(change_set);
 
                 assert!(cert_pool.certification_at_height(Height::from(5)).is_some());
             })
@@ -1281,7 +1278,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
+                cert_pool.apply_changes(change_set);
 
                 // Let's insert valid shares from the same signer again:
                 cert_pool.insert(fake_share(Height::from(4), 0));
@@ -1305,7 +1302,7 @@ mod tests {
                     "Both items should be RemoveFromUnvalidated"
                 );
 
-                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
+                cert_pool.apply_changes(change_set);
 
                 // At level 4, we find a certification
                 assert_eq!(cert_pool.shares_at_height(Height::from(4)).count(), 4);

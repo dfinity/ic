@@ -55,7 +55,7 @@ _canister_download_name_for_nns_canister_type() {
         echo "$CANISTER_TYPE"_canister
     elif [ "$CANISTER_TYPE" == "ledger" ]; then
         echo "ledger-canister_notify-method"
-    elif [ "$CANISTER_TYPE" == "icp-ledger-archive" ]; then
+    elif [ "$CANISTER_TYPE" == "icp-ledger-archive" ] || [ "$CANISTER_TYPE" == "icp-ledger-archive-1" ]; then
         echo "ledger-archive-node-canister"
     else
         echo "$CANISTER_TYPE"-canister

@@ -17,8 +17,8 @@ DEPENDENCIES = [
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
     "@crate_index//:p256",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
@@ -89,7 +89,7 @@ rust_bench(
         "//rs/rust_canisters/canister_test",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -111,7 +111,7 @@ rust_bench(
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -134,7 +134,7 @@ rust_bench(
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -146,7 +146,7 @@ rust_bench(
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -158,6 +158,6 @@ rust_bench(
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )

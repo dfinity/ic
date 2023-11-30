@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:anyhow",
+]
+
+rust_library(
+    name = "config",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    aliases = {},
+    crate_name = "config",
+    edition = "2021",
+    proc_macro_deps = [],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES,
+)

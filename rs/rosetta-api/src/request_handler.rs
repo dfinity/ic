@@ -573,7 +573,7 @@ impl RosettaRequestHandler {
         let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
         use ic_nns_governance::pb::v1::NeuronState as PbNeuronState;
-        let state = match PbNeuronState::from_i32(res.state) {
+        let state = match PbNeuronState::try_from(res.state).ok() {
             Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
             Some(PbNeuronState::Spawning) => NeuronState::Spawning,
             Some(PbNeuronState::Dissolving) => NeuronState::Dissolving,

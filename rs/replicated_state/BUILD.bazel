@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/interfaces",
     "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/registry/routing_table",
@@ -23,28 +24,32 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
+    "@crate_index//:bit-vec",
     "@crate_index//:cvt",
     "@crate_index//:ic-btc-interface",
+    "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:libc",
     "@crate_index//:maplit",
     "@crate_index//:prometheus",
     "@crate_index//:nix",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:serde",
     "@crate_index//:slog",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:uuid",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/test_utils/keys",
     "//rs/criterion_time",
-    "//rs/monitoring/metrics",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:ic-btc-test-utils",

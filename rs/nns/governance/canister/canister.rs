@@ -24,12 +24,11 @@ use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::BufferedStableMemReader,
     ledger::IcpLedgerCanister,
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
-    MethodAuthzChange,
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
-    access_control::{check_caller_is_gtc, check_caller_is_ledger, check_caller_is_root},
-    pb::v1::{CanisterAuthzInfo, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
+    access_control::{check_caller_is_gtc, check_caller_is_ledger},
+    pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
     types::{CallCanisterProposal, NeuronId, ProposalId},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
@@ -49,11 +48,12 @@ use ic_nns_governance::{
             ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
         },
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-        ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceError, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
-        NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
+        ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction,
+        GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+        Governance as GovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
+        ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
+        ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
+        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
         RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
@@ -225,7 +225,7 @@ impl Environment for CanisterEnv {
         proposal_id: u64,
         update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        let mt = NnsFunction::from_i32(update.nns_function).ok_or_else(||
+        let mt = NnsFunction::try_from(update.nns_function).map_err(|_|
             // No update type specified.
             GovernanceError::new(ErrorType::PreconditionFailed))?;
 
@@ -412,34 +412,6 @@ fn set_time_warp() {
 #[cfg(feature = "test")]
 fn set_time_warp_(new_time_warp: TimeWarp) {
     governance_mut().set_time_warp(new_time_warp);
-}
-
-#[export_name = "canister_update update_authz"]
-fn update_authz() {
-    check_caller_is_root();
-    over(candid_one, |_: Vec<MethodAuthzChange>| {
-        println!(
-            "{}update_authz was called. \
-                 This does not do anything, since the governance canister no longer has any \
-                 function whose access is controlled using this mechanism. \
-                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
-            LOG_PREFIX,
-        );
-    })
-}
-
-#[export_name = "canister_query current_authz"]
-fn current_authz() {
-    over(candid, |_: ()| {
-        println!(
-            "{}current_authz was called. \
-                 This always returns the default value, since the governance canister's state no \
-                 longer contains a CanisterAuthzInfo. \
-                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
-            LOG_PREFIX,
-        );
-        CanisterAuthzInfo::default()
-    })
 }
 
 /// DEPRECATED: Use manage_neuron directly instead.
@@ -662,6 +634,19 @@ fn get_proposal_info() {
 #[candid_method(query, rename = "get_proposal_info")]
 fn get_proposal_info_(id: ProposalId) -> Option<ProposalInfo> {
     governance().get_proposal_info(&caller(), id)
+}
+
+#[export_name = "canister_query get_neurons_fund_audit_info"]
+fn get_neurons_fund_audit_info() {
+    debug_log("get_neurons_fund_audit_info");
+    over(candid_one, get_neurons_fund_audit_info_)
+}
+
+#[candid_method(query, rename = "get_neurons_fund_audit_info")]
+fn get_neurons_fund_audit_info_(
+    request: GetNeuronsFundAuditInfoRequest,
+) -> GetNeuronsFundAuditInfoResponse {
+    governance().get_neurons_fund_audit_info(request).into()
 }
 
 #[export_name = "canister_query get_pending_proposals"]

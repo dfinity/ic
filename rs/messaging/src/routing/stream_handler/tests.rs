@@ -632,7 +632,7 @@ fn induct_loopback_stream_with_memory_limit_impl(
     let msg = loopback_stream.messages().iter().nth(1).unwrap().1;
     expected_loopback_stream.push(generate_reject_response(
         msg.clone(),
-        RejectCode::SysTransient,
+        RejectCode::CanisterError,
         StateError::OutOfMemory {
             requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
             available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
@@ -1117,19 +1117,35 @@ fn garbage_collect_local_state_inexistent_stream() {
 }
 
 /// Tests that garbage collecting a provided `ReplicatedState` results in all
-/// messages with matching signals being garbage collected appropriately.
+/// messages with matching signals being garbage collected appropriately. And
+/// that message memory usage is updated correctly.
 #[test]
 fn garbage_collect_local_state_success() {
     with_test_replica_logger(|log| {
         let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
+
+        // Canister must exist for its responses in streams to count as memory usage.
+        let initial_canister_state = new_canister_state(
+            *LOCAL_CANISTER,
+            user_test_id(24).get(),
+            *INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        initial_state.put_canister_state(initial_canister_state);
+
         let mut expected_state = initial_state.clone();
 
-        let initial_stream = generate_outgoing_stream(StreamConfig {
+        // A stream with begin index 31, consisting of `[request0, response, request]``.
+        let mut initial_stream = generate_outgoing_stream(StreamConfig {
             messages_begin: 31,
-            message_count: 3,
+            message_count: 1,
             signals_end: 43,
             reject_signals: None,
         });
+        let response: RequestOrResponse = test_response(*LOCAL_CANISTER, *REMOTE_CANISTER).into();
+        let request: RequestOrResponse = test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into();
+        initial_stream.push(response.clone());
+        initial_stream.push(request.clone());
         initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
         // 2 incoming messages, 2 new incoming signals.
@@ -1144,18 +1160,29 @@ fn garbage_collect_local_state_success() {
 
         // The expected state must contain only messages past the last signal (index
         // 33).
-        let expected_stream = generate_outgoing_stream(StreamConfig {
+        let mut expected_stream = generate_outgoing_stream(StreamConfig {
             messages_begin: 33,
-            message_count: 1,
+            message_count: 0,
             signals_end: 43,
             reject_signals: None,
         });
+        expected_stream.push(request);
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+        let initial_subnet_available_memory =
+            stream_handler.subnet_available_memory(&initial_state);
 
         let pruned_state = stream_handler
             .garbage_collect_local_state(initial_state, &btreemap![REMOTE_SUBNET => stream_slice]);
 
         assert_eq!(pruned_state, expected_state);
+
+        // `response` was garbage collected.
+        assert_eq!(
+            initial_subnet_available_memory + response.count_bytes() as i64,
+            stream_handler.subnet_available_memory(&pruned_state)
+        );
+
         assert_eq!(
             2,
             fetch_int_counter(&metrics_registry, METRIC_GCED_XNET_MESSAGES).unwrap()
@@ -2393,7 +2420,7 @@ fn induct_stream_slices_with_memory_limit_impl(
     expected_stream.increment_signals_end();
     expected_stream.push(generate_reject_response(
         request1,
-        RejectCode::SysTransient,
+        RejectCode::CanisterError,
         StateError::OutOfMemory {
             requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
             available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,

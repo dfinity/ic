@@ -41,6 +41,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-interfaces-mocks = { path = "../interfaces/mocks" }
 ic-icos-sev = { path = "../ic_os/sev" }
 ic-logger = { path = "../monitoring/logger" }
 ic-registry-client = { path = "../registry/client" }
@@ -51,5 +52,4 @@ ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
-mockall = "0.7.2"
 tempfile = "3.1.0"

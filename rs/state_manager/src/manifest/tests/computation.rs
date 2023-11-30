@@ -604,11 +604,7 @@ fn test_diff_manifest_v1() {
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
-    let copy_files: HashMap<_, _> = indices
-        .clone()
-        .into_iter()
-        .zip(indices.into_iter())
-        .collect();
+    let copy_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
@@ -785,11 +781,7 @@ fn test_missing_simple_manifest() {
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
-    let copy_files: HashMap<_, _> = indices
-        .clone()
-        .into_iter()
-        .zip(indices.into_iter())
-        .collect();
+    let copy_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
@@ -1046,6 +1038,72 @@ fn test_hash_plan() {
     }
     assert!(seen_used as f64 >= 0.4 * repetitions as f64);
     assert!(seen_used as f64 <= 0.6 * repetitions as f64);
+}
+
+#[test]
+fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
+    use crate::manifest::{dirty_pages_to_dirty_chunks, FileWithSize, ManifestDelta};
+    use bit_vec::BitVec;
+    use maplit::btreemap;
+
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+    let root = dir.path();
+    let checkpoint0 = root.join("checkpoint0");
+    fs::create_dir(&checkpoint0).expect("failed to create dir 'subdir'");
+    let checkpoint1 = root.join("checkpoint1");
+    fs::create_dir(&checkpoint1).expect("failed to create dir 'subdir'");
+
+    fs::write(checkpoint0.join("wasm_a"), vec![1u8; 2048 * 1024])
+        .expect("failed to create file 'wasm_a'");
+    fs::write(checkpoint0.join("wasm_b"), vec![1u8; 2048 * 1024])
+        .expect("failed to create file 'wasm_b'");
+    fs::write(checkpoint1.join("wasm_a"), vec![1u8; 2048 * 1024])
+        .expect("failed to create file 'wasm_a'");
+    fs::hard_link(checkpoint0.join("wasm_b"), checkpoint1.join("wasm_b"))
+        .expect("failed to hardlink wasm_b");
+
+    let max_chunk_size = 1024 * 1024;
+
+    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let base_manifest = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        CURRENT_STATE_SYNC_VERSION,
+        &CheckpointLayout::new_untracked(checkpoint0.to_path_buf(), Height::new(0)).unwrap(),
+        max_chunk_size,
+        None,
+    )
+    .expect("failed to compute manifest");
+    let dirty_chunks = dirty_pages_to_dirty_chunks(
+        &no_op_logger(),
+        &ManifestDelta {
+            base_manifest,
+            base_height: Height::new(0),
+            target_height: Height::new(1),
+            dirty_memory_pages: Vec::new(),
+            base_checkpoint: CheckpointLayout::new_untracked(
+                checkpoint0.to_path_buf(),
+                Height::new(0),
+            )
+            .unwrap(),
+        },
+        &CheckpointLayout::new_untracked(checkpoint1.to_path_buf(), Height::new(1)).unwrap(),
+        &[
+            FileWithSize("wasm_a".into(), 2048 * 1024),
+            FileWithSize("wasm_b".into(), 2048 * 1024),
+        ],
+        max_chunk_size,
+    )
+    .expect("Failed to get dirty chunks");
+    assert_eq!(
+        dirty_chunks,
+        btreemap! {
+            PathBuf::from("wasm_b") => BitVec::from_elem(2, false)
+        }
+    );
 }
 
 #[test]

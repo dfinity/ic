@@ -183,11 +183,7 @@ RUN addgroup filebeat && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Filebeat" filebeat && \
     adduser filebeat filebeat && \
     adduser filebeat systemd-journal && \
-    chown root:root /usr/local/bin/filebeat && \
-    chown filebeat:filebeat /var/lib/filebeat \
-                            /var/log/filebeat && \
-    chmod 0750 /var/lib/filebeat \
-               /var/log/filebeat
+    chown root:root /usr/local/bin/filebeat
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
@@ -203,11 +199,6 @@ RUN addgroup node_exporter && \
 
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
-    rm -rf \
-        /var/cache/fontconfig/* /var/cache/ldconfig/aux-cache \
-        /var/log/alternatives.log /var/log/apt/history.log /var/log/apt/term.log /var/log/dpkg.log \
-        /var/lib/apt/lists/* /var/lib/dbus/machine-id \
-        /var/lib/initramfs-tools/* && \
     find /usr/local/share/fonts -name .uuid | xargs rm && \
     find /usr/share/fonts -name .uuid | xargs rm && \
     find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \

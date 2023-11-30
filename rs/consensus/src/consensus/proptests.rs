@@ -1,6 +1,6 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-use ic_interfaces::consensus::PayloadBuilder;
+use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
 use ic_test_utilities::{
     consensus::fake::Fake,
     mock_time,
@@ -69,21 +69,26 @@ fn proptest_round(
             vec![(1, subnet_record)],
         );
 
-        let context = ValidationContext {
+        let validation_context = ValidationContext {
             certified_height: Height::from(height),
             registry_version: RegistryVersion::from(1),
             time: mock_time(),
+        };
+        let proposal_context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &validation_context,
         };
 
         let payload_builder =
             make_test_payload_impl(registry, vec![ingress], vec![xnet], vec![], vec![]);
 
         // Build the payload and validate it
-        let payload = payload_builder.get_payload(Height::from(0), &[], &context, &subnet_records);
+        let payload =
+            payload_builder.get_payload(Height::from(0), &[], &validation_context, &subnet_records);
 
         let wrapped_payload = wrap_batch_payload(0, payload);
         payload_builder
-            .validate_payload(Height::from(0), &wrapped_payload, &[], &context)
+            .validate_payload(Height::from(0), &proposal_context, &wrapped_payload, &[])
             .unwrap();
 
         // Check that no critical errors occurred during the run.

@@ -535,7 +535,7 @@ mod tests {
         let fake_state_path_str = fake_state_path.to_string_lossy();
 
         let mut cursor = std::io::Cursor::new(
-            (vec![
+            ([
                 FAKE_SUBNET_ID,
                 FAKE_INITIAL_REPLICA_VERSION,
                 &FAKE_NODES_SYNCING.to_string(),

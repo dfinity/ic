@@ -1,6 +1,6 @@
 use super::*;
 
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use anyhow::Error;
 
@@ -51,7 +51,7 @@ fn check_certificate_verification(
 async fn test_verify_tls_certificate() -> Result<(), Error> {
     let rt = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(Arc::clone(&rt), reg);
+    let mut runner = Runner::new(Arc::clone(&rt), reg, Duration::ZERO);
     let helper = TlsVerifier::new(Arc::clone(&rt));
     runner.run().await?;
 
@@ -70,7 +70,7 @@ async fn test_verify_tls_certificate() -> Result<(), Error> {
 
         // Check with different cert -> should fail
         let r = check_certificate_verification(&helper, node_name.as_str(), test_certificate());
-        assert!(matches!(r, Err(_)));
+        assert!(r.is_err());
     }
 
     Ok(())

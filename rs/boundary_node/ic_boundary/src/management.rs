@@ -48,22 +48,27 @@ pub async fn btc_mw(
         (*BITCOIN_METHODS).contains(method)
     };
 
-    if is_match(&ctx) {
-        let canister_id = match extract_btc_network(&ctx) {
-            Ok(BitcoinNetwork::Mainnet) => Ok(*BITCOIN_MAINNET_CANISTER_ID_PRINCIPAL),
-            Ok(BitcoinNetwork::Testnet) => Ok(*BITCOIN_TESTNET_CANISTER_ID_PRINCIPAL),
-            Ok(n) => Err(ApiError::ProxyError(ErrorCause::MalformedRequest(format!(
-                "invalid network {n}"
-            )))),
-            Err(err) => Err(ApiError::ProxyError(ErrorCause::MalformedRequest(format!(
-                "failed to extract btc network: {err}"
-            )))),
-        }?;
-
-        request.extensions_mut().insert(canister_id);
+    if !is_match(&ctx) {
+        return Ok(next.run(request).await);
     }
 
-    Ok(next.run(request).await)
+    let canister_id = match extract_btc_network(&ctx) {
+        Ok(BitcoinNetwork::Mainnet) => Ok(*BITCOIN_MAINNET_CANISTER_ID_PRINCIPAL),
+        Ok(BitcoinNetwork::Testnet) => Ok(*BITCOIN_TESTNET_CANISTER_ID_PRINCIPAL),
+        Ok(n) => Err(ApiError::ProxyError(ErrorCause::MalformedRequest(format!(
+            "invalid network {n}"
+        )))),
+        Err(err) => Err(ApiError::ProxyError(ErrorCause::MalformedRequest(format!(
+            "failed to extract btc network: {err}"
+        )))),
+    }?;
+
+    request.extensions_mut().insert(canister_id);
+    let mut response = next.run(request).await;
+    // Override the canister_id in the response to properly log it
+    response.extensions_mut().insert(canister_id);
+
+    Ok(response)
 }
 
 #[derive(CandidType, Deserialize)]

@@ -210,14 +210,15 @@ impl ConsensusCacheImpl {
         change_set
             .iter()
             .filter_map(|change_action| match change_action {
-                ChangeAction::AddToValidated(ConsensusMessage::Finalization(x)) => {
-                    cache.check_finalization(x)
+                ChangeAction::AddToValidated(validated_consensus_artifact) => {
+                    match &validated_consensus_artifact.msg {
+                        ConsensusMessage::Finalization(x) => cache.check_finalization(x),
+                        ConsensusMessage::CatchUpPackage(x) => cache.check_catch_up_package(x),
+                        _ => None,
+                    }
                 }
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(x)) => {
                     cache.check_finalization(x)
-                }
-                ChangeAction::AddToValidated(ConsensusMessage::CatchUpPackage(x)) => {
-                    cache.check_catch_up_package(x)
                 }
                 ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackage(x)) => {
                     cache.check_catch_up_package(x)
@@ -465,7 +466,7 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
-    use ic_interfaces::consensus_pool::HEIGHT_CONSIDERED_BEHIND;
+    use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities::{
         consensus::fake::*,
@@ -544,7 +545,10 @@ mod test {
 
             // 2. Cache can be updated by finalization
             let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                finalization.clone().into_message(),
+                ValidatedConsensusArtifact {
+                    msg: finalization.clone().into_message(),
+                    timestamp: time,
+                },
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::Finalization]);
             pool.insert_validated(finalization);
@@ -570,7 +574,10 @@ mod test {
             );
             let catch_up_package = pool.make_catch_up_package(Height::from(4));
             let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                catch_up_package.clone().into_message(),
+                ValidatedConsensusArtifact {
+                    msg: catch_up_package.clone().into_message(),
+                    timestamp: time,
+                },
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::CatchUpPackage]);
             pool.insert_validated(catch_up_package.clone());

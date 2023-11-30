@@ -160,7 +160,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
     }
 
     fn get_skipped_steps(&self) -> Vec<StepType> {
-        self.params.skip.clone().unwrap_or(vec![])
+        self.params.skip.clone().unwrap_or_default()
     }
 
     fn read_step_params(&mut self, step_type: StepType) {

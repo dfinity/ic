@@ -1,3 +1,4 @@
+use crate::as_round_instructions;
 use crate::canister_settings::{validate_canister_settings, ValidatedCanisterSettings};
 use crate::execution::install_code::{validate_controller, OriginalContext};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
@@ -114,6 +115,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) wasm_chunk_store: FlagStatus,
     rate_limiting_of_heap_delta: FlagStatus,
     heap_delta_rate_limit: NumBytes,
+    upload_wasm_chunk_instructions: NumInstructions,
 }
 
 impl CanisterMgrConfig {
@@ -131,6 +133,7 @@ impl CanisterMgrConfig {
         wasm_chunk_store: FlagStatus,
         rate_limiting_of_heap_delta: FlagStatus,
         heap_delta_rate_limit: NumBytes,
+        upload_wasm_chunk_instructions: NumInstructions,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -145,6 +148,7 @@ impl CanisterMgrConfig {
             wasm_chunk_store,
             rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
+            upload_wasm_chunk_instructions,
         }
     }
 }
@@ -380,7 +384,8 @@ impl CanisterManager {
             | Ok(Ic00Method::BitcoinGetUtxos)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
-            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => Err(UserError::new(
+            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
+            | Ok(Ic00Method::NodeMetricsHistory) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!("Only canisters can call ic00 method {}", method_name),
             )),
@@ -1460,7 +1465,7 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &mut CanisterState,
         chunk: &[u8],
-        subnet_available_memory: &mut SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
     ) -> Result<UploadChunkResult, CanisterManagerError> {
@@ -1470,7 +1475,10 @@ impl CanisterManager {
             });
         }
 
-        validate_controller(canister, &sender)?;
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
 
         canister
             .system_state
@@ -1480,6 +1488,7 @@ impl CanisterManager {
 
         let chunk_bytes = wasm_chunk_store::chunk_size();
         let new_memory_usage = canister.memory_usage() + chunk_bytes;
+        let instructions = self.config.upload_wasm_chunk_instructions;
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -1491,6 +1500,38 @@ impl CanisterManager {
                 ),
             });
         }
+
+        let current_memory_usage = canister.memory_usage();
+        let message_memory = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        // Charge for the upload.
+        let prepaid_cycles = self
+            .cycles_account_manager
+            .prepay_execution_cycles(
+                &mut canister.system_state,
+                current_memory_usage,
+                message_memory,
+                compute_allocation,
+                instructions,
+                subnet_size,
+            )
+            .map_err(|err| CanisterManagerError::WasmChunkStoreError {
+                message: format!("Error charging for 'upload_chunk': {}", err),
+            })?;
+        // To keep the invariant that `prepay_execution_cycles` is always paired
+        // with `refund_unused_execution_cycles` we refund zero immediately.
+        self.cycles_account_manager.refund_unused_execution_cycles(
+            &mut canister.system_state,
+            NumInstructions::from(0),
+            instructions,
+            prepaid_cycles,
+            // This counter is incremented if we refund more
+            // instructions than initially charged, which is impossible
+            // here.
+            &IntCounter::new("no_op", "no_op").unwrap(),
+            subnet_size,
+            &self.log,
+        );
 
         match canister.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => {
@@ -1537,19 +1578,21 @@ impl CanisterManager {
                         ),
                     });
                 }
-
                 // Verify subnet has enough memory.
-                subnet_available_memory
+                round_limits
+                    .subnet_available_memory
                     .check_available_memory(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
                     .map_err(
                         |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
                             requested: chunk_bytes,
                             available: NumBytes::from(
-                                subnet_available_memory.get_execution_memory().max(0) as u64,
+                                round_limits
+                                    .subnet_available_memory
+                                    .get_execution_memory()
+                                    .max(0) as u64,
                             ),
                         },
                     )?;
-
                 // Reserve needed cycles if the subnet is becoming saturated.
                 canister
                     .system_state
@@ -1571,18 +1614,19 @@ impl CanisterManager {
                             }
                         }
                     })?;
-
                 // Actually deduct memory from the subnet. It's safe to unwrap
                 // here because we already checked the available memory above.
-                subnet_available_memory
-                    .try_decrement(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
-                    .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
+                round_limits.subnet_available_memory
+                            .try_decrement(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
+                            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
             }
-        }
+        };
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += chunk_bytes;
         }
+
+        round_limits.instructions -= as_round_instructions(instructions);
 
         // We initially checked that this chunk can be inserted, so the unwarp
         // here is guaranteed to succeed.
@@ -1610,7 +1654,10 @@ impl CanisterManager {
             });
         }
 
-        validate_controller(canister, &sender)?;
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
         canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
         Ok(())
     }
@@ -1625,7 +1672,10 @@ impl CanisterManager {
                 message: "Wasm chunk store not enabled".to_string(),
             });
         }
-        validate_controller(canister, &sender)?;
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
 
         let keys = canister
             .system_state

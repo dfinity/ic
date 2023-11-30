@@ -6,7 +6,7 @@ use phantom_newtype::Id;
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;
 
-fn check_roundtrip<T>(v: &T) -> Result<(), TestCaseError>
+pub fn check_roundtrip<T>(v: &T) -> Result<(), TestCaseError>
 where
     for<'a> T: PartialEq + std::fmt::Debug + Encode<()> + Decode<'a, ()>,
 {

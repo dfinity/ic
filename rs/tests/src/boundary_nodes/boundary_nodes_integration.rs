@@ -39,11 +39,16 @@ use std::{net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
-use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
+use ic_agent::{
+    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, export::Principal,
+    Agent,
+};
 
 use serde::Deserialize;
 use slog::{error, info, Logger};
 use tokio::runtime::Runtime;
+const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
+const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
 
 async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Principal, Error> {
     let install_node = env
@@ -1110,7 +1115,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
         let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
         let client_builder = client_builder
             .danger_accept_invalid_certs(true)
-            .resolve("raw.{host}", bn_addr.into());
+            .resolve(&format!("raw.{host}"), bn_addr.into());
         (client_builder, host.to_string())
     };
     let client = client_builder.build().unwrap();
@@ -1689,7 +1694,6 @@ pub fn direct_to_replica_test(env: TestEnv) {
     futs.push(rt.spawn({
         let logger = logger.clone();
         let client = client;
-        let install_url = install_url;
         let name = "update random node";
         info!(&logger, "Starting subtest {}", name);
 
@@ -2024,7 +2028,6 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
     futs.push(rt.spawn({
         let logger = logger.clone();
         let client = client;
-        let install_url = install_url;
         let name = "rosetta: update random node";
         info!(&logger, "Starting subtest {}", name);
 
@@ -2244,16 +2247,6 @@ pub fn reboot_test(env: TestEnv) {
         boundary_node.block_on_ipv4().unwrap()
     );
 
-    info!(&logger, "Waiting for routes file");
-    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-    let cmd_output = boundary_node.block_on_bash_script(&sleep_command).unwrap();
-    info!(
-        logger,
-        "{BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'",
-        cmd_output.trim(),
-    );
-
     info!(&logger, "Checking BN health");
     boundary_node
         .await_status_is_healthy()
@@ -2316,14 +2309,23 @@ pub fn canister_routing_test(env: TestEnv) {
         "Incrementing counters on canisters via BN agent update calls ..."
     );
     block_on(set_counters_on_counter_canisters(
+        &log,
         bn_agent.clone(),
         canister_ids.clone(),
         canister_values.clone(),
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
     ));
     info!(
         log,
         "Asserting expected counters on canisters via BN agent query calls ... "
     );
-    let counters = block_on(read_counters_on_counter_canisters(bn_agent, canister_ids));
+    let counters = block_on(read_counters_on_counter_canisters(
+        &log,
+        bn_agent,
+        canister_ids,
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
+    ));
     assert_eq!(counters, canister_values);
 }

@@ -69,6 +69,12 @@ impl Cycles {
     pub fn is_zero(&self) -> bool {
         self.0 == 0
     }
+
+    /// Checked multiplication. Computes `self * rhs`, returning `None`
+    /// if overflow occurred.
+    pub fn checked_mul(self, rhs: u64) -> Option<Self> {
+        self.0.checked_mul(rhs as u128).map(Cycles::from)
+    }
 }
 
 impl From<u128> for Cycles {
@@ -243,6 +249,19 @@ mod test {
             Cycles::from(std::u128::MAX) * 10_u64,
             Cycles::from(std::u128::MAX)
         );
+    }
+
+    #[test]
+    fn test_checked_mul() {
+        assert_eq!(
+            Cycles::zero().checked_mul(std::u64::MAX),
+            Some(Cycles::zero())
+        );
+        assert_eq!(
+            Cycles::from(std::u128::MAX).checked_mul(std::u64::MAX),
+            None
+        );
+        assert_eq!(Cycles::from(std::u128::MAX).checked_mul(10_u64), None);
     }
 
     #[test]

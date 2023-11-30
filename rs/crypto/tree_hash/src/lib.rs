@@ -149,7 +149,7 @@ impl Ord for Label {
 
 impl PartialOrd for Label {
     fn partial_cmp(&self, rhs: &Self) -> Option<std::cmp::Ordering> {
-        self.as_bytes().partial_cmp(rhs.as_bytes())
+        Some(self.cmp(rhs))
     }
 }
 

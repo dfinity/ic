@@ -14,6 +14,7 @@ ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../types/error_types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -53,6 +54,7 @@ ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
+ic-interfaces-mocks = { path = "../interfaces/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-messaging = { path = "../messaging" }
 ic-registry-client-fake = { path = "../registry/fake" }
@@ -66,7 +68,6 @@ ic-utils = { path = "../utils" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
-mockall = "0.7.2"
 slog-async = "2.5.0"
 slog-envlogger = "2.2.0"
 slog-term = "2.6.0"

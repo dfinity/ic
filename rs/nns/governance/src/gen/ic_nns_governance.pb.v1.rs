@@ -470,7 +470,7 @@ pub struct SetSnsTokenSwapOpenTimeWindow {
 pub struct Proposal {
     /// Must be present (enforced at the application layer, not by PB).
     /// A brief description of what the proposal does.
-    /// Size in bytes must be in the interval [5, 256].
+    /// Size in bytes must be in the interval \[5, 256\].
     #[prost(string, optional, tag = "20")]
     pub title: ::core::option::Option<::prost::alloc::string::String>,
     /// Text providing a short description of the proposal, composed
@@ -1383,6 +1383,59 @@ pub struct NeuronsFundData {
     #[prost(message, optional, tag = "3")]
     pub neurons_fund_refunds: ::core::option::Option<NeuronsFundSnapshot>,
 }
+/// This is a view of the NeuronsFundData returned by API queries and is NOT used for storage.
+/// Currently, the structure is identical to NeuronsFundData, but this may change over time.
+/// Some of the fields, e.g., actual IDs of neurons, are anonymized.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundAuditInfo {
+    /// See documentation for NeuronsFundData.neurons_fund_participation
+    #[prost(message, optional, tag = "1")]
+    pub initial_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    /// See documentation for NeuronsFundData.final_neurons_fund_participation
+    #[prost(message, optional, tag = "2")]
+    pub final_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+    /// See documentation for NeuronsFundData.neurons_fund_refunds
+    #[prost(message, optional, tag = "3")]
+    pub neurons_fund_refunds: ::core::option::Option<NeuronsFundSnapshot>,
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetNeuronsFundAuditInfoRequest {
+    /// ID of the NNS proposal that resulted in the creation of the corresponding Swap.
+    #[prost(message, optional, tag = "1")]
+    pub nns_proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetNeuronsFundAuditInfoResponse {
+    #[prost(oneof = "get_neurons_fund_audit_info_response::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<get_neurons_fund_audit_info_response::Result>,
+}
+/// Nested message and enum types in `GetNeuronsFundAuditInfoResponse`.
+pub mod get_neurons_fund_audit_info_response {
+    /// Request was completed successfully.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Ok {
+        /// Represents public information suitable for auditing Neurons' Fund participation in an SNS swap.
+        #[prost(message, optional, tag = "1")]
+        pub neurons_fund_audit_info: ::core::option::Option<super::NeuronsFundAuditInfo>,
+    }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Err(super::GovernanceError),
+        #[prost(message, tag = "2")]
+        Ok(Ok),
+    }
+}
 /// Information for deciding how the Neurons' Fund should participate in an SNS Swap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1422,6 +1475,11 @@ pub struct NeuronsFundParticipation {
     /// (`ideal_matched_participation_function`).
     #[prost(uint64, optional, tag = "7")]
     pub intended_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
+    /// How much from `intended_neurons_fund_participation_icp_e8s` was the Neurons' Fund actually able
+    /// to allocate, given the specific composition of neurons at the time of execution of the proposal
+    /// through which this SNS was created and the participation limits of this SNS.
+    #[prost(uint64, optional, tag = "8")]
+    pub allocated_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
 /// This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
 /// try to follow, but may deviate from in order to satisfy SNS-specific participation constraints

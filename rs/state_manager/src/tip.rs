@@ -11,7 +11,7 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
-use ic_replicated_state::page_map::PersistDestination;
+use ic_replicated_state::page_map::{PersistDestination, StorageMetrics};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
@@ -294,7 +294,7 @@ pub(crate) fn spawn_tip_thread(
                                         page_map
                                             .as_ref()
                                             .unwrap()
-                                            .persist_unflushed_delta(dst)
+                                            .persist_unflushed_delta(dst, &metrics.storage_metrics)
                                             .unwrap_or_else(|err| {
                                                 fatal!(
                                                     log,
@@ -329,6 +329,7 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 }),
                                 &mut thread_pool,
+                                &metrics.storage_metrics,
                                 lsmt_storage,
                             )
                             .unwrap_or_else(|err| {
@@ -414,6 +415,7 @@ fn serialize_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
+    metrics: &StorageMetrics,
     lsmt_storage: FlagStatus,
 ) -> Result<(), CheckpointError> {
     // Serialize ingress history separately. The `SystemMetadata` proto does not
@@ -450,7 +452,7 @@ fn serialize_to_tip(
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(log, canister_state, tip, lsmt_storage)
+        serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_storage)
     });
 
     for result in results.into_iter() {
@@ -464,6 +466,7 @@ fn serialize_canister_to_tip(
     log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    metrics: &StorageMetrics,
     lsmt_storage: FlagStatus,
 ) -> Result<(), CheckpointError> {
     let canister_layout = tip.canister(&canister_state.canister_id())?;
@@ -509,11 +512,11 @@ fn serialize_canister_to_tip(
             execution_state
                 .wasm_memory
                 .page_map
-                .persist_delta(memory_dst)?;
+                .persist_delta(memory_dst, metrics)?;
             execution_state
                 .stable_memory
                 .page_map
-                .persist_delta(stable_dst)?;
+                .persist_delta(stable_dst, metrics)?;
 
             Some(ExecutionStateBits {
                 exported_globals: execution_state.exported_globals.clone(),
@@ -550,7 +553,7 @@ fn serialize_canister_to_tip(
         .system_state
         .wasm_chunk_store
         .page_map()
-        .persist_delta(wasm_chunk_store_dst)?;
+        .persist_delta(wasm_chunk_store_dst, metrics)?;
 
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
@@ -888,7 +891,7 @@ mod test {
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let metrics_registry = ic_metrics::MetricsRegistry::new();
-            let metrics = StateManagerMetrics::new(&metrics_registry);
+            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
             let tip_handler = layout.capture_tip_handler();
             let (_h, _s) = spawn_tip_thread(
                 log,

@@ -43,7 +43,7 @@ use slog::info;
 use super::tecdsa_signature_test::DKG_INTERVAL;
 
 const NODES_COUNT: usize = 4;
-const UNASSIGNED_NODES_COUNT: i32 = 3;
+const UNASSIGNED_NODES_COUNT: usize = 3;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
@@ -83,7 +83,7 @@ pub fn test(env: TestEnv) {
                 .collect::<Vec<_>>(),
         )
     };
-    assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT as usize);
+    assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT);
     info!(log, "Installing nns canisters.");
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
@@ -136,7 +136,7 @@ pub fn test(env: TestEnv) {
         assert!(topology_snapshot.unassigned_nodes().next().is_none());
         assert_eq!(
             topology_snapshot.root_subnet().nodes().count(),
-            UNASSIGNED_NODES_COUNT as usize + NODES_COUNT
+            UNASSIGNED_NODES_COUNT + NODES_COUNT
         );
         info!(log, "Run through ecdsa signature test.");
         let message_hash = [0xabu8; 32];

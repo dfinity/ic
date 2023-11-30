@@ -133,6 +133,11 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::NodeMetricsHistory => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
             Ic00Method::ProvisionalCreateCanisterWithCycles => Self {
                 method,
                 allow_remote_subnet_sender: true,

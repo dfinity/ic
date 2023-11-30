@@ -17,19 +17,17 @@ use either::Either;
 use futures::{future::BoxFuture, FutureExt};
 use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
-use ic_icos_sev::Sev;
-use ic_icos_sev_interfaces::ValidateAttestedStream;
+use ic_icos_sev::{Sev, ValidateAttestedStream};
 use ic_interfaces::{
-    artifact_manager::{ArtifactProcessorEvent, JoinGuard},
-    artifact_pool::UnvalidatedArtifactEvent,
-    state_sync_client::StateSyncClient,
+    p2p::artifact_manager::{ArtifactProcessorEvent, JoinGuard},
+    p2p::state_sync::StateSyncClient,
     time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
 use quinn::{
     self,
     udp::{EcnCodepoint, Transmit},
@@ -165,6 +163,21 @@ where
     Ok(())
 }
 
+/// Runs the tokio simulation for the provided duration.
+/// If Ok(true) is returned all clients have completed.
+pub fn run_simulation_for(sim: &mut Sim, timeout: Duration) -> turmoil::Result {
+    let now = sim.elapsed();
+    loop {
+        if sim.elapsed() > timeout + now {
+            break;
+        }
+        if sim.step()? {
+            panic!("Simulation finished while checking condition");
+        }
+    }
+    Ok(())
+}
+
 /// Runs the tokio simulation until the timeout is reached.
 /// Panics if simulation finishes or condition evaluates to true.
 pub fn wait_for_timeout<F>(sim: &mut Sim, f: F, timeout: Duration) -> turmoil::Result
@@ -284,10 +297,17 @@ pub fn add_transport_to_sim<F>(
         let consensus_manager_clone = consensus_manager.clone();
 
         async move {
+            let metrics_registry = &MetricsRegistry::default();
+            let mut consensus_builder = ic_consensus_manager::ConsensusManagerBuilder::new(
+                log.clone(),
+                tokio::runtime::Handle::current(),
+                metrics_registry,
+            );
+
+            let mut router = conn_checker_clone;
             let udp_listener = turmoil::net::UdpSocket::bind(node_addr).await.unwrap();
             let this_ip = turmoil::lookup(peer.to_string());
             let custom_udp = CustomUdp::new(this_ip, udp_listener);
-            let mut router = Router::new().merge(conn_checker_clone.unwrap_or_default());
 
             let state_sync_rx = if let Some(ref state_sync) = state_sync_client_clone {
                 let (state_sync_router, state_sync_rx) = ic_state_sync_manager::build_axum_router(
@@ -295,32 +315,46 @@ pub fn add_transport_to_sim<F>(
                     log.clone(),
                     &MetricsRegistry::default(),
                 );
-                router = router.merge(state_sync_router);
+                router = Some(router.unwrap_or_default().merge(state_sync_router));
                 Some(state_sync_rx)
             } else {
                 None
             };
-            let consensus_rx = if let Some(ref consensus) = consensus_manager_clone {
-                let (consensus_router, consensus_tx) =
-                    ic_consensus_manager::build_axum_router(log.clone(), consensus.clone());
-                router = router.merge(consensus_router);
-                Some(consensus_tx)
+
+            let _artifact_processor_jh = if let Some(consensus) = consensus_manager_clone {
+                let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
+                    start_test_processor(
+                        consensus.clone(),
+                        consensus.clone().read().unwrap().clone(),
+                    );
+                let pfn_producer = Arc::new(consensus.clone().read().unwrap().clone());
+                consensus_builder.add_client(
+                    artifact_manager_event_rx,
+                    consensus,
+                    pfn_producer,
+                    artifact_sender,
+                );
+                router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
+
+                Some(artifact_processor_jh)
             } else {
                 None
             };
 
-            let transport = Arc::new(QuicTransport::build(
+            let transport = Arc::new(QuicTransport::start(
                 &log,
                 &MetricsRegistry::default(),
-                tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
                 node_crypto_clone,
                 registry_client,
                 sev_handshake_clone,
                 peer,
                 topology_watcher_clone.clone(),
                 Either::Right(custom_udp),
-                Some(router),
+                router.unwrap_or_default(),
             ));
+
+            consensus_builder.run(transport.clone(), topology_watcher_clone.clone());
 
             if let Some(state_sync_rx) = state_sync_rx {
                 ic_state_sync_manager::start_state_sync_manager(
@@ -332,27 +366,6 @@ pub fn add_transport_to_sim<F>(
                     state_sync_rx,
                 );
             }
-
-            let _artifact_processor_jh = if let Some(consensus_rx) = consensus_rx {
-                let consensus = consensus_manager_clone.clone().unwrap();
-                let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
-                    start_test_processor(consensus.clone(), consensus.read().unwrap().clone());
-                ic_consensus_manager::start_consensus_manager(
-                    log,
-                    &MetricsRegistry::default(),
-                    tokio::runtime::Handle::current(),
-                    artifact_manager_event_rx,
-                    consensus_rx,
-                    consensus.clone(),
-                    Arc::new(consensus.read().unwrap().clone()),
-                    artifact_sender,
-                    transport.clone(),
-                    topology_watcher_clone,
-                );
-                Some(artifact_processor_jh)
-            } else {
-                None
-            };
 
             post_setup_future_clone(peer, transport).await;
             Ok(())
@@ -379,7 +392,7 @@ fn start_test_processor(
 ) -> (
     Box<dyn JoinGuard>,
     tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
-    crossbeam_channel::Sender<UnvalidatedArtifactEvent<U64Artifact>>,
+    crossbeam_channel::Sender<UnvalidatedArtifactMutation<U64Artifact>>,
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);
     let time_source = Arc::new(SysTimeSource::new());

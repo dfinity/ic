@@ -1,13 +1,17 @@
-use crate::{CheckpointError, CheckpointMetrics, TipRequest, NUMBER_OF_CHECKPOINT_THREADS};
+use crate::{
+    CheckpointError, CheckpointMetrics, TipRequest,
+    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
+};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
+use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::Memory;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
+use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
@@ -19,6 +23,19 @@ use std::time::{Duration, Instant};
 
 #[cfg(test)]
 mod tests;
+
+impl CheckpointLoadingMetrics for CheckpointMetrics {
+    fn observe_broken_soft_invariant(&self, msg: String) {
+        debug_assert!(false);
+        self.load_checkpoint_soft_invariant_broken.inc();
+        error!(
+            self.log,
+            "{}: Checkpoint invariant broken: {}",
+            CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
+            msg
+        );
+    }
+}
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
@@ -147,8 +164,11 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             ic_replicated_state::IngressHistoryState::try_from(ingress_history_proto)
                 .map_err(|err| into_checkpoint_error("IngressHistoryState".into(), err))?;
         let metadata_proto = checkpoint_layout.system_metadata().deserialize()?;
-        let mut metadata = ic_replicated_state::SystemMetadata::try_from(metadata_proto)
-            .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
+        let mut metadata = ic_replicated_state::SystemMetadata::try_from((
+            metadata_proto,
+            metrics as &dyn CheckpointLoadingMetrics,
+        ))
+        .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
         metadata.ingress_history = ingress_history;
         metadata.own_subnet_type = own_subnet_type;
 

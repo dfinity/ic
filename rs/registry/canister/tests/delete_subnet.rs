@@ -1,9 +1,11 @@
 use candid::Encode;
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, RegistryVersion, SubnetId};
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_test_utils::registry::new_node_keys_and_node_id;
+use ic_nns_test_utils::registry::{generate_nidkg_initial_transcript, new_node_keys_and_node_id};
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet,
@@ -11,6 +13,7 @@ use ic_nns_test_utils::{
     },
     registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
 };
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -23,12 +26,14 @@ use ic_registry_keys::{
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, update};
 use ic_test_utilities::types::ids::user_test_id;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
 use ic_types::{p2p::build_default_gossip_config, ReplicaVersion};
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_delete_subnet::{DeleteSubnetPayload, NNS_SUBNET_ID},
 };
+use std::collections::BTreeMap;
 
 #[test]
 fn test_subnet_is_only_deleted_when_appropriate() {
@@ -76,8 +81,32 @@ fn test_subnet_is_only_deleted_when_appropriate() {
             }
         };
 
-        let application_subnet_cup = CatchUpPackageContents::default();
-        let application_subnet_pk = PublicKey::default();
+        let dealer_subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(187));
+        let registry_version = RegistryVersion::new(1);
+        let rng = &mut ReproducibleRng::new();
+
+        let mut application_subnet_nodes_and_dkg_pk = BTreeMap::new();
+        application_subnet_nodes_and_dkg_pk
+            .insert(node_pid_2, valid_pks_2.dkg_dealing_encryption_key().clone());
+        let application_subnet_transcript = generate_nidkg_initial_transcript(
+            &application_subnet_nodes_and_dkg_pk,
+            dealer_subnet_id,
+            NiDkgTag::HighThreshold,
+            registry_version,
+            rng,
+        );
+        let application_subnet_pk = PublicKey::from(
+            extract_threshold_sig_public_key(
+                &application_subnet_transcript.internal_csp_transcript,
+            )
+            .expect("error extracting threshold sig public key from internal CSP transcript"),
+        );
+        let application_subnet_cup = CatchUpPackageContents {
+            initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+                application_subnet_transcript,
+            )),
+            ..Default::default()
+        };
         let application_subnet = SubnetRecord {
             membership: vec![node_pid_2.get().to_vec()],
             subnet_type: i32::from(SubnetType::Application),
@@ -86,8 +115,29 @@ fn test_subnet_is_only_deleted_when_appropriate() {
             gossip_config: Some(build_default_gossip_config()),
             ..Default::default()
         };
-        let second_system_subnet_cup = CatchUpPackageContents::default();
-        let second_system_subnet_pk = PublicKey::default();
+
+        let mut second_system_subnet_nodes_and_dkg_pk = BTreeMap::new();
+        second_system_subnet_nodes_and_dkg_pk
+            .insert(node_pid_3, valid_pks_3.dkg_dealing_encryption_key().clone());
+        let second_system_subnet_transcript = generate_nidkg_initial_transcript(
+            &second_system_subnet_nodes_and_dkg_pk,
+            dealer_subnet_id,
+            NiDkgTag::HighThreshold,
+            registry_version,
+            rng,
+        );
+        let second_system_subnet_pk = PublicKey::from(
+            extract_threshold_sig_public_key(
+                &second_system_subnet_transcript.internal_csp_transcript,
+            )
+            .expect("error extracting threshold sig public key from internal CSP transcript"),
+        );
+        let second_system_subnet_cup = CatchUpPackageContents {
+            initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+                second_system_subnet_transcript,
+            )),
+            ..Default::default()
+        };
         let second_system_subnet = SubnetRecord {
             membership: vec![node_pid_3.get().to_vec()],
             subnet_type: i32::from(SubnetType::System),

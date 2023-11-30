@@ -221,14 +221,18 @@ fn create_summary_payload_helper(
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let current_key_transcript = ecdsa_payload.key_transcript.current.as_ref();
 
-    // Registry version as recorded in key transcript if it exists.
-    // Otherwise use curr_interval_registry_version.
-    let curr_key_registry_version = current_key_transcript
-        .map(ecdsa::UnmaskedTranscriptWithAttributes::registry_version)
-        .unwrap_or(curr_interval_registry_version);
-
     let created_key_transcript =
         key_transcript::get_created_key_transcript(&ecdsa_payload.key_transcript, block_reader)?;
+
+    // Registry version as recorded in the (new) current key transcript if it exists.
+    // Otherwise use curr_interval_registry_version.
+    let curr_key_registry_version = created_key_transcript
+        .as_ref()
+        .map(ecdsa::UnmaskedTranscriptWithAttributes::registry_version)
+        .or_else(|| {
+            current_key_transcript.map(ecdsa::UnmaskedTranscriptWithAttributes::registry_version)
+        })
+        .unwrap_or(curr_interval_registry_version);
 
     if created_key_transcript.is_none() {
         if let Some(metrics) = ecdsa_payload_metrics {
@@ -1059,6 +1063,8 @@ mod tests {
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::ecdsa::EcdsaPayload;
     use ic_types::consensus::ecdsa::TranscriptRef;
+    use ic_types::consensus::ecdsa::UnmaskedTranscript;
+    use ic_types::consensus::ecdsa::UnmaskedTranscriptWithAttributes;
     use ic_types::consensus::{
         BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
     };
@@ -1741,7 +1747,7 @@ mod tests {
 
             let all_nodes: Nodes = subnet_nodes
                 .into_iter()
-                .chain(target_subnet_nodes.into_iter())
+                .chain(target_subnet_nodes)
                 .collect();
             all_nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
@@ -2458,6 +2464,166 @@ mod tests {
         );
     }
 
+    fn create_key_transcript_and_refs(
+        rng: &mut ReproducibleRng,
+        height: Height,
+    ) -> (
+        IDkgTranscript,
+        UnmaskedTranscript,
+        UnmaskedTranscriptWithAttributes,
+    ) {
+        let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+
+        let key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            rng,
+        );
+        let key_transcript_ref =
+            ecdsa::UnmaskedTranscript::try_from((height, &key_transcript)).unwrap();
+        let with_attributes = ecdsa::UnmaskedTranscriptWithAttributes::new(
+            key_transcript.to_attributes(),
+            key_transcript_ref,
+        );
+        (key_transcript, key_transcript_ref, with_attributes)
+    }
+
+    #[test]
+    fn test_no_creation_after_successful_creation() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut rng = reproducible_rng();
+            let Dependencies {
+                registry,
+                registry_data_provider,
+                ..
+            } = dependencies(pool_config, 1);
+            let subnet_id = subnet_test_id(1);
+            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+            let mut block_reader = TestEcdsaBlockReader::new();
+
+            // Create two key transcripts
+            let (mut key_transcript, mut key_transcript_ref, mut current_key_transcript) =
+                create_key_transcript_and_refs(&mut rng, Height::from(1));
+            let (
+                mut reshare_key_transcript,
+                mut reshare_key_transcript_ref,
+                mut next_key_transcript,
+            ) = create_key_transcript_and_refs(&mut rng, Height::from(1));
+
+            // Reshared transcript should use higher registry version
+            if key_transcript.registry_version() > reshare_key_transcript.registry_version() {
+                std::mem::swap(&mut key_transcript, &mut reshare_key_transcript);
+                std::mem::swap(&mut key_transcript_ref, &mut reshare_key_transcript_ref);
+                std::mem::swap(&mut current_key_transcript, &mut next_key_transcript);
+            }
+
+            block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
+
+            // Membership changes between the registry versions
+            let subnet_record1 = SubnetRecordBuilder::from(&[node_test_id(0)])
+                .with_dkg_interval_length(9)
+                .build();
+            add_subnet_record(
+                &registry_data_provider,
+                current_key_transcript.registry_version().get(),
+                subnet_id,
+                subnet_record1,
+            );
+
+            let subnet_record2 = SubnetRecordBuilder::from(&[node_test_id(0), node_test_id(1)])
+                .with_dkg_interval_length(9)
+                .build();
+            add_subnet_record(
+                &registry_data_provider,
+                next_key_transcript.registry_version().get(),
+                subnet_id,
+                subnet_record2,
+            );
+
+            registry.update_to_latest_version();
+
+            // We only have the current transcript initially
+            let key_transcript = ecdsa::EcdsaKeyTranscript {
+                current: Some(current_key_transcript.clone()),
+                next_in_creation: ecdsa::KeyTranscriptCreation::Created(
+                    current_key_transcript.unmasked_transcript(),
+                ),
+                key_id: key_id.clone(),
+            };
+
+            // Initial bootstrap payload should be created successfully
+            let mut payload_0 =
+                make_bootstrap_summary(subnet_id, key_id.clone(), Height::from(0)).unwrap();
+            payload_0.key_transcript = key_transcript;
+
+            // A new summary payload should be created successfully, with next_in_creation
+            // set to Begin (membership changed).
+            let payload_1 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(1),
+                RegistryVersion::from(0),
+                next_key_transcript.registry_version(),
+                &payload_0,
+                None,
+                &no_op_logger(),
+            )
+            .unwrap()
+            .unwrap();
+
+            // As membership changed between the registry versions, next_in_creation should be set to begin
+            assert_eq!(
+                payload_1.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Begin
+            );
+
+            // Simulate successful creation of the next key transcript
+            let key_transcript = ecdsa::EcdsaKeyTranscript {
+                current: Some(current_key_transcript.clone()),
+                next_in_creation: ecdsa::KeyTranscriptCreation::Created(
+                    next_key_transcript.unmasked_transcript(),
+                ),
+                key_id: key_id.clone(),
+            };
+
+            let mut payload_2 = payload_1.clone();
+            payload_2.key_transcript = key_transcript;
+
+            block_reader
+                .add_transcript(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
+
+            // After the next key transcript was created, it should be carried over into the next payload.
+            let expected = ecdsa::EcdsaKeyTranscript {
+                current: Some(next_key_transcript.clone()),
+                next_in_creation: ecdsa::KeyTranscriptCreation::Created(
+                    next_key_transcript.unmasked_transcript(),
+                ),
+                key_id,
+            };
+
+            let payload_3 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(1),
+                RegistryVersion::from(0),
+                next_key_transcript.registry_version(),
+                &payload_2,
+                None,
+                &no_op_logger(),
+            )
+            .unwrap()
+            .unwrap();
+
+            assert_eq!(expected, payload_3.key_transcript);
+        })
+    }
+
     #[test]
     fn test_if_next_in_creation_continues() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -2607,9 +2773,6 @@ mod tests {
             let subnet_record = SubnetRecordBuilder::from(&node_ids)
                 .with_dkg_interval_length(9)
                 .build();
-            add_subnet_record(&registry_data_provider, 511, subnet_id, subnet_record);
-            registry.update_to_latest_version();
-            let registry_version = registry.get_latest_version();
             let mut valid_keys = BTreeSet::new();
             let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
             valid_keys.insert(key_id.clone());
@@ -2648,6 +2811,15 @@ mod tests {
                     transcript.clone(),
                 );
             }
+
+            add_subnet_record(
+                &registry_data_provider,
+                transcript.registry_version().get(),
+                subnet_id,
+                subnet_record,
+            );
+            registry.update_to_latest_version();
+            let registry_version = registry.get_latest_version();
 
             // Step 2: a summary payload should be created successfully, with next_in_creation
             // set to XnetReshareOfUnmaskedParams.
@@ -2791,12 +2963,16 @@ mod tests {
             );
             assert_matches!(payload_6, Ok(Some(_)));
             let payload_6 = payload_6.unwrap().unwrap();
-            // next_in_creation should be back to begin since membership changes
+            // next_in_creation should be equal to current
             assert_matches!(
                 payload_6.key_transcript.next_in_creation,
-                ecdsa::KeyTranscriptCreation::Begin
+                ecdsa::KeyTranscriptCreation::Created(ref unmasked)
+                if unmasked.as_ref().transcript_id == transcript.transcript_id
             );
             assert_matches!(payload_6.key_transcript.current, Some(_));
+            let refs = payload_6.key_transcript.get_refs();
+            assert_eq!(refs.len(), 2);
+            assert_eq!(refs[0], refs[1]);
         })
     }
 }

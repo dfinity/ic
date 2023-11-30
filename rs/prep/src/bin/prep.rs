@@ -23,6 +23,7 @@ use ic_prep_lib::{
     subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 
@@ -159,6 +160,10 @@ struct CliArgs {
     /// commas.
     #[clap(long)]
     whitelisted_prefixes: Option<String>,
+
+    /// The indices of subnets that should have the SEV feature enabled, if any.
+    #[clap(long, use_value_delimiter = true)]
+    pub sev_subnet_indices: Vec<u64>,
 }
 
 fn main() -> Result<()> {
@@ -185,11 +190,18 @@ fn main() -> Result<()> {
         } else {
             SubnetType::Application
         };
+        let features = valid_args
+            .sev_subnet_indices
+            .contains(&(i as u64))
+            .then_some(SubnetFeatures {
+                sev_enabled: true,
+                ..Default::default()
+            });
+
         let subnet_configuration = SubnetConfig::new(
             *subnet_id,
             nodes.to_owned(),
             valid_args.replica_version_id.clone(),
-            None,
             valid_args.max_ingress_bytes_per_message,
             None,
             None,
@@ -201,7 +213,7 @@ fn main() -> Result<()> {
             None,
             None,
             None,
-            None,
+            features,
             None,
             None,
             valid_args.ssh_readonly_access.clone(),
@@ -267,6 +279,7 @@ struct ValidatedArgs {
     pub guest_launch_measurement_sha256_hex: Option<String>,
     pub use_specified_ids_allocation_range: bool,
     pub whitelisted_prefixes: Option<String>,
+    pub sev_subnet_indices: Vec<u64>,
 }
 
 impl CliArgs {
@@ -303,7 +316,7 @@ impl CliArgs {
             if let Some(subnet_index) = subnet_index {
                 subnets
                     .entry(*subnet_index)
-                    .or_insert_with(BTreeMap::<_, _>::new)
+                    .or_default()
                     .insert(*node_index, config);
             } else {
                 unassigned_nodes.insert(*node_index, config);
@@ -320,6 +333,16 @@ impl CliArgs {
                 self.nns_subnet_index.unwrap(),
                 subnets.keys().collect::<Vec<_>>()
             );
+        }
+
+        for index in &self.sev_subnet_indices {
+            if !subnets.contains_key(index) {
+                bail!(
+                    "SEV subnet index {} does not match any of subnet indices {:?}",
+                    index,
+                    subnets.keys().collect::<Vec<_>>()
+                );
+            }
         }
 
         let dc_pk_path = match self.dc_pk_path {
@@ -410,6 +433,7 @@ impl CliArgs {
             guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
             whitelisted_prefixes: self.whitelisted_prefixes,
+            sev_subnet_indices: self.sev_subnet_indices,
         })
     }
 }

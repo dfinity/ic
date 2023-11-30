@@ -1,6 +1,6 @@
 use std::{
     error::Error as StdError,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{Ipv6Addr, SocketAddr},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -10,15 +10,15 @@ use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
 use axum::{
-    extract::DefaultBodyLimit,
     middleware,
     routing::method_routing::{get, post},
     Router,
 };
 use axum_server::{accept::DefaultAcceptor, Server};
 use futures::TryFutureExt;
+use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::LocalStoreImpl;
+use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::CanisterId;
 use prometheus::Registry;
@@ -53,6 +53,7 @@ use crate::{
     nns::{Load, Loader},
     persist,
     rate_limiting::RateLimit,
+    retry::{retry_request, RetryParams},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     snapshot::{Runner as SnapshotRunner, SnapshotPersister},
     tls_verify::TlsVerifier,
@@ -69,7 +70,6 @@ use crate::{
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
-const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 const SYSTEMCTL_BIN: &str = "/usr/bin/systemctl";
 
 const SECOND: Duration = Duration::from_secs(1);
@@ -79,7 +79,7 @@ const DAY: Duration = Duration::from_secs(24 * 3600);
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
-const MAX_REQUEST_BODY_SIZE: usize = 2 * MB;
+pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
 const METRICS_CACHE_CAPACITY: usize = 30 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
@@ -111,16 +111,15 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .with_custom_certificate_verifier(Arc::new(tls_verifier))
         .with_no_client_auth();
 
-    // TODO move to cli if it helps
-    let keepalive = Duration::from_secs(15);
+    let keepalive = Duration::from_secs(cli.listen.http_keepalive);
 
     // HTTP Client
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(cli.listen.http_timeout))
         .connect_timeout(Duration::from_secs(cli.listen.http_timeout_connect))
-        .pool_idle_timeout(Some(Duration::from_secs(10))) // After this duration the idle connection is closed (default 90s)
+        .pool_idle_timeout(Some(Duration::from_secs(cli.listen.http_idle_timeout))) // After this duration the idle connection is closed (default 90s)
         .http2_keep_alive_interval(Some(keepalive)) // Keepalive interval for http2 connections
-        .http2_keep_alive_timeout(Duration::from_secs(3)) // Close connection if no reply after timeout
+        .http2_keep_alive_timeout(Duration::from_secs(cli.listen.http_keepalive_timeout)) // Close connection if no reply after timeout
         .http2_keep_alive_while_idle(true) // Also ping connections that have no streams open
         .tcp_keepalive(Some(keepalive)) // Enable TCP keepalives
         .user_agent(SERVICE_NAME)
@@ -143,10 +142,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     registry_client
         .fetch_and_start_polling()
         .context("failed to start registry client")?;
-
-    let nns_pub_key =
-        ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&cli.registry.nns_pub_key_pem)
-            .context("failed to parse nns public key")?;
 
     #[cfg(feature = "tls")]
     let (tls_configurator, tls_acceptor, token) = prepare_tls(&cli, &registry)
@@ -183,16 +178,29 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
     let configuration_runner = WithThrottle(configuration_runner, ThrottleParams::new(10 * SECOND));
 
+    // Caching
+    let cache = cli.cache.cache_size_bytes.map(|x| {
+        Arc::new(
+            Cache::new(
+                x,
+                cli.cache.cache_max_item_size_bytes,
+                Duration::from_secs(cli.cache.cache_ttl_seconds),
+                cli.cache.cache_non_anonymous,
+            )
+            .expect("unable to initialize cache"),
+        )
+    });
+
     // Server / API
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
         Arc::clone(&routing_table),
-        [DER_PREFIX.as_slice(), nns_pub_key.into_bytes().as_slice()].concat(),
+        Arc::clone(&registry_snapshot),
     );
 
     let proxy_router = Arc::new(proxy_router);
 
-    let (p, lk, rk, h) = (
+    let (proxy, lookup, root_key, health) = (
         proxy_router.clone() as Arc<dyn Proxy>,
         proxy_router.clone() as Arc<dyn Lookup>,
         proxy_router.clone() as Arc<dyn RootKey>,
@@ -202,22 +210,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let routers_https = {
         let query_route = {
             let mut route = Router::new().route(routes::PATH_QUERY, {
-                post(routes::handle_call).with_state(p.clone())
+                post(routes::handle_call).with_state(proxy.clone())
             });
 
             // Add caching layer if configured
-            if let Some(v) = cli.cache.cache_size_bytes {
-                let cache = Cache::new(
-                    v,
-                    cli.cache.cache_max_item_size_bytes,
-                    Duration::from_secs(cli.cache.cache_ttl_seconds),
-                    cli.cache.cache_non_anonymous,
-                )?;
-
-                route = route.layer(middleware::from_fn_with_state(
-                    Arc::new(cache),
-                    cache_middleware,
-                ));
+            if let Some(v) = &cache {
+                route = route.layer(middleware::from_fn_with_state(v.clone(), cache_middleware));
             }
 
             route
@@ -225,7 +223,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
         let call_route = {
             let mut route = Router::new().route(routes::PATH_CALL, {
-                post(routes::handle_call).with_state(p.clone())
+                post(routes::handle_call).with_state(proxy.clone())
             });
 
             // will panic if ip_rate_limit is Some(0)
@@ -244,12 +242,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         };
 
         let read_state_route = Router::new().route(routes::PATH_READ_STATE, {
-            post(routes::handle_call).with_state(p.clone())
+            post(routes::handle_call).with_state(proxy.clone())
         });
 
         let status_route = Router::new()
             .route(routes::PATH_STATUS, {
-                get(routes::status).with_state((rk.clone(), h.clone()))
+                get(routes::status).with_state((root_key.clone(), health.clone()))
             })
             .layer(middleware::from_fn_with_state(
                 HttpMetricParamsStatus::new(&registry),
@@ -257,13 +255,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             ));
 
         let health_route = Router::new().route(routes::PATH_HEALTH, {
-            get(routes::health).with_state(h.clone())
+            get(routes::health).with_state(health.clone())
         });
 
         let proxy_routes = query_route.merge(call_route).merge(read_state_route).layer(
             // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
             // 1st layer wraps 2nd layer and so on
             ServiceBuilder::new()
+                .concurrency_limit(cli.listen.max_concurrency)
                 .layer(middleware::from_fn(routes::validate_request))
                 .layer(middleware::from_fn(routes::postprocess_response))
                 .layer(
@@ -273,8 +272,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                         .zstd(true)
                         .deflate(true),
                 )
+                .layer(middleware::from_fn(routes::pre_compression))
                 .set_x_request_id(MakeRequestUuid)
-                .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
                 .layer(middleware::from_fn_with_state(
                     HttpMetricParams::new(&registry, "http_request_in"),
                     metrics::metrics_middleware,
@@ -282,8 +281,15 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .layer(middleware::from_fn(routes::preprocess_request))
                 .layer(middleware::from_fn(management::btc_mw))
                 .layer(middleware::from_fn_with_state(
-                    lk.clone(),
-                    routes::lookup_node,
+                    lookup.clone(),
+                    routes::lookup_subnet,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    RetryParams {
+                        retry_count: cli.retry.retry_count as usize,
+                        retry_update_call: cli.retry.retry_update_call,
+                    },
+                    retry_request,
                 )),
         );
 
@@ -303,23 +309,21 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let routers_http = routers_https;
 
     // HTTP
-    let srvs_http = [Ipv4Addr::UNSPECIFIED.into(), Ipv6Addr::UNSPECIFIED.into()]
-        .into_iter()
-        .map(|ip| {
-            Server::bind(SocketAddr::new(ip, cli.listen.http_port))
-                .acceptor(DefaultAcceptor)
-                .serve(routers_http.clone().into_make_service()) // TODO change back to routers_http - for now routing http==https
-        });
+    let srvs_http = Server::bind(SocketAddr::new(
+        Ipv6Addr::UNSPECIFIED.into(),
+        cli.listen.http_port,
+    ))
+    .acceptor(DefaultAcceptor)
+    .serve(routers_http.clone().into_make_service());
 
     // HTTPS
     #[cfg(feature = "tls")]
-    let srvs_https = [Ipv4Addr::UNSPECIFIED.into(), Ipv6Addr::UNSPECIFIED.into()]
-        .into_iter()
-        .map(|ip| {
-            Server::bind(SocketAddr::new(ip, cli.listen.https_port))
-                .acceptor(tls_acceptor.clone())
-                .serve(routers_https.clone().into_make_service())
-        });
+    let srvs_https = Server::bind(SocketAddr::new(
+        Ipv6Addr::UNSPECIFIED.into(),
+        cli.listen.https_port,
+    ))
+    .acceptor(tls_acceptor.clone())
+    .serve(routers_https.clone().into_make_service());
 
     // Metrics
     let metrics_cache = Arc::new(RwLock::new(MetricsCache::new(METRICS_CACHE_CAPACITY)));
@@ -338,13 +342,21 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         });
 
     let metrics_runner = WithThrottle(
-        MetricsRunner::new(metrics_cache, registry.clone()),
+        MetricsRunner::new(
+            metrics_cache,
+            registry.clone(),
+            cache,
+            Arc::clone(&registry_snapshot),
+        ),
         ThrottleParams::new(10 * SECOND),
     );
 
     // Snapshots
-    let mut snapshot_runner =
-        SnapshotRunner::new(Arc::clone(&registry_snapshot), registry_client.clone());
+    let mut snapshot_runner = SnapshotRunner::new(
+        Arc::clone(&registry_snapshot),
+        registry_client.clone(),
+        Duration::from_secs(cli.registry.min_version_age),
+    );
 
     if let Some(v) = &cli.firewall.nftables_system_replicas_path {
         let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
@@ -360,7 +372,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         snapshot_runner,
         MetricParams::new(&registry, "run_snapshot"),
     );
-    let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(10 * SECOND));
+    let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
 
     // Checks
     let persister = WithMetricsPersist(
@@ -368,13 +380,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         MetricParamsPersist::new(&registry),
     );
 
-    let checker = Checker::new(http_client);
-    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&registry));
-    let checker = WithRetryLimited(
-        checker,
-        cli.health.check_retries,
-        Duration::from_secs(cli.health.check_retry_interval),
+    let checker = Checker::new(
+        http_client,
+        Duration::from_secs(cli.listen.http_timeout_check),
     );
+    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&registry));
+    let checker = WithRetryLimited(checker, cli.health.check_retries, Duration::ZERO);
 
     let check_runner = CheckRunner::new(
         Arc::clone(&registry_snapshot),
@@ -397,6 +408,49 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         Box::new(metrics_runner),
     ];
 
+    let (registry_replicator, nns_pub_key) = if !cli.registry.disable_registry_replicator {
+        // Check if we require an NNS key
+        let nns_pub_key = {
+            // Check if the local store is initialized
+            if !local_store
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .expect("failed to read registry local store")
+                .is_empty()
+            {
+                None
+            } else {
+                // If it's not - then we need an NNS public key to initialize it
+                let nns_pub_key_path = cli
+                    .registry
+                    .nns_pub_key_pem
+                    .expect("NNS public key is required to init Registry local store");
+
+                Some(
+                    ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&nns_pub_key_path)
+                        .expect("failed to parse NNS public key"),
+                )
+            }
+        };
+
+        // Notice no-op logger
+        let logger = ic_logger::new_replica_logger(
+            slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
+            &ic_config::logger::Config::default(),                          // config
+        );
+
+        (
+            Some(RegistryReplicator::new_with_clients(
+                logger,
+                local_store,
+                registry_client,
+                Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
+            )),
+            nns_pub_key,
+        )
+    } else {
+        (None, None)
+    };
+
     TokioScope::scope_and_block(|s| {
         s.spawn(
             axum::Server::bind(&cli.monitoring.metrics_addr)
@@ -404,26 +458,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .map_err(|err| anyhow!("server failed: {:?}", err)),
         );
 
-        if !cli.registry.disable_registry_replicator {
-            // Registry Replicator
-            let registry_replicator = {
-                // Notice no-op logger
-                let logger = ic_logger::new_replica_logger(
-                    slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
-                    &ic_config::logger::Config::default(),                          // config
-                );
-
-                RegistryReplicator::new_with_clients(
-                    logger,
-                    local_store,
-                    registry_client,
-                    Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
-                )
-            };
-
+        if let Some(v) = registry_replicator {
             s.spawn(async move {
-                registry_replicator
-                    .start_polling(cli.registry.nns_urls, Some(nns_pub_key))
+                v.start_polling(cli.registry.nns_urls, nns_pub_key)
                     .await
                     .context("failed to start registry replicator")?
                     .await
@@ -434,14 +471,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         }
 
         // Servers
-        srvs_http.for_each(|srv| {
-            s.spawn(srv.map_err(|err| anyhow!("failed to start http server: {:?}", err)))
-        });
+        s.spawn(srvs_http.map_err(|err| anyhow!("failed to start http server: {:?}", err)));
 
         #[cfg(feature = "tls")]
-        srvs_https.for_each(|srv| {
-            s.spawn(srv.map_err(|err| anyhow!("failed to start https server: {:?}", err)))
-        });
+        s.spawn(srvs_https.map_err(|err| anyhow!("failed to start https server: {:?}", err)));
 
         // Runners
         runners.into_iter().for_each(|mut r| {

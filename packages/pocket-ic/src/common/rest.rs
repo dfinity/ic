@@ -3,12 +3,13 @@
 //! from and to JSON, and are used by both crates.
 
 use crate::UserError;
-
 use candid::Principal;
 use hex;
+use ic_cdk::api::management_canister::provisional::CanisterId;
 use reqwest::blocking::Response;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub type InstanceId = usize;
 
@@ -25,13 +26,30 @@ pub struct RawCheckpoint {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CreateInstanceResponse {
-    Created { instance_id: InstanceId },
-    Error { message: String },
+    Created {
+        instance_id: InstanceId,
+        topology: Topology,
+    },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Copy)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
+}
+
+/// Relevant for calls to the management canister. If a subnet ID is
+/// provided, the call will be sent to the management canister of that subnet.
+/// If a canister ID is provided, the call will be sent to the management
+/// canister of the subnet where the canister is on.
+/// If None, the call will be sent to any management canister.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum RawEffectivePrincipal {
+    None,
+    SubnetId(#[serde(with = "base64")] Vec<u8>),
+    CanisterId(#[serde(with = "base64")] Vec<u8>),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -40,6 +58,7 @@ pub struct RawCanisterCall {
     pub sender: Vec<u8>,
     #[serde(with = "base64")]
     pub canister_id: Vec<u8>,
+    pub effective_principal: RawEffectivePrincipal,
     pub method: String,
     #[serde(with = "base64")]
     pub payload: Vec<u8>,
@@ -167,6 +186,28 @@ impl From<Principal> for RawCanisterId {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct RawSubnetId {
+    #[serde(with = "base64")]
+    pub subnet_id: Vec<u8>,
+}
+
+pub type SubnetId = Principal;
+
+impl From<Principal> for RawSubnetId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            subnet_id: principal.as_slice().to_vec(),
+        }
+    }
+}
+
+impl From<RawSubnetId> for Principal {
+    fn from(val: RawSubnetId) -> Self {
+        Principal::from_slice(&val.subnet_id)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct RawVerifyCanisterSigArg {
     #[serde(with = "base64")]
@@ -180,11 +221,11 @@ pub struct RawVerifyCanisterSigArg {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct BlobId(pub [u8; 32]);
+pub struct BlobId(#[serde(with = "base64")] pub Vec<u8>);
 
 impl std::fmt::Display for BlobId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "BlobId{{{}}}", hex::encode(self.0))
+        write!(f, "BlobId{{{}}}", hex::encode(self.0.clone()))
     }
 }
 
@@ -215,5 +256,127 @@ pub mod base64 {
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         let base64 = String::deserialize(d)?;
         base64::decode(base64.as_bytes()).map_err(serde::de::Error::custom)
+    }
+}
+
+// ================================================================================================================= //
+
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum SubnetKind {
+    Application,
+    Bitcoin,
+    Fiduciary,
+    II,
+    NNS,
+    SNS,
+    System,
+}
+
+/// This represents which named subnets the user wants to create, and how
+/// many of the general app/system subnets, which are indistinguishable.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, Default)]
+pub struct SubnetConfigSet {
+    pub nns: bool,
+    pub sns: bool,
+    pub ii: bool,
+    pub fiduciary: bool,
+    pub bitcoin: bool,
+    pub system: usize,
+    pub application: usize,
+}
+
+impl SubnetConfigSet {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.system > 0
+            || self.application > 0
+            || self.nns
+            || self.sns
+            || self.ii
+            || self.fiduciary
+            || self.bitcoin
+        {
+            return Ok(());
+        }
+        Err("SubnetConfigSet must contain at least one subnet".to_owned())
+    }
+
+    /// Return the configured named subnets in order.
+    pub fn get_named(&self) -> Vec<SubnetKind> {
+        use SubnetKind::*;
+        vec![
+            (self.nns, NNS),
+            (self.sns, SNS),
+            (self.ii, II),
+            (self.fiduciary, Fiduciary),
+            (self.bitcoin, Bitcoin),
+        ]
+        .into_iter()
+        .filter(|(flag, _)| *flag)
+        .map(|(_, kind)| kind)
+        .collect()
+    }
+}
+
+/// Configuration details for a subnet, returned by PocketIc server
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SubnetConfig {
+    pub subnet_kind: SubnetKind,
+    /// Number of nodes in the subnet.
+    pub size: u64,
+    /// Some mainnet subnets have several disjunct canister ranges.
+    pub canister_ranges: Vec<CanisterIdRange>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CanisterIdRange {
+    pub start: CanisterId,
+    pub end: CanisterId,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Topology(pub HashMap<SubnetId, SubnetConfig>);
+
+impl Topology {
+    pub fn get_app_subnets(&self) -> Vec<SubnetId> {
+        self.find_subnets(SubnetKind::Application)
+    }
+
+    pub fn get_bitcoin(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::Bitcoin)
+    }
+
+    pub fn get_fiduciary(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::Fiduciary)
+    }
+
+    pub fn get_ii(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::II)
+    }
+
+    pub fn get_nns(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::NNS)
+    }
+
+    pub fn get_sns(&self) -> Option<SubnetId> {
+        self.find_subnet(SubnetKind::SNS)
+    }
+
+    pub fn get_system_subnets(&self) -> Vec<SubnetId> {
+        self.find_subnets(SubnetKind::System)
+    }
+
+    fn find_subnets(&self, kind: SubnetKind) -> Vec<SubnetId> {
+        self.0
+            .iter()
+            .filter(|(_, config)| config.subnet_kind == kind)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    fn find_subnet(&self, kind: SubnetKind) -> Option<SubnetId> {
+        self.0
+            .iter()
+            .find(|(_, config)| config.subnet_kind == kind)
+            .map(|(id, _)| *id)
     }
 }

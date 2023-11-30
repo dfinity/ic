@@ -167,13 +167,13 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
-                &b"Here's a howdyedo!"[..],
+                b"Here's a howdyedo!".to_vec(),
                 key_id,
             )
             .expect("The key should be there initially");
 
         // Call retain, keeping the threshold key:
-        let active_key_ids: BTreeSet<KeyId> = vec![internal_public_coefficients.clone()]
+        let active_key_ids: BTreeSet<KeyId> = [internal_public_coefficients.clone()]
             .iter()
             .map(KeyId::from)
             .collect();
@@ -185,7 +185,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
-                &b"Here's a state of things!"[..],
+                b"Here's a state of things!".to_vec(),
                 key_id,
             )
             .expect("The key should have been retained");
@@ -199,7 +199,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
             different_public_coefficients != internal_public_coefficients,
             "Public coefficients should be different - the different one has no entries after all!"
         );
-        let active_key_ids = vec![different_public_coefficients]
+        let active_key_ids = [different_public_coefficients]
             .iter()
             .map(KeyId::from)
             .collect();
@@ -211,7 +211,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
-                &b"To her life she clings!"[..],
+                b"To her life she clings!".to_vec(),
                 key_id,
             )
             .expect_err("The key should have been removed");
@@ -233,7 +233,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
-                &b"Here's a howdyedo!"[..],
+                b"Here's a howdyedo!".to_vec(),
                 key_id,
             )
             .expect("The key should be there initially");
@@ -436,7 +436,7 @@ pub fn should_generate_dealing_encryption_key_pair_and_store_keys(csp_vault: Arc
 
     assert_matches!(public_key, CspFsEncryptionPublicKey::Groth20_Bls12_381(_));
     assert_matches!(pop, CspFsEncryptionPop::Groth20WithPop_Bls12_381(_));
-    assert!(csp_vault.sks_contains(&KeyId::from(&public_key)).is_ok());
+    assert!(csp_vault.sks_contains(KeyId::from(&public_key)).is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()

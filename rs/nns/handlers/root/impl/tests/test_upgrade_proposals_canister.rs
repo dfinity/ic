@@ -5,7 +5,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
@@ -61,8 +61,8 @@ fn test_upgrade_governance_canister() {
             .await
             .unwrap();
 
-        let governance =
-            ChangeCanisterProposal::new(true, Upgrade, fake_governance_canister.canister_id())
+        let change_canister_request =
+            ChangeCanisterRequest::new(true, Upgrade, fake_governance_canister.canister_id())
                 .with_wasm(STABLE_MEMORY_READER_WASM.clone());
 
         // The upgrade should work
@@ -71,7 +71,7 @@ fn test_upgrade_governance_canister() {
                 &fake_governance_canister,
                 &root,
                 "change_nns_canister",
-                Encode!(&governance).unwrap(),
+                Encode!(&change_canister_request).unwrap(),
             )
             .await
         );

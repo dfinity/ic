@@ -9,7 +9,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode,
+    ExecutionMode,
     HypervisorError::{self, *},
     HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, StableGrowOutcome,
     StableMemoryApi, SubnetAvailableMemory, SystemApi,
@@ -36,10 +36,10 @@ use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
     convert::{From, TryFrom},
-    sync::Arc,
+    rc::Rc,
 };
 
-const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
+pub const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
 const CERTIFIED_DATA_MAX_LENGTH: u32 = 32;
 
@@ -822,7 +822,7 @@ pub struct SystemApiImpl {
 
     /// A handler that is invoked when the instruction counter becomes negative
     /// (exceeds the current slice instruction limit).
-    out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
+    out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
 
     /// The instruction limit of the currently executing slice. It is
     /// initialized to `execution_parameters.instruction_limits.slice()` and
@@ -833,9 +833,6 @@ pub struct SystemApiImpl {
     /// is initialized to 0 and updated after each out-of-instructions call that
     /// starts a new slice.
     instructions_executed_before_current_slice: i64,
-
-    /// Tracks the complexity accumulated during the message execution.
-    execution_complexity: ExecutionComplexity,
 }
 
 impl SystemApiImpl {
@@ -850,7 +847,7 @@ impl SystemApiImpl {
         wasm_native_stable_memory: FlagStatus,
         max_sum_exported_function_name_lengths: usize,
         stable_memory: Memory,
-        out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
+        out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
         let memory_usage = MemoryUsage::new(
@@ -877,7 +874,6 @@ impl SystemApiImpl {
             log,
             current_slice_instruction_limit: i64::try_from(slice_limit).unwrap_or(i64::MAX),
             instructions_executed_before_current_slice: 0,
-            execution_complexity: ExecutionComplexity::default(),
         }
     }
 
@@ -1331,14 +1327,6 @@ impl SystemApiImpl {
 }
 
 impl SystemApi for SystemApiImpl {
-    fn set_execution_complexity(&mut self, complexity: ExecutionComplexity) {
-        self.execution_complexity = complexity
-    }
-
-    fn execution_complexity(&self) -> &ExecutionComplexity {
-        &self.execution_complexity
-    }
-
     fn set_execution_error(&mut self, error: HypervisorError) {
         self.execution_error = Some(error)
     }
@@ -2362,10 +2350,9 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64> {
-        let execution_complexity = self.execution_complexity().clone();
         let result = self
             .out_of_instructions_handler
-            .out_of_instructions(instruction_counter, execution_complexity);
+            .out_of_instructions(instruction_counter);
         if let Ok(new_slice_instruction_limit) = result {
             // A new slice has started, update the instruction sum and limit.
             let slice_instructions = self
@@ -2933,11 +2920,7 @@ impl SystemApi for SystemApiImpl {
 pub struct DefaultOutOfInstructionsHandler {}
 
 impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
-    fn out_of_instructions(
-        &self,
-        _instruction_counter: i64,
-        _execution_complexity: ExecutionComplexity,
-    ) -> HypervisorResult<i64> {
+    fn out_of_instructions(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
         Err(HypervisorError::InstructionLimitExceeded)
     }
 }

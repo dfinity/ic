@@ -2,9 +2,11 @@
 
 set -e
 
-# Detect the first boot of GuestOS virtual machine.
+# Detect the first successful boot of HostOS.
+# Successful boot is defined as a boot where GuestOS can be booted.
+# This script is executed by HostOS right before booting GuestOS VM.
 
-SCRIPT="$(basename $0)[$$]"
+SCRIPT="$(basename "$0")[$$]"
 METRICS_DIR="/run/node_exporter/collector_textfile"
 FIRST_BOOT_FILE="/boot/config/first_boot"
 HOSTOS_VERSION_FILE="/opt/ic/share/version.txt"
@@ -14,7 +16,7 @@ for argument in "${@}"; do
     case ${argument} in
         -h | --help)
             echo 'Usage:
-Detect GuestOS Virtual Machine First Boot
+Detect HostOS First Successful Boot
 
 Arguments:
   -h, --help            show this help message and exit
@@ -81,17 +83,22 @@ function detect_first_boot() {
     if [ ${FIRST_BOOT_STATE} -eq 1 ]; then
         write_log "First boot detected."
         write_first_boot_state
-        write_metric "hostos_guestos_first_boot_state" \
+        write_metric "hostos_first_boot_state" \
             "1" \
-            "GuestOS virtual machine first boot" \
+            "HostOS first boot state" \
             "gauge"
     else
         write_log "Not first boot, continuing with startup."
-        write_metric "hostos_guestos_first_boot_state" \
+        write_metric "hostos_first_boot_state" \
             "0" \
-            "GuestOS virtual machine first boot state" \
+            "HostOS first boot state" \
             "gauge"
     fi
+    write_metric_attr "hostos_boot_action" \
+        "{successful_boot=\"true\"}" \
+        "0" \
+        "HostOS boot action" \
+        "gauge"
 }
 
 function get_hostos_version() {

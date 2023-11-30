@@ -1,4 +1,6 @@
 //! The module contains implementations for different artifact kinds.
+use std::convert::Infallible;
+
 use crate::{
     artifact::*,
     canister_http::CanisterHttpResponseShare,
@@ -13,17 +15,28 @@ use crate::{
     messages::SignedIngress,
     CountBytes,
 };
+use ic_protobuf::proxy::ProxyDecodeError;
+use prost::bytes::Bytes;
+use serde::{Deserialize, Serialize};
 
 /// The `ArtifactKind` of *Consensus* messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusArtifact;
 
 /// `ConsensusArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for ConsensusArtifact {
     const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
+    type PbId = ic_protobuf::types::v1::ConsensusMessageId;
+    type PbIdError = ProxyDecodeError;
     type Id = ConsensusMessageId;
+    type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type Message = ConsensusMessage;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ic_protobuf::types::v1::ConsensusMessageAttribute;
+    type PbAttributeError = ProxyDecodeError;
     type Attribute = ConsensusMessageAttribute;
+    type PbFilter = ic_protobuf::types::v1::ConsensusMessageFilter;
+    type PbFilterError = ProxyDecodeError;
     type Filter = ConsensusMessageFilter;
 
     /// The function converts a `ConsensusMessage` into an advert for a
@@ -39,15 +52,23 @@ impl ArtifactKind for ConsensusArtifact {
 }
 
 /// The `ArtifactKind` of ingress message.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct IngressArtifact;
 
 /// `IngressArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for IngressArtifact {
     const TAG: ArtifactTag = ArtifactTag::IngressArtifact;
+    type PbId = ic_protobuf::types::v1::IngressMessageId;
+    type PbIdError = ProxyDecodeError;
     type Id = IngressMessageId;
+    type PbMessage = Bytes;
+    type PbMessageError = ProxyDecodeError;
     type Message = SignedIngress;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
     type Attribute = ();
+    type PbFilter = ();
+    type PbFilterError = Infallible;
     type Filter = ();
 
     /// The function converts a `SignedIngress` into an advert for an
@@ -63,15 +84,23 @@ impl ArtifactKind for IngressArtifact {
 }
 
 /// The `ArtifactKind` of certification messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CertificationArtifact;
 
 /// `CertificationArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for CertificationArtifact {
     const TAG: ArtifactTag = ArtifactTag::CertificationArtifact;
+    type PbId = ic_protobuf::types::v1::CertificationMessageId;
+    type PbIdError = ProxyDecodeError;
     type Id = CertificationMessageId;
+    type PbMessage = ic_protobuf::types::v1::CertificationMessage;
+    type PbMessageError = ProxyDecodeError;
     type Message = CertificationMessage;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
     type Attribute = ();
+    type PbFilter = ic_protobuf::types::v1::CertificationMessageFilter;
+    type PbFilterError = ProxyDecodeError;
     type Filter = CertificationMessageFilter;
 
     /// The function converts a `CertificationMessage` into an advert for a
@@ -87,15 +116,23 @@ impl ArtifactKind for CertificationArtifact {
 }
 
 /// The `ArtifactKind` of DKG messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DkgArtifact;
 
 /// `DkgArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for DkgArtifact {
     const TAG: ArtifactTag = ArtifactTag::DkgArtifact;
+    type PbId = ic_protobuf::types::v1::DkgMessageId;
+    type PbIdError = ProxyDecodeError;
     type Id = DkgMessageId;
+    type PbMessage = ic_protobuf::types::v1::DkgMessage;
+    type PbMessageError = ProxyDecodeError;
     type Message = DkgMessage;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
     type Attribute = ();
+    type PbFilter = ();
+    type PbFilterError = Infallible;
     type Filter = ();
 
     /// The function converts a `DkgMessage` into an advert for a
@@ -111,15 +148,23 @@ impl ArtifactKind for DkgArtifact {
 }
 
 /// The `ArtifactKind` of ECDSA messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EcdsaArtifact;
 
 /// `EcdsaArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for EcdsaArtifact {
     const TAG: ArtifactTag = ArtifactTag::EcdsaArtifact;
+    type PbId = ic_protobuf::types::v1::EcdsaArtifactId;
+    type PbIdError = ProxyDecodeError;
     type Id = EcdsaMessageId;
+    type PbMessage = ic_protobuf::types::v1::EcdsaMessage;
+    type PbMessageError = ProxyDecodeError;
     type Message = EcdsaMessage;
+    type PbAttribute = ic_protobuf::types::v1::EcdsaMessageAttribute;
+    type PbAttributeError = ProxyDecodeError;
     type Attribute = EcdsaMessageAttribute;
+    type PbFilter = ();
+    type PbFilterError = Infallible;
     type Filter = ();
 
     /// The function converts a `EcdsaMessage` into an advert for a
@@ -135,15 +180,23 @@ impl ArtifactKind for EcdsaArtifact {
 }
 
 /// The `ArtifactKind` of CanisterHttp messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CanisterHttpArtifact;
 
 /// `CanisterHttpArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for CanisterHttpArtifact {
     const TAG: ArtifactTag = ArtifactTag::CanisterHttpArtifact;
+    type PbId = ic_protobuf::types::v1::CanisterHttpShare;
+    type PbIdError = ProxyDecodeError;
     type Id = CanisterHttpResponseId;
+    type PbMessage = ic_protobuf::types::v1::CanisterHttpShare;
+    type PbMessageError = ProxyDecodeError;
     type Message = CanisterHttpResponseShare;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
     type Attribute = ();
+    type PbFilterError = Infallible;
+    type PbFilter = ();
     type Filter = ();
 
     /// This function converts a `CanisterHttpResponseShare` into an advert for a

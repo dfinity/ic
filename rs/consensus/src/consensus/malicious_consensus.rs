@@ -13,6 +13,7 @@ use ic_types::consensus::{
     FinalizationShare, NotarizationShare, Rank,
 };
 use ic_types::malicious_flags::MaliciousFlags;
+use ic_types::Time;
 use std::time::Duration;
 
 /// Return a `ChangeSet` that moves all block proposals in the range to the
@@ -310,6 +311,7 @@ pub fn maliciously_alter_changeset(
     finalizer: &Finalizer,
     notary: &Notary,
     logger: &ReplicaLogger,
+    timestamp: Time,
 ) -> ChangeSet {
     let mut changeset = honest_changeset;
 
@@ -322,17 +324,20 @@ pub fn maliciously_alter_changeset(
             changeset.retain(|change_action| {
                 !matches!(
                     change_action,
-                    ChangeAction::AddToValidated(ConsensusMessage::BlockProposal(_))
+                    ChangeAction::AddToValidated(x) if matches!(x.msg ,ConsensusMessage::BlockProposal(_))
                 )
             });
         }
 
-        changeset.append(&mut add_all_to_validated(maliciously_propose_blocks(
-            block_maker,
-            pool,
-            malicious_flags.maliciously_propose_empty_blocks,
-            malicious_flags.maliciously_propose_equivocating_blocks,
-        )));
+        changeset.append(&mut add_all_to_validated(
+            timestamp,
+            maliciously_propose_blocks(
+                block_maker,
+                pool,
+                malicious_flags.maliciously_propose_empty_blocks,
+                malicious_flags.maliciously_propose_equivocating_blocks,
+            ),
+        ));
     }
 
     if malicious_flags.maliciously_notarize_all {
@@ -352,9 +357,10 @@ pub fn maliciously_alter_changeset(
         changeset.append(&mut maliciously_validate_all_blocks(pool, logger));
 
         // Notarize all valid block proposals
-        changeset.append(&mut add_all_to_validated(maliciously_notarize_all(
-            notary, pool,
-        )));
+        changeset.append(&mut add_all_to_validated(
+            timestamp,
+            maliciously_notarize_all(notary, pool),
+        ));
     }
 
     if malicious_flags.maliciously_finalize_all {
@@ -363,14 +369,15 @@ pub fn maliciously_alter_changeset(
         changeset.retain(|change_action| {
             !matches!(
                 change_action,
-                ChangeAction::AddToValidated(ConsensusMessage::FinalizationShare(_))
+                ChangeAction::AddToValidated(x) if matches!(x.msg, ConsensusMessage::FinalizationShare(_))
             )
         });
 
         // Finalize all block proposals
-        changeset.append(&mut add_all_to_validated(maliciously_finalize_all(
-            finalizer, pool,
-        )));
+        changeset.append(&mut add_all_to_validated(
+            timestamp,
+            maliciously_finalize_all(finalizer, pool),
+        ));
     }
 
     changeset

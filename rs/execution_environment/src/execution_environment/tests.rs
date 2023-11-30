@@ -2587,7 +2587,7 @@ fn create_multiple_canisters_with_specified_id() {
 
     // Percentiles of the range [start, end] that will be used to get their
     // respective CanisterIds for the creation of canisters with specified Ids.
-    let percentiles = vec![0.0, 0.1, 0.3, 0.5, 0.6, 0.9];
+    let percentiles = [0.0, 0.1, 0.3, 0.5, 0.6, 0.9];
 
     for percentile in percentiles.iter() {
         let specified_id =

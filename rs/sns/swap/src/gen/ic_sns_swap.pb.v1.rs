@@ -367,7 +367,6 @@ pub struct Init {
     #[prost(bool, optional, tag = "28")]
     pub should_auto_finalize: ::core::option::Option<bool>,
     /// Constraints for the Neurons' Fund participation in this swap.
-    /// TODO\[NNS1-2570\]: Use this data to compute neurons_fund_participation_icp_e8s.
     #[prost(message, optional, tag = "29")]
     pub neurons_fund_participation_constraints:
         ::core::option::Option<NeuronsFundParticipationConstraints>,
@@ -2051,7 +2050,7 @@ pub mod new_sale_ticket_response {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListDirectParticipantsRequest {
     /// The limit of the number of Participants returned in each page, in range
-    /// [0, 30,000].
+    /// \[0, 30,000\].
     /// If no value, or a value outside of this range is requested, 30,000 will be
     /// used.
     #[prost(uint32, optional, tag = "1")]

@@ -124,7 +124,7 @@ impl fmt::Display for CspFsEncryptionPopFromPublicKeyProtoError {
             CspFsEncryptionPopFromPublicKeyProtoError::UnknownAlgorithm { algorithm } => write!(
                 f,
                 "Unknown algorithm: {:?}",
-                AlgorithmIdProto::from_i32(*algorithm)
+                AlgorithmIdProto::try_from(*algorithm)
             ),
             CspFsEncryptionPopFromPublicKeyProtoError::MissingProofData => {
                 write!(f, "Missing proof data",)

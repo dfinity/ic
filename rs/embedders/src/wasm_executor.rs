@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
@@ -19,8 +20,8 @@ use crate::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, HypervisorError, HypervisorResult, InstanceStats,
-    OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
+    SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -105,8 +106,6 @@ impl WasmExecutorMetrics {
 pub struct SliceExecutionOutput {
     /// The number of instructions executed by the slice.
     pub executed_instructions: NumInstructions,
-    /// The complexity observed in the slice.
-    pub execution_complexity: ExecutionComplexity,
 }
 
 /// Represents a paused WebAssembly execution that can be resumed or aborted.
@@ -229,7 +228,7 @@ impl WasmExecutor for WasmExecutorImpl {
             &execution_state.exported_globals,
             self.log.clone(),
             wasm_reserved_pages,
-            Arc::new(DefaultOutOfInstructionsHandler {}),
+            Rc::new(DefaultOutOfInstructionsHandler {}),
         );
 
         // Collect logs only when the flag is enabled to avoid producing too much data.
@@ -448,7 +447,6 @@ pub fn wasm_execution_error(
     WasmExecutionResult::Finished(
         SliceExecutionOutput {
             executed_instructions: NumInstructions::from(0),
-            execution_complexity: ExecutionComplexity::default(),
         },
         WasmExecutionOutput {
             wasm_result: Err(err),
@@ -482,7 +480,7 @@ pub fn compute_page_delta<'a>(
         // pages are not borrowed as mutable.
         let page_ref = unsafe {
             let offset: usize = i as usize * PAGE_SIZE;
-            page_bytes_from_ptr(instance, (heap_addr as *const u8).add(offset))
+            page_bytes_from_ptr(instance, heap_addr.add(offset))
         };
         pages.push((*page_index, page_ref));
     }
@@ -572,7 +570,7 @@ pub fn process(
     globals: &[Global],
     logger: ReplicaLogger,
     wasm_reserved_pages: NumWasmPages,
-    out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
+    out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
 ) -> (
     SliceExecutionOutput,
     WasmExecutionOutput,
@@ -612,7 +610,6 @@ pub fn process(
             return (
                 SliceExecutionOutput {
                     executed_instructions: NumInstructions::from(0),
-                    execution_complexity: ExecutionComplexity::default(),
                 },
                 WasmExecutionOutput {
                     wasm_result: Err(err),
@@ -668,7 +665,6 @@ pub fn process(
 
     let mut allocated_bytes = NumBytes::from(0);
     let mut allocated_message_bytes = NumBytes::from(0);
-    let mut execution_complexity = ExecutionComplexity::default();
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -706,7 +702,6 @@ pub fn process(
                     let sys_api = instance.store_data().system_api().unwrap();
                     allocated_bytes = sys_api.get_allocated_bytes();
                     allocated_message_bytes = sys_api.get_allocated_message_bytes();
-                    execution_complexity = sys_api.execution_complexity().clone();
 
                     Some(WasmStateChanges::new(
                         wasm_memory_delta,
@@ -723,7 +718,6 @@ pub fn process(
     (
         SliceExecutionOutput {
             executed_instructions: slice_instructions_executed,
-            execution_complexity,
         },
         WasmExecutionOutput {
             wasm_result,

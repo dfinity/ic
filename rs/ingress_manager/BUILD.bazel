@@ -28,6 +28,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/config",
+    "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager/mocks",
     "//rs/registry/client",
     "//rs/registry/proto_data_provider",
@@ -37,7 +38,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:tokio",
 ]
 
@@ -86,6 +87,7 @@ rust_bench(
         "//rs/artifact_pool",
         "//rs/constants",
         "//rs/interfaces",
+        "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
@@ -100,7 +102,7 @@ rust_bench(
         "//rs/types/ic00_types",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
         "@crate_index//:tokio",
     ],
 )
@@ -117,6 +119,7 @@ rust_bench(
         "//rs/config",
         "//rs/constants",
         "//rs/interfaces",
+        "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
@@ -132,7 +135,7 @@ rust_bench(
         "//rs/test_utilities/registry",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
         "@crate_index//:tokio",
     ],
 )

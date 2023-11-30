@@ -1,7 +1,9 @@
 use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
 use crate::key_id::KeyId;
-use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
+use crate::keygen::utils::{
+    idkg_dealing_encryption_pk_to_proto, mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
+};
 use crate::public_key_store::{
     PublicKeyAddError, PublicKeyRetainCheckError, PublicKeyRetainError, PublicKeyStore,
 };
@@ -9,7 +11,7 @@ use crate::secret_key_store::{
     SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
-use crate::vault::api::IDkgProtocolCspVault;
+use crate::vault::api::{IDkgCreateDealingVaultError, IDkgProtocolCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -26,10 +28,12 @@ use ic_logger::debug;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
+    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{BatchSignedIDkgDealing, IDkgDealingBytes};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -46,21 +50,48 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
-        receiver_keys: &[MEGaPublicKey],
-        transcript_operation: &IDkgTranscriptOperationInternal,
-    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
+        receiver_keys: Vec<PublicKey>,
+        transcript_operation: IDkgTranscriptOperation,
+    ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
         let start_time = self.metrics.now();
+        let receiver_keys_typed = receiver_keys
+            .into_iter()
+            .enumerate()
+            .map(|(receiver_index_usize, pk_proto)| {
+                mega_public_key_from_proto(&pk_proto).map_err(|e| match e {
+                    MEGaPublicKeyFromProtoError::MalformedPublicKey { key_bytes } => {
+                        u32::try_from(receiver_index_usize).ok().map_or_else(
+                            || {
+                                IDkgCreateDealingVaultError::InternalError(format!(
+                                    "node index is larger than u32: {receiver_index_usize}"
+                                ))
+                            },
+                            |receiver_index| IDkgCreateDealingVaultError::MalformedPublicKey {
+                                receiver_index,
+                                key_bytes,
+                            },
+                        )
+                    }
+                    MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { algorithm_id } => {
+                        IDkgCreateDealingVaultError::UnsupportedAlgorithm(algorithm_id)
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>, IDkgCreateDealingVaultError>>()?;
+        let transcript_operation_internal =
+            IDkgTranscriptOperationInternal::try_from(&transcript_operation)
+                .map_err(|e| IDkgCreateDealingVaultError::SerializationError(format!("{:?}", e)))?;
         let result = self.idkg_create_dealing_internal(
             algorithm_id,
-            context_data,
+            &context_data,
             dealer_index,
             reconstruction_threshold,
-            receiver_keys,
-            transcript_operation,
+            &receiver_keys_typed[..],
+            &transcript_operation_internal,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
@@ -75,11 +106,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
-        dealing: IDkgDealingBytes,
+        dealing: IDkgDealingInternalBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
-        context_data: &[u8],
+        context_data: Vec<u8>,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
         let start_time = self.metrics.now();
@@ -95,7 +126,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             dealer_index,
             receiver_index,
             receiver_key_id,
-            context_data,
+            &context_data,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
@@ -109,15 +140,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-        context_data: &[u8],
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        key_id: &KeyId,
+        key_id: KeyId,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
         let internal_dealings =
-            idkg_internal_dealings_from_verified_dealings(dealings).map_err(|e| {
+            idkg_internal_dealings_from_verified_dealings(&dealings).map_err(|e| {
                 IDkgLoadTranscriptError::SerializationError {
                     internal_error: format!("failed to deserialize internal dealing: {:?}", e),
                 }
@@ -128,9 +159,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             })?;
         let result = self.idkg_load_transcript_internal(
             &internal_dealings,
-            context_data,
+            &context_data,
             receiver_index,
-            key_id,
+            &key_id,
             &internal_transcript,
         );
         self.metrics.observe_duration_seconds(
@@ -145,25 +176,25 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: &[u8],
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        key_id: &KeyId,
+        key_id: KeyId,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
-        let internal_dealings = idkg_internal_dealings_from_verified_dealings(dealings)?;
+        let internal_dealings = idkg_internal_dealings_from_verified_dealings(&dealings)?;
         let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
             .map_err(|e| IDkgLoadTranscriptError::SerializationError {
                 internal_error: e.0,
             })?;
         let result = self.idkg_load_transcript_with_openings_internal(
             &internal_dealings,
-            openings,
-            context_data,
+            &openings,
+            &context_data,
             receiver_index,
-            key_id,
+            &key_id,
             &internal_transcript,
         );
         self.metrics.observe_duration_seconds(
@@ -192,19 +223,27 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_open_dealing(
         &self,
-        dealing: IDkgDealingInternal,
+        dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         opener_index: NodeIndex,
-        opener_key_id: &KeyId,
+        opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
         let start_time = self.metrics.now();
+        let internal_dealing = IDkgDealingInternal::try_from(&dealing).map_err(|e| {
+            IDkgOpenTranscriptError::InternalError {
+                internal_error: format!(
+                    "Error deserializing a signed dealing: {:?} of dealer {:?}",
+                    e, dealer_index
+                ),
+            }
+        })?;
         let result = self.idkg_open_dealing_internal(
-            dealing,
+            internal_dealing,
             dealer_index,
-            context_data,
+            &context_data,
             opener_index,
-            opener_key_id,
+            &opener_key_id,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
@@ -246,11 +285,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: &[MEGaPublicKey],
         transcript_operation: &IDkgTranscriptOperationInternal,
-    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
+    ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         let tecdsa_shares = self.get_secret_shares(transcript_operation)?;
-
         let seed = Seed::from_rng(&mut *self.rng_write_lock());
-        tecdsa_create_dealing(
+        let dealing = tecdsa_create_dealing(
             algorithm_id,
             context_data,
             dealer_index,
@@ -259,9 +297,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             &tecdsa_shares,
             seed,
         )
-        .map_err(|e| IDkgCreateDealingError::InternalError {
-            internal_error: format!("{:?}", e),
-        })
+        .map_err(|e| IDkgCreateDealingVaultError::InternalError(format!("{:?}", e)))?;
+        let bytes = dealing
+            .serialize()
+            .map_err(|e| IDkgCreateDealingVaultError::SerializationError(format!("{:?}", e)))?;
+        Ok(IDkgDealingInternalBytes::from(bytes))
     }
 
     fn idkg_verify_dealing_private_internal(
@@ -584,50 +624,64 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         active_key_ids: BTreeSet<KeyId>,
     ) -> Result<(), IDkgRetainKeysError> {
-        self.canister_sks_write_lock()
-            .retain(
-                move |key_id, _| active_key_ids.contains(key_id),
-                IDKG_THRESHOLD_KEYS_SCOPE,
-            )
-            .map_err(|e| match e {
-                SecretKeyStoreWriteError::SerializationError(e) => {
-                    IDkgRetainKeysError::SerializationError {
-                        internal_error: format!("Serialization error while retaining active IDKG canister secret shares: {:?}", e),
-                    }
+        let filter = move |key_id: &KeyId, _: &CspSecretKey| active_key_ids.contains(key_id);
+        if self
+            .canister_sks_read_lock()
+            .retain_would_modify_keystore(filter.clone(), IDKG_THRESHOLD_KEYS_SCOPE)
+        {
+            // The fact that we perform the initial check holding a read lock on the canister SKS,
+            // and then possibly acquire a write lock to actually modify the canister SKS, results
+            // in a potential race condition here. This has two consequences:
+            //  - In case another writer managed to get the write lock after we released the read
+            //    lock and acquired the write lock, and also executed the retain operation with the
+            //    same set of `active_key_ids`, this is fine, since the operation is idempotent.
+            //  - Another potential issue is that a new transcript could have been loaded, and a
+            //    new key added, between the time that retain on the crypto component was called,
+            //    and the time that we actually call retain here. In this case, a newly-created key
+            //    may be deleted. This is currently not an issue given how the crypto component is
+            //    called from consensus, but an approach similar to the one proposed for NI-DKG in
+            //    CRP-1094 (adding the registry version to the keys) could be applied here also.
+            self.canister_sks_write_lock()
+                .retain(
+                    filter,
+                    IDKG_THRESHOLD_KEYS_SCOPE,
+                )
+                .map_err(|e| match e {
+                    SecretKeyStoreWriteError::SerializationError(e) => {
+                        IDkgRetainKeysError::SerializationError {
+                            internal_error: format!("Serialization error while retaining active IDKG canister secret shares: {:?}", e),
+                        }
 
-                }
-                SecretKeyStoreWriteError::TransientError(e) => {
-                    IDkgRetainKeysError::TransientInternalError {
-                        internal_error: format!("IO error while retaining active IDKG canister secret shares: {:?}", e)
                     }
+                    SecretKeyStoreWriteError::TransientError(e) => {
+                        IDkgRetainKeysError::TransientInternalError {
+                            internal_error: format!("IO error while retaining active IDKG canister secret shares: {:?}", e)
+                        }
 
-                }
-            })
+                    }
+                })
+        } else {
+            Ok(())
+        }
     }
 
     fn get_secret_shares(
         &self,
         transcript_operation: &IDkgTranscriptOperationInternal,
-    ) -> Result<SecretShares, IDkgCreateDealingError> {
+    ) -> Result<SecretShares, IDkgCreateDealingVaultError> {
         match transcript_operation {
             IDkgTranscriptOperationInternal::Random => Ok(SecretShares::Random),
             IDkgTranscriptOperationInternal::ReshareOfUnmasked(commitment)
             | IDkgTranscriptOperationInternal::ReshareOfMasked(commitment) => {
                 let secret_share_bytes = self.commitment_opening_from_sks(commitment)?;
-                SecretShares::try_from((&secret_share_bytes, None)).map_err(|e| {
-                    IDkgCreateDealingError::InternalError {
-                        internal_error: format!("{:?}", e),
-                    }
-                })
+                SecretShares::try_from((&secret_share_bytes, None))
+                    .map_err(|e| IDkgCreateDealingVaultError::InternalError(format!("{:?}", e)))
             }
             IDkgTranscriptOperationInternal::UnmaskedTimesMasked(commitment_1, commitment_2) => {
                 let unmasked_share_bytes = self.commitment_opening_from_sks(commitment_1)?;
                 let masked_share_bytes = self.commitment_opening_from_sks(commitment_2)?;
-                SecretShares::try_from((&unmasked_share_bytes, Some(&masked_share_bytes))).map_err(
-                    |e| IDkgCreateDealingError::InternalError {
-                        internal_error: format!("{:?}", e),
-                    },
-                )
+                SecretShares::try_from((&unmasked_share_bytes, Some(&masked_share_bytes)))
+                    .map_err(|e| IDkgCreateDealingVaultError::InternalError(format!("{:?}", e)))
             }
         }
     }
@@ -635,12 +689,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn commitment_opening_from_sks(
         &self,
         commitment: &PolynomialCommitment,
-    ) -> Result<CommitmentOpeningBytes, IDkgCreateDealingError> {
+    ) -> Result<CommitmentOpeningBytes, IDkgCreateDealingVaultError> {
         let key_id = KeyId::from(commitment);
         let opening = self.canister_sks_read_lock().get(&key_id);
         match &opening {
             Some(CspSecretKey::IDkgCommitmentOpening(bytes)) => Ok(bytes.clone()),
-            _ => Err(IDkgCreateDealingError::SecretSharesNotFound {
+            _ => Err(IDkgCreateDealingVaultError::SecretSharesNotFound {
                 commitment_string: format!("{:?}", commitment),
             }),
         }
@@ -725,7 +779,7 @@ fn idkg_public_key_proto_to_key_id(
     public_keys
         .iter()
         .map(|public_key| {
-            let curve_type = match AlgorithmIdProto::from_i32(public_key.algorithm) {
+            let curve_type = match AlgorithmIdProto::try_from(public_key.algorithm).ok() {
                 Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
                 alg_id => Err(IDkgRetainKeysError::InternalError {
                     internal_error: format!("Unsupported algorithm {:?}", alg_id),

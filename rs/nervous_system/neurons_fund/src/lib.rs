@@ -22,9 +22,15 @@ mod binomial_tests;
 mod polynomial_matching_function_tests;
 pub mod test_functions;
 
+pub(crate) const LOG_PREFIX: &str = "[Neurons' Fund] ";
+
 /// This is a theoretical limit which should be smaller than any realistic amount of maturity
 /// that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
 pub const MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S: u64 = 333_000 * E8;
+
+const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_1_ICP: Decimal = dec!(33_000);
+const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_2_ICP: Decimal = dec!(100_000);
+const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_3_ICP: Decimal = dec!(167_000);
 
 // The maximum number of bytes that a serialized representation of an ideal matching function
 // `IdealMatchedParticipationFunction` may have.
@@ -63,7 +69,7 @@ pub fn rescale_to_icp(x_icp_e8s: u64) -> Decimal {
     u64_to_dec(x_icp_e8s) * dec!(0.000_000_01)
 }
 
-/// Attempts to rescale a decimal amount of ICPs to ICP e8s.
+/// Attempts to rescale a decimal amount of ICPs to ICP e8s. Warning: this operation is lossy.
 pub fn rescale_to_icp_e8s(x_icp: Decimal) -> Result<u64, String> {
     x_icp
         .checked_mul(u64_to_dec(E8))
@@ -95,6 +101,7 @@ impl<F: InvertibleFunction + SerializableFunction + std::fmt::Debug> IdealMatchi
 
 /// A monotonically non-decreasing function. Returns a decimal amount of ICP (not e8s).
 pub trait NonDecreasingFunction {
+    /// Applies `self` over the specified amount in ICP e8s, returning an amount in ICP (not e8s).
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String>;
 
     /// Simply unwraps the result from `self.apply()`.
@@ -106,14 +113,152 @@ pub trait NonDecreasingFunction {
     fn apply_and_rescale_to_icp_e8s(&self, x_icp_e8s: u64) -> Result<u64, String> {
         self.apply(x_icp_e8s).and_then(rescale_to_icp_e8s)
     }
+}
 
-    /// The least argument value (in ICP e8s) at which the function reaches its supremum.
-    fn max_argument_icp_e8s(&self) -> Result<u64, String> {
-        // A general version of this function could be implemented via binary search.
-        Ok(u64::MAX)
+#[derive(Clone, Debug, PartialEq)]
+pub enum InvertError {
+    ValueIsNegative(Decimal),
+    MaxArgumentValueError(String),
+    FunctionApplicationError(String),
+    MonotonicityAssumptionViolation {
+        left: u64,
+        target_y: Decimal,
+        right: u64,
+    },
+    InvertValueAboveU64Range {
+        lower: u64,
+        target_y: Decimal,
+    },
+    InvertValueBelowU64Range {
+        target_y: Decimal,
+        upper: u64,
+    },
+}
+
+impl ToString for InvertError {
+    fn to_string(&self) -> String {
+        let prefix = "Cannot invert ";
+        match self {
+            Self::ValueIsNegative(value) => {
+                format!("{}negative value {}.", prefix, value)
+            }
+            Self::MaxArgumentValueError(error) => {
+                format!("{}due to maximum argument error: {}", prefix, error)
+            }
+            Self::FunctionApplicationError(error) => {
+                format!("{}due to function application error: {}", prefix, error)
+            }
+            Self::MonotonicityAssumptionViolation {
+                left,
+                target_y,
+                right,
+            } => {
+                format!(
+                    "{}at target_y={}, as function is decreasing between {} and {}.",
+                    prefix, target_y, left, right,
+                )
+            }
+            Self::InvertValueAboveU64Range { lower, target_y } => {
+                format!(
+                    "{}at target_y={}, as function's inverse appears to be above {}.",
+                    prefix, target_y, lower,
+                )
+            }
+            Self::InvertValueBelowU64Range { target_y, upper } => {
+                format!(
+                    "{}at target_y={}, as function's inverse appears to be below {}.",
+                    prefix, target_y, upper,
+                )
+            }
+        }
+    }
+}
+
+/// An invertible function is a function that has an inverse (a.k.a. monotonically non-decreasing).
+///
+/// Say we have an invertible function `f(x: u64) -> u64` and its inverse is `g(y: u64) -> u64`.
+/// Then the equality `g(f(x)) = x` must hold for all `x` s.t. `g(f(x))` is defined.
+///
+/// Additionally, the equality `f(g(y)) = y` must hold for all `y` s.t. `f(g(y))` is defined.
+pub trait InvertibleFunction: NonDecreasingFunction {
+    /// This method searches an inverse of `y` given the function defined by `self.apply`.
+    ///
+    /// An error is returned if the function defined by `self.apply` is not monotonically increasing.
+    ///
+    /// The default implementation assumes the function is non-decreasing.
+    fn invert(&self, target_y: Decimal) -> Result<u64, InvertError> {
+        if target_y.is_sign_negative() {
+            return Err(InvertError::ValueIsNegative(target_y));
+        }
+
+        let left = 0_u64;
+        let right = u64::MAX;
+
+        // Search to find the highest `lower` where `f(lower) < target_y`,
+        // and the lowest `higher` where `f(higher) >= target_y`.
+        // These form the upper and lower bound of the "true" inverse.
+        let search_result = binary_search::search_with_fallible_predicate(
+            |x: &u64| -> Result<bool, InvertError> {
+                let y = self
+                    .apply(*x)
+                    .map_err(InvertError::FunctionApplicationError)?;
+                Ok(y >= target_y)
+            },
+            left,
+            right,
+        )?;
+        let error = |x: u64| -> Result<Decimal, InvertError> {
+            let y = self
+                .apply(x)
+                .map_err(InvertError::FunctionApplicationError)?;
+            Ok((y - target_y).abs())
+        };
+        match search_result {
+            // binary_search::search will return the two values inside the range that inclusively
+            // "enclose" the exact inverse, if present. Let's return whichever was closer
+            (Some(lower), Some(upper)) => {
+                let (error_l, error_r) = (error(lower)?, error(upper)?);
+                // <= means that we pick the leftmost value if the errors are zero for both bounds.
+                if error_l <= error_r {
+                    Ok(lower)
+                } else {
+                    Ok(upper)
+                }
+            }
+            // Otherwise, it'll return the beginning or end of the range.
+            // This case will be exercised if `u64::MAX` is less than the true inverse.
+            (Some(lower), None) => {
+                if error(lower)?.is_zero() {
+                    Ok(lower)
+                } else {
+                    Err(InvertError::InvertValueAboveU64Range { lower, target_y })
+                }
+            }
+            // This case will be exercised if 0 is equal to or greater than the
+            // true inverse
+            (None, Some(upper)) => {
+                if error(upper)?.is_zero() {
+                    Ok(upper)
+                } else {
+                    Err(InvertError::InvertValueBelowU64Range { target_y, upper })
+                }
+            }
+            (None, None) => Err(InvertError::MonotonicityAssumptionViolation {
+                left,
+                target_y,
+                right,
+            }),
+        }
     }
 
-    /// Attempts to compute the `(x, f(x))`` pairs for `x in [0..self.max_argument_icp_e8s()]`
+    /// Attempts to find the least argument value (in ICP e8s) at which the function reaches its
+    /// supremum.
+    fn max_argument_icp_e8s(&self) -> Result<u64, String> {
+        let max_y_icp = self.apply(u64::MAX)?;
+        self.invert(max_y_icp).map_err(|err| err.to_string())
+    }
+
+    /// Attempts to compute the `(x, f(x))` pairs for `x in [0..self.max_argument_icp_e8s()]`
     /// with `num_samples` steps. Returned pairs are in ICP. Used in debugging.
     fn plot(&self, num_samples: NonZeroU64) -> Result<Vec<(Decimal, Decimal)>, String> {
         let max_argument_icp_e8s = self.max_argument_icp_e8s()?;
@@ -140,76 +285,9 @@ pub trait NonDecreasingFunction {
     }
 }
 
-/// An invertible function is a function that has an inverse (a.k.a. monotonically non-decreasing).
-///
-/// Say we have an invertible function `f(x: u64) -> u64` and its inverse is `g(y: u64) -> u64`.
-/// Then the equality `g(f(x)) = x` must hold for all `x` s.t. `g(f(x))` is defined.
-///
-/// Additionally, the equality `f(g(y)) = y` must hold for all `y` s.t. `f(g(y))` is defined.
-pub trait InvertibleFunction: NonDecreasingFunction {
-    /// This method searches an inverse of `y` given the function defined by `apply`.
-    ///
-    /// An error is returned if the function defined by `apply` is not monotonically increasing.
-    ///
-    /// The default implementation assumes the function is non-descending
-    fn invert(&self, target_y: Decimal) -> Result<u64, String> {
-        if target_y.is_sign_negative() {
-            return Err(format!("Cannot invert negative value {}.", target_y));
-        }
-
-        let left: u64 = 0;
-        let right: u64 = self.max_argument_icp_e8s()?;
-
-        // Search to find the highest `lower` where `f(lower) < target_y`,
-        // and the lowest `higher` where `f(higher) >= target_y`.
-        // These form the upper and lower bound of the "true" inverse.
-        let search_result = binary_search::search_with_fallible_predicate(
-            |x| Ok::<_, String>(self.apply(*x)? >= target_y),
-            left,
-            right,
-        )?;
-        let error = |x| Ok::<_, String>((self.apply(x)? - target_y).abs());
-        match search_result {
-            // binary_search::search will return the two values inside the range that inclusively
-            // "enclose" the exact inverse, if present. Let's return whichever was closer
-            (Some(lower), Some(upper)) => {
-                if error(lower)? < error(upper)? {
-                    Ok(lower)
-                } else {
-                    Ok(upper)
-                }
-            }
-            // Otherwise, it'll return the beginning or end of the range.
-            // This case will be exercised if u64::MAX is less than the true
-            // inverse
-            (Some(lower), None) => {
-                if error(lower)?.is_zero() {
-                    Ok(lower)
-                } else {
-                    Err(format!(
-                        "inverse of function appears to be greater than {lower}"
-                    ))
-                }
-            }
-            // This case will be exercised if 0 is equal to or greater than the
-            // true inverse
-            (None, Some(upper)) => {
-                if error(upper)?.is_zero() {
-                    Ok(upper)
-                } else {
-                    Err(format!(
-                        "inverse of function appears to be lower than {upper}"
-                    ))
-                }
-            }
-            (None, None) => Err("invertible function must be non-decreasing".to_string()),
-        }
-    }
-}
-
 impl<T: NonDecreasingFunction> InvertibleFunction for T {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedLinearScalingCoefficient {
     pub from_direct_participation_icp_e8s: u64,
     pub to_direct_participation_icp_e8s: u64,
@@ -230,6 +308,7 @@ impl Default for ValidatedLinearScalingCoefficient {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ValidatedNeuronsFundParticipationConstraints<F> {
     pub min_direct_participation_threshold_icp_e8s: u64,
     pub max_neurons_fund_participation_icp_e8s: u64,
@@ -387,14 +466,13 @@ impl BinomialFormula {
         self.members
             .iter()
             .enumerate()
-            .fold(Ok(Decimal::ZERO), |total, (i, member)| {
+            .try_fold(Decimal::ZERO, |total, (i, member)| {
                 let member = member.eval().map_err(|e| {
                     format!(
                         "Cannot evaluate binomial member #{} of {:?}: {}",
                         i, self, e
                     )
                 })?;
-                let total = total?;
                 total
                     .checked_add(member)
                     .ok_or_else(|| format!("Decimal overflow while computing {:?}.", self))
@@ -402,7 +480,7 @@ impl BinomialFormula {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct F1Cache {
     #[allow(unused)]
     t1: Decimal,
@@ -459,7 +537,7 @@ impl F1Cache {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct F2Cache {
     #[allow(unused)]
     t2: Decimal,
@@ -516,7 +594,7 @@ impl F2Cache {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct F3Cache {
     #[allow(unused)]
     t3: Decimal,
@@ -614,14 +692,14 @@ impl F3Cache {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct PolynomialMatchingFunctionCache {
     f_1: F1Cache,
     f_2: F2Cache,
     f_3: F3Cache,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct PolynomialMatchingFunctionPersistentData {
     pub t_1: Decimal,
     pub t_2: Decimal,
@@ -638,13 +716,29 @@ impl PolynomialMatchingFunctionCache {
             .map_err(|e| format!("Error while computing cached data for f_1: {}", e))?;
         let f_2 = F2Cache::new(data.t_2, data.t_3, data.cap)
             .map_err(|e| format!("Error while computing cached data for f_2: {}", e))?;
-        let f_3 = F3Cache::new(data.t_3, data.t_4, data.cap)
-            .map_err(|e| format!("Error while computing cached data for f_3: {}", e))?;
+        let f_3 = if data.t_4 > Decimal::ZERO {
+            F3Cache::new(data.t_3, data.t_4, data.cap)
+                .map_err(|e| format!("Error while computing cached data for f_3: {}", e))?
+        } else {
+            // Setting all polynomial coefficients to `1.0` to avoid dealing with `0^0`; at the same
+            // time, `cap == 0.0` makes `F3Cache::apply` always return `0.0`, respecting
+            // the semantics of `f_3` for `t4 == 0`.
+            F3Cache {
+                t3: data.t_3,
+                t4: data.t_4,
+                a: Decimal::ONE,
+                b: Decimal::ONE,
+                c: Decimal::ONE,
+                d: Decimal::ONE,
+                e: Decimal::ONE,
+                cap: Decimal::ZERO,
+            }
+        };
         Ok(Self { f_1, f_2, f_3 })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PolynomialMatchingFunction {
     persistent_data: PolynomialMatchingFunctionPersistentData,
     cache: PolynomialMatchingFunctionCache,
@@ -659,7 +753,10 @@ impl SerializableFunction for PolynomialMatchingFunction {
 }
 
 impl PolynomialMatchingFunction {
-    fn from_persistant_data(
+    /// Attempts to create an instance of `Self` from `persistent_data`. This might fail, e.g.,
+    /// if there is an overflow or division by zero during the computation of the polynomial
+    /// coefficients.
+    fn from_persistent_data(
         persistent_data: PolynomialMatchingFunctionPersistentData,
     ) -> Result<Self, String> {
         let cache = PolynomialMatchingFunctionCache::from_persistent_data(&persistent_data)?;
@@ -670,7 +767,7 @@ impl PolynomialMatchingFunction {
     }
 
     /// Creates a monotonically non-decreasing polynomial function for Neurons' Fund Matched Funding.
-    pub fn new(total_maturity_equivalent_icp_e8s: u64) -> Self {
+    pub fn new(total_maturity_equivalent_icp_e8s: u64) -> Result<Self, String> {
         // Computations defined in ICP rather than ICP e8s to avoid multiplication overflows for
         // the `Decimal` type for the range of values that this type is expected to operate on.
         let global_cap_icp =
@@ -680,21 +777,30 @@ impl PolynomialMatchingFunction {
             dec!(0.1) * total_maturity_equivalent_icp, // 10%
         );
         let persistent_data = PolynomialMatchingFunctionPersistentData {
-            t_1: dec!(0.1) * global_cap_icp, // 10%
-            t_2: dec!(0.3) * global_cap_icp, // 30%
-            t_3: dec!(0.5) * global_cap_icp, // 50%
-            t_4: dec!(2.0) * cap,            // 200%
+            t_1: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_1_ICP,
+            t_2: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_2_ICP,
+            t_3: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_3_ICP,
+            t_4: dec!(2.0) * cap, // 200%
             cap,
         };
-        // TODO: support this case
-        assert!(
-            persistent_data.t_4 > persistent_data.t_3,
-            "t_4 ({}) should be greater than t_3 ({}).",
-            persistent_data.t_4,
-            persistent_data.t_3
-        );
-        // Unwrapping here is safe due to the FIXME test.
-        Self::from_persistant_data(persistent_data).unwrap()
+        if persistent_data.t_4 < persistent_data.t_3 {
+            if persistent_data.t_4 < persistent_data.t_1 {
+                println!(
+                    "{}WARNING: total_maturity_equivalent_icp_e8s ({}) is too low for this \
+                    PolynomialMatchingFunction instance to have a non-zero value for any direct \
+                    participation amount: {:?}.",
+                    LOG_PREFIX, total_maturity_equivalent_icp_e8s, persistent_data,
+                );
+            } else {
+                println!(
+                    "{}INFO: total_maturity_equivalent_icp_e8s ({}) is too low for some \
+                    Matched Funding milestones to be achievable for any direct participation \
+                    amount: {:?}.",
+                    LOG_PREFIX, total_maturity_equivalent_icp_e8s, persistent_data,
+                );
+            }
+        }
+        Self::from_persistent_data(persistent_data)
     }
 }
 
@@ -702,7 +808,7 @@ impl DeserializableFunction for PolynomialMatchingFunction {
     /// Attempts to create an instance of `Self` from a serialized representation, `repr`.
     fn from_repr(repr: &str) -> Result<Box<Self>, String> {
         let persistent_data = serde_json::from_str(repr).map_err(|e| e.to_string())?;
-        Self::from_persistant_data(persistent_data).map(Box::from)
+        Self::from_persistent_data(persistent_data).map(Box::from)
     }
 }
 
@@ -729,17 +835,13 @@ impl NonDecreasingFunction for PolynomialMatchingFunction {
         };
         Ok(res)
     }
-
-    fn max_argument_icp_e8s(&self) -> Result<u64, String> {
-        rescale_to_icp_e8s(self.persistent_data.t_4)
-    }
 }
 
 pub type PolynomialNeuronsFundParticipation =
     ValidatedNeuronsFundParticipationConstraints<PolynomialMatchingFunction>;
 
 // -------------------------------------------------------------------------------------------------
-// ------------------- IntervalPartition -----------------------------------------------------------
+// ------------------- Interval --------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
 pub trait Interval {
@@ -747,6 +849,42 @@ pub trait Interval {
     fn to(&self) -> u64;
     fn contains(&self, x: u64) -> bool {
         self.from() <= x && x < self.to()
+    }
+    fn find(intervals: &Vec<Self>, x: u64) -> Option<&Self>
+    where
+        Self: Sized,
+    {
+        if intervals.is_empty() {
+            return None;
+        }
+        let i = 0_usize;
+        // Cannot underflow as intervals.len() >= 1.
+        let j = intervals.len() - 1;
+        let search_result = binary_search::search(|m| x < intervals[*m].from(), i, j);
+        match search_result {
+            (Some(m), Some(_)) => {
+                let interval = &intervals[m];
+                // `m` will be the greatest index such that `!(x < intervals[*m].from())`.
+                // Can only fail if there is a "gap" with no intervals containing `x`.
+                debug_assert!(interval.contains(x));
+                Some(interval)
+            }
+            (Some(m), None) | (None, Some(m)) => {
+                let interval = &intervals[m];
+                if interval.contains(x) {
+                    Some(interval)
+                } else {
+                    None // There's no interval that contains `x`
+                }
+            }
+            (None, None) => {
+                println!(
+                    "{}ERROR: cannot perform find_interval as the intervals aren't sorted",
+                    LOG_PREFIX,
+                );
+                None
+            }
+        }
     }
 }
 
@@ -757,72 +895,6 @@ impl Interval for ValidatedLinearScalingCoefficient {
 
     fn to(&self) -> u64 {
         self.to_direct_participation_icp_e8s
-    }
-}
-
-pub trait IntervalPartition<I> {
-    fn intervals(&self) -> Vec<&I>;
-
-    fn find_interval(&self, x: u64) -> Option<&I>
-    where
-        I: Interval,
-    {
-        let intervals = &self.intervals();
-        if intervals.is_empty() {
-            return None;
-        }
-        let mut i = 0_usize;
-        // Cannot underflow as intervals.len() >= 1.
-        let mut j = intervals.len() - 1;
-        while i <= j {
-            // [Spec] assume loop guard: i <= j
-            // [Spec] assume invariant: 0 <= i <= j+1, 0 <= j < intervals.len()
-
-            // Without `as u64`, an overflow would occur if e.g. `i==j==usize::MAX-1`. Note that
-            // the actual value of `usize::MAX` on Wasm32 targets is just `4294967295`, less than
-            // `u64::MAX`. Converting back to usize is safe, as the average is not greater
-            // than `j: usize`.
-            let m = (((i as u64) + (j as u64)) / 2) as usize;
-            // [Spec] assert(*) i <= m <= j  -- from math.
-            if intervals[m].to() <= x {
-                // If x == intervals[m].to, then x \in intervals[m+1]; move rightwards.
-                // ... [intervals[m].from, intervals[m].to) ... x ...
-                i = m + 1;
-                // [Spec] assert invariant: 0 <= i   <= j+1, 0 <= j < intervals.len()
-                // [Spec] -- `i==m+1`; `j` did not change.
-                // [Spec] assert: 0 <= m+1 <= j+1
-                // [Spec] -- given `0 <= m` from (*), we know that `0 <= m+1`.
-                // [Spec] -- `m+1 <= j+1`  <==>  `m <= j`.
-                // [Spec] -- `m <= j` follows from (*). QED
-            } else if x < intervals[m].from() {
-                // exclusive, since x==intervals[m].from ==> x \in intervals[m]; move leftwards.
-                // ... x ... [intervals[m].from, intervals[m].to) ...
-                if m == 0 {
-                    // The leftmost interval starts from a value greated than `x`.
-                    return None;
-                }
-                // [Spec] assert(**) 0 < m
-                j = m - 1;
-                // [Spec] assert invariant: 0 <= i <= j+1, 0 <= j < intervals.len()
-                // [Spec] -- `i` did not change; `j==m-1`.
-                // [Spec] assert: 0 <= i <= m-1+1, 0 <= m-1 < intervals.len()
-                // [Spec] assert: 0 <= i <= m,     0 <= m-1 < intervals.len()
-                // [Spec] -- `i <= m` follows from (*).
-                // [Spec] -- given `0 < m` from (**), we know that `0 <= m-1`. QED
-            } else {
-                // x \in intervals[m]
-                return Some(intervals[m]);
-            }
-        }
-        None
-    }
-}
-
-impl<F> IntervalPartition<ValidatedLinearScalingCoefficient>
-    for ValidatedNeuronsFundParticipationConstraints<F>
-{
-    fn intervals(&self) -> Vec<&ValidatedLinearScalingCoefficient> {
-        self.coefficient_intervals.iter().collect()
     }
 }
 
@@ -881,7 +953,7 @@ where
             slope_denominator,
             intercept_icp_e8s,
             ..
-        }) = self.find_interval(direct_participation_icp_e8s)
+        }) = Interval::find(&self.coefficient_intervals, direct_participation_icp_e8s)
         {
             // This value is how much of Neurons' Fund maturity we should "ideally" allocate.
             let ideal_icp = self
@@ -889,7 +961,7 @@ where
                 .apply(direct_participation_icp_e8s)?;
 
             // Convert to Decimal
-            let intercept_icp_e8s = rescale_to_icp(*intercept_icp_e8s);
+            let intercept_icp = rescale_to_icp(*intercept_icp_e8s);
             let slope_numerator = u64_to_dec(*slope_numerator);
             let slope_denominator = u64_to_dec(*slope_denominator);
 
@@ -913,17 +985,16 @@ where
             //     via the `(slope_numerator / slope_denominator)` factor.
             // (2) Some Neurons' fund neurons being too big to fully participate (at this direct
             //     participation amount, `direct_participation_icp_e8s`). This is taken into account
-            //     via the `intercept_icp_e8s` component.
+            //     via the `intercept_icp` component.
             // (3) The computed overall participation amount (unexpectedly) exceeded `hard_cap`; so
             //     we enforce the limited at `hard_cap`.
-            let effective_icp = hard_cap.min(intercept_icp_e8s.saturating_add(
-                // `slope_denominator`` cannot be zero as it has been validated.
+            let effective_icp = hard_cap.min(intercept_icp.saturating_add(
+                // `slope_denominator` cannot be zero as it has been validated.
                 // See `LinearScalingCoefficientValidationError::DenominatorIsZero`.
                 // `slope_numerator / slope_denominator` is between 0.0 and 1.0.
                 // See `LinearScalingCoefficientValidationError::NumeratorGreaterThanDenominator`.
                 (slope_numerator / slope_denominator) * ideal_icp,
             ));
-
             return rescale_to_icp_e8s(effective_icp);
         }
 

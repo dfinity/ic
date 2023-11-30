@@ -39,8 +39,7 @@ use ic_ic00_types::{
     UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
-    SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
@@ -69,8 +68,7 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, CpuComplexity, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId,
-    Time,
+    CanisterId, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -207,13 +205,10 @@ pub fn as_num_instructions(a: RoundInstructions) -> NumInstructions {
 /// inspect message, benchmarks, tests also have to initialize the round limits.
 /// In such cases the "round" should be considered as a trivial round consisting
 /// of a single message.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     pub instructions: RoundInstructions,
-
-    /// Keeps track of remaining execution complexities.
-    pub execution_complexity: ExecutionComplexity,
 
     /// Keeps track of the available storage memory. It decreases if
     /// - Wasm execution grows the Wasm/stable memory.
@@ -229,7 +224,6 @@ impl RoundLimits {
     /// Returns true if any of the round limits is reached.
     pub fn reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
-            || self.execution_complexity.cpu <= CpuComplexity::from(0)
     }
 }
 
@@ -270,6 +264,15 @@ struct PausedExecutionRegistry {
 
     // Paused executions of `install_code` subnet messages.
     paused_install_code: HashMap<PausedExecutionId, Box<dyn PausedInstallCodeExecution>>,
+}
+
+// The replies that can be returned for a `stop_canister` request.
+#[derive(Debug, PartialEq, Eq)]
+enum StopCanisterReply {
+    // The stop request was completed successfully.
+    Completed,
+    // The stop request timed out.
+    Timeout,
 }
 
 /// ExecutionEnvironment is the component responsible for executing messages
@@ -326,6 +329,7 @@ impl ExecutionEnvironment {
         resource_saturation_scaling: usize,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         heap_delta_rate_limit: NumBytes,
+        upload_wasm_chunk_instructions: NumInstructions,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
@@ -346,6 +350,7 @@ impl ExecutionEnvironment {
             config.wasm_chunk_store,
             config.rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
+            upload_wasm_chunk_instructions,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -1042,7 +1047,7 @@ impl ExecutionEnvironment {
                         *msg.sender(),
                         &mut state,
                         args,
-                        &mut round_limits.subnet_available_memory,
+                        round_limits,
                         registry_settings.subnet_size,
                         &resource_saturation,
                     ),
@@ -1065,6 +1070,14 @@ impl ExecutionEnvironment {
                 };
                 Some((res, msg.take_cycles()))
             }
+
+            Ok(Ic00Method::NodeMetricsHistory) => Some((
+                Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "Node metrics history API is not yet implemented.",
+                )),
+                msg.take_cycles(),
+            )),
 
             Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => Some((
                 Err(UserError::new(
@@ -1550,7 +1563,7 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: UploadChunkArgs,
-        subnet_available_memory: &mut SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
@@ -1560,7 +1573,7 @@ impl ExecutionEnvironment {
                 sender,
                 canister,
                 &args.chunk,
-                subnet_available_memory,
+                round_limits,
                 subnet_size,
                 resource_saturation,
             )
@@ -1816,7 +1829,6 @@ impl ExecutionEnvironment {
         );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_query),
-            execution_complexity: ExecutionComplexity::with_cpu(max_instructions_per_query),
             subnet_available_memory,
             // Ignore compute allocation
             compute_allocation_used: 0,
@@ -2667,9 +2679,73 @@ impl ExecutionEnvironment {
         }
     }
 
+    /// Helper function to respond to a stop request based on the provided `StopCanisterReply`.
+    fn reply_to_stop_context(
+        &self,
+        stop_context: &StopCanisterContext,
+        state: &mut ReplicatedState,
+        canister_id: CanisterId,
+        time: Time,
+        reply: StopCanisterReply,
+    ) {
+        let call_id = stop_context.call_id();
+        self.remove_stop_canister_call(state, canister_id, *call_id);
+
+        match stop_context {
+            StopCanisterContext::Ingress {
+                sender, message_id, ..
+            } => {
+                // Responding to stop_canister request from a user.
+                let ingress_state = match reply {
+                    StopCanisterReply::Completed => {
+                        IngressState::Completed(WasmResult::Reply(EmptyBlob.encode()))
+                    }
+                    StopCanisterReply::Timeout => IngressState::Failed(UserError::new(
+                        ErrorCode::StopCanisterRequestTimeout,
+                        "Stop canister request timed out".to_string(),
+                    )),
+                };
+                self.ingress_history_writer.set_status(
+                    state,
+                    message_id.clone(),
+                    IngressStatus::Known {
+                        receiver: IC_00.get(),
+                        user_id: *sender,
+                        time,
+                        state: ingress_state,
+                    },
+                )
+            }
+            StopCanisterContext::Canister {
+                sender,
+                reply_callback,
+                cycles,
+                ..
+            } => {
+                // Responding to stop_canister request from a canister.
+                let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
+                let response_payload = match reply {
+                    StopCanisterReply::Completed => Payload::Data(EmptyBlob.encode()),
+                    StopCanisterReply::Timeout => Payload::Reject(RejectContext::new(
+                        RejectCode::SysTransient,
+                        "Stop canister request timed out",
+                    )),
+                };
+                let response = ic_types::messages::Response {
+                    originator: *sender,
+                    respondent: subnet_id_as_canister_id,
+                    originator_reply_callback: *reply_callback,
+                    refund: *cycles,
+                    response_payload,
+                };
+                state.push_subnet_output_response(response.into());
+            }
+        }
+    }
+
     /// Helper function to remove stop canister calls
     /// from SubnetCallContextManager based on provided call id.
-    pub fn remove_stop_canister_call(
+    fn remove_stop_canister_call(
         &self,
         state: &mut ReplicatedState,
         canister_id: CanisterId,
@@ -2703,82 +2779,101 @@ impl ExecutionEnvironment {
         }
     }
 
-    /// Checks for stopping canisters and, if any of them are ready to stop,
-    /// transitions them to be fully stopped. Responses to the pending stop
-    /// messages are written to ingress history.
+    /// Checks for stopping canisters and performs the following:
+    ///   1. If there are stop contexts that have timed out, respond to them.
+    ///   2. If any stopping canisters are ready to stop, transition them to
+    ///      be fully stopped and reply to the corresponding stop contexts.
+    ///
+    /// Responses to the pending stop messages are written to ingress history
+    /// or returned to the calling canisters respectively.
     pub fn process_stopping_canisters(&self, mut state: ReplicatedState) -> ReplicatedState {
         let mut canister_states = state.take_canister_states();
         let time = state.time();
 
         for canister in canister_states.values_mut() {
-            if !(canister.status() == CanisterStatusType::Stopping
-                && canister.system_state.ready_to_stop())
-            {
-                // Canister is either not stopping or isn't ready to be stopped yet. Nothing to
-                // do.
-                continue;
-            }
+            let canister_id = canister.canister_id();
+            let ready_to_stop = canister.system_state.ready_to_stop();
+            match canister.system_state.status {
+                // Canister is not stopping so we can skip it.
+                CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
+                // Canister is stopping so there might be some work to do.
+                CanisterStatus::Stopping {
+                    ref mut stop_contexts,
+                    ..
+                } => {
+                    if ready_to_stop {
+                        // Canister is ready to stop.
+                        // Transition the canister to "stopped".
+                        let stopping_status = mem::replace(
+                            &mut canister.system_state.status,
+                            CanisterStatus::Stopped,
+                        );
 
-            // Transition the canister to "stopped".
-            let stopping_status =
-                mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
-
-            if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
-                // Respond to the stop messages.
-                for stop_context in stop_contexts {
-                    match stop_context {
-                        StopCanisterContext::Ingress {
-                            sender,
-                            message_id,
-                            call_id,
-                        } => {
-                            // Responding to stop_canister request from a user.
-                            self.remove_stop_canister_call(
-                                &mut state,
-                                canister.canister_id(),
-                                call_id,
-                            );
-                            self.ingress_history_writer.set_status(
-                                &mut state,
-                                message_id,
-                                IngressStatus::Known {
-                                    receiver: IC_00.get(),
-                                    user_id: sender,
+                        // Reply to all pending stop_canister requests.
+                        if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
+                            for stop_context in stop_contexts {
+                                self.reply_to_stop_context(
+                                    &stop_context,
+                                    &mut state,
+                                    canister_id,
                                     time,
-                                    state: IngressState::Completed(WasmResult::Reply(
-                                        EmptyBlob.encode(),
-                                    )),
-                                },
-                            )
+                                    StopCanisterReply::Completed,
+                                );
+                            }
                         }
-                        StopCanisterContext::Canister {
-                            sender,
-                            reply_callback,
-                            call_id,
-                            cycles,
-                        } => {
-                            // Responding to stop_canister request from a canister.
-                            let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
-                            self.remove_stop_canister_call(
-                                &mut state,
-                                canister.canister_id(),
-                                call_id,
-                            );
-                            let response = ic_types::messages::Response {
-                                originator: sender,
-                                respondent: subnet_id_as_canister_id,
-                                originator_reply_callback: reply_callback,
-                                refund: cycles,
-                                response_payload: Payload::Data(EmptyBlob.encode()),
-                            };
-                            state.push_subnet_output_response(response.into());
-                        }
+                    } else {
+                        // Respond to any stop contexts that have timed out.
+                        self.timeout_expired_requests(time, canister_id, stop_contexts, &mut state);
                     }
                 }
             }
         }
         state.put_canister_states(canister_states);
         state
+    }
+
+    fn timeout_expired_requests(
+        &self,
+        time: Time,
+        canister_id: CanisterId,
+        stop_contexts: &mut Vec<StopCanisterContext>,
+        state: &mut ReplicatedState,
+    ) {
+        // Identify if any of the stop contexts have expired.
+        let (expired_stop_contexts, remaining_stop_contexts) = std::mem::take(stop_contexts)
+            .into_iter()
+            .partition(|stop_context| {
+                match stop_context.call_id() {
+                    Some(call_id) => {
+                        let sc_time = state
+                            .metadata
+                            .subnet_call_context_manager
+                            .get_time_for_stop_canister_call(call_id);
+                        match sc_time {
+                            Some(t) => time >= t + self.config.stop_canister_timeout_duration,
+                            // Should never hit this case unless there's a
+                            // bug but handle it for robustness.
+                            None => false,
+                        }
+                    }
+                    // Should only happen for old stop requests that existed
+                    // before call ids were added.
+                    None => false,
+                }
+            });
+
+        for stop_context in expired_stop_contexts {
+            // Respond to expired requests that they timed out.
+            self.reply_to_stop_context(
+                &stop_context,
+                state,
+                canister_id,
+                time,
+                StopCanisterReply::Timeout,
+            );
+        }
+
+        *stop_contexts = remaining_stop_contexts;
     }
 
     fn reject_unexpected_ingress(

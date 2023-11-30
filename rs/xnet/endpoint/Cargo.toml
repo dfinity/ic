@@ -42,4 +42,4 @@ ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 maplit = "1.0.2"
 prost = { workspace = true }
-reqwest = "0.11.1"
+reqwest = { workspace = true }

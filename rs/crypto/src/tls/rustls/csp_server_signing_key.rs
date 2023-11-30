@@ -56,20 +56,20 @@ struct CspServerEd25519Signer {
 
 impl rustls::sign::Signer for CspServerEd25519Signer {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
-        let csp_signature =
-            self.tls_csp_vault
-                .tls_sign(message, &self.key_id)
-                .map_err(|e| match e {
-                    CspTlsSignError::SecretKeyNotFound { .. }
-                    | CspTlsSignError::WrongSecretKeyType { .. }
-                    | CspTlsSignError::MalformedSecretKey { .. }
-                    | CspTlsSignError::SigningFailed { .. }
-                    | CspTlsSignError::TransientInternalError { .. } => TLSError::General(format!(
-                        "Failed to create signature during \
+        let csp_signature = self
+            .tls_csp_vault
+            .tls_sign(message.to_vec(), self.key_id)
+            .map_err(|e| match e {
+                CspTlsSignError::SecretKeyNotFound { .. }
+                | CspTlsSignError::WrongSecretKeyType { .. }
+                | CspTlsSignError::MalformedSecretKey { .. }
+                | CspTlsSignError::SigningFailed { .. }
+                | CspTlsSignError::TransientInternalError { .. } => TLSError::General(format!(
+                    "Failed to create signature during \
                      TLS handshake by means of the CspServerEd25519Signer: {:?}",
-                        e
-                    )),
-                })?;
+                    e
+                )),
+            })?;
         match csp_signature {
             CspSignature::Ed25519(signature_bytes) => Ok(signature_bytes.0.to_vec()),
             _ => Err(TLSError::General(

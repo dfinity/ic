@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/https_outcalls/client",
+    "//rs/interfaces/mocks",
     "//rs/ic_os/sev",
     "//rs/registry/client",
     "//rs/registry/fake",
@@ -51,7 +52,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
-    "@crate_index//:mockall_0_7_2",
     "@crate_index//:tempfile",
 ]
 

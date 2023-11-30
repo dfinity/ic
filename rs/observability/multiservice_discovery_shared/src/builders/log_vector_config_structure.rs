@@ -68,7 +68,7 @@ pub(crate) fn from_targets_into_vector_config(
             let key = format!("{}-{}", key, job);
             let source = VectorSystemdGatewayJournaldSource {
                 _type: "systemd_journal_gatewayd".into(),
-                endpoint: handle_ip(record.clone(), job),
+                endpoint: handle_ip(record.clone(), job, is_bn),
                 data_dir: "logs".to_string(),
                 batch_size: builder.batch_size,
                 port: match is_bn {
@@ -76,9 +76,19 @@ pub(crate) fn from_targets_into_vector_config(
                     true => builder.bn_port,
                 },
             };
+            let source_key = format!("{}-source", key);
+            let transform =
+                VectorRemapTransform::from(record.clone(), *job, source_key.clone(), is_bn);
 
-            let transform = VectorSystemdGatewayJournaldTransform::from(record.clone(), *job);
-            config.add_target_group(key, Box::new(source), Box::new(transform));
+            let mut sources_map = HashMap::new();
+            sources_map.insert(source_key, Box::new(source) as Box<dyn VectorSource>);
+
+            let mut transforms_map = HashMap::new();
+            transforms_map.insert(
+                format!("{}-transform", key),
+                Box::new(transform) as Box<dyn VectorTransform>,
+            );
+            config.add_target_group(sources_map, transforms_map);
         }
     }
     serde_json::to_string_pretty(&config).unwrap()
@@ -101,14 +111,14 @@ impl VectorSource for VectorSystemdGatewayJournaldSource {
 }
 
 #[derive(Debug, Serialize, Clone)]
-struct VectorSystemdGatewayJournaldTransform {
+pub struct VectorRemapTransform {
     #[serde(rename = "type")]
     _type: String,
     inputs: Vec<String>,
     source: String,
 }
 
-impl VectorTransform for VectorSystemdGatewayJournaldTransform {
+impl VectorTransform for VectorRemapTransform {
     fn clone_dyn(&self) -> Box<dyn VectorTransform> {
         Box::new(self.clone())
     }
@@ -121,8 +131,8 @@ const DC: &str = "dc";
 const ADDRESS: &str = "address";
 const NODE_PROVIDER_ID: &str = "node_provider_id";
 
-impl VectorSystemdGatewayJournaldTransform {
-    fn from(target: TargetDto, job: JobType) -> Self {
+impl VectorRemapTransform {
+    pub fn from(target: TargetDto, job: JobType, input: String, is_bn: bool) -> Self {
         let target_group = Into::<TargetGroup>::into(&target);
         let mut labels: HashMap<String, String> = HashMap::new();
 
@@ -132,7 +142,7 @@ impl VectorSystemdGatewayJournaldTransform {
             node_id = target.clone().name
         }
 
-        let endpoint = handle_ip(target.clone(), &job);
+        let endpoint = handle_ip(target.clone(), &job, is_bn);
 
         labels.insert(IC_NAME.into(), target_group.ic_name.to_string());
         labels.insert(IC_NODE.into(), node_id.clone());
@@ -148,7 +158,7 @@ impl VectorSystemdGatewayJournaldTransform {
         }
         Self {
             _type: "remap".into(),
-            inputs: vec![format!("{}-{}-source", node_id, job)],
+            inputs: vec![input],
             source: labels
                 .into_iter()
                 // Might be dangerous as the tag value is coming from an outside source and
@@ -160,17 +170,18 @@ impl VectorSystemdGatewayJournaldTransform {
     }
 }
 
-fn handle_ip(target_group: TargetDto, job_type: &JobType) -> String {
+pub fn handle_ip(target_group: TargetDto, job_type: &JobType, is_bn: bool) -> String {
     match job_type {
         JobType::NodeExporter(NodeOS::Guest) => {
             target_group.targets.first().unwrap().ip().to_string()
         }
-        JobType::NodeExporter(NodeOS::Host) => {
-            guest_to_host_address(*target_group.targets.first().unwrap())
+        JobType::NodeExporter(NodeOS::Host) => match is_bn {
+            true => target_group.targets.first().unwrap().ip().to_string(),
+            false => guest_to_host_address(*target_group.targets.first().unwrap())
                 .unwrap()
                 .ip()
-                .to_string()
-        }
+                .to_string(),
+        },
         _ => panic!("Unsupported job type"),
     }
 }

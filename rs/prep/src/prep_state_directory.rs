@@ -82,7 +82,7 @@ mod tests {
     use crate::internet_computer::{IcConfig, TopologyConfig};
     use crate::node::{NodeConfiguration, NodeIndex};
     use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
-    use ic_crypto::threshold_sig_public_key_from_der;
+    use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
     use ic_registry_subnet_type::SubnetType;
     use std::collections::BTreeMap;
     use std::net::SocketAddr;
@@ -138,7 +138,6 @@ mod tests {
             SubnetConfig::new(
                 0,
                 subnet_nodes,
-                None,
                 None,
                 None,
                 None,

@@ -2,7 +2,7 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Principal};
-use clap::Parser;
+use clap::{Args, Parser};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
     UpdateSubnetTypeArgs,
@@ -14,7 +14,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
-use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
+use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
 use ic_ic00_types::{CanisterInstallMode, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
 use ic_nervous_system_clients::{
@@ -30,7 +30,7 @@ use ic_nervous_system_humanize::{
 };
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nervous_system_root::change_canister::{
-    AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
+    AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -69,7 +69,6 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
-    hostos_version::v1::HostosVersionRecord,
     node::v1::NodeRecord,
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
@@ -82,18 +81,19 @@ use ic_protobuf::registry::{
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
-    subnet::SubnetRegistry,
+    hostos_version::HostosRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    get_node_record_node_id, is_node_record_key, make_api_boundary_node_record_key,
-    make_blessed_replica_versions_key, make_canister_migrations_record_key, make_crypto_node_key,
+    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
+    is_node_record_key, make_api_boundary_node_record_key, make_blessed_replica_versions_key,
+    make_canister_migrations_record_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -117,6 +117,7 @@ use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     p2p, CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
+use indexmap::IndexMap;
 use itertools::izip;
 use maplit::hashmap;
 use prost::Message;
@@ -151,6 +152,7 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
+use std::net::{Ipv6Addr, TcpStream};
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
@@ -163,7 +165,9 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
-use types::{ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord};
+use types::{
+    NodeDetails, ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord,
+};
 use url::Url;
 
 #[macro_use]
@@ -183,10 +187,10 @@ const IC_DOMAIN: &str = "ic0.app";
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, alias = "registry-url")]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',')]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
-    nns_url: Url,
+    nns_urls: Vec<Url>,
 
     #[clap(short = 's', long)]
     /// The pem file containing a secret key to use while authenticating with
@@ -248,8 +252,6 @@ impl ProposeToCreateSubnetCmd {
             subnet_configuration::get_default_config_params(self.subnet_type, self.node_ids.len());
         let gossip_config = p2p::build_default_gossip_config();
         // set subnet params
-        self.ingress_bytes_per_block_soft_cap
-            .get_or_insert(subnet_config.ingress_bytes_per_block_soft_cap);
         self.max_ingress_bytes_per_message
             .get_or_insert(subnet_config.max_ingress_bytes_per_message);
         self.max_ingress_messages_per_block
@@ -882,9 +884,9 @@ impl ProposalTitle for StartCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<StopOrStartCanisterProposal> for StartCanisterCmd {
-    async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
-        StopOrStartCanisterProposal {
+impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
+    async fn payload(&self, _: Url) -> StopOrStartCanisterRequest {
+        StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Start,
         }
@@ -909,9 +911,9 @@ impl ProposalTitle for StopCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
-    async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
-        StopOrStartCanisterProposal {
+impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
+    async fn payload(&self, _: Url) -> StopOrStartCanisterRequest {
+        StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Stop,
         }
@@ -925,6 +927,10 @@ struct ProposeToUpdateElectedReplicaVersionsCmd {
     #[clap(long)]
     /// The replica version ID to elect.
     pub replica_version_to_elect: Option<String>,
+
+    #[clap(long)]
+    /// The launch measurement of the replica version to elect.
+    pub guest_launch_measurement: Option<String>,
 
     #[clap(long)]
     /// The hex-formatted SHA-256 hash of the archive served by
@@ -962,7 +968,7 @@ impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
             replica_version_to_elect: self.replica_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurement_sha256_hex: self.guest_launch_measurement.clone(),
             replica_versions_to_unelect: self.replica_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
@@ -986,10 +992,6 @@ struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     // Assigns this subnet ID to the newly created subnet
     pub subnet_id_override: Option<PrincipalId>,
-
-    #[clap(long)]
-    /// Maximum amount of bytes per block. This is a soft cap.
-    pub ingress_bytes_per_block_soft_cap: Option<u64>,
 
     #[clap(long)]
     /// Maximum amount of bytes per message. This is a hard cap.
@@ -1147,6 +1149,10 @@ struct ProposeToCreateSubnetCmd {
     /// subnet.
     #[clap(long)]
     pub max_number_of_canisters: Option<u64>,
+
+    /// The features that are enabled and disabled on the subnet.
+    #[clap(long)]
+    pub features: Option<SubnetFeatures>,
 }
 
 /// Parse the options that are used to create EcdsaInitialConfig option
@@ -1235,7 +1241,7 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
         CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
-            ingress_bytes_per_block_soft_cap: self.ingress_bytes_per_block_soft_cap.unwrap(),
+            ingress_bytes_per_block_soft_cap: Default::default(),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap(),
             max_block_payload_size: self.max_block_payload_size.unwrap(),
@@ -1270,7 +1276,7 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             max_instructions_per_install_code: self
                 .max_instructions_per_install_code
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
-            features: SubnetFeatures::default(),
+            features: self.features.unwrap_or_default().into(),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
@@ -1817,7 +1823,7 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
-            features: self.features,
+            features: self.features.map(|v| v.into()),
             ecdsa_config,
             ecdsa_key_signing_enable,
             ecdsa_key_signing_disable,
@@ -1909,8 +1915,8 @@ impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> ChangeCanisterProposal {
+impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
+    async fn payload(&self, _: Url) -> ChangeCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1921,7 +1927,7 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             .arg
             .as_ref()
             .map_or(vec![], |path| read_file_fully(path));
-        ChangeCanisterProposal {
+        ChangeCanisterRequest {
             stop_before_installing: !self.skip_stopping_before_installing,
             mode: self.mode,
             canister_id: self.canister_id,
@@ -1929,7 +1935,6 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             arg,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            authz_changes: vec![],
             query_allocation: None,
         }
     }
@@ -2060,8 +2065,8 @@ impl ProposalTitle for ProposeToAddNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> AddCanisterProposal {
+impl ProposalPayload<AddCanisterRequest> for ProposeToAddNnsCanisterCmd {
+    async fn payload(&self, _: Url) -> AddCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -2073,7 +2078,7 @@ impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
             .clone()
             .map_or(vec![], |path| read_file_fully(&path));
 
-        AddCanisterProposal {
+        AddCanisterRequest {
             name: self.name.clone(),
             wasm_module,
             arg,
@@ -2082,7 +2087,6 @@ impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
             initial_cycles: 1,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            authz_changes: vec![],
             query_allocation: None,
         }
     }
@@ -2828,7 +2832,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .rewardable_nodes
             .as_ref()
             .map(|s| parse_rewardable_nodes(s))
-            .unwrap_or_else(BTreeMap::new);
+            .unwrap_or_default();
 
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
@@ -2903,7 +2907,7 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
             .rewardable_nodes
             .as_ref()
             .map(|s| parse_rewardable_nodes(s))
-            .unwrap_or_else(BTreeMap::new);
+            .unwrap_or_default();
 
         UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(self.node_operator_id),
@@ -3654,10 +3658,10 @@ struct ProposeToCreateServiceNervousSystemCmd {
     swap_minimum_participants: u64,
 
     #[clap(long, value_parser=parse_tokens)]
-    swap_minimum_icp: nervous_system_pb::Tokens,
+    swap_minimum_direct_participation_icp: nervous_system_pb::Tokens,
 
     #[clap(long, value_parser=parse_tokens)]
-    swap_maximum_icp: nervous_system_pb::Tokens,
+    swap_maximum_direct_participation_icp: nervous_system_pb::Tokens,
 
     #[clap(long, value_parser=parse_tokens)]
     swap_minimum_participant_icp: nervous_system_pb::Tokens,
@@ -3683,11 +3687,8 @@ struct ProposeToCreateServiceNervousSystemCmd {
     #[clap(long, value_parser=parse_duration)]
     swap_duration: nervous_system_pb::Duration,
 
-    #[clap(long, value_parser=parse_tokens)]
-    neurons_fund_investment_icp: nervous_system_pb::Tokens,
-
-    #[clap(long)]
-    neurons_fund_participation: Option<bool>,
+    #[clap(long, action)]
+    neurons_fund_participation: bool, // defaults to false if unset (due to `action`)
 
     // Ledger
     // ------
@@ -3769,8 +3770,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             swap_amount,
 
             swap_minimum_participants,
-            swap_minimum_icp,
-            swap_maximum_icp,
+            swap_minimum_direct_participation_icp,
+            swap_maximum_direct_participation_icp,
             swap_minimum_participant_icp,
             swap_maximum_participant_icp,
             swap_neuron_count,
@@ -3780,7 +3781,6 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             restrict_swap_in_country: restricted_countries,
             swap_start_time,
             swap_duration,
-            neurons_fund_investment_icp,
             neurons_fund_participation,
 
             transaction_fee,
@@ -3892,17 +3892,14 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
         let swap_parameters = {
             let minimum_participants = Some(swap_minimum_participants);
-            let minimum_direct_participation_icp =
-                swap_minimum_icp.checked_sub(&neurons_fund_investment_icp);
-            let maximum_direct_participation_icp =
-                swap_maximum_icp.checked_sub(&neurons_fund_investment_icp);
-            let minimum_icp = Some(swap_minimum_icp);
-            let maximum_icp = Some(swap_maximum_icp);
+            let minimum_direct_participation_icp = Some(swap_minimum_direct_participation_icp);
+            let maximum_direct_participation_icp = Some(swap_maximum_direct_participation_icp);
+            let neurons_fund_participation = Some(neurons_fund_participation);
+
             let minimum_participant_icp = Some(swap_minimum_participant_icp);
             let maximum_participant_icp = Some(swap_maximum_participant_icp);
             let start_time = swap_start_time;
             let duration = Some(swap_duration);
-            let neurons_fund_investment_icp = Some(neurons_fund_investment_icp);
 
             let neuron_basket_construction_parameters = {
                 let count = Some(swap_neuron_count);
@@ -3916,6 +3913,11 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
             let restricted_countries =
                 restricted_countries.map(|iso_codes| nervous_system_pb::Countries { iso_codes });
+
+            // Deprecated fields
+            let minimum_icp = None;
+            let maximum_icp = None;
+            let neurons_fund_investment_icp = None;
 
             Some(SwapParameters {
                 minimum_participants,
@@ -4124,17 +4126,40 @@ struct ProposeToUpdateNodesHostosVersionCmd {
     #[clap(name = "NODE_ID", multiple_values(true), required = true)]
     pub node_ids: Vec<PrincipalId>,
 
+    #[clap(flatten)]
+    pub hostos_version_flag: HostosVersionFlag,
+}
+
+#[derive(Args)]
+struct HostosVersionFlag {
     /// Version ID. This should correspond to a HostOS version previously added
     /// to the registry.
     #[clap(long)]
     pub hostos_version_id: Option<String>,
+    /// When this flag is passed, remove the HostOS version from this set of
+    /// Nodes. This will take the same action as excluding the version id flag.
+    #[clap(long)]
+    pub clear_hostos_version: bool,
+}
+
+impl HostosVersionFlag {
+    // TODO: If we upgrade clap, this can be replaced with `group` attributes.
+    fn simplify(&self) -> &Option<String> {
+        if self.hostos_version_id.is_some() && self.clear_hostos_version {
+            panic!("Only one of --hostos-version-id or --clear-hostos-version can be specified at once.");
+        }
+
+        // When `--clear-hostos-version` is set, `--hostos-version-id` must be
+        // unset and `None`, so we can always return it directly.
+        &self.hostos_version_id
+    }
 }
 
 impl ProposalTitle for ProposeToUpdateNodesHostosVersionCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => match &self.hostos_version_id {
+            None => match &self.hostos_version_flag.simplify() {
                 Some(hostos_version_id) => format!(
                     "Set HostOS version: '{}' on nodes: '{}'",
                     hostos_version_id,
@@ -4161,7 +4186,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToUpdateNodesHo
 
         UpdateNodesHostosVersionPayload {
             node_ids,
-            hostos_version_id: self.hostos_version_id.clone(),
+            hostos_version_id: self.hostos_version_flag.simplify().clone(),
         }
     }
 }
@@ -4323,9 +4348,7 @@ async fn get_firewall_rules_from_registry(
         .get_value(make_firewall_rules_record_key(scope).into_bytes(), None)
         .await;
 
-    if registry_answer.is_ok() {
-        let (bytes, _) = registry_answer.unwrap();
-
+    if let Ok((bytes, _)) = registry_answer {
         let ruleset = deserialize_registry_value::<FirewallRuleSet>(Ok(Some(bytes)))
             .unwrap()
             .unwrap();
@@ -4348,11 +4371,62 @@ async fn get_subnet_record(
     SubnetRecord::from(&value)
 }
 
+async fn get_subnet_record_with_details(
+    subnet_id: SubnetId,
+    registry_canister: &RegistryCanister,
+    all_nodes_with_details: &IndexMap<PrincipalId, NodeDetails>,
+) -> SubnetRecord {
+    get_subnet_record(registry_canister, subnet_id)
+        .await
+        .with_node_details(all_nodes_with_details)
+}
+
+/// Check if a connection to the Url can be established ==> Url is reachable
+fn is_url_reachable(url: &Url) -> bool {
+    let addrs = match url.socket_addrs(|| None) {
+        Ok(addrs) => addrs,
+        Err(err) => {
+            eprintln!("WARNING: could not resolve {}: {}", url, err);
+            return false;
+        }
+    };
+    for addr in addrs.into_iter() {
+        // A Url may have multiple IP addresses so we'll check if any of them are reachable
+        match TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(1)) {
+            Ok(_) => return true,
+            Err(err) => {
+                if url.to_string().contains(&addr.to_string()) {
+                    eprintln!("WARNING: could not connect to {}: {}, skipping", url, err);
+                } else {
+                    eprintln!(
+                        "WARNING: could not connect to {} ({}): {}, skipping",
+                        addr, url, err
+                    );
+                }
+            }
+        }
+    }
+    false
+}
+
 /// `main()` method for the `ic-admin` utility.
 #[tokio::main]
 async fn main() {
     let opts: Opts = Opts::parse();
-    let registry_canister = RegistryCanister::new(vec![opts.nns_url.clone()]);
+
+    // Check all NNS urls in parallel to see which ones are reachable (and join async)
+    let reachable_nns_urls: Vec<Url> = opts
+        .nns_urls
+        .iter()
+        .filter(|addr| is_url_reachable(addr))
+        .cloned()
+        .collect();
+
+    if reachable_nns_urls.is_empty() {
+        panic!("None of the provided NNS urls are reachable");
+    }
+
+    let registry_canister = RegistryCanister::new(reachable_nns_urls.clone());
 
     let sender = if opts.secret_key_pem.is_some() || opts.use_hsm {
         // Make sure to let the user know that we only actually use the sender
@@ -4460,7 +4534,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RemoveNodesFromSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4479,7 +4553,7 @@ async fn main() {
             .await;
         }
         SubCommand::GetNodeListSince(cmd) => {
-            let node_records = get_node_list_since(cmd.version, registry_canister).await;
+            let node_records = get_node_list_since(cmd.version, &registry_canister).await;
 
             let res = serde_json::to_string(&node_records)
                 .unwrap_or_else(|_| "Could not serialize node_records".to_string());
@@ -4492,59 +4566,66 @@ async fn main() {
             // data, there is no nice way to print the whole topology.
             // Instead, we print the surrounding structure in a not so nice way
             // and delegate pretty-printing to jq or other consumers.
-            // Also, this method is slow, as each fetch needs to happen in sequence (due to
+            // This method is slow, as each fetch needs to happen in sequence (due to
             // printing from it).
-            let subnet_ids = get_subnet_ids(&registry_canister).await;
-            let subnet_count = subnet_ids.len();
+            //
+            // Fetch a list of all nodes, with IP addresses and other details
+            let all_nodes_with_details = get_node_list_since(0, &registry_canister).await;
             let mut seen: HashSet<NodeId> = HashSet::new();
-            println!("{{ \"topology\": {{");
-            println!("\"subnets\": {{");
-            for (i, subnet_id) in subnet_ids.iter().enumerate() {
-                println!("\"{}\": ", subnet_id);
-                let record = print_and_get_last_value::<SubnetRecordProto>(
-                    make_subnet_record_key(*subnet_id).as_bytes().to_vec(),
+
+            #[derive(Serialize)]
+            struct Topology {
+                // IndexMap preserves the insertion order
+                subnets: IndexMap<SubnetId, SubnetRecord>,
+                api_boundary_nodes: Vec<NodeId>,
+                unassigned_nodes: IndexMap<NodeId, NodeDetails>,
+            }
+            let mut topology = Topology {
+                subnets: IndexMap::new(),
+                api_boundary_nodes: Vec::new(),
+                unassigned_nodes: IndexMap::new(),
+            };
+            eprintln!("INFO: Fetching subnets...");
+            let subnet_ids = get_subnet_ids(&registry_canister).await;
+            for subnet_id in subnet_ids.into_iter() {
+                let subnet_record = get_subnet_record_with_details(
+                    subnet_id,
                     &registry_canister,
-                    true,
+                    &all_nodes_with_details,
                 )
                 .await;
-                if i + 1 != subnet_count {
-                    println!(",")
-                }
+                topology.subnets.insert(subnet_id, subnet_record.clone());
 
-                for node in record
+                for node in subnet_record
                     .membership
                     .iter()
-                    .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).unwrap()))
+                    .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap()))
                 {
                     seen.insert(node);
                 }
             }
-            println!("}},");
+            eprintln!("INFO: Fetching API Boundary nodes...");
             // list all API Boundary Nodes
-            let api_bn_node_ids = get_api_boundary_node_ids(opts.nns_url.clone());
-            println!(
-                "\"api_boundary_nodes\": {},",
-                serde_json::to_string_pretty(&api_bn_node_ids).unwrap()
-            );
-            seen.extend(
-                api_bn_node_ids
-                    .iter()
-                    .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap())),
-            );
-            // list all remaining nodes as unassigned nodes
-            let node_ids = get_node_list_since(0, registry_canister)
-                .await
+            let api_bn_node_ids = get_api_boundary_node_ids(reachable_nns_urls.clone())
+                .iter()
+                .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap()))
+                .collect();
+            seen.extend(&api_bn_node_ids);
+            topology.api_boundary_nodes = api_bn_node_ids;
+
+            // all remaining nodes are unassigned nodes
+            topology.unassigned_nodes = all_nodes_with_details
                 .into_iter()
-                .filter(|record| {
-                    let node_id = NodeId::from(PrincipalId::from_str(&record.node_id).unwrap());
-                    !seen.contains(&node_id)
+                .filter_map(|(node_id, node_details)| {
+                    let node_id = NodeId::from(node_id);
+                    if seen.contains(&node_id) {
+                        None
+                    } else {
+                        Some((node_id, node_details))
+                    }
                 })
-                .collect::<Vec<_>>();
-            println!(
-                "\"unassigned_nodes\": {}",
-                serde_json::to_string_pretty(&node_ids).unwrap()
-            );
-            println!("}}}}");
+                .collect::<IndexMap<_, _>>();
+            println!("{}", serde_json::to_string_pretty(&topology).unwrap());
         }
         SubCommand::ConvertNumericNodeIdToPrincipalId(
             convert_numeric_node_id_to_principal_id_cmd,
@@ -4596,13 +4677,19 @@ async fn main() {
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
             let file_downloader = FileDownloader::new(None).follow_redirects();
-            if version.release_package_urls.iter().all(|url| {
-                tokio::runtime::Handle::current()
-                    .block_on(file_downloader.download_file(url, &tmp_file, None))
-                    .is_err()
-            }) {
-                panic!("Download of release package failed.");
+
+            let mut result = Err(anyhow!("Download of release package failed."));
+            for url in version.release_package_urls.iter() {
+                result = file_downloader
+                    .download_file(url, &tmp_file, None)
+                    .await
+                    .map_err(|v| v.into());
+
+                if result.is_ok() {
+                    break;
+                }
             }
+            result.unwrap();
 
             println!("OK   Download success");
 
@@ -4616,40 +4703,6 @@ async fn main() {
                 }
             };
 
-            // Check version number.
-            eprintln!("Extracting .. ");
-            match extract_tar_gz_into_dir(&tmp_file, &tmp_dir) {
-                Ok(()) => {
-                    println!("OK   extracting tar gz archive");
-                    let mut version_file = tmp_dir.clone();
-                    version_file.push("VERSION.TXT");
-
-                    if !version_file.exists() {
-                        // Older versions of the IC-OS had version.txt as a file name
-                        version_file = tmp_dir.clone();
-                        version_file.push("version.txt");
-                    }
-
-                    let archive_version = read_to_string(version_file)
-                        .expect("Could not read version in extracted version file");
-                    let archive_version = archive_version.trim();
-
-                    if archive_version == get_replica_version_cmd.replica_version_id {
-                        println!("OK   correct version number in archived version file");
-                    } else {
-                        println!(
-                            "FAIL incorrect version number in archived version file ({} vs {})",
-                            archive_version, get_replica_version_cmd.replica_version_id
-                        );
-                        success = false;
-                    }
-                }
-                Err(e) => {
-                    println!("FAIL extracting tar gz archive: {:?}", e);
-                    success = false;
-                }
-            }
-
             if !success {
                 exit(1);
             }
@@ -4660,7 +4713,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateSubnetReplicaVersion,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4689,7 +4742,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    vec![opts.nns_url.clone()],
+                    reachable_nns_urls.clone(),
                 )),
                 None,
             );
@@ -4713,7 +4766,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateElectedReplicaVersions,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4729,7 +4782,7 @@ async fn main() {
                 cmd,
                 NnsFunction::CreateSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4743,7 +4796,7 @@ async fn main() {
             propose_to_create_service_nervous_system(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4758,7 +4811,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AddNodeToSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4773,7 +4826,7 @@ async fn main() {
                 cmd,
                 NnsFunction::ChangeSubnetMembership,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4788,7 +4841,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RecoverSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4803,7 +4856,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateConfigOfSubnet,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4818,7 +4871,7 @@ async fn main() {
                 cmd,
                 NnsFunction::NnsCanisterInstall,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4837,7 +4890,7 @@ async fn main() {
                     cmd,
                     NnsFunction::NnsRootUpgrade,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -4847,13 +4900,13 @@ async fn main() {
                 .await;
             } else {
                 propose_external_proposal_from_command::<
-                    ChangeCanisterProposal,
+                    ChangeCanisterRequest,
                     ProposeToChangeNnsCanisterCmd,
                 >(
                     cmd,
                     NnsFunction::NnsCanisterUpgrade,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -4872,7 +4925,7 @@ async fn main() {
                 cmd,
                 NnsFunction::HardResetNnsRootToVersion,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4887,7 +4940,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UninstallCode,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4902,7 +4955,7 @@ async fn main() {
                 cmd,
                 NnsFunction::IcpXdrConversionRate,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4917,7 +4970,7 @@ async fn main() {
                 cmd,
                 NnsFunction::StopOrStartNnsCanister,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4932,7 +4985,7 @@ async fn main() {
                 cmd,
                 NnsFunction::StopOrStartNnsCanister,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4947,7 +5000,7 @@ async fn main() {
                 cmd,
                 NnsFunction::ClearProvisionalWhitelist,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4962,7 +5015,7 @@ async fn main() {
                 cmd,
                 NnsFunction::SetAuthorizedSubnetworks,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4977,7 +5030,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateSubnetType,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -4992,7 +5045,7 @@ async fn main() {
                 cmd,
                 NnsFunction::ChangeSubnetTypeAssignment,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5018,7 +5071,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RemoveNodes,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5033,7 +5086,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AssignNoid,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5054,7 +5107,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    vec![opts.nns_url.clone()],
+                    reachable_nns_urls.clone(),
                 )),
                 None,
             );
@@ -5082,7 +5135,7 @@ async fn main() {
             );
         }
         SubCommand::UpdateRegistryLocalStore(cmd) => {
-            update_registry_local_store(opts.nns_url, cmd).await;
+            update_registry_local_store(reachable_nns_urls, cmd).await;
         }
         SubCommand::ProposeToUpdateNodeOperatorConfig(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5090,7 +5143,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateNodeOperatorConfig,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5112,7 +5165,7 @@ async fn main() {
                 cmd,
                 NnsFunction::SetFirewallConfig,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5130,7 +5183,7 @@ async fn main() {
                     cmd,
                     NnsFunction::AddFirewallRules,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -5149,7 +5202,7 @@ async fn main() {
                     cmd,
                     NnsFunction::RemoveFirewallRules,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -5168,7 +5221,7 @@ async fn main() {
                     cmd,
                     NnsFunction::UpdateFirewallRules,
                     make_canister_client(
-                        opts.nns_url,
+                        reachable_nns_urls,
                         opts.verify_nns_responses,
                         opts.nns_public_key_pem_file,
                         sender,
@@ -5182,7 +5235,7 @@ async fn main() {
             get_firewall_rules(cmd, &registry_canister).await;
         }
         SubCommand::GetFirewallRulesForNode(cmd) => {
-            get_firewall_rules_for_node(cmd, &registry_canister, opts.nns_url).await;
+            get_firewall_rules_for_node(cmd, &registry_canister, reachable_nns_urls).await;
         }
         SubCommand::GetFirewallRulesetHash(cmd) => {
             get_firewall_ruleset_hash(cmd);
@@ -5193,7 +5246,7 @@ async fn main() {
             propose_to_add_or_remove_node_provider(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5211,7 +5264,7 @@ async fn main() {
             submit_root_proposal_to_upgrade_governance_canister(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5221,7 +5274,7 @@ async fn main() {
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
-                opts.nns_url,
+                reachable_nns_urls,
                 opts.verify_nns_responses,
                 opts.nns_public_key_pem_file,
                 sender,
@@ -5233,7 +5286,7 @@ async fn main() {
             vote_on_root_proposal_to_upgrade_governance_canister(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5257,7 +5310,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AddOrRemoveDataCenters,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5314,7 +5367,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateNodeRewardsTable,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5329,7 +5382,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateUnassignedNodesConfig,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5351,7 +5404,7 @@ async fn main() {
         SubCommand::GetMonthlyNodeProviderRewards => {
             let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5369,7 +5422,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RemoveNodeOperators,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5384,7 +5437,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RerouteCanisterRanges,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5399,7 +5452,7 @@ async fn main() {
                 cmd,
                 NnsFunction::PrepareCanisterMigration,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5414,7 +5467,7 @@ async fn main() {
                 cmd,
                 NnsFunction::CompleteCanisterMigration,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5437,7 +5490,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AddSnsWasm,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5452,7 +5505,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateSnsWasmSnsSubnetIds,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5467,7 +5520,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateAllowedPrincipals,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5482,7 +5535,7 @@ async fn main() {
             propose_to_open_sns_token_swap(
                 cmd,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5496,7 +5549,7 @@ async fn main() {
                 get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
 
             let agent = make_canister_client(
-                opts.nns_url,
+                reachable_nns_urls,
                 opts.verify_nns_responses,
                 opts.nns_public_key_pem_file,
                 sender,
@@ -5526,7 +5579,7 @@ async fn main() {
                 cmd,
                 NnsFunction::BitcoinSetConfig,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5541,7 +5594,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateElectedHostosVersions,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5556,7 +5609,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateNodesHostosVersion,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5569,7 +5622,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    vec![opts.nns_url.clone()],
+                    reachable_nns_urls.clone(),
                 )),
                 None,
             );
@@ -5579,21 +5632,14 @@ async fn main() {
                 .try_polling_latest_version(usize::MAX)
                 .unwrap();
 
-            let keys = registry_client
-                .get_key_family(
-                    HOSTOS_VERSION_KEY_PREFIX,
-                    registry_client.get_latest_version(),
-                )
+            let hostos_versions = registry_client
+                .get_hostos_versions(registry_client.get_latest_version())
                 .unwrap();
 
-            for key in keys {
-                let bytes = registry_client
-                    .get_value(&key, registry_client.get_latest_version())
-                    .unwrap()
-                    .unwrap();
-                let hostos_version_record = HostosVersionRecord::decode(&bytes[..])
-                    .expect("Error decoding HostosVersionRecord from registry");
-                println!("{}", hostos_version_record.hostos_version_id);
+            if let Some(hostos_versions) = hostos_versions {
+                for version in hostos_versions {
+                    println!("{}", version.hostos_version_id);
+                }
             }
         }
         SubCommand::ProposeToAddApiBoundaryNode(cmd) => {
@@ -5602,7 +5648,7 @@ async fn main() {
                 cmd,
                 NnsFunction::AddApiBoundaryNode,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5617,7 +5663,7 @@ async fn main() {
                 cmd,
                 NnsFunction::RemoveApiBoundaryNodes,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5632,7 +5678,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateApiBoundaryNodeDomain,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5647,7 +5693,7 @@ async fn main() {
                 cmd,
                 NnsFunction::UpdateApiBoundaryNodesVersion,
                 make_canister_client(
-                    opts.nns_url,
+                    reachable_nns_urls,
                     opts.verify_nns_responses,
                     opts.nns_public_key_pem_file,
                     sender,
@@ -5667,7 +5713,7 @@ async fn main() {
             .await;
         }
         SubCommand::GetApiBoundaryNodes => {
-            let records = get_api_boundary_node_ids(opts.nns_url.clone());
+            let records = get_api_boundary_node_ids(reachable_nns_urls.clone());
             println!(
                 "{}",
                 serde_json::to_string_pretty(&records)
@@ -6067,12 +6113,12 @@ async fn get_firewall_rules(cmd: GetFirewallRulesCmd, registry_canister: &Regist
 async fn get_firewall_rules_for_node(
     cmd: GetFirewallRulesForNodeCmd,
     registry_canister: &RegistryCanister,
-    nns_url: Url,
+    nns_urls: Vec<Url>,
 ) {
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
             tokio::runtime::Handle::current(),
-            vec![nns_url],
+            nns_urls,
         )),
         None,
     );
@@ -6124,18 +6170,12 @@ fn get_firewall_ruleset_hash(cmd: GetFirewallRulesetHashCmd) {
     println!("{}", compute_firewall_ruleset_hash(&rules));
 }
 
-/// Encapsulates a node/node operator id pair.
-#[derive(Serialize)]
-struct NodeAndNodeOperatorId {
-    node_id: String,
-    node_operator_id: String,
-}
-
 /// Fetches the list of nodes that were added since `version` to the registry.
 async fn get_node_list_since(
     version: u64,
-    registry: RegistryCanister,
-) -> Vec<NodeAndNodeOperatorId> {
+    registry: &RegistryCanister,
+) -> IndexMap<PrincipalId, NodeDetails> {
+    eprintln!("INFO: Fetching a list of all nodes from the registry...");
     let (nns_subnet_id_vec, _) = registry
         .get_value(ROOT_SUBNET_ID_KEY.as_bytes().to_vec(), None)
         .await
@@ -6165,13 +6205,20 @@ async fn get_node_list_since(
     // pagination. This is why we loop here.
     let mut deltas = vec![];
     let mut current_version = version;
+    let mut errs = 0;
     loop {
         match registry
             .get_certified_changes_since(current_version, &nns_pub_key)
             .await
         {
-            Err(err) => panic!("Couldn't fetch registry delta: {:?}", err),
+            Err(err) => {
+                errs += 1;
+                if errs > 10 {
+                    panic!("Couldn't fetch registry delta: {:?}", err)
+                }
+            }
             Ok((mut v, _, _)) => {
+                errs = 0;
                 current_version = v[v.len() - 1].version.get();
                 deltas.append(&mut v);
                 if current_version >= latest_version {
@@ -6181,40 +6228,70 @@ async fn get_node_list_since(
         };
     }
 
-    let mut node_map = BTreeMap::new();
+    let mut node_map: IndexMap<PrincipalId, NodeRecord> = IndexMap::new();
+    let mut node_operator_map: IndexMap<PrincipalId, NodeOperatorRecord> = IndexMap::new();
     deltas.into_iter().for_each(|versioned_record| {
         // Since RegistryVersionedRecord's are strongly typed; we must filter those
         // with the relevant keys.
         if is_node_record_key(&versioned_record.key) {
+            let node_id = get_node_record_node_id(&versioned_record.key).unwrap();
             match versioned_record.value {
                 Some(v) => {
-                    let decoded_v = NodeRecord::decode(v.as_slice()).unwrap();
-                    node_map
-                        .entry(versioned_record.key)
-                        .and_modify(|e: &mut Vec<NodeRecord>| e.push(decoded_v.clone()))
-                        .or_insert_with(|| vec![decoded_v]);
+                    let record = NodeRecord::decode(v.as_slice()).unwrap();
+                    *node_map.entry(node_id).or_default() = record;
                 }
                 None => {
-                    node_map.remove(&versioned_record.key);
+                    node_map.remove(&node_id);
+                }
+            };
+        } else if is_node_operator_record_key(&versioned_record.key) {
+            let node_operator_id =
+                get_node_operator_id_from_record_key(&versioned_record.key).unwrap();
+            match versioned_record.value {
+                Some(v) => {
+                    let record = NodeOperatorRecord::decode(v.as_slice()).unwrap();
+                    *node_operator_map.entry(node_operator_id).or_default() = record;
+                }
+                None => {
+                    node_operator_map.remove(&node_operator_id);
                 }
             };
         }
     });
 
-    let node_records: Vec<NodeAndNodeOperatorId> = node_map
-        .iter()
-        .filter_map(|(k, v)| {
-            v.last().map(|res| NodeAndNodeOperatorId {
-                node_id: format!("{}", get_node_record_node_id(k).unwrap()),
-                node_operator_id: format!(
-                    "{}",
-                    PrincipalId::try_from(res.node_operator_id.clone()).unwrap()
+    let result: IndexMap<PrincipalId, NodeDetails> = node_map
+        .into_iter()
+        .map(|(node_id, node_record): (PrincipalId, NodeRecord)| {
+            let node_operator_id =
+                PrincipalId::try_from(node_record.node_operator_id).unwrap_or_default();
+            let (node_provider_id, dc_id) = match node_operator_map.get(&node_operator_id) {
+                Some(node_operator_record) => (
+                    PrincipalId::try_from(&node_operator_record.node_provider_principal_id)
+                        .unwrap_or_default(),
+                    node_operator_record.dc_id.clone(),
                 ),
-            })
+                None => (PrincipalId::default(), "".to_string()),
+            };
+            (
+                node_id,
+                NodeDetails {
+                    node_operator_id,
+                    ipv6: node_record
+                        .http
+                        .as_ref()
+                        .map(|conn| {
+                            Ipv6Addr::from_str(&conn.ip_addr)
+                                .unwrap_or_else(|_| Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0))
+                        })
+                        .unwrap_or_else(|| Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
+                    node_provider_id,
+                    dc_id,
+                },
+            )
         })
         .collect();
 
-    node_records
+    result
 }
 
 /// Parses the URL of a proposal.
@@ -6340,11 +6417,11 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
     }
 }
 
-fn get_api_boundary_node_ids(nns_url: Url) -> Vec<String> {
+fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
             tokio::runtime::Handle::current(),
-            vec![nns_url],
+            nns_url,
         )),
         None,
     );
@@ -6527,9 +6604,9 @@ fn get_root_subnet_pub_key(
         .ok_or_else(|| "Root subnet public key is not found".to_string())
 }
 
-/// Fetch registry records from the given `nns_url`, and update the local
+/// Fetch registry records from the given `nns_urls`, and update the local
 /// registry store with the new records.
-async fn update_registry_local_store(nns_url: Url, cmd: UpdateRegistryLocalStoreCmd) {
+async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLocalStoreCmd) {
     eprintln!("RegistryLocalStore path: {:?}", cmd.local_store_path);
     let local_store = Arc::new(LocalStoreImpl::new(cmd.local_store_path));
     let local_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
@@ -6555,7 +6632,7 @@ async fn update_registry_local_store(nns_url: Url, cmd: UpdateRegistryLocalStore
             }
         }
     };
-    let remote_canister = RegistryCanister::new(vec![nns_url.clone()]);
+    let remote_canister = RegistryCanister::new(nns_urls);
     let response = remote_canister
         .get_certified_changes_since(latest_version.get(), &nns_pub_key)
         .await;
@@ -6713,13 +6790,17 @@ struct RootCanisterClient(NnsCanisterClient);
 /// Build a new canister client.
 /// `nns_public_key_pem` is the key used for response verification. If None mainnet public key is used.
 fn make_canister_client(
-    nns_url: Url,
+    nns_urls: Vec<Url>,
     verify_nns_responses: bool,
     nns_public_key_pem_file: Option<PathBuf>,
     sender: Sender,
 ) -> Agent {
     // If we talk to `ic0.app` we verify against mainnet root key by default.
-    if verify_nns_responses || nns_url.domain().map_or(false, |d| d.contains(IC_DOMAIN)) {
+    if verify_nns_responses
+        || nns_urls[0]
+            .domain()
+            .map_or(false, |d| d.contains(IC_DOMAIN))
+    {
         let nns_key = if let Some(path) = nns_public_key_pem_file {
             parse_threshold_sig_key(&path).expect("Failed to parse PEM file.")
         } else {
@@ -6728,9 +6809,9 @@ fn make_canister_client(
             parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)
                 .expect("Failed to decode mainnet public key.")
         };
-        Agent::new(nns_url, sender).with_nns_public_key(nns_key)
+        Agent::new(nns_urls[0].clone(), sender).with_nns_public_key(nns_key)
     } else {
-        Agent::new(nns_url, sender)
+        Agent::new(nns_urls[0].clone(), sender)
     }
 }
 
@@ -6878,8 +6959,8 @@ impl RootCanisterClient {
             &cmd.wasm_module_sha256,
         )
         .await;
-        let root_proposal =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
                 .with_wasm(wasm_module);
 
@@ -6906,7 +6987,7 @@ impl RootCanisterClient {
             hex::encode(&module_hash)
         );
 
-        let serialized = Encode!(&module_hash, &root_proposal)
+        let serialized = Encode!(&module_hash, &change_canister_request)
             .expect("Error candid-serializing root proposal to upgrade governance canister.");
         let response = self
             .0

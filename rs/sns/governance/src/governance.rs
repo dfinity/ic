@@ -54,7 +54,7 @@ use crate::{
             NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
             ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
             RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters, WaitForQuietState,
+            UpgradeSnsToNextVersion, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -85,7 +85,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -240,11 +240,11 @@ impl GovernanceProto {
                 continue;
             }
 
-            let followee_index = index.entry(*function_id).or_insert_with(BTreeMap::new);
+            let followee_index = index.entry(*function_id).or_default();
             for followee in followees.followees.iter() {
                 followee_index
                     .entry(followee.to_string())
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(
                         neuron
                             .id
@@ -304,7 +304,7 @@ impl GovernanceProto {
         neuron_id: &NeuronId,
         principal: &PrincipalId,
     ) {
-        let neuron_ids = index.entry(*principal).or_insert_with(HashSet::new);
+        let neuron_ids = index.entry(*principal).or_default();
         neuron_ids.insert(neuron_id.clone());
     }
 
@@ -393,8 +393,8 @@ impl GovernanceProto {
     /// This name does not follow our naming pattern, because "mode" is already
     /// used by prost::Message.
     pub fn get_mode(&self) -> governance::Mode {
-        let result = governance::Mode::from_i32(self.mode)
-            .unwrap_or_else(|| panic!("Unknown mode ({})", self.mode));
+        let result = governance::Mode::try_from(self.mode)
+            .unwrap_or_else(|_| panic!("Unknown mode ({})", self.mode));
 
         assert!(
             result != governance::Mode::Unspecified,
@@ -489,7 +489,7 @@ impl ValidGovernanceProto {
 
     /// Because enum fields (such as mode) are of type i32, not FooEnum.
     fn valid_mode_or_err(governance_proto: &GovernanceProto) -> Result<governance::Mode, String> {
-        let mode = match governance::Mode::from_i32(governance_proto.mode) {
+        let mode = match governance::Mode::try_from(governance_proto.mode).ok() {
             Some(mode) => mode,
             None => {
                 return Err(format!(
@@ -713,6 +713,10 @@ impl Governance {
                 distributed_e8s_equivalent: 0,
                 end_timestamp_seconds: Some(now),
                 rounds_since_last_distribution: Some(0),
+                // This value should be considered equivalent to None (allowing
+                // the use of unwrap_or_default), but for consistency, we
+                // explicitly initialize to 0.
+                total_available_e8s_equivalent: Some(0),
             })
         }
 
@@ -747,7 +751,7 @@ impl Governance {
 
     pub fn set_mode(&mut self, mode: i32, caller: PrincipalId) {
         let mode =
-            governance::Mode::from_i32(mode).unwrap_or_else(|| panic!("Unknown mode: {}", mode));
+            governance::Mode::try_from(mode).unwrap_or_else(|_| panic!("Unknown mode: {}", mode));
 
         if !self.is_swap_canister(caller) {
             panic!("Caller must be the swap canister.");
@@ -1886,8 +1890,8 @@ impl Governance {
                 self.proto
                     .id_to_nervous_system_functions
                     .values()
-                    .cloned()
-                    .filter(|f| f != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER),
+                    .filter(|&f| f != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER)
+                    .cloned(),
             )
             .collect();
 
@@ -2493,11 +2497,11 @@ impl Governance {
             // upgrade when it might not have the context to parse those usefully.
             //
             // For more details, please refer to the comments above the (definition of the)
-            // stop_before_installing field in ChangeCanisterProposal.
+            // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
 
             let change_canister_arg =
-                ChangeCanisterProposal::new(stop_before_installing, mode, target_canister_id)
+                ChangeCanisterRequest::new(stop_before_installing, mode, target_canister_id)
                     .with_wasm(wasm)
                     .with_arg(arg)
                     .with_mode(mode);
@@ -2858,14 +2862,6 @@ impl Governance {
             .expect("NervousSystemParameters must have wait_for_quiet_deadline_increase_seconds")
     }
 
-    /// Returns the voting rewards parameters from the nervous system parameters.
-    fn voting_rewards_parameters_or_panic(&self) -> &VotingRewardsParameters {
-        self.nervous_system_parameters_or_panic()
-            .voting_rewards_parameters
-            .as_ref()
-            .expect("NervousSystemParameters must have voting_rewards_parameters")
-    }
-
     /// Returns the neuron minimum stake e8s from the nervous system parameters.
     fn neuron_minimum_stake_e8s_or_panic(&self) -> u64 {
         self.nervous_system_parameters_or_panic()
@@ -3110,9 +3106,6 @@ impl Governance {
             let proposal_num = self.next_proposal_id();
             let proposal_id = ProposalId { id: proposal_num };
 
-            // Compute whether the proposal is eligible for rewards
-            let is_eligible_for_rewards =
-                self.voting_rewards_parameters_or_panic().rewards_enabled();
             // Create the proposal.
             let mut proposal_data = ProposalData {
                 action: u64::from(action),
@@ -3123,7 +3116,6 @@ impl Governance {
                 proposal_creation_timestamp_seconds: now_seconds,
                 ballots: electoral_roll,
                 payload_text_rendering: Some(rendering),
-                is_eligible_for_rewards,
                 initial_voting_period_seconds,
                 wait_for_quiet_deadline_increase_seconds,
                 // Writing these explicitly so that we have to make a conscious decision
@@ -3140,6 +3132,14 @@ impl Governance {
                 minimum_yes_proportion_of_total: Some(
                     NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
                 ),
+                minimum_yes_proportion_of_exercised: Some(
+                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
+                ),
+                // This field is on its way to deletion, but before we can do that, we temporarily
+                // set it to true. It used to be that this was set based on whether the reward rate
+                // is positive, but that was a mistake. That's why we are getting rid of this.
+                // TODO(NNS1-2731): Delete this.
+                is_eligible_for_rewards: true,
             };
 
             proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -3356,7 +3356,7 @@ impl Governance {
                 .as_ref()
                 .expect("Proposal must have an action");
 
-            let vote = Vote::from_i32(request.vote).unwrap_or(Vote::Unspecified);
+            let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
             if vote == Vote::Unspecified {
                 // Invalid vote specified, i.e., not yes or no.
                 return Err(GovernanceError::new_with_message(
@@ -3498,13 +3498,11 @@ impl Governance {
                 let cache = self
                     .function_followee_index
                     .entry(f.function_id)
-                    .or_insert_with(BTreeMap::new);
+                    .or_default();
                 // We need to add this neuron as a follower for
                 // all followees.
                 for followee in &f.followees {
-                    let all_followers = cache
-                        .entry(followee.to_string())
-                        .or_insert_with(BTreeSet::new);
+                    let all_followers = cache.entry(followee.to_string()).or_default();
                     all_followers.insert(id.clone());
                 }
                 Ok(())
@@ -4082,7 +4080,7 @@ impl Governance {
     /// Similarly, if the translation results in Unspecified, panics (in
     /// non-release builds) or defaults to Normal (in release builds).
     fn mode(&self) -> governance::Mode {
-        let result = governance::Mode::from_i32(self.proto.mode).unwrap_or_else(|| {
+        let result = governance::Mode::try_from(self.proto.mode).unwrap_or_else(|_| {
             debug_assert!(
                 false,
                 "Governance is in an unknown mode: {}",
@@ -4475,9 +4473,7 @@ impl Governance {
         let action_to_proposals: HashMap<u64, Vec<u64>> = {
             let mut tmp: HashMap<u64, Vec<u64>> = HashMap::new();
             for (proposal_id, proposal) in self.proto.proposals.iter() {
-                tmp.entry(proposal.action)
-                    .or_insert_with(Vec::new)
-                    .push(*proposal_id);
+                tmp.entry(proposal.action).or_default().push(*proposal_id);
             }
             tmp
         };
@@ -4612,8 +4608,12 @@ impl Governance {
         self.proto.maturity_modulation = Some(new_maturity_modulation);
     }
 
-    /// Returns `true` if rewards should be distributed (which is the case if
-    /// enough time has passed since the last reward event) and `false` otherwise
+    /// Returns `true` if enough time has passed since the end of the last reward round.
+    ///
+    /// The end of the last reward round is recorded in self.latest_reward_event.
+    ///
+    /// The (current) length of a reward round is specified in
+    /// self.nervous_system_parameters.voting_reward_parameters
     fn should_distribute_rewards(&self) -> bool {
         let now = self.env.now();
 
@@ -4624,22 +4624,12 @@ impl Governance {
             None => return false,
             Some(ok) => ok,
         };
-
-        if !voting_rewards_parameters.rewards_enabled() {
-            return false;
-        }
-
-        if self.ready_to_be_settled_proposal_ids().next().is_none() {
-            // If there are no proposals eligible for reward, no RewardEvent will
-            // be created.
-            return false;
-        }
-
         let seconds_since_last_reward_event = now.saturating_sub(
             self.latest_reward_event()
                 .end_timestamp_seconds
                 .unwrap_or_default(),
         );
+
         let round_duration_seconds = match voting_rewards_parameters.round_duration_seconds {
             Some(s) => s,
             None => {
@@ -4683,15 +4673,6 @@ impl Governance {
             }
         };
 
-        if !voting_rewards_parameters.rewards_enabled() {
-            log!(
-                ERROR,
-                "distribute_rewards called even though \
-                 rewards are not enabled for voting_rewards_parameters.",
-            );
-            return;
-        }
-
         let round_duration_seconds = match voting_rewards_parameters.round_duration_seconds {
             Some(s) => s,
             None => {
@@ -4703,6 +4684,18 @@ impl Governance {
                 return;
             }
         };
+        // This guard is needed, because we'll divide by this amount shortly.
+        if round_duration_seconds == 0 {
+            // This is important, but emitting this every time will be spammy, because this gets
+            // called during heartbeat.
+            log!(
+                ERROR,
+                "round_duration_seconds ({}) is not positive. \
+                 Therefore, we cannot calculate voting rewards.",
+                round_duration_seconds,
+            );
+            return;
+        }
 
         let reward_start_timestamp_seconds = self
             .latest_reward_event()
@@ -4720,17 +4713,10 @@ impl Governance {
 
         let considered_proposals: Vec<ProposalId> =
             self.ready_to_be_settled_proposal_ids().collect();
-        if considered_proposals.is_empty() {
-            // This early return is needed to make rewards roll over when there
-            // are no proposals that need to be settled (i.e. give voting
-            // rewards to neurons). This early return could be moved to
-            // immediately before generating a new RewardEvent, near the end,
-            // but returning early is done here, because none of the intervening
-            // code does anything when there are no proposals to consider.
-            return;
-        }
+        // RewardEvents are generated every time. If there are no proposals to reward, the rewards
+        // purse is rolled over via the total_available_e8s_equivalent field.
 
-        // Log if we are about to "back fill".
+        // Log if we are about to "backfill" rounds that were missed.
         if new_rounds_count > 1 {
             log!(
                 INFO,
@@ -4745,20 +4731,23 @@ impl Governance {
             .saturating_add(reward_start_timestamp_seconds);
 
         // What's going on here looks a little complex, but it's just a slightly
-        // more advanced version of non-compounding interest. The main
-        // embellishment is because we are calculating the reward purse over
-        // possibly more than one reward round. The possibility of multiple
-        // rounds is why range, map, and sum are used. Otherwise, it boils down
-        // to the non-compounding interest formula:
+        // more advanced version of simple (i.e. non-compounding) interest. The
+        // main embellishment is because we are calculating the reward purse
+        // over possibly more than one reward round. The possibility of multiple
+        // rounds is why we loop over rounds. Otherwise, it boils down to the
+        // simple interest formula:
         //
         //   principal * rate * duration
         //
         // Here, the entire token supply is used as the "principal", and the
-        // length of a reward round is used as the duration. The rate is
-        // calculated using VotingRewardsParameters::reward_rate, because it
-        // varies from round to round.
+        // length of a reward round is used as the duration. The reward rate
+        // varies from round to round, and is calculated using
+        // VotingRewardsParameters::reward_rate_at.
         let rewards_purse_e8s = {
-            let mut result = dec!(0);
+            let mut result = Decimal::from(
+                self.latest_reward_event()
+                    .e8s_equivalent_to_be_rolled_over(),
+            );
             let supply = i2d(supply.get_e8s());
 
             for i in 1..=new_rounds_count {
@@ -4777,13 +4766,38 @@ impl Governance {
             result
         };
         debug_assert!(rewards_purse_e8s >= dec!(0), "{}", rewards_purse_e8s);
+        // This will get assembled into the new RewardEvent at the end.
+        let total_available_e8s_equivalent = Some(match u64::try_from(rewards_purse_e8s) {
+            Ok(ok) => ok,
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "Looks like the rewards purse ({}) overflowed u64: {}. \
+                     Therefore, we stop the current attempt to distribute voting rewards.",
+                    rewards_purse_e8s,
+                    err,
+                );
+                return;
+            }
+        });
 
         // Add up reward shares based on voting power that was exercised.
         let mut neuron_id_to_reward_shares: HashMap<NeuronId, Decimal> = HashMap::new();
         for proposal_id in &considered_proposals {
             if let Some(proposal) = self.get_proposal_data(*proposal_id) {
                 for (voter, ballot) in &proposal.ballots {
-                    if !Vote::from(ballot.vote).eligible_for_rewards() {
+                    #[allow(clippy::blocks_in_if_conditions)]
+                    if !Vote::try_from(ballot.vote)
+                        .unwrap_or_else(|_| {
+                            println!(
+                                "{}Vote::from invoked with unexpected value {}.",
+                                log_prefix(),
+                                ballot.vote
+                            );
+                            Vote::Unspecified
+                        })
+                        .eligible_for_rewards()
+                    {
                         continue;
                     }
 
@@ -4897,7 +4911,7 @@ impl Governance {
         // instead. This value can still be used if round duration is not changed.
         let new_reward_event_round = self.latest_reward_event().round + new_rounds_count;
         // Settle proposals.
-        for pid in considered_proposals.iter() {
+        for pid in &considered_proposals {
             // Before considering a proposal for reward, it must be fully processed --
             // because we're about to clear the ballots, so no further processing will be
             // possible.
@@ -4975,6 +4989,7 @@ impl Governance {
             distributed_e8s_equivalent,
             end_timestamp_seconds: Some(reward_event_end_timestamp_seconds),
             rounds_since_last_distribution: Some(new_rounds_count),
+            total_available_e8s_equivalent,
         })
     }
 
@@ -6456,201 +6471,6 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_proposal_not_eligible_for_rewards_when_reward_rate_0() {
-        // Step 1: Prepare the world, i.e. Governance.
-        let principal_id = PrincipalId::new_user_test_id(8807);
-        let neuron_id = NeuronId {
-            id: vec![249, 83, 240, 16],
-        };
-        let neuron = Neuron {
-            id: Some(neuron_id.clone()),
-            permissions: vec![NeuronPermission {
-                principal: Some(principal_id),
-                permission_type: NeuronPermissionType::all(),
-            }],
-            cached_neuron_stake_e8s: 100 * E8,
-            aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
-            ..Default::default()
-        };
-
-        let mut governance = Governance::new(
-            GovernanceProto {
-                neurons: btreemap! {
-                    neuron_id.to_string() => neuron,
-                },
-                mode: governance::Mode::Normal as i32,
-                parameters: Some(NervousSystemParameters {
-                    voting_rewards_parameters: Some(VotingRewardsParameters {
-                        initial_reward_rate_basis_points: Some(0),
-                        final_reward_rate_basis_points: Some(0),
-                        ..VotingRewardsParameters::with_default_values()
-                    }),
-                    ..NervousSystemParameters::with_default_values()
-                }),
-                ..basic_governance_proto()
-            }
-            .try_into()
-            .unwrap(),
-            Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
-            Box::new(DoNothingLedger {}),
-            Box::new(DoNothingLedger {}),
-            Box::new(FakeCmc::new()),
-        );
-
-        // Step 2: Run code under test.
-        let proposal_id = governance
-            .make_proposal(
-                &neuron_id,
-                &principal_id,
-                &Proposal {
-                    action: Some(Action::Motion(Motion {
-                        motion_text: "Make a change".to_string(),
-                    })),
-                    ..Default::default()
-                },
-            )
-            .await
-            .unwrap();
-
-        // Step 3: Inspect results.
-        let proposal_data = governance.get_proposal_data(proposal_id).unwrap();
-        assert!(!proposal_data.is_eligible_for_rewards, "is_eligible_for_rewards should be false since initial_reward_rate_basis_points is 0 and final_reward_rate_basis_points is 0");
-    }
-
-    #[tokio::test]
-    async fn test_proposal_eligible_for_rewards_when_initial_reward_rate_not_0() {
-        // Step 1: Prepare the world, i.e. Governance.
-        let principal_id = PrincipalId::new_user_test_id(8807);
-        let neuron_id = NeuronId {
-            id: vec![249, 83, 240, 16],
-        };
-        let neuron = Neuron {
-            id: Some(neuron_id.clone()),
-            permissions: vec![NeuronPermission {
-                principal: Some(principal_id),
-                permission_type: NeuronPermissionType::all(),
-            }],
-            cached_neuron_stake_e8s: 100 * E8,
-            aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
-            ..Default::default()
-        };
-
-        let mut governance = Governance::new(
-            GovernanceProto {
-                neurons: btreemap! {
-                    neuron_id.to_string() => neuron,
-                },
-                mode: governance::Mode::Normal as i32,
-                parameters: Some(NervousSystemParameters {
-                    voting_rewards_parameters: Some(VotingRewardsParameters {
-                        initial_reward_rate_basis_points: Some(1),
-                        final_reward_rate_basis_points: Some(0),
-                        ..VotingRewardsParameters::with_default_values()
-                    }),
-                    ..NervousSystemParameters::with_default_values()
-                }),
-                ..basic_governance_proto()
-            }
-            .try_into()
-            .unwrap(),
-            Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
-            Box::new(DoNothingLedger {}),
-            Box::new(DoNothingLedger {}),
-            Box::new(FakeCmc::new()),
-        );
-
-        // Step 2: Run code under test.
-        let proposal_id = governance
-            .make_proposal(
-                &neuron_id,
-                &principal_id,
-                &Proposal {
-                    action: Some(Action::Motion(Motion {
-                        motion_text: "Make a change".to_string(),
-                    })),
-                    ..Default::default()
-                },
-            )
-            .await
-            .unwrap();
-
-        // Step 3: Inspect results.
-        let proposal_data = governance.get_proposal_data(proposal_id).unwrap();
-        assert!(
-            proposal_data.is_eligible_for_rewards,
-            "is_eligible_for_rewards should be true since initial_reward_rate_basis_points is 1"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_proposal_eligible_for_rewards_when_both_reward_rate_not_0() {
-        // Step 1: Prepare the world, i.e. Governance.
-        let principal_id = PrincipalId::new_user_test_id(8807);
-        let neuron_id = NeuronId {
-            id: vec![249, 83, 240, 16],
-        };
-        let neuron = Neuron {
-            id: Some(neuron_id.clone()),
-            permissions: vec![NeuronPermission {
-                principal: Some(principal_id),
-                permission_type: NeuronPermissionType::all(),
-            }],
-            cached_neuron_stake_e8s: 100 * E8,
-            aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
-            ..Default::default()
-        };
-
-        let mut governance = Governance::new(
-            GovernanceProto {
-                neurons: btreemap! {
-                    neuron_id.to_string() => neuron,
-                },
-                mode: governance::Mode::Normal as i32,
-                parameters: Some(NervousSystemParameters {
-                    voting_rewards_parameters: Some(VotingRewardsParameters {
-                        initial_reward_rate_basis_points: Some(1),
-                        final_reward_rate_basis_points: Some(1),
-                        ..VotingRewardsParameters::with_default_values()
-                    }),
-                    ..NervousSystemParameters::with_default_values()
-                }),
-                ..basic_governance_proto()
-            }
-            .try_into()
-            .unwrap(),
-            Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
-            Box::new(DoNothingLedger {}),
-            Box::new(DoNothingLedger {}),
-            Box::new(FakeCmc::new()),
-        );
-
-        // Step 2: Run code under test.
-        let proposal_id = governance
-            .make_proposal(
-                &neuron_id,
-                &principal_id,
-                &Proposal {
-                    action: Some(Action::Motion(Motion {
-                        motion_text: "Make a change".to_string(),
-                    })),
-                    ..Default::default()
-                },
-            )
-            .await
-            .unwrap();
-
-        // Step 3: Inspect results.
-        let proposal_data = governance.get_proposal_data(proposal_id).unwrap();
-        assert!(
-            proposal_data.is_eligible_for_rewards,
-            "is_eligible_for_rewards should be true since final_reward_rate_basis_points is 1"
-        );
-    }
-
     #[test]
     fn two_sns_version_upgrades_cannot_be_concurrent() {
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
@@ -7086,7 +6906,7 @@ mod tests {
                 env.require_call_canister_invocation(
                     root_canister_id,
                     "change_canister",
-                    Encode!(&ChangeCanisterProposal::new(
+                    Encode!(&ChangeCanisterRequest::new(
                         true,
                         CanisterInstallMode::Upgrade,
                         canister_id

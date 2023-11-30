@@ -182,21 +182,21 @@ fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
 
         assert!(ctext.decrypt(ad, dealer_index, 1, &b_sk, &b_pk).is_ok());
         assert_eq!(
-            ctext.decrypt(b"wrong_ad", dealer_index, 1, &b_sk, &b_pk),
+            ctext.verify_pop(b"wrong_ad", dealer_index),
             Err(ThresholdEcdsaError::InvalidProof)
         );
 
         let mut bad_pop_pk = ctext.clone();
         bad_pop_pk.pop_public_key = ctext.ephemeral_key.clone();
         assert_eq!(
-            bad_pop_pk.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
+            bad_pop_pk.verify_pop(ad, dealer_index),
             Err(ThresholdEcdsaError::InvalidProof)
         );
 
         let mut bad_eph_key = ctext;
         bad_eph_key.ephemeral_key = EccPoint::hash_to_point(curve, b"input", b"dst")?;
         assert_eq!(
-            bad_eph_key.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
+            bad_eph_key.verify_pop(ad, dealer_index),
             Err(ThresholdEcdsaError::InvalidProof)
         );
     }
@@ -262,19 +262,15 @@ mod mega_cipher_text {
     #[test]
     fn should_fail_if_decrypt_of_ciphertext_fails_due_to_dealer_index_mismatch() {
         let rng = &mut reproducible_rng();
+
         for ctext_type in MEGaCiphertextType::iter() {
             let setup = Setup::new(rng, ctext_type);
             let invalid_dealer_index = 47;
 
             assert_eq!(
-                decrypt(
-                    setup.ctext,
-                    setup.associated_data,
-                    invalid_dealer_index,
-                    0,
-                    &setup.a_sk,
-                    &setup.a_pk
-                ),
+                setup
+                    .ctext
+                    .check_validity(1, setup.associated_data, invalid_dealer_index),
                 Err(ThresholdEcdsaError::InvalidProof)
             );
         }

@@ -7,12 +7,14 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+axum = "0.6.1"
 crossbeam-channel = "0.5.5"
 either = "1.6.0"
 ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
+ic-consensus-manager = { path = "../../p2p/consensus_manager" }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
@@ -20,7 +22,6 @@ ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-execution-environment = { path = "../../execution_environment" }
 ic-https-outcalls-consensus = { path = "../../https_outcalls/consensus" }
 ic-icos-sev = { path = "../../ic_os/sev" }
-ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
@@ -40,8 +41,10 @@ ic-state-sync-manager = { path = "../../p2p/state_sync_manager" }
 ic-transport = { path = "../../transport" }
 ic-types = { path = "../../types/types" }
 parking_lot = "0.12.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 threadpool = "1.8.1"
 tokio = { workspace = true }
 tower = { workspace = true }
-

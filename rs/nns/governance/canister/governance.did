@@ -151,6 +151,8 @@ type Follow = record { topic : int32; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
 type Followers = record { followers : vec NeuronId };
 type FollowersMap = record { followers_map : vec record { nat64; Followers } };
+type GetNeuronsFundAuditInfoRequest = record { nns_proposal_id : opt NeuronId };
+type GetNeuronsFundAuditInfoResponse = record { result : opt Result_6 };
 type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
@@ -378,6 +380,11 @@ type NeuronStakeTransfer = record {
   transfer_timestamp : nat64;
   block_height : nat64;
 };
+type NeuronsFundAuditInfo = record {
+  final_neurons_fund_participation : opt NeuronsFundParticipation;
+  initial_neurons_fund_participation : opt NeuronsFundParticipation;
+  neurons_fund_refunds : opt NeuronsFundSnapshot;
+};
 type NeuronsFundData = record {
   final_neurons_fund_participation : opt NeuronsFundParticipation;
   initial_neurons_fund_participation : opt NeuronsFundParticipation;
@@ -404,6 +411,7 @@ type NeuronsFundParticipation = record {
   max_neurons_fund_swap_participation_icp_e8s : opt nat64;
   neurons_fund_reserves : opt NeuronsFundSnapshot;
   ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
+  allocated_neurons_fund_participation_icp_e8s : opt nat64;
 };
 type NeuronsFundSnapshot = record {
   neurons_fund_neuron_portions : vec NeuronsFundNeuronPortion;
@@ -412,7 +420,8 @@ type NodeProvider = record {
   id : opt principal;
   reward_account : opt AccountIdentifier;
 };
-type Ok = record { neurons_fund_neuron_portions : vec NeuronsFundNeuron };
+type Ok = record { neurons_fund_audit_info : opt NeuronsFundAuditInfo };
+type Ok_1 = record { neurons_fund_neuron_portions : vec NeuronsFundNeuron };
 type OpenSnsTokenSwap = record {
   community_fund_investment_e8s : opt nat64;
   target_swap_canister_id : opt principal;
@@ -493,14 +502,15 @@ type RegisterVote = record { vote : int32; proposal : opt NeuronId };
 type RemoveHotKey = record { hot_key_to_remove : opt principal };
 type Result = variant { Ok; Err : GovernanceError };
 type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
+type Result_10 = variant { Ok : Ok_1; Err : GovernanceError };
 type Result_2 = variant { Ok : Neuron; Err : GovernanceError };
 type Result_3 = variant { Ok : GovernanceCachedMetrics; Err : GovernanceError };
 type Result_4 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
 type Result_5 = variant { Ok : NeuronInfo; Err : GovernanceError };
-type Result_6 = variant { Ok : NodeProvider; Err : GovernanceError };
-type Result_7 = variant { Committed : Committed; Aborted : record {} };
-type Result_8 = variant { Committed : Committed_1; Aborted : record {} };
-type Result_9 = variant { Ok : Ok; Err : GovernanceError };
+type Result_6 = variant { Ok : Ok; Err : GovernanceError };
+type Result_7 = variant { Ok : NodeProvider; Err : GovernanceError };
+type Result_8 = variant { Committed : Committed; Aborted : record {} };
+type Result_9 = variant { Committed : Committed_1; Aborted : record {} };
 type RewardEvent = record {
   rounds_since_last_distribution : opt nat64;
   day_after_genesis : nat64;
@@ -535,14 +545,14 @@ type SetSnsTokenSwapOpenTimeWindow = record {
   swap_canister_id : opt principal;
 };
 type SettleCommunityFundParticipation = record {
-  result : opt Result_7;
+  result : opt Result_8;
   open_sns_token_swap_proposal_id : opt nat64;
 };
 type SettleNeuronsFundParticipationRequest = record {
-  result : opt Result_8;
+  result : opt Result_9;
   nns_proposal_id : opt nat64;
 };
-type SettleNeuronsFundParticipationResponse = record { result : opt Result_9 };
+type SettleNeuronsFundParticipationResponse = record { result : opt Result_10 };
 type Spawn = record {
   percentage_to_spawn : opt nat32;
   new_controller : opt principal;
@@ -628,7 +638,10 @@ service : (Governance) -> {
   get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_5,
     ) query;
-  get_node_provider_by_caller : (null) -> (Result_6) query;
+  get_neurons_fund_audit_info : (GetNeuronsFundAuditInfoRequest) -> (
+      GetNeuronsFundAuditInfoResponse,
+    ) query;
+  get_node_provider_by_caller : (null) -> (Result_7) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;

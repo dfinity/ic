@@ -128,6 +128,7 @@ mod tests {
             canister_id: CanisterId::ic_00(),
             method: "provisional_create_canister_with_cycles".to_string(),
             payload: encode_args((CreateCanisterArgument { settings: None },)).unwrap(),
+            effective_principal: pocket_ic::EffectivePrincipal::None,
         });
 
         let timeout = Some(Duration::from_secs(30));
@@ -137,12 +138,11 @@ mod tests {
 
         match res {
             UpdateReply::Output(OpOut::CanisterResult(Ok(WasmResult::Reply(bytes)))) => {
-                println!("wasm result bytes {:?}", bytes);
                 let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
-                println!("result: {}", canister_id);
+                assert!(!canister_id.to_text().is_empty());
             }
             UpdateReply::Output(OpOut::CanisterResult(Ok(WasmResult::Reject(x)))) => {
-                println!("wasm reject {:?}", x);
+                panic!("unexpected reject: {:?}", x);
             }
             e => {
                 panic!("unexpected result: {:?}", e);

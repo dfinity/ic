@@ -15,18 +15,15 @@ impl MigrationStatus {
 impl Migration {
     pub fn migration_status(&self) -> MigrationStatus {
         self.status
-            .and_then(MigrationStatus::from_i32)
+            .and_then(|v| MigrationStatus::try_from(v).ok())
             .unwrap_or_default()
     }
 }
 
 pub(crate) fn maybe_run_migrations(
-    mut migrations: Migrations,
-    neuron_store: &mut NeuronStore,
+    migrations: Migrations,
+    _neuron_store: &mut NeuronStore,
 ) -> Migrations {
-    if crate::neuron_stable_indexes_building_is_enabled() {
-        migrations.neuron_indexes_migration =
-            Some(neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes());
-    }
+    // TODO: move inactive neuron migration here.
     migrations
 }

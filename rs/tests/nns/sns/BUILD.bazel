@@ -195,13 +195,9 @@ system_test(
 system_test(
     name = "one_proposal_neurons_fund_swap_participation_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2590]: re-enable this test with the following tags:
-    # tags = [
-    #     "system_test_hourly",
-    #     "system_test_nightly",
-    # ],
     tags = [
-        "manual",
+        "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",

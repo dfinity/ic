@@ -58,8 +58,8 @@ impl std::fmt::Display for CanisterOutOfCyclesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles",
-            self.canister_id, self.requested, self.available, self.threshold
+            "Canister {} is out of cycles: please top up the canister with at least {} additional cycles",
+            self.canister_id, (self.threshold + self.requested) - self.available
         )
     }
 }
@@ -80,8 +80,6 @@ pub enum HypervisorError {
     ContractViolation(String),
     /// Wasm execution consumed too many instructions.
     InstructionLimitExceeded,
-    /// Wasm execution was too complex, i.e. had too many System API calls.
-    ExecutionComplexityLimitExceeded,
     /// We could not validate the wasm module
     InvalidWasm(WasmValidationError),
     /// We could not instrument the wasm module
@@ -234,10 +232,6 @@ impl HypervisorError {
                 E::CanisterInstructionLimitExceeded,
                 format!("Canister {} exceeded the instruction limit for single message execution.", canister_id),
             ),
-            Self::ExecutionComplexityLimitExceeded => UserError::new(
-                E::CanisterInstructionLimitExceeded,
-                format!("Canister {} exceeded the instruction limit for single message execution due to too many System API calls.", canister_id),
-            ),
             Self::InvalidWasm(err) => UserError::new(
                 E::CanisterInvalidWasm,
                 format!(
@@ -370,7 +364,6 @@ impl HypervisorError {
             HypervisorError::MethodNotFound(_) => "MethodNotFound",
             HypervisorError::ContractViolation(_) => "ContractViolation",
             HypervisorError::InstructionLimitExceeded => "InstructionLimitExceeded",
-            HypervisorError::ExecutionComplexityLimitExceeded => "ExecutionComplexityLimitExceeded",
             HypervisorError::InvalidWasm(_) => "InvalidWasm",
             HypervisorError::InstrumentationFailed(_) => "InstrumentationFailed",
             HypervisorError::Trapped(_) => "Trapped",

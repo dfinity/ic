@@ -14,7 +14,7 @@
 //! the download order.
 
 use crate::metrics::DownloadPrioritizerMetrics;
-use ic_interfaces::artifact_manager::ArtifactManager;
+use ic_interfaces::p2p::artifact_manager::ArtifactManager;
 use ic_types::{
     artifact::{ArtifactId, ArtifactPriorityFn, ArtifactTag, Priority},
     chunkable::ChunkId,
@@ -226,10 +226,7 @@ pub(crate) trait DownloadAttemptTracker {
 /// Implementation for the DownloadAttemptTracker trait
 impl DownloadAttemptTracker for AdvertTracker {
     fn record_attempt(&mut self, chunk_id: ChunkId, node_id: &NodeId) {
-        let attempt = self
-            .download_attempt_map
-            .entry(chunk_id)
-            .or_insert_with(Default::default);
+        let attempt = self.download_attempt_map.entry(chunk_id).or_default();
         attempt.peers.insert(*node_id);
     }
 
@@ -239,10 +236,7 @@ impl DownloadAttemptTracker for AdvertTracker {
     }
 
     fn is_attempts_round_complete(&mut self, chunk_id: ChunkId) -> bool {
-        let attempt = self
-            .download_attempt_map
-            .entry(chunk_id)
-            .or_insert_with(Default::default);
+        let attempt = self.download_attempt_map.entry(chunk_id).or_default();
         !attempt.in_progress && attempt.peers.len() == self.peers.len()
     }
 
@@ -255,10 +249,7 @@ impl DownloadAttemptTracker for AdvertTracker {
     }
 
     fn set_in_progress(&mut self, chunk_id: ChunkId, node_id: &NodeId) {
-        let attempt = self
-            .download_attempt_map
-            .entry(chunk_id)
-            .or_insert_with(Default::default);
+        let attempt = self.download_attempt_map.entry(chunk_id).or_default();
         attempt.peers.insert(*node_id);
         attempt.in_progress = true;
     }
@@ -284,9 +275,7 @@ impl AdvertTracker {
 
     /// Returns the DownloadAttemptTracker for a chunk
     fn get_download_attempt_tracker(&mut self, chunk_id: ChunkId) -> &mut DownloadAttempt {
-        self.download_attempt_map
-            .entry(chunk_id)
-            .or_insert_with(Default::default)
+        self.download_attempt_map.entry(chunk_id).or_default()
     }
 }
 

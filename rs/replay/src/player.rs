@@ -168,13 +168,21 @@ impl Player {
             .join(replica_version.to_string());
         // Extract the genesis CUP and instantiate a new pool.
         let cup_file = backup::cup_file_name(&backup_dir, Height::from(start_height));
-        let initial_cup =
-            backup::read_cup_file(&cup_file).expect("CUP of the starting block should be valid");
+        let initial_cup_proto = backup::read_cup_proto_file(&cup_file)
+            .expect("CUP of the starting block should be valid");
         // This would create a new pool with just the genesis CUP.
-        let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let pool = ConsensusPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
-            initial_cup,
+            // Note: it's important to pass the original proto which came from the command line (as
+            // opposed to, for example, a proto which was first deserialized and then serialized
+            // again). Since the proto file could have been produced and signed by nodes running a
+            // different replica version, there is a possibility that the format of
+            // `pb::CatchUpContent` has changed across the versions, in which case deserializing and
+            // serializing the proto could result in a different value of
+            // `pb::CatchUpPackage::content` which will make it impossible to validate the signature
+            // of the proto.
+            initial_cup_proto,
             artifact_pool_config,
             MetricsRegistry::new(),
             log.clone(),
@@ -454,20 +462,18 @@ impl Player {
 
         let pool_reader = &PoolReader::new(consensus_pool);
         let finalized_height = pool_reader.get_finalized_height();
-        let target_height = Some(
-            finalized_height.min(
-                self.replay_target_height
-                    .map(Height::from)
-                    .unwrap_or_else(|| finalized_height),
-            ),
+        let target_height = finalized_height.min(
+            self.replay_target_height
+                .map(Height::from)
+                .unwrap_or_else(|| finalized_height),
         );
 
         // Validate artifacts in temporary pool
         let mut invalid_artifacts = Vec::new();
         invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
             consensus_pool,
-            self.get_latest_cup(),
-            target_height.unwrap(),
+            self.get_latest_cup_proto(),
+            target_height,
         )?);
         if !invalid_artifacts.is_empty() {
             println!("Invalid artifacts:");
@@ -478,7 +484,7 @@ impl Player {
             self.message_routing.as_ref(),
             pool_reader,
             membership,
-            target_height,
+            Some(target_height),
         );
         self.wait_for_state(last_batch_height);
 
@@ -506,7 +512,7 @@ impl Player {
         validator: &ReplayValidator,
     ) -> bool {
         print!("Redelivering certifications:");
-        let mut cert_heights = Vec::from_iter(certification_pool.certified_heights().into_iter());
+        let mut cert_heights = Vec::from_iter(certification_pool.certified_heights());
         cert_heights.sort();
         for (i, &h) in cert_heights.iter().enumerate() {
             if i > 0 && cert_heights[i - 1].increment() != h {
@@ -1035,13 +1041,8 @@ impl Player {
         let purge_height = cache.catch_up_package().height();
         println!("Removing all states below height {:?}", purge_height);
         self.state_manager.remove_states_below(purge_height);
-        use ic_interfaces::{
-            artifact_pool::MutablePool, consensus_pool::ChangeAction, time_source::SysTimeSource,
-        };
-        pool.apply_changes(
-            &SysTimeSource::new(),
-            ChangeAction::PurgeValidatedBelow(purge_height).into(),
-        );
+        use ic_interfaces::{consensus_pool::ChangeAction, p2p::consensus::MutablePool};
+        pool.apply_changes(ChangeAction::PurgeValidatedBelow(purge_height).into());
         Ok(params)
     }
 
@@ -1076,8 +1077,8 @@ impl Player {
 
         // Verify the CUP signature.
         if let Err(err) = self.crypto.verify_combined_threshold_sig_by_public_key(
-            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
-            &CatchUpContentProtobufBytes(protobuf.content),
+            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
+            &CatchUpContentProtobufBytes::from(&protobuf),
             self.subnet_id,
             last_cup.content.block.get_value().context.registry_version,
         ) {

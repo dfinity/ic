@@ -431,7 +431,7 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
 
     // Disburse maturity repeatedly.
     let mut remaining_maturity_e8s = earned_maturity_e8s;
-    let percentage_and_destination = vec![(50, receiver), (50, env.controller), (100, receiver)];
+    let percentage_and_destination = [(50, receiver), (50, env.controller), (100, receiver)];
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
         let destination_account = icrc_ledger_types::icrc1::account::Account {
             owner: destination.0,

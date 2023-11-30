@@ -31,21 +31,22 @@ impl From<&Message> for DkgMessageId {
     }
 }
 
-impl From<&pb::DkgMessageId> for DkgMessageId {
-    fn from(id: &pb::DkgMessageId) -> Self {
-        Self {
-            hash: CryptoHash(id.hash.clone()).into(),
-            height: Height::from(id.height),
-        }
-    }
-}
-
-impl From<&DkgMessageId> for pb::DkgMessageId {
-    fn from(id: &DkgMessageId) -> Self {
+impl From<DkgMessageId> for pb::DkgMessageId {
+    fn from(id: DkgMessageId) -> Self {
         Self {
             hash: id.hash.clone().get().0,
             height: id.height.get(),
         }
+    }
+}
+
+impl TryFrom<pb::DkgMessageId> for DkgMessageId {
+    type Error = ProxyDecodeError;
+    fn try_from(id: pb::DkgMessageId) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hash: CryptoHash(id.hash.clone()).into(),
+            height: Height::from(id.height),
+        })
     }
 }
 
@@ -77,13 +78,13 @@ impl SignedBytesWithoutDomainSeparator for DealingContent {
     }
 }
 
-impl From<&Message> for pb::DkgMessage {
-    fn from(message: &Message) -> Self {
+impl From<Message> for pb::DkgMessage {
+    fn from(message: Message) -> Self {
         Self {
             replica_version: message.content.version.to_string(),
             dkg_id: Some(pb::NiDkgId::from(message.content.dkg_id)),
             dealing: bincode::serialize(&message.content.dealing).unwrap(),
-            signature: message.signature.signature.clone().get().0,
+            signature: message.signature.signature.get().0,
             signer: Some(crate::node_id_into_protobuf(message.signature.signer)),
         }
     }
@@ -217,7 +218,7 @@ impl Summary {
     pub fn into_transcripts(self) -> Vec<NiDkgTranscript> {
         self.current_transcripts
             .into_iter()
-            .chain(self.next_transcripts.into_iter())
+            .chain(self.next_transcripts)
             .map(|(_, t)| t)
             .collect()
     }
@@ -575,7 +576,13 @@ impl From<&Dealings> for pb::DkgPayload {
     fn from(dealings: &Dealings) -> Self {
         Self {
             val: Some(pb::dkg_payload::Val::Dealings(pb::Dealings {
-                dealings: dealings.messages.iter().map(pb::DkgMessage::from).collect(),
+                // TODO do we need this clone
+                dealings: dealings
+                    .messages
+                    .iter()
+                    .cloned()
+                    .map(pb::DkgMessage::from)
+                    .collect(),
                 summary_height: dealings.start_height.get(),
             })),
         }

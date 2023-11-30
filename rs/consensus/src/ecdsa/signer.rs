@@ -22,8 +22,6 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
 use ic_types::{Height, NodeId};
-
-use prometheus::IntCounterVec;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
@@ -579,36 +577,6 @@ impl<'a> Debug for Action<'a> {
     }
 }
 
-/// Resolves the ThresholdEcdsaSigInputsRef -> ThresholdEcdsaSigInputs
-fn resolve_sig_inputs_refs(
-    block_reader: &dyn EcdsaBlockReader,
-    reason: &str,
-    metric: IntCounterVec,
-    log: &ReplicaLogger,
-) -> Vec<(RequestId, ThresholdEcdsaSigInputs)> {
-    let mut ret = Vec::new();
-    for (request_id, sig_inputs_ref) in block_reader.requested_signatures() {
-        // Translate the ThresholdEcdsaSigInputsRef -> ThresholdEcdsaSigInputs
-        match sig_inputs_ref.translate(block_reader) {
-            Ok(sig_inputs) => {
-                ret.push((*request_id, sig_inputs));
-            }
-            Err(error) => {
-                warn!(
-                    log,
-                    "Failed to resolve sig input ref: reason = {}, \
-                     sig_inputs_ref = {:?}, error = {:?}",
-                    reason,
-                    sig_inputs_ref,
-                    error
-                );
-                metric.with_label_values(&[reason]).inc();
-            }
-        }
-    }
-    ret
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -619,15 +587,45 @@ mod tests {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
-    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities::types::ids::{subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3};
-    use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::*;
     use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
+    use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, Randomness};
+    use prometheus::IntCounterVec;
     use std::ops::Deref;
+
+    /// Resolves the ThresholdEcdsaSigInputsRef -> ThresholdEcdsaSigInputs
+    fn resolve_sig_inputs_refs(
+        block_reader: &dyn EcdsaBlockReader,
+        reason: &str,
+        metric: IntCounterVec,
+        log: &ReplicaLogger,
+    ) -> Vec<(RequestId, ThresholdEcdsaSigInputs)> {
+        let mut ret = Vec::new();
+        for (request_id, sig_inputs_ref) in block_reader.requested_signatures() {
+            // Translate the ThresholdEcdsaSigInputsRef -> ThresholdEcdsaSigInputs
+            match sig_inputs_ref.translate(block_reader) {
+                Ok(sig_inputs) => {
+                    ret.push((*request_id, sig_inputs));
+                }
+                Err(error) => {
+                    warn!(
+                        log,
+                        "Failed to resolve sig input ref: reason = {}, \
+                     sig_inputs_ref = {:?}, error = {:?}",
+                        reason,
+                        sig_inputs_ref,
+                        error
+                    );
+                    metric.with_label_values(&[reason]).inc();
+                }
+            }
+        }
+        ret
+    }
 
     fn create_request_id(generator: &mut EcdsaUIDGenerator, height: Height) -> RequestId {
         let quadruple_id = generator.next_quadruple_id();
@@ -737,7 +735,6 @@ mod tests {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
 
                 ecdsa_pool.apply_changes(
-                    &SysTimeSource::new(),
                     shares
                         .iter()
                         .map(|s| EcdsaChangeAction::AddToValidated(s.clone()))
@@ -772,7 +769,6 @@ mod tests {
                 );
 
                 ecdsa_pool.apply_changes(
-                    &SysTimeSource::new(),
                     shares
                         .iter()
                         .map(|s| EcdsaChangeAction::AddToValidated(s.clone()))
@@ -785,6 +781,48 @@ mod tests {
                 assert!(change_set.is_empty());
             })
         });
+    }
+
+    #[test]
+    fn test_ecdsa_send_signature_shares_when_failure() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let height = Height::from(100);
+                let (id_1, id_2, id_3) = (
+                    create_request_id(&mut uid_generator, height),
+                    create_request_id(&mut uid_generator, height),
+                    create_request_id(&mut uid_generator, height),
+                );
+                // Set up the signature requests
+                // The block requests signatures 1, 2, 3
+                let block_reader = TestEcdsaBlockReader::for_signer_test(
+                    height,
+                    vec![
+                        (id_1, create_sig_inputs(1)),
+                        (id_2, create_sig_inputs(2)),
+                        (id_3, create_sig_inputs(3)),
+                    ],
+                );
+
+                let transcript_loader =
+                    TestEcdsaTranscriptLoader::new(TestTranscriptLoadStatus::Failure);
+                let change_set =
+                    signer.send_signature_shares(&ecdsa_pool, &transcript_loader, &block_reader);
+
+                // No shares should be created when transcripts fail to load
+                assert!(change_set.is_empty());
+
+                let transcript_loader =
+                    TestEcdsaTranscriptLoader::new(TestTranscriptLoadStatus::Success);
+                let change_set =
+                    signer.send_signature_shares(&ecdsa_pool, &transcript_loader, &block_reader);
+
+                // Shares should be created when transcripts succeed to load
+                assert_eq!(change_set.len(), 3);
+            })
+        })
     }
 
     // Tests that complaints are generated and added to the pool if loading transcript
@@ -868,7 +906,6 @@ mod tests {
                 let (_, signer) =
                     create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                // let time_source = FastForwardTimeSource::new();
                 let id = create_request_id(&mut uid_generator, Height::from(5));
                 let share = create_signature_share(NODE_2, id);
                 let changeset: Vec<_> = signer
@@ -891,7 +928,6 @@ mod tests {
     #[test]
     fn test_ecdsa_validate_signature_shares() {
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
-        let time_source = FastForwardTimeSource::new();
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4) = (
             create_request_id(&mut uid_generator, Height::from(200)),
@@ -914,7 +950,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaSigShare(share),
             peer_id: NODE_2,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // A share for a request in the finalized block (accepted)
@@ -923,7 +959,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaSigShare(share),
             peer_id: NODE_2,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // A share for a request in the finalized block (accepted)
@@ -932,7 +968,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaSigShare(share),
             peer_id: NODE_2,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         // A share for a request not in the finalized block (dropped)
@@ -941,7 +977,7 @@ mod tests {
         artifacts.push(UnvalidatedArtifact {
             message: EcdsaMessage::EcdsaSigShare(share),
             peer_id: NODE_2,
-            timestamp: time_source.get_relative_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -983,7 +1019,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let time_source = FastForwardTimeSource::new();
                 let id_2 = create_request_id(&mut uid_generator, Height::from(100));
 
                 // Set up the ECDSA pool
@@ -992,7 +1027,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
                 let share = create_signature_share(NODE_2, id_2);
@@ -1000,7 +1035,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
@@ -1023,7 +1058,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let time_source = FastForwardTimeSource::new();
                 let id_1 = create_request_id(&mut uid_generator, Height::from(100));
 
                 // Unvalidated pool has: {signature share 1, signer = NODE_2}
@@ -1032,7 +1066,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2}
@@ -1041,7 +1075,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_3}
@@ -1050,7 +1084,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
@@ -1076,7 +1110,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
                     create_request_id(&mut uid_generator, Height::from(10)),
                     create_request_id(&mut uid_generator, Height::from(20)),
@@ -1095,7 +1128,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Share 2: height <= current_height, !in_progress (purged)
@@ -1104,7 +1137,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 // Share 3: height > current_height (not purged)
@@ -1112,7 +1145,7 @@ mod tests {
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: UNIX_EPOCH,
                 });
 
                 let change_set = signer.purge_artifacts(&ecdsa_pool, &block_reader);
@@ -1147,7 +1180,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Share 2: height <= current_height, !in_progress (purged)
                 let share = create_signature_share(NODE_2, id_2);
@@ -1155,14 +1188,14 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 // Share 3: height > current_height (not purged)
                 let share = create_signature_share(NODE_2, id_3);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let change_set = signer.purge_artifacts(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
@@ -1283,7 +1316,7 @@ mod tests {
                         EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share))
                     })
                     .collect::<Vec<_>>();
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                ecdsa_pool.apply_changes(change_set);
 
                 let sig_builder = EcdsaSignatureBuilderImpl::new(
                     &block_reader,

@@ -4,12 +4,15 @@ use std::time::Duration;
 use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_icrc_rosetta::{
     common::types::{
-        Allow, BlockIdentifier, BlockRequest, BlockResponse, Currency, Error, MetadataRequest,
-        NetworkIdentifier, NetworkListResponse, NetworkOptionsResponse, NetworkRequest,
-        NetworkStatusResponse, Version,
+        Allow, BlockIdentifier, BlockRequest, BlockResponse, BlockTransactionRequest,
+        BlockTransactionResponse, Currency, Error, MetadataRequest, NetworkIdentifier,
+        NetworkListResponse, NetworkOptionsResponse, NetworkRequest, NetworkStatusResponse,
+        Version,
     },
     AppState,
 };
+use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_rosetta_api::models::MempoolResponse;
 use serde_bytes::ByteBuf;
 
 const ROSETTA_VERSION: &str = "1.4.13";
@@ -165,4 +168,64 @@ pub async fn block(
         .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
 
     Ok(Json(response))
+}
+
+pub async fn block_transaction(
+    State(state): State<Arc<AppState>>,
+    request: Json<BlockTransactionRequest>,
+) -> Result<Json<BlockTransactionResponse>> {
+    verify_network_id(&request.network_identifier, &state)?;
+    let rosetta_block = state
+        .storage
+        .get_block_at_idx(request.block_identifier.index)
+        .map_err(|e| Error::unable_to_find_block(format!("Unable to retrieve block: {}", e)))?
+        .ok_or_else(|| {
+            Error::unable_to_find_block(format!(
+                "Block at index {} could not be found",
+                request.block_identifier.index
+            ))
+        })?;
+    if hex::encode(&rosetta_block.block_hash) != request.block_identifier.hash {
+        return Err(Error::invalid_block_identifier().into());
+    }
+
+    let transaction = rosetta_block
+        .get_transaction()
+        .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
+
+    if transaction.hash().to_string() != request.transaction_identifier.hash {
+        return Err(Error::invalid_transaction_identifier().into());
+    }
+
+    let currency = Currency {
+        symbol: state.metadata.symbol.clone(),
+        decimals: state.metadata.decimals,
+        ..Default::default()
+    };
+
+    let effective_fee = rosetta_block
+        .get_effective_fee()
+        .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
+
+    let mut builder = BlockTransactionResponse::builder()
+        .with_transaction(transaction)
+        .with_currency(currency);
+
+    if let Some(effective_fee) = effective_fee {
+        builder = builder.with_effective_fee(effective_fee);
+    }
+
+    let response = builder
+        .build()
+        .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
+
+    Ok(Json(response))
+}
+
+pub async fn mempool(
+    State(state): State<Arc<AppState>>,
+    request: Json<NetworkRequest>,
+) -> Result<Json<MempoolResponse>> {
+    verify_network_id(&request.network_identifier, &state)?;
+    Ok(Json(MempoolResponse::new(vec![])))
 }

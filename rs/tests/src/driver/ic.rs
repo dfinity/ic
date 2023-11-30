@@ -125,7 +125,7 @@ impl InternetComputer {
     /// Add the given number of unassigned nodes to the IC.
     ///
     /// The nodes inherit the VM resources of the IC.
-    pub fn with_unassigned_nodes(mut self, no_of_nodes: i32) -> Self {
+    pub fn with_unassigned_nodes(mut self, no_of_nodes: usize) -> Self {
         for _ in 0..no_of_nodes {
             self.unassigned_nodes.push(Node::new_with_settings(
                 self.default_vm_resources,
@@ -198,7 +198,7 @@ impl InternetComputer {
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
         let group_setup = GroupSetup::read_attribute(env);
-        let group_name: String = group_setup.farm_group_name;
+        let group_name: String = group_setup.infra_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);
@@ -312,7 +312,6 @@ pub struct Subnet {
     pub required_host_features: Vec<HostFeature>,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
-    pub ingress_bytes_per_block_soft_cap: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     pub unit_delay: Option<Duration>,
@@ -342,7 +341,6 @@ impl Subnet {
             required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay: None,
@@ -473,11 +471,6 @@ impl Subnet {
         self
     }
 
-    pub fn with_ingress_bytes_per_block_soft_cap(mut self, limit: u64) -> Self {
-        self.ingress_bytes_per_block_soft_cap = Some(limit);
-        self
-    }
-
     pub fn with_unit_delay(mut self, unit_delay: Duration) -> Self {
         self.unit_delay = Some(unit_delay);
         self
@@ -544,7 +537,6 @@ impl Default for Subnet {
             required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay: Some(Duration::from_millis(200)),

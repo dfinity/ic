@@ -4,6 +4,7 @@ use crate::crypto::CryptoHash;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_protobuf::types::v1 as pb;
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::time::Duration;
 
@@ -11,7 +12,7 @@ use std::time::Duration;
 /// in its artifact pool. The adverts of different artifact types may differ
 /// in their attributes. Upon the reception of an advert, a node can decide
 /// if and when to request the corresponding artifact from the sender.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GossipAdvert {
     pub attribute: ArtifactAttribute,
     pub size: usize,
@@ -81,9 +82,9 @@ pub fn build_default_gossip_config() -> GossipConfig {
 impl From<GossipAdvert> for pb::GossipAdvert {
     fn from(advert: GossipAdvert) -> Self {
         Self {
-            attribute: Some((&advert.attribute).into()),
+            attribute: Some(advert.attribute.into()),
             size: advert.size as u64,
-            artifact_id: Some((&advert.artifact_id).into()),
+            artifact_id: Some(advert.artifact_id.into()),
             integrity_hash: advert.integrity_hash.0,
         }
     }
@@ -93,12 +94,9 @@ impl TryFrom<pb::GossipAdvert> for GossipAdvert {
     type Error = ProxyDecodeError;
     fn try_from(advert: pb::GossipAdvert) -> Result<Self, Self::Error> {
         Ok(Self {
-            attribute: try_from_option_field(advert.attribute.as_ref(), "GossipAdvert::attribute")?,
+            attribute: try_from_option_field(advert.attribute, "GossipAdvert::attribute")?,
             size: advert.size as usize,
-            artifact_id: try_from_option_field(
-                advert.artifact_id.as_ref(),
-                "GossipAdvert::artifact_id",
-            )?,
+            artifact_id: try_from_option_field(advert.artifact_id, "GossipAdvert::artifact_id")?,
             integrity_hash: CryptoHash(advert.integrity_hash),
         })
     }

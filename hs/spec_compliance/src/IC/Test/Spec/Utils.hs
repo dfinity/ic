@@ -227,12 +227,12 @@ create ecid = ic_provisional_create ic00 ecid Nothing (Just (2 ^ (60 :: Int))) e
 upgrade' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 upgrade' cid prog = do
   universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-  ic_install' ic00 (enum #upgrade) cid universal_wasm (run prog)
+  ic_install' ic00 (enumNothing #upgrade) cid universal_wasm (run prog)
 
 upgrade :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 upgrade cid prog = do
   universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-  ic_install ic00 (enum #upgrade) cid universal_wasm (run prog)
+  ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run prog)
 
 reinstall' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 reinstall' cid prog = do

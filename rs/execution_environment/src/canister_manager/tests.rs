@@ -27,9 +27,7 @@ use ic_ic00_types::{
     InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, StoredChunksArgs, StoredChunksReply,
     UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
-use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -286,6 +284,7 @@ fn canister_manager_config(
         FlagStatus::Enabled,
         // 10 MiB should be enough for all the tests.
         NumBytes::from(10 * 1024 * 1024),
+        SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
     )
 }
 
@@ -390,7 +389,6 @@ fn install_canister_makes_subnet_oversubscribed() {
         let compute_allocation_used = state.total_compute_allocation();
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used,
         };
@@ -510,7 +508,6 @@ fn upgrade_non_existing_canister_fails() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -543,7 +540,6 @@ fn upgrade_canister_with_no_wasm_fails() {
         let sender_subnet_id = subnet_test_id(1);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -596,7 +592,6 @@ fn can_update_compute_allocation_during_upgrade() {
         let sender_subnet_id = subnet_test_id(1);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -671,7 +666,6 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
         let sender_subnet_id = subnet_test_id(1);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -901,7 +895,6 @@ fn can_update_memory_allocation_during_upgrade() {
         let sender_subnet_id = subnet_test_id(1);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: SubnetAvailableMemory::new(
                 MEMORY_CAPACITY.get() as i64,
                 MEMORY_CAPACITY.get() as i64,
@@ -978,7 +971,6 @@ fn install_code_preserves_messages() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1042,7 +1034,6 @@ fn can_create_canister() {
         let expected_generated_id2 = CanisterId::from(1);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1093,7 +1084,6 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
         let sender_subnet_id = subnet_test_id(1);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1134,7 +1124,6 @@ fn can_create_canister_with_extra_cycles() {
         let cycles: u64 = 1_000_000_000_200;
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1167,7 +1156,6 @@ fn cannot_install_non_empty_canister() {
         let sender_subnet_id = subnet_test_id(1);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1233,7 +1221,6 @@ fn install_code_with_wrong_controller_fails() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1293,7 +1280,6 @@ fn create_canister_sets_correct_allocations() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1333,7 +1319,6 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1386,7 +1371,6 @@ fn provisional_create_canister_has_no_creation_fee() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1432,7 +1416,6 @@ fn reinstall_on_empty_canister_succeeds() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1536,7 +1519,6 @@ fn install_puts_canister_back_after_invalid_wasm() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1602,7 +1584,6 @@ fn reinstall_clears_stable_memory() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1698,7 +1679,6 @@ fn stop_a_running_canister() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1835,7 +1815,6 @@ fn stop_a_canister_with_incorrect_controller() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1914,7 +1893,6 @@ fn start_a_canister_with_incorrect_controller() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1955,7 +1933,6 @@ fn starting_an_already_running_canister_keeps_it_running() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2066,7 +2043,6 @@ fn get_canister_status_with_incorrect_controller() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2107,7 +2083,6 @@ fn get_canister_status_of_running_canister() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2143,7 +2118,6 @@ fn get_canister_status_of_self() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2213,7 +2187,6 @@ fn set_controller_with_incorrect_controller() {
     with_setup(|canister_manager, state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2257,7 +2230,6 @@ fn set_controller_with_correct_controller() {
     with_setup(|canister_manager, state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2468,7 +2440,6 @@ fn install_canister_with_query_allocation() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2541,7 +2512,6 @@ fn create_canister_with_cycles_sender_in_whitelist() {
     let mut state = initial_state(subnet_id, false);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -2579,7 +2549,6 @@ fn create_canister_with_specified_id(
     let mut state = initial_state(subnet_id, true);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -2714,7 +2683,6 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2819,7 +2787,6 @@ fn upgrading_canister_with_not_enough_memory_allocation_fails() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -2953,7 +2920,6 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -3072,7 +3038,6 @@ fn failed_upgrade_hooks_consume_instructions() {
         let mut state = initial_state(subnet_id, false);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -3113,7 +3078,6 @@ fn failed_upgrade_hooks_consume_instructions() {
         // reset instruction limit to investigate costs of just the following install
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -3217,7 +3181,6 @@ fn failed_install_hooks_consume_instructions() {
         let mut state = initial_state(subnet_id, false);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -3304,7 +3267,6 @@ fn install_code_respects_instruction_limit() {
     let mut state = initial_state(subnet_id, false);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3355,7 +3317,6 @@ fn install_code_respects_instruction_limit() {
     // Too few instructions result in failed installation.
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(NumInstructions::from(3)),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3386,7 +3347,6 @@ fn install_code_respects_instruction_limit() {
     // Enough instructions result in successful installation.
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(NumInstructions::from(6) + compilation_cost),
-        execution_complexity: ExecutionComplexity::MAX,
         // Function is 1 instruction.
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
@@ -3412,7 +3372,6 @@ fn install_code_respects_instruction_limit() {
     // Too few instructions result in failed upgrade.
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(NumInstructions::from(5)),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3443,7 +3402,6 @@ fn install_code_respects_instruction_limit() {
     // Enough instructions result in successful upgrade.
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(NumInstructions::from(10) + compilation_cost),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3502,7 +3460,6 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .build();
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3655,7 +3612,6 @@ fn lower_memory_allocation_than_usage_fails() {
     with_setup(|canister_manager, mut state, subnet_id| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -3725,7 +3681,6 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
     with_setup(|canister_manager, mut state, subnet_id| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -3818,7 +3773,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
     with_setup(|canister_manager, mut state, subnet_id| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -4021,7 +3975,6 @@ fn test_install_when_setting_memory_allocation_to_zero() {
     with_setup(|canister_manager, mut state, subnet_id| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -4088,7 +4041,6 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
     with_setup(|canister_manager, mut state, subnet_id| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -4176,7 +4128,6 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
     with_setup(|canister_manager, mut state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -7163,15 +7114,20 @@ fn uninstall_clears_wasm_chunk_store() {
 #[test]
 fn upload_chunk_fails_when_freeze_threshold_triggered() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
 
     let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
     let canister_id = test.create_canister(CYCLES);
     let initial_subnet_available_memory = test.subnet_available_memory();
 
-    // Make balance just a bit higher than freezing threshold so upload_chunk
-    // fails.
+    // Make balance just a bit higher than freezing threshold plus the charge
+    // for one upload so upload_chunk fails.
     let threshold = test.freezing_threshold(canister_id);
-    let new_balance = threshold + Cycles::from(1_000_u128);
+    let new_balance = threshold
+        + test
+            .cycles_account_manager()
+            .execution_cost(instructions, test.subnet_size())
+        + Cycles::from(1_000_u128);
     let to_remove = test.canister_state(canister_id).system_state.balance() - new_balance;
     test.canister_state_mut(canister_id)
         .system_state
@@ -7187,9 +7143,13 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         .unwrap_err();
 
     assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
-    assert!(error
-        .description()
-        .contains("additional cycles are required"));
+    assert!(
+        error
+            .description()
+            .contains("additional cycles are required"),
+        "Unexpected error: {}",
+        error.description()
+    );
 
     assert_eq!(
         test.subnet_available_memory(),
@@ -7503,4 +7463,121 @@ fn upload_chunk_increases_subnet_heap_delta() {
         test.state().metadata.heap_delta_estimate,
         wasm_chunk_store::chunk_size()
     );
+}
+
+#[test]
+fn upload_chunk_charges_canister_cycles() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let canister_id = test.create_canister(CYCLES);
+    let initial_balance = test.canister_state(canister_id).system_state.balance();
+
+    // Uploading one chunk will decrease balance by the cycles corresponding to
+    // the instructions for uploading.
+    let payload = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    }
+    .encode();
+    let expected_charge = test
+        .cycles_account_manager()
+        .execution_cost(instructions, test.subnet_size());
+    let _hash = test.subnet_message("upload_chunk", payload).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge,
+    );
+}
+
+#[test]
+fn upload_chunk_charges_if_failing() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store()
+        .with_subnet_memory_reservation(0)
+        .with_subnet_execution_memory(10)
+        .build();
+    let canister_id = test.create_canister(CYCLES);
+    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    // Expected charge is the same as if the upload succeeds.
+    let expected_charge = test
+        .cycles_account_manager()
+        .execution_cost(instructions, test.subnet_size());
+
+    let payload = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    }
+    .encode();
+    // Upload will fail because subnet does not have space.
+    let _err = test.subnet_message("upload_chunk", payload).unwrap_err();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge,
+    );
+}
+
+/// Check that a canister can call the chunk store methods on itself even if it
+/// isn't a controller of itself.
+#[test]
+fn chunk_store_methods_succeed_from_canister_itself() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    assert!(!test
+        .canister_state(uc)
+        .system_state
+        .controllers
+        .contains(&uc.into()));
+
+    let methods = [
+        (
+            Method::UploadChunk,
+            UploadChunkArgs {
+                canister_id: uc.into(),
+                chunk: vec![1, 2, 3, 4, 5],
+            }
+            .encode(),
+        ),
+        (
+            Method::ClearChunkStore,
+            ClearChunkStoreArgs {
+                canister_id: uc.into(),
+            }
+            .encode(),
+        ),
+        (
+            Method::StoredChunks,
+            StoredChunksArgs {
+                canister_id: uc.into(),
+            }
+            .encode(),
+        ),
+    ];
+
+    for (method, args) in methods {
+        let wasm = wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                method,
+                call_args()
+                    .other_side(args)
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::new(CYCLES.get() / 2),
+            )
+            .build();
+
+        let _result = get_reply(test.ingress(uc, "update", wasm));
+    }
 }

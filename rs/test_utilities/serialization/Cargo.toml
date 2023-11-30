@@ -9,7 +9,7 @@ documentation.workspace = true
 [dev-dependencies]
 assert_matches = "1"
 ic-protobuf = { path = "../../protobuf" }
-prost = "0.11"
+prost = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }

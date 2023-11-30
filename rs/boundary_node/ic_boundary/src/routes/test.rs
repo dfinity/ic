@@ -11,13 +11,14 @@ use axum::{
     routing::method_routing::{get, post},
     Router,
 };
+use ethnum::u256;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
     HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use prometheus::Registry;
 use tower::{Service, ServiceBuilder};
-use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
+use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
 
 use crate::{
     management::btc_mw,
@@ -25,11 +26,11 @@ use crate::{
         metrics_middleware, metrics_middleware_status, HttpMetricParams, HttpMetricParamsStatus,
     },
     persist::test::node,
+    retry::{retry_request, RetryParams},
 };
 
 #[derive(Clone)]
 struct ProxyRouter {
-    node: Node,
     root_key: Vec<u8>,
     health: Arc<Mutex<ReplicaHealthStatus>>,
 }
@@ -62,17 +63,40 @@ impl Proxy for ProxyRouter {
     }
 }
 
+pub fn test_node(id: u64) -> Node {
+    node(id, Principal::from_text("f7crg-kabae").unwrap())
+}
+
+pub fn test_route_subnet(n: usize) -> RouteSubnet {
+    let mut nodes = Vec::new();
+
+    for i in 0..n {
+        nodes.push(test_node(i as u64));
+    }
+
+    // "casting integer literal to `u32` is unnecessary"
+    // fck clippy
+    let zero = 0u32;
+
+    RouteSubnet {
+        id: Principal::from_text("f7crg-kabae").unwrap().to_string(),
+        range_start: u256::from(zero),
+        range_end: u256::from(zero),
+        nodes,
+    }
+}
+
 #[async_trait]
 impl Lookup for ProxyRouter {
-    async fn lookup(&self, _: &CanisterId) -> Result<Node, ErrorCause> {
-        Ok(self.node.clone())
+    async fn lookup_subnet(&self, _: &CanisterId) -> Result<Arc<RouteSubnet>, ErrorCause> {
+        Ok(Arc::new(test_route_subnet(1)))
     }
 }
 
 #[async_trait]
 impl RootKey for ProxyRouter {
-    async fn root_key(&self) -> Vec<u8> {
-        self.root_key.clone()
+    async fn root_key(&self) -> Option<Vec<u8>> {
+        Some(self.root_key.clone())
     }
 }
 
@@ -85,11 +109,9 @@ impl Health for ProxyRouter {
 
 #[tokio::test]
 async fn test_middleware_validate_request() -> Result<(), Error> {
-    let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
 
     let proxy_router = Arc::new(ProxyRouter {
-        node,
         root_key: root_key.clone(),
         health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
     });
@@ -187,11 +209,9 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_health() -> Result<(), Error> {
-    let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
 
     let proxy_router = Arc::new(ProxyRouter {
-        node,
         root_key: root_key.clone(),
         health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
     });
@@ -226,11 +246,9 @@ async fn test_health() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_status() -> Result<(), Error> {
-    let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
 
     let proxy_router = Arc::new(ProxyRouter {
-        node: node.clone(),
         root_key: root_key.clone(),
         health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
     });
@@ -302,10 +320,9 @@ async fn test_status() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_all_call_types() -> Result<(), Error> {
-    let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
+    let node = test_node(0);
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
     let state = Arc::new(ProxyRouter {
-        node: node.clone(),
         root_key,
         health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
     });
@@ -329,6 +346,8 @@ async fn test_all_call_types() -> Result<(), Error> {
             ServiceBuilder::new()
                 .layer(middleware::from_fn(validate_request))
                 .layer(middleware::from_fn(postprocess_response))
+                .layer(CompressionLayer::new())
+                .layer(middleware::from_fn(pre_compression))
                 .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()
                 .layer(middleware::from_fn_with_state(
@@ -337,7 +356,14 @@ async fn test_all_call_types() -> Result<(), Error> {
                 ))
                 .layer(middleware::from_fn(preprocess_request))
                 .layer(middleware::from_fn(btc_mw))
-                .layer(middleware::from_fn_with_state(state_lookup, lookup_node)),
+                .layer(middleware::from_fn_with_state(state_lookup, lookup_subnet))
+                .layer(middleware::from_fn_with_state(
+                    RetryParams {
+                        retry_count: 1,
+                        retry_update_call: false,
+                    },
+                    retry_request,
+                )),
         );
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
@@ -401,6 +427,42 @@ async fn test_all_call_types() -> Result<(), Error> {
             .to_str()
             .unwrap(),
         node.subnet_type.as_ref()
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_SENDER)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        sender.to_string(),
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_CANISTER_ID)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        canister_id.to_string(),
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_METHOD_NAME)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "foobar",
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_REQUEST_TYPE)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "query",
     );
 
     let (_parts, body) = resp.into_parts();

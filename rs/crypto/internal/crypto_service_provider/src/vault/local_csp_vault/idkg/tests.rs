@@ -48,7 +48,7 @@ mod idkg_gen_dealing_encryption_key_pair {
 
             prop_assert_eq!(generated_public_key.curve_type(), EccCurveType::K256);
             prop_assert_eq!(idkg_dealing_encryption_pk_to_proto(generated_public_key), stored_public_key);
-            prop_assert!(vault.sks_contains(&key_id).expect("error reading SKS"));
+            prop_assert!(vault.sks_contains(key_id).expect("error reading SKS"));
         }
     }
 
@@ -351,7 +351,7 @@ mod idkg_retain_active_keys {
             Some(idkg_dealing_encryption_pk_to_proto(public_key.clone()))
         );
         assert!(vault
-            .sks_contains(&KeyId::try_from(&public_key).expect("invalid key ID"))
+            .sks_contains(KeyId::try_from(&public_key).expect("invalid key ID"))
             .expect("error reading SKS"));
     }
 
@@ -403,9 +403,9 @@ mod idkg_retain_active_keys {
         for (i, public_key) in rotated_public_keys.iter().enumerate() {
             let key_id = KeyId::try_from(public_key).expect("invalid key id");
             if i < oldest_public_key_index {
-                assert!(!vault.sks_contains(&key_id).expect("error reading SKS"));
+                assert!(!vault.sks_contains(key_id).expect("error reading SKS"));
             } else {
-                assert!(vault.sks_contains(&key_id).expect("error reading SKS"));
+                assert!(vault.sks_contains(key_id).expect("error reading SKS"));
             }
         }
     }
@@ -442,6 +442,12 @@ mod idkg_retain_active_keys {
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgMEGaEncryptionKeys))
             .return_const(Ok(()));
         canister_sks
+            .expect_retain_would_modify_keystore()
+            .times(1)
+            .in_sequence(&mut seq)
+            .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgThresholdKeys))
+            .return_const(true);
+        canister_sks
             .expect_retain()
             .times(1)
             .in_sequence(&mut seq)
@@ -477,11 +483,12 @@ mod idkg_retain_active_keys {
             .with(eq(oldest_public_key_proto))
             .return_once(|_| Ok(false));
         canister_sks
-            .expect_retain()
+            .expect_retain_would_modify_keystore()
             .times(1)
             .in_sequence(&mut seq)
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgThresholdKeys))
-            .return_const(Ok(()));
+            .return_const(false);
+        canister_sks.expect_retain().never();
 
         let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(node_sks)

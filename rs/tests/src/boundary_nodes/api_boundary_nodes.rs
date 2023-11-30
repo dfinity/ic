@@ -20,7 +20,10 @@ use crate::{
 use anyhow::{anyhow, bail, Error};
 use discower_bowndary::api_nodes_discovery::{Fetch, RegistryFetcher};
 use futures::stream::FuturesUnordered;
-use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
+use ic_agent::{
+    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Agent},
+    export::Principal,
+};
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
@@ -32,7 +35,8 @@ use serde::Deserialize;
 use slog::{error, info};
 use std::{net::SocketAddrV6, time::Duration};
 use tokio::runtime::Runtime;
-
+const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
+const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
 /* tag::catalog[]
 Title:: API BN binary canister test
 
@@ -162,15 +166,24 @@ pub fn canister_routing_test(env: TestEnv) {
         "Incrementing counters on canisters via BN agent update calls ..."
     );
     block_on(set_counters_on_counter_canisters(
+        &log,
         bn_agent.clone(),
         canister_ids.clone(),
         canister_values.clone(),
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
     ));
     info!(
         log,
         "Asserting expected counters on canisters via BN agent query calls ... "
     );
-    let counters = block_on(read_counters_on_counter_canisters(bn_agent, canister_ids));
+    let counters = block_on(read_counters_on_counter_canisters(
+        &log,
+        bn_agent,
+        canister_ids,
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
+    ));
     assert_eq!(counters, canister_values);
 }
 
@@ -397,7 +410,6 @@ pub fn direct_to_replica_test(env: TestEnv) {
     futs.push(rt.spawn({
         let logger = logger.clone();
         let client = client;
-        let install_url = install_url;
         let name = "update random node";
         info!(&logger, "Starting subtest {}", name);
 
@@ -657,18 +669,6 @@ pub fn reboot_test(env: TestEnv) {
         &logger,
         "API Boundary node {API_BOUNDARY_NODE_NAME} has IPv4 {:?}",
         api_boundary_node.block_on_ipv4().unwrap()
-    );
-
-    info!(&logger, "Waiting for routes file");
-    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-    let cmd_output = api_boundary_node
-        .block_on_bash_script(&sleep_command)
-        .unwrap();
-    info!(
-        logger,
-        "{API_BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'",
-        cmd_output.trim(),
     );
 
     info!(&logger, "Checking API BN health");
