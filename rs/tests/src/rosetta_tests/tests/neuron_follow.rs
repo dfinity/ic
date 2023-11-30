@@ -497,8 +497,8 @@ async fn test_follow_too_many(
         "Expecting an error while following too many neurons (16 followed while limit is 15)."
     );
     let res = res.unwrap_err();
-    assert_eq!(res.code, 770);
-    assert_eq!(res.message, "Operation failed");
+    assert_eq!(res.0.code, 770);
+    assert_eq!(res.0.message, "Operation failed");
 }
 
 // Create neurons to follow.

@@ -11,6 +11,8 @@ use ic_types::messages::Blob;
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client as HttpClient;
 use reqwest::StatusCode as HttpStatusCode;
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::NetworkListResponse;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::path::PathBuf;
@@ -129,7 +131,7 @@ impl RosettaApiHandle {
         api_serv.wait_for_startup().await;
         assert_eq!(
             api_serv.network_list().await.unwrap(),
-            Ok(NetworkListResponse::new(vec![api_serv.network_id()]))
+            Ok(NetworkListResponse::new(vec![api_serv.network_id().0]))
         );
         api_serv
     }

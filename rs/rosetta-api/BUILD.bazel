@@ -31,6 +31,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
     "@crate_index//:actix-rt",
     "@crate_index//:actix-web",
     "@crate_index//:base64",

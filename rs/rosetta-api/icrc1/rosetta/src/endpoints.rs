@@ -5,21 +5,25 @@ use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_icrc_rosetta::{
     common::types::{
         Allow, BlockIdentifier, BlockRequest, BlockResponse, BlockTransactionRequest,
-        BlockTransactionResponse, Currency, Error, MetadataRequest, NetworkIdentifier,
-        NetworkListResponse, NetworkOptionsResponse, NetworkRequest, NetworkStatusResponse,
-        Version,
+        BlockTransactionResponse, Currency, Error, NetworkOptionsResponse, NetworkRequest,
+        NetworkStatusResponse, Version,
     },
     AppState,
 };
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::models::MempoolResponse;
+use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::NetworkListResponse;
 use serde_bytes::ByteBuf;
 
 const ROSETTA_VERSION: &str = "1.4.13";
 const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
+const DEFAULT_BLOCKCHAIN: &str = "Internet Computer";
 
 fn verify_network_id(network_identifier: &NetworkIdentifier, state: &AppState) -> Result<()> {
-    let expected = &NetworkIdentifier::for_ledger_id(state.ledger_id);
+    let expected =
+        &NetworkIdentifier::new(DEFAULT_BLOCKCHAIN.to_owned(), state.ledger_id.to_string());
 
     if network_identifier != expected {
         return Err(Error::invalid_network_id(expected).into());
@@ -36,7 +40,10 @@ pub async fn network_list(
     _request: Json<MetadataRequest>,
 ) -> Json<NetworkListResponse> {
     Json(NetworkListResponse {
-        network_identifiers: vec![NetworkIdentifier::for_ledger_id(state.ledger_id)],
+        network_identifiers: vec![NetworkIdentifier::new(
+            DEFAULT_BLOCKCHAIN.to_owned(),
+            state.ledger_id.to_string(),
+        )],
     })
 }
 
@@ -55,9 +62,10 @@ pub async fn network_options(
         allow: Allow {
             operation_statuses: vec![],
             operation_types: vec![],
-            errors: vec![Error::invalid_network_id(
-                &NetworkIdentifier::for_ledger_id(state.ledger_id),
-            )],
+            errors: vec![Error::invalid_network_id(&NetworkIdentifier::new(
+                DEFAULT_BLOCKCHAIN.to_owned(),
+                state.ledger_id.to_string(),
+            ))],
             historical_balance_lookup: true,
             timestamp_start_index: None,
             call_methods: vec![],

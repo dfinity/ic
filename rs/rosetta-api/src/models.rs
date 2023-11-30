@@ -23,11 +23,8 @@ use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 
+use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
-use std::{
-    convert::{TryFrom, TryInto},
-    fmt::Display,
-};
 
 // This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
 // Then heavily tweaked because openapi-generator no longer generates valid rust
@@ -1143,35 +1140,24 @@ impl ::std::str::FromStr for CurveType {
     }
 }
 
-/// Instead of utilizing HTTP status codes to describe node errors (which often
-/// do not have a good analog), rich errors are returned using this object.
-/// Both the code and message fields can be individually used to correctly
-/// identify an error. Implementations MUST use unique values for both fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Error {
-    /// Code is a network-specific error code. If desired, this code can be
-    /// equivalent to an HTTP status code.
-    #[serde(rename = "code")]
-    pub code: u32,
+pub struct Error(pub rosetta_core::objects::Error);
 
-    /// Message is a network-specific error message.  The message MUST NOT
-    /// change for a given code. In particular, this means that any contextual
-    /// information should be included in the details field.
-    #[serde(rename = "message")]
-    pub message: String,
-
-    /// An error is retriable if the same request may succeed if submitted
-    /// again.
-    #[serde(rename = "retriable")]
-    pub retriable: bool,
-
-    /// Often times it is useful to return context specific to the request that
-    /// caused the error (i.e. a sample of the stack trace or impacted account)
-    /// in addition to the standard error message.
-    #[serde(rename = "details")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<Object>,
+impl From<Error> for rosetta_core::objects::Error {
+    fn from(value: Error) -> Self {
+        value.0
+    }
+}
+impl From<rosetta_core::objects::Error> for Error {
+    fn from(value: rosetta_core::objects::Error) -> Self {
+        Error(value)
+    }
+}
+impl ::std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl Error {
@@ -1185,20 +1171,10 @@ impl Error {
     }
 }
 
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            serde_json::to_string(self)
-                .expect("This should be impossible, all errors must be serializable")
-        )
-    }
-}
-
 impl actix_web::ResponseError for Error {
     fn status_code(&self) -> actix_web::http::StatusCode {
-        self.code
+        self.0
+            .code
             .try_into()
             .ok()
             .and_then(|c| actix_web::http::StatusCode::from_u16(c).ok())
@@ -1270,55 +1246,12 @@ impl MempoolTransactionResponse {
     }
 }
 
-/// A MetadataRequest is utilized in any request where the only argument is
-/// optional metadata.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct MetadataRequest {
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
-}
-
-impl MetadataRequest {
-    pub fn new() -> MetadataRequest {
-        MetadataRequest { metadata: None }
-    }
-}
-
-/// The network_identifier specifies which network a particular object is
-/// associated with.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct NetworkIdentifier {
-    #[serde(rename = "blockchain")]
-    pub blockchain: String,
-
-    /// If a blockchain has a specific chain-id or network identifier, it should
-    /// go in this field. It is up to the client to determine which
-    /// network-specific identifier is mainnet or testnet.
-    #[serde(rename = "network")]
-    pub network: String,
-
-    #[serde(rename = "sub_network_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_network_identifier: Option<SubNetworkIdentifier>,
-}
-
-impl NetworkIdentifier {
-    pub fn new(blockchain: String, network: String) -> NetworkIdentifier {
-        NetworkIdentifier {
-            blockchain,
-            network,
-            sub_network_identifier: None,
-        }
-    }
-}
-
+pub struct NetworkIdentifier(pub rosetta_core::identifiers::NetworkIdentifier);
 impl TryInto<CanisterId> for &NetworkIdentifier {
     type Error = ApiError;
     fn try_into(self) -> Result<CanisterId, Self::Error> {
-        let principal_bytes = hex::decode(&self.network)
+        let principal_bytes = hex::decode(&self.0.network)
             .map_err(|_| ApiError::InvalidNetworkId(false, "not hex".into()))?;
         let principal_id = PrincipalId::try_from(&principal_bytes)
             .map_err(|_| ApiError::InvalidNetworkId(false, "invalid principal id".into()))?;
@@ -1327,20 +1260,11 @@ impl TryInto<CanisterId> for &NetworkIdentifier {
     }
 }
 
-/// A NetworkListResponse contains all NetworkIdentifiers that the node can
-/// serve information for.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct NetworkListResponse {
-    #[serde(rename = "network_identifiers")]
-    pub network_identifiers: Vec<NetworkIdentifier>,
-}
-
-impl NetworkListResponse {
-    pub fn new(network_identifiers: Vec<NetworkIdentifier>) -> NetworkListResponse {
-        NetworkListResponse {
-            network_identifiers,
-        }
+impl NetworkIdentifier {
+    pub fn new(blockchain: String, network: String) -> NetworkIdentifier {
+        Self(rosetta_core::identifiers::NetworkIdentifier::new(
+            blockchain, network,
+        ))
     }
 }
 
@@ -1679,29 +1603,6 @@ impl SubAccountIdentifier {
     pub fn new(address: String) -> SubAccountIdentifier {
         SubAccountIdentifier {
             address,
-            metadata: None,
-        }
-    }
-}
-
-/// In blockchains with sharded state, the SubNetworkIdentifier is required to
-/// query some object on a specific shard. This identifier is optional for all
-/// non-sharded blockchains.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct SubNetworkIdentifier {
-    #[serde(rename = "network")]
-    pub network: String,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
-}
-
-impl SubNetworkIdentifier {
-    pub fn new(network: String) -> SubNetworkIdentifier {
-        SubNetworkIdentifier {
-            network,
             metadata: None,
         }
     }

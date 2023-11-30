@@ -223,8 +223,8 @@ async fn test_remove_hotkey(
         "Expecting an error while removing twice the hotkey."
     );
     let res = res.unwrap_err();
-    assert_eq!(res.code, 770);
-    assert_eq!(res.message, "Operation failed");
+    assert_eq!(res.0.code, 770);
+    assert_eq!(res.0.message, "Operation failed");
 }
 
 // Sign a transaction with wrong key and check if it gets rejected

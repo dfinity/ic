@@ -11,13 +11,14 @@ use ic_rosetta_api::models::{
     AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
     BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
     ConstructionMetadataRequest, ConstructionMetadataResponse, Currency, CurveType,
-    MempoolResponse, MempoolTransactionRequest, MetadataRequest, NetworkListResponse,
-    NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest, SearchTransactionsResponse,
-    SyncStatus,
+    MempoolResponse, MempoolTransactionRequest, NetworkRequest, NetworkStatusResponse,
+    SearchTransactionsRequest, SearchTransactionsResponse, SyncStatus,
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::NetworkListResponse;
 use std::sync::Arc;
 
 #[actix_rt::test]
@@ -124,7 +125,7 @@ async fn smoke_test() {
     let res = req_handler.network_list(msg).await;
     assert_eq!(
         res,
-        Ok(NetworkListResponse::new(vec![req_handler.network_id()]))
+        Ok(NetworkListResponse::new(vec![req_handler.network_id().0]))
     );
 
     let msg = NetworkRequest::new(req_handler.network_id());
