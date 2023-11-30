@@ -150,7 +150,7 @@ const DEFAULT_RESERVED_BALANCE_LIMIT: Cycles = Cycles::new(5 * T);
 pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::new(200_000_000);
 
 /// The per subnet type configuration for the scheduler component
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SchedulerConfig {
     /// Number of canisters that the scheduler is allowed to schedule in
     /// parallel.
