@@ -2,10 +2,13 @@ use candid::{Decode, Encode};
 use clap::{Arg, ArgMatches};
 use eyre::{bail, Result};
 use ic_agent::{export::Principal, identity::Secp256k1Identity, Agent};
-use ic_config::subnet_config::CyclesAccountManagerConfig;
+use ic_config::{
+    embedders, execution_environment,
+    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig},
+};
 use serde_json::json;
 
-// bazel run //rs/execution_environment:fees_and_limits -- --replica=<version> --canister=<canister-id> --pem-file=<path>
+// bazel run //rs/execution_environment:fees_and_limits -- --replica-version=<version> --canister-id=<canister-id> --pem-file=<path>
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = parse_args();
@@ -82,57 +85,56 @@ async fn upload_to_canister(
 }
 
 fn get_fees_and_limits() -> serde_json::Value {
-    let embedder_config = ic_config::embedders::Config::default();
-    let subnet_config = ic_config::execution_environment::Config::default();
+    let embedder = embedders::Config::default();
+    let execution = execution_environment::Config::default();
+
+    let application = json_config(
+        &CyclesAccountManagerConfig::application_subnet(),
+        &SchedulerConfig::application_subnet(),
+        &embedder,
+        &execution,
+    );
+
+    let verified_application = json_config(
+        &CyclesAccountManagerConfig::verified_application_subnet(),
+        &SchedulerConfig::verified_application_subnet(),
+        &embedder,
+        &execution,
+    );
+
+    let system = json_config(
+        &CyclesAccountManagerConfig::system_subnet(),
+        &SchedulerConfig::system_subnet(),
+        &embedder,
+        &execution,
+    );
+
     json!({
-        "fees": {
-            "application": CyclesAccountManagerConfig::application_subnet(),
-            "verified_application": CyclesAccountManagerConfig::verified_application_subnet(),
-            "system": CyclesAccountManagerConfig::system_subnet(),
-        },
-        "limits": {
-            "application:": get_limits(&ic_config::subnet_config::SchedulerConfig::application_subnet(), &embedder_config, &subnet_config),
-            "verified_application:": get_limits(&ic_config::subnet_config::SchedulerConfig::verified_application_subnet(), &embedder_config, &subnet_config),
-            "system:": get_limits(&ic_config::subnet_config::SchedulerConfig::system_subnet(), &embedder_config, &subnet_config),
-        }
+        "application:": application,
+        "verified_application:": verified_application,
+        "system:": system,
     })
 }
 
-fn get_limits(
-    scheduler_config: &ic_config::subnet_config::SchedulerConfig,
-    embedder_config: &ic_config::embedders::Config,
-    subnet_config: &ic_config::execution_environment::Config,
+fn json_config(
+    cycles_account_manager: &CyclesAccountManagerConfig,
+    scheduler: &ic_config::subnet_config::SchedulerConfig,
+    embedder: &ic_config::embedders::Config,
+    execution: &ic_config::execution_environment::Config,
 ) -> serde_json::Value {
-    use ic_embedders::wasm_utils::validation::MAX_CODE_SECTION_SIZE_IN_BYTES;
     use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
     use ic_system_api::MULTIPLIER_MAX_SIZE_LOCAL_SUBNET;
     use ic_types::messages::MAX_XNET_PAYLOAD_IN_BYTES;
-    use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
     json!({
-        "CANISTER_QUEUE_LIMIT": DEFAULT_QUEUE_CAPACITY,
-        "MAX_INGRESS_PAYLOAD_BYTES": MAX_XNET_PAYLOAD_IN_BYTES.get(),
-        "MAX_SAME_SUBNET_CALL_BYTES": MAX_XNET_PAYLOAD_IN_BYTES.get() * MULTIPLIER_MAX_SIZE_LOCAL_SUBNET,
-        "MAX_RESPONSE_SIZE_BYTES": MAX_XNET_PAYLOAD_IN_BYTES.get(), // The same as for ingress payload size?
-        "MAX_INSTRUCTIONS_PER_UPDATE_TIMER_HEARTBEAT": (scheduler_config.max_instructions_per_message.get()),
-        "MAX_INSTRUCTIONS_PER_QUERY": scheduler_config.max_instructions_per_message_without_dts.get(), // See setup_execution in execution_environment/src/lib.rs,
-        "MAX_INSTRUCTIONS_CANISTER_INSTALL": scheduler_config.max_instructions_per_install_code.get(),
-        "SUBNET_MEMORY_CAPACITY": subnet_config.subnet_memory_capacity.get(),
-        "MAX_STABLE_MEMORY_IN_BYTES": MAX_STABLE_MEMORY_IN_BYTES,
-        "MAX_WASM_MEMORY_IN_BYTES": MAX_WASM_MEMORY_IN_BYTES,
-        // custom section: global, per canister, sections per canister
-        "WASM_CUSTOM_SECTIONS": (
-            subnet_config.subnet_wasm_custom_sections_memory_capacity.get(),
-            embedder_config.max_custom_sections_size.get(),
-            embedder_config.max_custom_sections
-        ),
-        "WASM_CODE_SECTION_BYTES": MAX_CODE_SECTION_SIZE_IN_BYTES,
-        "NUMBER_QUERY_EXECUTION_THREADS": (scheduler_config.scheduler_cores, embedder_config.query_execution_threads_per_canister),
-        "NUMBER_UPDATE_EXECUTION_THREADS": scheduler_config.scheduler_cores,
-        // Other limits
-        "MAX_FUNCTIONS": embedder_config.max_functions,
-        "MAX_GLOBALS": embedder_config.max_globals,
-        "MAX_EXPORTED_FUNCTIONS": embedder_config.max_number_exported_functions,
-        "MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS": embedder_config.max_sum_exported_function_name_lengths,
-        "MAX_CUSTOM_SECTIONS_SIZE": embedder_config.max_custom_sections_size.get(),
+        "fees": serde_json::to_value(*cycles_account_manager).unwrap(),
+        "embedder": serde_json::to_value(embedder.clone()).unwrap(),
+        "execution": serde_json::to_value(execution.clone()).unwrap(),
+        "scheduler": serde_json::to_value(scheduler.clone()).unwrap(),
+        "messages": json!({
+            "canister_queue_capacity": DEFAULT_QUEUE_CAPACITY,
+            "max_ingress_payload_bytes": MAX_XNET_PAYLOAD_IN_BYTES.get(),
+            "max_cross_subnet_call_payload_bytes": MAX_XNET_PAYLOAD_IN_BYTES.get(),
+            "max_same_subnet_call_payload_bytes": MAX_XNET_PAYLOAD_IN_BYTES.get() * MULTIPLIER_MAX_SIZE_LOCAL_SUBNET,
+        }),
     })
 }
