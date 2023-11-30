@@ -22,7 +22,7 @@ struct IPv6Info {
 #[derive(Debug)]
 struct NetworkInfo {
     ipv6_info: Option<IPv6Info>,
-    name_servers_list: Option<String>,
+    ipv6_name_servers_list: Option<String>,
 }
 
 /// Generate network configuration for systemd networkd based on the provided network configuration and then restarts the systemd networkd
@@ -89,15 +89,15 @@ fn fetch_network_info(network_config_variables: &HashMap<String, String>) -> Res
         _ => None,
     };
 
-    let name_servers_list = network_config_variables
+    let ipv6_name_servers_list = network_config_variables
         .get("name_servers")
-        .map(|name_servers| name_servers.split_whitespace())
+        .map(|ipv6_name_servers| ipv6_name_servers.split_whitespace())
         .map(generate_nameserver_list)
         .transpose()?;
 
     Ok(NetworkInfo {
         ipv6_info,
-        name_servers_list,
+        ipv6_name_servers_list,
     })
 }
 
@@ -129,7 +129,7 @@ fn generate_networkd_config_contents(
 ) -> String {
     let match_contents = generate_network_config_match_contents(interface_name);
     let ipv6_contents = generate_network_config_ipv6_contents(network_info.ipv6_info, disable_dad);
-    let dns_contents = generate_network_config_dns_contents(network_info.name_servers_list);
+    let dns_contents = generate_network_config_dns_contents(network_info.ipv6_name_servers_list);
 
     format!("{}{}{}", match_contents, ipv6_contents, dns_contents)
 }
@@ -170,8 +170,8 @@ fn generate_network_config_ipv6_contents(ipv6_info: Option<IPv6Info>, disable_da
     }
 }
 
-fn generate_network_config_dns_contents(name_servers_list: Option<String>) -> String {
-    name_servers_list.unwrap_or_default()
+fn generate_network_config_dns_contents(ipv6_name_servers_list: Option<String>) -> String {
+    ipv6_name_servers_list.unwrap_or_default()
 }
 
 fn get_interface_name() -> Result<String> {
@@ -239,9 +239,9 @@ mod tests {
         assert_eq!(ipv6_info.ipv6_address, "2001:db8::1/64");
         assert_eq!(ipv6_info.ipv6_gateway, "2001:db8::1");
 
-        assert!(result.name_servers_list.is_some());
-        let name_servers_list = result.name_servers_list.unwrap();
-        assert_eq!(name_servers_list, "DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n");
+        assert!(result.ipv6_name_servers_list.is_some());
+        let ipv6_name_servers_list = result.ipv6_name_servers_list.unwrap();
+        assert_eq!(ipv6_name_servers_list, "DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n");
     }
 
     #[test]
@@ -286,7 +286,7 @@ mod tests {
 
         let result = fetch_network_info(&network_config_variables).unwrap();
         assert!(result.ipv6_info.is_none());
-        assert!(result.name_servers_list.is_none());
+        assert!(result.ipv6_name_servers_list.is_none());
     }
 
     #[test]
@@ -296,7 +296,7 @@ mod tests {
                 ipv6_address: "2001:db8::1/64".to_string(),
                 ipv6_gateway: "2001:db8::1".to_string(),
             }),
-            name_servers_list: Some("DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n".to_string()),
+            ipv6_name_servers_list: Some("DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n".to_string()),
         };
         let interface_name = "enp65s0f1";
 
@@ -313,7 +313,7 @@ mod tests {
                 ipv6_address: "2001:db8::1/64".to_string(),
                 ipv6_gateway: "2001:db8::1".to_string(),
             }),
-            name_servers_list: Some("DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n".to_string()),
+            ipv6_name_servers_list: Some("DNS=2606:4700:4700::1111\nDNS=2606:4700:4700::1001\nDNS=2001:4860:4860::8888\nDNS=2001:4860:4860::8844\n".to_string()),
         };
         let interface_name = "enp65s0f1";
 
@@ -327,7 +327,7 @@ mod tests {
     fn test_generate_networkd_config_contents_with_no_ipv6_or_nameservers() {
         let network_info = NetworkInfo {
             ipv6_info: None,
-            name_servers_list: None,
+            ipv6_name_servers_list: None,
         };
         let interface_name = "enp65s0f1";
 
