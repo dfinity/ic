@@ -128,7 +128,7 @@ pub fn init_ic(
             SubnetConfig::new(
                 subnet_index,
                 nodes,
-                Some(initial_replica.replica_version.clone()),
+                initial_replica.replica_version.clone(),
                 subnet.max_ingress_bytes_per_message,
                 subnet.max_ingress_messages_per_block,
                 subnet.max_block_payload_size,
@@ -182,7 +182,7 @@ pub fn init_ic(
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
-        Some(initial_replica.replica_version),
+        initial_replica.replica_version,
         // To maintain backwards compatibility, pass true here.
         // False is used only when nodes need to be deployed without
         // them joining any subnet initially

@@ -182,6 +182,7 @@ fn main() -> Result<()> {
         }
     }
 
+    let replica_version = valid_args.replica_version_id.unwrap_or_default();
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
     let mut topology_config = TopologyConfig::default();
     for (i, (subnet_id, nodes)) in valid_args.subnets.iter().enumerate() {
@@ -201,7 +202,7 @@ fn main() -> Result<()> {
         let subnet_configuration = SubnetConfig::new(
             *subnet_id,
             nodes.to_owned(),
-            valid_args.replica_version_id.clone(),
+            replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
             None,
             None,
@@ -228,7 +229,7 @@ fn main() -> Result<()> {
     let mut ic_config0 = IcConfig::new(
         valid_args.working_dir.as_path(),
         topology_config,
-        valid_args.replica_version_id,
+        replica_version,
         valid_args.generate_subnet_records,
         Some(root_subnet_idx),
         valid_args.release_package_download_url,
