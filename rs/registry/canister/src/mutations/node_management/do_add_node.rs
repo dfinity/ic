@@ -89,6 +89,7 @@ impl Registry {
             node_operator_id: caller.into_vec(),
             hostos_version_id: None,
             chip_id: payload.chip_id.clone(),
+            public_ipv4_config: None,
         };
 
         // 6. Insert node, public keys, and crypto keys

@@ -225,6 +225,12 @@ type UpdateElectedReplicaVersionsPayload = record {
 type UpdateNodeDirectlyPayload = record {
   idkg_dealing_encryption_pk : opt vec nat8;
 };
+type UpdateNodeIPv4ConfigDirectlyPayload = record {
+  node_id : principal;
+  gateway_ip_addrs : vec text;
+  prefix_length : nat32;
+  ip_addr : text;
+};
 type UpdateNodeOperatorConfigDirectlyPayload = record {
   node_operator_id : opt principal;
   node_provider_id : opt principal;
@@ -324,6 +330,9 @@ service : {
   update_elected_replica_versions : (UpdateElectedReplicaVersionsPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);
+  update_node_ipv4_config_directly : (UpdateNodeIPv4ConfigDirectlyPayload) -> (
+      Result_1,
+    );
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
   update_node_operator_config_directly : (
       UpdateNodeOperatorConfigDirectlyPayload,
