@@ -137,9 +137,14 @@ impl OngoingStateSync {
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
                         Ok((result, _)) => {
+                            // We do a saturating sub here because it can happen (in rare cases) that a peer that just joined this sync
+                            // was previously removed from the sync and still had outstanding downloads. As a consequence there is the possibiliy
+                            // of an underflow. In the case where we close old download task while having active downloads we might start to
+                            // undercount active downloads for this peer but this is acceptable since everything will be reset anyway every
+                            // 5-10min when state sync restarts.
+                            self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
                             // Usually it is discouraged to use await in the event loop.
                             // In this case it is ok because the function only is async if state sync completed.
-                            self.active_downloads.entry(result.peer_id).and_modify(|v| *v -= 1);
                             self.handle_downloaded_chunk_result(result).await;
 
                             self.spawn_chunk_downloads();
