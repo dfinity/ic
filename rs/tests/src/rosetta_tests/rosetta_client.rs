@@ -16,8 +16,7 @@ use ic_rosetta_api::models::{
     ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
     ConstructionPreprocessRequest, ConstructionPreprocessResponse, ConstructionSubmitRequest,
     ConstructionSubmitResponse, Error, NetworkRequest, NetworkStatusResponse,
-    NeuronSubaccountComponents, Object, PartialBlockIdentifier, PublicKey, Signature,
-    SignedTransaction,
+    NeuronSubaccountComponents, PartialBlockIdentifier, PublicKey, Signature, SignedTransaction,
 };
 use ic_rosetta_api::request_types::GetProposalInfo;
 use icp_ledger::AccountIdentifier;
@@ -25,6 +24,7 @@ use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client as HttpClient;
 use reqwest::StatusCode as HttpStatusCode;
 use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::request_types::MetadataRequest;
 use rosetta_core::response_types::NetworkListResponse;
 use slog::{debug, info, Logger};
@@ -333,7 +333,9 @@ impl RosettaApiClient {
 
     pub async fn network_status(&self) -> Result<Result<NetworkStatusResponse, Error>, String> {
         let url = format!("{}/network/status", self.api_url);
-        let req = NetworkRequest::new(ic_rosetta_api::models::NetworkIdentifier(self.network_id()));
+        let req = NetworkRequest::new(
+            ic_rosetta_api::models::NetworkIdentifier(self.network_id()).into(),
+        );
         to_rosetta_response::<NetworkStatusResponse>(
             self.post_json_request(&url, serde_json::to_vec(&req).unwrap())
                 .await,
@@ -449,7 +451,7 @@ impl RosettaApiClient {
         let req = CallRequest::new(
             ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
             "get_proposal_info".to_owned(),
-            Object::from(GetProposalInfo { proposal_id }),
+            ObjectMap::from(GetProposalInfo { proposal_id }),
         );
         debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
         debug!(
@@ -470,7 +472,7 @@ impl RosettaApiClient {
         let req = CallRequest::new(
             ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
             "get_pending_proposals".to_owned(),
-            Object::new(),
+            ObjectMap::new(),
         );
         debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
         debug!(

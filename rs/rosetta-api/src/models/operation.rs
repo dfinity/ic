@@ -1,5 +1,5 @@
 use crate::models::amount::Amount;
-use crate::models::{AccountIdentifier, CoinChange, Object};
+use crate::models::{AccountIdentifier, CoinChange, ObjectMap};
 
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter};
@@ -56,7 +56,7 @@ pub struct Operation {
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl Operation {
@@ -66,7 +66,7 @@ impl Operation {
         status: Option<String>,
         account: Option<AccountIdentifier>,
         amount: Option<Amount>,
-        metadata: Option<Object>,
+        metadata: Option<ObjectMap>,
     ) -> Operation {
         Operation {
             operation_identifier: OperationIdentifier::new(op_id),

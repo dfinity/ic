@@ -20,8 +20,8 @@ use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
 use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, Error, Object, PublicKey, RosettaSupportedKeyPair,
-    Signature, SignatureType,
+    ConstructionPayloadsResponse, CurveType, Error, PublicKey, RosettaSupportedKeyPair, Signature,
+    SignatureType,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request::request_result::RequestResult;
@@ -42,6 +42,7 @@ use icp_ledger::{AccountIdentifier, Operation};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
+use rosetta_core::objects::ObjectMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -771,13 +772,13 @@ pub fn acc_id(seed: u64) -> AccountIdentifier {
     PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 
-pub async fn raw_construction(ros: &RosettaApiClient, operation: &str, req: Value) -> Object {
+pub async fn raw_construction(ros: &RosettaApiClient, operation: &str, req: Value) -> ObjectMap {
     let req = req.to_string();
     let res = &ros
         .raw_construction_endpoint(operation, req.as_bytes())
         .await
         .unwrap();
-    let output: Object = serde_json::from_slice(&res.0).unwrap();
+    let output: ObjectMap = serde_json::from_slice(&res.0).unwrap();
     assert!(
         res.1.is_success(),
         "Result of {} should be a success, got: {:?}",

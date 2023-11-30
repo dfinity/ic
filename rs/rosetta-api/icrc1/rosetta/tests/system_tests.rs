@@ -9,7 +9,7 @@ use ic_icrc_rosetta::{
         storage::types::RosettaBlock,
         types::{
             AccountIdentifier, Amount, ApproveMetadata, Block, BlockIdentifier, BlockResponse,
-            BlockTransactionResponse, Currency, Operation, OperationIdentifier, OperationType,
+            BlockTransactionResponse, Operation, OperationIdentifier, OperationType,
             PartialBlockIdentifier, Transaction, TransactionIdentifier,
         },
     },
@@ -29,7 +29,8 @@ use icrc_ledger_types::{
 };
 use lazy_static::lazy_static;
 use rosetta_core::identifiers::NetworkIdentifier;
-use rosetta_core::objects::Object;
+use rosetta_core::objects::Currency;
+use rosetta_core::objects::ObjectMap;
 use serde_json::Number;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -314,7 +315,7 @@ fn expected_operations(
                 amount: "1000000000000".to_string(),
                 currency: Currency {
                     symbol: symbol.clone(),
-                    decimals,
+                    decimals: decimals.into(),
                     metadata: None,
                 },
             }),
@@ -331,7 +332,7 @@ fn expected_operations(
                 amount: "100000000000".to_string(),
                 currency: Currency {
                     symbol: symbol.clone(),
-                    decimals,
+                    decimals: decimals.into(),
                     metadata: None,
                 },
             }),
@@ -349,7 +350,7 @@ fn expected_operations(
                     amount: "-100000000".to_string(),
                     currency: Currency {
                         symbol: symbol.clone(),
-                        decimals,
+                        decimals: decimals.into(),
                         metadata: None,
                     },
                 }),
@@ -366,7 +367,7 @@ fn expected_operations(
                     amount: "100000000".to_string(),
                     currency: Currency {
                         symbol: symbol.clone(),
-                        decimals,
+                        decimals: decimals.into(),
                         metadata: None,
                     },
                 }),
@@ -383,7 +384,7 @@ fn expected_operations(
                     amount: "-10000".to_string(),
                     currency: Currency {
                         symbol: symbol.clone(),
-                        decimals,
+                        decimals: decimals.into(),
                         metadata: None,
                     },
                 }),
@@ -401,7 +402,7 @@ fn expected_operations(
                 amount: "-100000000".to_string(),
                 currency: Currency {
                     symbol: symbol.clone(),
-                    decimals,
+                    decimals: decimals.into(),
                     metadata: None,
                 },
             }),
@@ -444,7 +445,7 @@ fn expected_operations(
                     amount: "-10000".to_string(),
                     currency: Currency {
                         symbol: symbol.clone(),
-                        decimals,
+                        decimals: decimals.into(),
                         metadata: None,
                     },
                 }),
@@ -477,7 +478,7 @@ fn create_expected_rosetta_responses(
             .map(hex::encode)
             .unwrap_or_else(|| block_hash.clone());
         let transaction_hash = block.get_transaction().unwrap().hash().to_string();
-        let mut transaction_metadata = Object::new();
+        let mut transaction_metadata = ObjectMap::new();
         if index == 0 {
             transaction_metadata.insert(
                 "created_at_time".to_string(),
@@ -609,7 +610,7 @@ fn create_expected_block_hashes_and_block_transaction_responses(
         let block = RosettaBlock::from_generic_block(block, index as u64).unwrap();
         let block_hash = hex::encode(&block.block_hash);
         let transaction_hash = block.get_transaction().unwrap().hash().to_string();
-        let mut metadata = Object::new();
+        let mut metadata = ObjectMap::new();
         if index == 0 {
             metadata.insert(
                 "created_at_time".to_string(),

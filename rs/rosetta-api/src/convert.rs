@@ -310,7 +310,7 @@ pub fn from_model_account_identifier(
 const LAST_HEIGHT: &str = "last_height";
 
 // Last hash is an option because there may be no blocks on the system
-pub fn from_metadata(mut ob: models::Object) -> Result<BlockIndex, ApiError> {
+pub fn from_metadata(mut ob: rosetta_core::objects::ObjectMap) -> Result<BlockIndex, ApiError> {
     let v = ob
         .remove(LAST_HEIGHT)
         .ok_or_else(|| ApiError::internal_error("No value `LAST_HEIGHT` in object"))?;

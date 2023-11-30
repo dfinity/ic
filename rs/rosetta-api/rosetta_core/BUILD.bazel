@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
+    "@crate_index//:serde_with",
 ]
 
 MACRO_DEPENDENCIES = [

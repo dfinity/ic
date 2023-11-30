@@ -1,8 +1,8 @@
 use crate::errors::ApiError;
-use crate::models::Object;
 use crate::request::request_result::RequestResult;
 use crate::transaction_id::TransactionIdentifier;
 use icp_ledger::BlockIndex;
+use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 
 use serde::{Deserialize, Serialize};
@@ -40,18 +40,18 @@ impl TransactionResults {
     }
 }
 
-impl From<&TransactionResults> for Object {
+impl From<&TransactionResults> for ObjectMap {
     fn from(d: &TransactionResults) -> Self {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => o,
-            _ => Object::default(),
+            _ => ObjectMap::default(),
         }
     }
 }
 
-impl TryFrom<Object> for TransactionResults {
+impl TryFrom<ObjectMap> for TransactionResults {
     type Error = ApiError;
-    fn try_from(o: Object) -> Result<Self, ApiError> {
+    fn try_from(o: ObjectMap) -> Result<Self, ApiError> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse TransactionResults from Object: {}",

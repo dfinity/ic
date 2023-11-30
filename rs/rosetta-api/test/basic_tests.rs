@@ -63,7 +63,7 @@ async fn smoke_test() {
         );
     }
 
-    let msg = NetworkRequest::new(req_handler.network_id());
+    let msg = NetworkRequest::new(req_handler.network_id().into());
     let res = req_handler.network_status(msg).await;
     assert_eq!(
         res,
@@ -114,7 +114,7 @@ async fn smoke_test() {
         .index;
     assert_eq!(b - a, 10);
 
-    let msg = NetworkRequest::new(req_handler.network_id());
+    let msg = NetworkRequest::new(req_handler.network_id().into());
     let res = req_handler.network_status(msg).await;
     assert_eq!(
         res.unwrap().oldest_block_identifier,
@@ -128,7 +128,7 @@ async fn smoke_test() {
         Ok(NetworkListResponse::new(vec![req_handler.network_id().0]))
     );
 
-    let msg = NetworkRequest::new(req_handler.network_id());
+    let msg = NetworkRequest::new(req_handler.network_id().into());
     let network_options = req_handler
         .network_options(msg)
         .await
@@ -148,7 +148,7 @@ async fn smoke_test() {
     assert!(!network_options.allow.errors.is_empty());
     assert!(network_options.allow.historical_balance_lookup);
 
-    let msg = NetworkRequest::new(req_handler.network_id());
+    let msg = NetworkRequest::new(req_handler.network_id().into());
     let res = req_handler.mempool(msg).await;
     assert_eq!(res, Ok(MempoolResponse::new(vec![])));
 

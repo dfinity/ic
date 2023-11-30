@@ -1,5 +1,5 @@
 use crate::errors::ApiError;
-use crate::models::{Currency, Object};
+use crate::models::{Currency, ObjectMap};
 use ic_ledger_core::tokens::DECIMAL_PLACES;
 use icp_ledger::Tokens;
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ pub struct Amount {
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl Amount {

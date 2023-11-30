@@ -13,6 +13,8 @@ pub struct NetworkIdentifier {
     /// network-specific identifier is mainnet or testnet.
     pub network: String,
 
+    /// In blockchains with sharded state, the SubNetworkIdentifier is required to query some object on a specific shard.
+    /// This identifier is optional for all non-sharded blockchains.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_network_identifier: Option<SubNetworkIdentifier>,
 }

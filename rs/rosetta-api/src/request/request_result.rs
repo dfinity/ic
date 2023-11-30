@@ -1,8 +1,8 @@
-use crate::models::Object;
 use crate::request::Request;
 use crate::request_types::{RequestResultMetadata, Status};
 use crate::transaction_id::TransactionIdentifier;
 use icp_ledger::BlockIndex;
+use rosetta_core::objects::ObjectMap;
 
 use crate::errors;
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,7 @@ pub struct RequestResult {
     pub status: Status,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub response: Option<Object>,
+    pub response: Option<ObjectMap>,
 }
 
 pub fn convert_to_request_result_metadata(rr: &RequestResult) -> RequestResultMetadata {

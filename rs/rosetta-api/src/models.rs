@@ -21,17 +21,20 @@ use ic_types::{
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+pub use rosetta_core::objects::Currency;
+use rosetta_core::objects::ObjectMap;
+pub use rosetta_core::request_types::NetworkRequest;
+pub use rosetta_core::response_types::Allow;
+pub use rosetta_core::response_types::NetworkOptionsResponse;
+pub use rosetta_core::response_types::OperationStatus;
+pub use rosetta_core::response_types::Version;
 use serde::{Deserialize, Serialize};
-
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 
 // This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
 // Then heavily tweaked because openapi-generator no longer generates valid rust
 // code
-
-pub type Object = serde_json::map::Map<String, serde_json::Value>;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionSubmitResponse {
     /// Transfers produce a real transaction identifier,
@@ -47,7 +50,7 @@ pub struct ConstructionSubmitResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionHashResponse {
     pub transaction_identifier: TransactionIdentifier,
-    pub metadata: Object,
+    pub metadata: ObjectMap,
 }
 
 /// An AccountBalanceRequest is utilized to make a balance request on the
@@ -137,7 +140,7 @@ pub struct AccountIdentifier {
     /// key(s) owned by the address in metadata.
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl AccountIdentifier {
@@ -146,54 +149,6 @@ impl AccountIdentifier {
             address,
             sub_account: None,
             metadata: None,
-        }
-    }
-}
-
-/// Allow specifies supported Operation status, Operation types, and all
-/// possible error statuses. This Allow object is used by clients to validate
-/// the correctness of a Rosetta Server implementation. It is expected that
-/// these clients will error if they receive some response that contains any of
-/// the above information that is not specified here.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Allow {
-    /// All Operation.Status this implementation supports. Any status that is
-    /// returned during parsing that is not listed here will cause client
-    /// validation to error.
-    #[serde(rename = "operation_statuses")]
-    pub operation_statuses: Vec<OperationStatus>,
-
-    /// All Operation.Type this implementation supports. Any type that is
-    /// returned during parsing that is not listed here will cause client
-    /// validation to error.
-    #[serde(rename = "operation_types")]
-    pub operation_types: Vec<String>,
-
-    /// All Errors that this implementation could return. Any error that is
-    /// returned during parsing that is not listed here will cause client
-    /// validation to error.
-    #[serde(rename = "errors")]
-    pub errors: Vec<Error>,
-
-    /// Any Rosetta implementation that supports querying the balance of an
-    /// account at any height in the past should set this to true.
-    #[serde(rename = "historical_balance_lookup")]
-    pub historical_balance_lookup: bool,
-}
-
-impl Allow {
-    pub fn new(
-        operation_statuses: Vec<OperationStatus>,
-        operation_types: Vec<String>,
-        errors: Vec<Error>,
-        historical_balance_lookup: bool,
-    ) -> Allow {
-        Allow {
-            operation_statuses,
-            operation_types,
-            errors,
-            historical_balance_lookup,
         }
     }
 }
@@ -221,7 +176,7 @@ pub struct Block {
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl Block {
@@ -450,14 +405,14 @@ pub struct CallRequest {
     pub method_name: String,
 
     #[serde(rename = "parameters")]
-    pub parameters: Object,
+    pub parameters: ObjectMap,
 }
 
 impl CallRequest {
     pub fn new(
         network_identifier: NetworkIdentifier,
         method_name: String,
-        parameters: Object,
+        parameters: ObjectMap,
     ) -> CallRequest {
         CallRequest {
             network_identifier,
@@ -471,11 +426,11 @@ impl CallRequest {
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct CallResponse {
     #[serde(rename = "result")]
-    pub result: Object,
+    pub result: ObjectMap,
 }
 
 impl CallResponse {
-    pub fn new(result: Object) -> CallResponse {
+    pub fn new(result: ObjectMap) -> CallResponse {
         CallResponse { result }
     }
 }
@@ -650,7 +605,7 @@ pub struct ConstructionDeriveResponse {
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl ConstructionDeriveResponse {
@@ -836,7 +791,7 @@ pub struct ConstructionParseResponse {
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl ConstructionParseResponse {
@@ -973,7 +928,7 @@ pub struct ConstructionPreprocessRequest {
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 
     #[serde(rename = "max_fee")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1059,41 +1014,6 @@ impl ConstructionSubmitRequest {
                 e
             ))
         })
-    }
-}
-
-/// Currency is composed of a canonical Symbol and Decimals. This Decimals value
-/// is used to convert an Amount.Value from atomic units (Satoshis) to standard
-/// units (Bitcoins).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Currency {
-    /// Canonical symbol associated with a currency.
-    #[serde(rename = "symbol")]
-    pub symbol: String,
-
-    /// Number of decimal places in the standard unit representation of the
-    /// amount.  For example, BTC has 8 decimals. Note that it is not possible
-    /// to represent the value of some currency in atomic units that is not base
-    /// 10.
-    #[serde(rename = "decimals")]
-    pub decimals: u32,
-
-    /// Any additional information related to the currency itself.  For example,
-    /// it would be useful to populate this object with the contract address of
-    /// an ERC-20 token.
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
-}
-
-impl Currency {
-    pub fn new(symbol: String, decimals: u32) -> Currency {
-        Currency {
-            symbol,
-            decimals,
-            metadata: None,
-        }
     }
 }
 
@@ -1234,7 +1154,7 @@ pub struct MempoolTransactionResponse {
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl MempoolTransactionResponse {
@@ -1260,51 +1180,23 @@ impl TryInto<CanisterId> for &NetworkIdentifier {
     }
 }
 
+impl From<rosetta_core::identifiers::NetworkIdentifier> for NetworkIdentifier {
+    fn from(value: rosetta_core::identifiers::NetworkIdentifier) -> Self {
+        Self(value)
+    }
+}
+
+impl From<NetworkIdentifier> for rosetta_core::identifiers::NetworkIdentifier {
+    fn from(value: NetworkIdentifier) -> Self {
+        value.0
+    }
+}
+
 impl NetworkIdentifier {
     pub fn new(blockchain: String, network: String) -> NetworkIdentifier {
         Self(rosetta_core::identifiers::NetworkIdentifier::new(
             blockchain, network,
         ))
-    }
-}
-
-/// NetworkOptionsResponse contains information about the versioning of the node
-/// and the allowed operation statuses, operation types, and errors.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct NetworkOptionsResponse {
-    #[serde(rename = "version")]
-    pub version: Version,
-
-    #[serde(rename = "allow")]
-    pub allow: Allow,
-}
-
-impl NetworkOptionsResponse {
-    pub fn new(version: Version, allow: Allow) -> NetworkOptionsResponse {
-        NetworkOptionsResponse { version, allow }
-    }
-}
-
-/// A NetworkRequest is utilized to retrieve some data specific exclusively to a
-/// NetworkIdentifier.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct NetworkRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
-}
-
-impl NetworkRequest {
-    pub fn new(network_identifier: NetworkIdentifier) -> NetworkRequest {
-        NetworkRequest {
-            network_identifier,
-            metadata: None,
-        }
     }
 }
 
@@ -1366,32 +1258,6 @@ impl NetworkStatusResponse {
     }
 }
 
-/// OperationStatus is utilized to indicate which Operation status are
-/// considered successful.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct OperationStatus {
-    /// The status is the network-specific status of the operation.
-    #[serde(rename = "status")]
-    pub status: String,
-
-    /// An Operation is considered successful if the Operation.Amount should
-    /// affect the Operation.Account. Some blockchains (like Bitcoin) only
-    /// include successful operations in blocks but other blockchains (like
-    /// Ethereum) include unsuccessful operations that incur a fee.  To
-    /// reconcile the computed balance from the stream of Operations, it is
-    /// critical to understand which Operation.Status indicate an Operation is
-    /// successful and should affect an Account.
-    #[serde(rename = "successful")]
-    pub successful: bool,
-}
-
-impl OperationStatus {
-    pub fn new(status: String, successful: bool) -> OperationStatus {
-        OperationStatus { status, successful }
-    }
-}
-
 /// When fetching data by BlockIdentifier, it may be possible to only specify
 /// the index or hash. If neither property is specified, it is assumed that the
 /// client is making a request at the current block.
@@ -1425,7 +1291,7 @@ pub struct Peer {
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl Peer {
@@ -1596,7 +1462,7 @@ pub struct SubAccountIdentifier {
     /// differing metadata will not be considered equal by clients.
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl SubAccountIdentifier {
@@ -1663,7 +1529,7 @@ pub struct Transaction {
     /// transactions in the metadata.
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl Transaction {
@@ -1690,7 +1556,7 @@ pub struct TransactionIdentifierResponse {
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl TransactionIdentifierResponse {
@@ -1853,52 +1719,6 @@ impl SearchTransactionsResponse {
             transactions,
             total_count,
             next_offset,
-        }
-    }
-}
-
-/// The Version object is utilized to inform the client of the versions of
-/// different components of the Rosetta implementation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Version {
-    /// The rosetta_version is the version of the Rosetta interface the
-    /// implementation adheres to. This can be useful for clients looking to
-    /// reliably parse responses.
-    #[serde(rename = "rosetta_version")]
-    pub rosetta_version: String,
-
-    /// The node_version is the canonical version of the node runtime. This can
-    /// help clients manage deployments.
-    #[serde(rename = "node_version")]
-    pub node_version: String,
-
-    /// When a middleware server is used to adhere to the Rosetta interface, it
-    /// should return its version here. This can help clients manage
-    /// deployments.
-    #[serde(rename = "middleware_version")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub middleware_version: Option<String>,
-
-    /// Any other information that may be useful about versioning of dependent
-    /// services should be returned here.
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
-}
-
-impl Version {
-    pub fn new(
-        rosetta_version: String,
-        node_version: String,
-        middleware_version: Option<String>,
-        metadata: Option<Object>,
-    ) -> Version {
-        Version {
-            rosetta_version,
-            node_version,
-            middleware_version,
-            metadata,
         }
     }
 }

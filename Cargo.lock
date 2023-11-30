@@ -15852,6 +15852,7 @@ dependencies = [
  "serde_cbor",
  "serde_derive",
  "serde_json",
+ "serde_with",
 ]
 
 [[package]]
