@@ -614,7 +614,12 @@ fn test_from_active_to_inactive() {
 
     // Step 3: veriifies that the neuron is in both heap and stable.
     assert_neuron_in_neuron_store_eq(&neuron_store, &modified_neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 }
 
@@ -628,7 +633,12 @@ fn test_from_inactive_to_active() {
 
     // Step 1.2: verifies that the neuron is in both stable and heap.
     assert_neuron_in_neuron_store_eq(&neuron_store, &neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 
     // Step 2: modifies the neuron to be active by funding it.
@@ -656,7 +666,12 @@ fn test_from_inactive_to_inactive() {
 
     // Step 1.2: verifies that the neuron is in both stable and heap.
     assert_neuron_in_neuron_store_eq(&neuron_store, &neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 
     // Step 2: modifies the neuron to be still inactive.
@@ -670,7 +685,12 @@ fn test_from_inactive_to_inactive() {
 
     // Step 3: veriifies that the neuron is modified and is only in heap.
     assert_neuron_in_neuron_store_eq(&neuron_store, &modified_neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 }
 
@@ -695,7 +715,12 @@ fn test_from_stale_inactive_to_inactive() {
 
     // Step 3: veriifies that the neuron is not modified but now in both heap and stable.
     assert_neuron_in_neuron_store_eq(&neuron_store, &neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 }
 
