@@ -131,6 +131,10 @@ impl State {
         self.update_eth_balance_upon_deposit(event)
     }
 
+    pub fn has_events_to_mint(&self) -> bool {
+        !self.events_to_mint.is_empty()
+    }
+
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
         assert!(
             !self.events_to_mint.contains_key(&source),
