@@ -49,7 +49,7 @@ use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::Height;
+use ic_types::{Height, ReplicaVersion};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -114,7 +114,7 @@ fn main() -> Result<()> {
             SubnetConfig::new(
                 SUBNET_ID,
                 subnet_nodes,
-                None,
+                config.replica_version.clone(),
                 None,
                 None,
                 None,
@@ -142,7 +142,7 @@ fn main() -> Result<()> {
         let mut ic_config = IcConfig::new(
             /* target_dir= */ config.state_dir.as_path(),
             topology_config,
-            /* replica_version_id= */ None,
+            config.replica_version.clone(),
             /* generate_subnet_records= */ true, // see note above
             /* nns_subnet_index= */ Some(0),
             /* release_package_url= */ None,
@@ -183,7 +183,7 @@ fn main() -> Result<()> {
     };
     let cmd = cmd
         .arg("--replica-version")
-        .arg(config.replica_version)
+        .arg(config.replica_version.to_string())
         .arg("--config-file")
         .args([config_path.to_str().unwrap()]);
     info!(log, "Executing {:?}", cmd);
@@ -205,8 +205,8 @@ struct CliArgs {
     replica_path: Option<PathBuf>,
 
     /// Version of the replica binary.
-    #[clap(long = "replica-version", default_value = "0.8.0")]
-    replica_version: String,
+    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
+    replica_version: Option<ReplicaVersion>,
 
     /// Path to the cargo binary. Not optional because there is a default value.
     ///
@@ -348,9 +348,9 @@ struct CliArgs {
 
 impl CliArgs {
     fn validate(self) -> io::Result<ValidatedConfig> {
+        let replica_version = self.replica_version.unwrap_or_default();
         // check whether replica path exists, if it is specified.
         let replica_path = self.replica_path;
-        let replica_version = self.replica_version;
         if let Some(f) = &replica_path {
             if !f.is_file() {
                 return Err(io::Error::new(
@@ -566,7 +566,7 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
 #[derive(Debug)]
 struct ValidatedConfig {
     replica_path: Option<PathBuf>,
-    replica_version: String,
+    replica_version: ReplicaVersion,
     log_level: slog::Level,
     debug_overrides: Vec<String>,
     cargo_bin: String,

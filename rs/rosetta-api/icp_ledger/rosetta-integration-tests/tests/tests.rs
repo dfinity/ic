@@ -143,7 +143,6 @@ oSMDIQCJuBJPWt2WWxv0zQmXcXMjY+fP0CJSsB80ztXpOFd2ZQ==
     .expect("failed to parse identity from PEM")
 }
 
-#[ignore]
 #[tokio::test]
 async fn test() {
     // this is a "demo" test, it shows how to setup a replica with the icp ledger installed
@@ -216,11 +215,10 @@ async fn test() {
     // So we try multiple times.
     let mut block = None;
     let mut attempts = 0;
-    while block.is_none() || attempts < MAX_ATTEMPTS {
+    while block.is_none() && attempts < MAX_ATTEMPTS {
         match client.block(network.clone(), 0).await {
             Ok(b) => {
                 block = b;
-                break;
             }
             Err(err) => {
                 if attempts == MAX_ATTEMPTS - 1 {
