@@ -237,10 +237,10 @@ pub struct CanisterCodeDeploymentRecord {
 
 impl CanisterCodeDeploymentRecord {
     pub fn mode(&self) -> CanisterInstallMode {
-        self.mode.clone()
+        self.mode
     }
     pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
-        self.module_hash.clone()
+        self.module_hash
     }
 }
 
