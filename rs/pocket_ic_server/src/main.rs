@@ -101,7 +101,7 @@ async fn start(runtime: Arc<Runtime>) {
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default().build();
     // A time-to-live mechanism: Requests bump this value, and the server
-    // gracefully shuts down when the value wasn't bumped for a while
+    // gracefully shuts down when the value wasn't bumped for a while.
     let min_alive_until = Arc::new(RwLock::new(Instant::now()));
     let app_state = AppState {
         api_state,
@@ -112,7 +112,7 @@ async fn start(runtime: Arc<Runtime>) {
 
     let router = ApiRouter::new()
         //
-        // Serve OpenAPI documentation
+        // Serve OpenAPI documentation.
         .route("/api.json", get(serve_api))
         //
         // Get server health.
@@ -124,7 +124,7 @@ async fn start(runtime: Arc<Runtime>) {
         // Get a blob store entry.
         .directory_route("/blobstore/:id", get(get_blob_store_entry))
         //
-        // verify signature
+        // Verify signature.
         .directory_route("/verify_signature", post(verify_signature))
         //
         // All instance routes.
