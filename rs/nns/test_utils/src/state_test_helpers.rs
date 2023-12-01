@@ -640,7 +640,7 @@ pub fn nns_governance_get_full_neuron(
     state_machine: &mut StateMachine,
     sender: PrincipalId,
     neuron_id: u64,
-) -> Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError> {
+) -> Result<nns_governance_pb::Neuron, GovernanceError> {
     let result = state_machine
         .execute_ingress_as(
             sender,
@@ -659,7 +659,33 @@ pub fn nns_governance_get_full_neuron(
             )
         }
     };
-    Decode!(&result, Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError>).unwrap()
+    Decode!(&result, Result<nns_governance_pb::Neuron, GovernanceError>).unwrap()
+}
+
+pub fn nns_governance_get_neuron_info(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: u64,
+) -> Result<nns_governance_pb::NeuronInfo, GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "get_neuron_info",
+            Encode!(&neuron_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_neuron_info was rejected by the NNS governance canister: {:#?}",
+                reject
+            )
+        }
+    };
+    Decode!(&result, Result<nns_governance_pb::NeuronInfo, GovernanceError>).unwrap()
 }
 
 pub fn nns_governance_get_proposal_info_as_anonymous(

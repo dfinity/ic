@@ -83,9 +83,14 @@ pub struct NeuronInfo {
     /// Timestamp when this neuron joined the community fund.
     #[prost(uint64, optional, tag = "9")]
     pub joined_community_fund_timestamp_seconds: ::core::option::Option<u64>,
-    /// If this neuron is a known neuron, this is data associated with it, including the neuron's name and (optionally) a description.
+    /// If this neuron is a known neuron, this is data associated
+    /// with it, including the neuron's name and (optionally) a description.
     #[prost(message, optional, tag = "10")]
     pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
+    /// The type of the Neuron. See \[NeuronType\] for a description
+    /// of the different states.
+    #[prost(enumeration = "NeuronType", optional, tag = "11")]
+    pub neuron_type: ::core::option::Option<i32>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -234,6 +239,10 @@ pub struct Neuron {
     /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
     #[prost(message, optional, tag = "18")]
     pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
+    /// The type of the Neuron. See \[NeuronType\] for a description
+    /// of the different states.
+    #[prost(enumeration = "NeuronType", optional, tag = "22")]
+    pub neuron_type: ::core::option::Option<i32>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -2263,6 +2272,8 @@ pub struct Governance {
     /// This is the inverse of what is stored in a Neuron (its followees).
     #[prost(map = "int32, message", tag = "22")]
     pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
+    #[prost(message, optional, tag = "23")]
+    pub seed_accounts: ::core::option::Option<governance::SeedAccounts>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2382,6 +2393,26 @@ pub mod governance {
             ::std::collections::HashMap<u64, f64>,
         #[prost(uint64, tag = "24")]
         pub not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: u64,
+        #[prost(uint64, tag = "26")]
+        pub seed_neuron_count: u64,
+        #[prost(uint64, tag = "27")]
+        pub ect_neuron_count: u64,
+        #[prost(uint64, tag = "28")]
+        pub total_staked_e8s_seed: u64,
+        #[prost(uint64, tag = "29")]
+        pub total_staked_e8s_ect: u64,
+        #[prost(uint64, tag = "30")]
+        pub total_staked_maturity_e8s_equivalent_seed: u64,
+        #[prost(uint64, tag = "31")]
+        pub total_staked_maturity_e8s_equivalent_ect: u64,
+        #[prost(map = "uint64, double", tag = "32")]
+        pub dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
+        #[prost(map = "uint64, double", tag = "33")]
+        pub dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        #[prost(map = "uint64, double", tag = "34")]
+        pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
+        #[prost(map = "uint64, double", tag = "35")]
+        pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
     /// proposal is in progress. We only want one of these to be happening at the same time,
@@ -2519,6 +2550,49 @@ pub mod governance {
             /// These values will be non-repeating, and order does not matter.
             #[prost(message, repeated, tag = "1")]
             pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+        }
+    }
+    /// The list of seed accounts existing in the Genesis Token Canister (GTC). These accounts are used during the
+    /// tagging process of Seed Neurons in the NNS.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct SeedAccounts {
+        #[prost(message, repeated, tag = "1")]
+        pub accounts: ::prost::alloc::vec::Vec<seed_accounts::SeedAccount>,
+    }
+    /// Nested message and enum types in `SeedAccounts`.
+    pub mod seed_accounts {
+        /// An individual seed account existing in the Genesis Token Canister (GTC). This account is used during the
+        /// tagging process of Seed Neurons in the NNS. The structure of the Seed Account allows for idempotent
+        /// processing of all SeedAccounts in the NNS Governance Canister's heartbeat.
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct SeedAccount {
+            /// The id of the Account in the GTC.
+            #[prost(string, tag = "1")]
+            pub account_id: ::prost::alloc::string::String,
+            /// The timestamp in seconds of when this SeedAccount began tagging of its Seed Neurons. If set to None,
+            /// this account has yet to be processed. If set to Some, this account has began or finished processing.
+            #[prost(uint64, optional, tag = "2")]
+            pub tag_start_timestamp_seconds: ::core::option::Option<u64>,
+            /// The timestamp in seconds of when this SeedAccount finished tagging of its Seed Neurons. If set to None,
+            /// this account has yet to be processed, or has started processing. If set to Some, this account has
+            /// finished processing.
+            #[prost(uint64, optional, tag = "3")]
+            pub tag_end_timestamp_seconds: ::core::option::Option<u64>,
+            /// The count of errors encountered when processing this SeedAccount. This is used when considering whether
+            /// this SeedAccount is eligible for tagging. If the error_count is too high, the tagging process will ignore
+            /// it and continue on to the next SeedAccount.
+            #[prost(uint64, tag = "4")]
+            pub error_count: u64,
+            /// The type of the Neuron (either Seed or ECT). This type will be applied to all neurons found in
+            /// the tagging process for this account.
+            #[prost(enumeration = "super::super::NeuronType", tag = "5")]
+            pub neuron_type: i32,
         }
     }
 }
@@ -3188,6 +3262,56 @@ impl NeuronState {
             "NEURON_STATE_DISSOLVING" => Some(Self::Dissolving),
             "NEURON_STATE_DISSOLVED" => Some(Self::Dissolved),
             "NEURON_STATE_SPAWNING" => Some(Self::Spawning),
+            _ => None,
+        }
+    }
+}
+/// Types of a Neuron.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum NeuronType {
+    /// Placeholder value due to the proto3 requirement for a zero default.
+    /// This is an invalid type; neurons should not be assigned this value.
+    Unspecified = 0,
+    /// Represents neurons initially created for Seed accounts in the
+    /// Genesis Token Canister, or those descended from such neurons.
+    Seed = 1,
+    /// Represents neurons initially created for Early Contributor Token (ECT)
+    /// accounts in the Genesis Token Canister, or those descended from such neurons.
+    Ect = 2,
+}
+impl NeuronType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NeuronType::Unspecified => "NEURON_TYPE_UNSPECIFIED",
+            NeuronType::Seed => "NEURON_TYPE_SEED",
+            NeuronType::Ect => "NEURON_TYPE_ECT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NEURON_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "NEURON_TYPE_SEED" => Some(Self::Seed),
+            "NEURON_TYPE_ECT" => Some(Self::Ect),
             _ => None,
         }
     }

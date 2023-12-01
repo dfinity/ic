@@ -127,6 +127,13 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
             ));
         }
 
+        if source_neuron.neuron_type != target_neuron.neuron_type {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Source neuron's neuron_type field does not match target",
+            ));
+        }
+
         Ok(())
     }
 

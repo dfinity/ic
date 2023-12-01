@@ -8872,6 +8872,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-protobuf-generator",
+ "ic-nns-gtc-accounts",
  "ic-protobuf",
  "ic-sns-init",
  "ic-sns-root",

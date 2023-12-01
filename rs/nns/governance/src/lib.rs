@@ -145,6 +145,7 @@ pub mod neurons_fund;
 pub mod pb;
 pub mod proposals;
 mod reward;
+pub mod seed_accounts;
 pub mod storage;
 mod subaccount_index;
 
@@ -498,6 +499,12 @@ pub fn encode_metrics(
             "governance_total_staked_maturity_e8s_equivalent",
             metrics.total_staked_maturity_e8s_equivalent as f64,
             "The total amount of Neurons' staked maturity",
+        )?;
+
+        w.encode_gauge(
+            "governance_seed_neuron_count",
+            metrics.seed_neuron_count as f64,
+            "The count of seed Neurons",
         )?;
 
         encode_dissolve_delay_buckets(
