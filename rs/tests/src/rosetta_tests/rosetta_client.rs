@@ -427,7 +427,7 @@ impl RosettaApiClient {
 
     pub async fn block_at(&self, idx: u64) -> Result<Result<BlockResponse, Error>, String> {
         let block_id = PartialBlockIdentifier {
-            index: Some(i64::try_from(idx).unwrap()),
+            index: Some(idx),
             hash: None,
         };
         let req = BlockRequest::new(
@@ -524,7 +524,7 @@ impl RosettaApiClient {
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < timeout {
             if let Ok(Ok(resp)) = self.network_status().await {
-                if resp.current_block_identifier.index as u64 >= tip_idx {
+                if resp.current_block_identifier.index >= tip_idx {
                     return Ok(());
                 }
             }

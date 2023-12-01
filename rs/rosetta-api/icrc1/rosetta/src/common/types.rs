@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use candid::Deserialize;
+use rosetta_core::identifiers::BlockIdentifier;
 
 use super::storage::types::RosettaBlock;
 use ic_icrc1_tokens_u64::U64;
@@ -95,49 +96,6 @@ impl Error {
             details: None,
         })
     }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct BlockIdentifier {
-    pub index: u64,
-    pub hash: String,
-}
-
-impl From<&RosettaBlock> for BlockIdentifier {
-    fn from(block: &RosettaBlock) -> Self {
-        Self {
-            index: block.index,
-            hash: hex::encode(&block.block_hash),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SyncStatus {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub current_index: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub target_index: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stage: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub synced: Option<bool>,
-}
-
-/// NetworkStatusResponse contains basic information about the node's view of a
-/// blockchain network.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkStatusResponse {
-    pub current_block_identifier: BlockIdentifier,
-    /// The timestamp of the block in milliseconds since the Unix Epoch.
-    pub current_block_timestamp: u64,
-    pub genesis_block_identifier: BlockIdentifier,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub oldest_block_identifier: Option<BlockIdentifier>,
-    // TODO: sync status should be displayed as it is helpful, but work
-    // needs to be done in order to share syncing status.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sync_status: Option<SyncStatus>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

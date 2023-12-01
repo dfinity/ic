@@ -4,13 +4,13 @@ use std::time::Duration;
 use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_icrc_rosetta::{
     common::types::{
-        BlockIdentifier, BlockRequest, BlockResponse, BlockTransactionRequest,
-        BlockTransactionResponse, Error, NetworkStatusResponse,
+        BlockRequest, BlockResponse, BlockTransactionRequest, BlockTransactionResponse, Error,
     },
     AppState,
 };
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::models::MempoolResponse;
+use rosetta_core::identifiers::BlockIdentifier;
 use rosetta_core::identifiers::NetworkIdentifier;
 use rosetta_core::objects::Currency;
 use rosetta_core::request_types::MetadataRequest;
@@ -18,6 +18,7 @@ use rosetta_core::request_types::NetworkRequest;
 use rosetta_core::response_types::Allow;
 use rosetta_core::response_types::NetworkListResponse;
 use rosetta_core::response_types::NetworkOptionsResponse;
+use rosetta_core::response_types::NetworkStatusResponse;
 use rosetta_core::response_types::Version;
 use serde_bytes::ByteBuf;
 
@@ -107,6 +108,7 @@ pub async fn network_status(
         genesis_block_identifier: genesis_block_identifier.clone(),
         oldest_block_identifier: Some(genesis_block_identifier),
         sync_status: None,
+        peers: vec![],
     }))
 }
 

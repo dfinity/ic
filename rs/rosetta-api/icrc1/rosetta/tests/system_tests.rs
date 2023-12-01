@@ -8,7 +8,7 @@ use ic_icrc_rosetta::{
     common::{
         storage::types::RosettaBlock,
         types::{
-            AccountIdentifier, Amount, ApproveMetadata, Block, BlockIdentifier, BlockResponse,
+            AccountIdentifier, Amount, ApproveMetadata, Block, BlockResponse,
             BlockTransactionResponse, Operation, OperationIdentifier, OperationType,
             PartialBlockIdentifier, Transaction, TransactionIdentifier,
         },
@@ -28,6 +28,7 @@ use icrc_ledger_types::{
     icrc3::blocks::GetBlocksRequest,
 };
 use lazy_static::lazy_static;
+use rosetta_core::identifiers::BlockIdentifier;
 use rosetta_core::identifiers::NetworkIdentifier;
 use rosetta_core::objects::Currency;
 use rosetta_core::objects::ObjectMap;
