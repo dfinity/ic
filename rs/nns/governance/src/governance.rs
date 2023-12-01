@@ -384,6 +384,18 @@ impl ManageNeuron {
     }
 }
 
+impl Command {
+    fn allowed_when_resources_are_low(&self) -> bool {
+        match self {
+            // Only making proposals and registering votes are needed to pass proposals.
+            // Therefore we should disallow others when resources are low.
+            Command::RegisterVote(_) => true,
+            Command::MakeProposal(_) => true,
+            _ => false,
+        }
+    }
+}
+
 impl NnsFunction {
     /// Returns whether proposals where the action is such an NnsFunction should
     /// be allowed to be submitted when the heap growth potential is low.
@@ -6288,6 +6300,14 @@ impl Governance {
         caller: &PrincipalId,
         mgmt: &ManageNeuron,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
+        if !mgmt
+            .command
+            .as_ref()
+            .map(|command| command.allowed_when_resources_are_low())
+            .unwrap_or_default()
+        {
+            self.check_heap_can_grow()?;
+        }
         // We run claim or refresh before we check whether a neuron exists because it
         // may not in the case of the neuron being claimed
         if let Some(Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
