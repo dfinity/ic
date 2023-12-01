@@ -21,12 +21,16 @@ use ic_types::{
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+pub use rosetta_core::identifiers::BlockIdentifier;
 pub use rosetta_core::objects::Currency;
 use rosetta_core::objects::ObjectMap;
 pub use rosetta_core::request_types::NetworkRequest;
 pub use rosetta_core::response_types::Allow;
 pub use rosetta_core::response_types::NetworkOptionsResponse;
+pub use rosetta_core::response_types::NetworkStatusResponse;
 pub use rosetta_core::response_types::OperationStatus;
+pub use rosetta_core::response_types::Peer;
+pub use rosetta_core::response_types::SyncStatus;
 pub use rosetta_core::response_types::Version;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
@@ -193,24 +197,6 @@ impl Block {
             transactions,
             metadata: None,
         }
-    }
-}
-
-/// The block_identifier uniquely identifies a block in a particular network.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct BlockIdentifier {
-    /// This is also known as the block height.
-    #[serde(rename = "index")]
-    pub index: i64,
-
-    #[serde(rename = "hash")]
-    pub hash: String,
-}
-
-impl BlockIdentifier {
-    pub fn new(index: i64, hash: String) -> BlockIdentifier {
-        BlockIdentifier { index, hash }
     }
 }
 
@@ -1200,64 +1186,6 @@ impl NetworkIdentifier {
     }
 }
 
-/// NetworkStatusResponse contains basic information about the node's view of a
-/// blockchain network. It is assumed that any BlockIdentifier.Index less than
-/// or equal to CurrentBlockIdentifier.Index can be queried.  If a Rosetta
-/// implementation prunes historical state, it should populate the optional
-/// `oldest_block_identifier` field with the oldest block available to query. If
-/// this is not populated, it is assumed that the `genesis_block_identifier` is
-/// the oldest queryable block.  If a Rosetta implementation performs some
-/// pre-sync before it is possible to query blocks, sync_status should be
-/// populated so that clients can still monitor healthiness. Without this field,
-/// it may appear that the implementation is stuck syncing and needs to be
-/// terminated.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct NetworkStatusResponse {
-    #[serde(rename = "current_block_identifier")]
-    pub current_block_identifier: BlockIdentifier,
-
-    /// The timestamp of the block in milliseconds since the Unix Epoch. The
-    /// timestamp is stored in milliseconds because some blockchains produce
-    /// blocks more often than once a second.
-    #[serde(rename = "current_block_timestamp")]
-    pub current_block_timestamp: Timestamp,
-
-    #[serde(rename = "genesis_block_identifier")]
-    pub genesis_block_identifier: BlockIdentifier,
-
-    #[serde(rename = "oldest_block_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub oldest_block_identifier: Option<BlockIdentifier>,
-
-    #[serde(rename = "sync_status")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sync_status: Option<SyncStatus>,
-
-    #[serde(rename = "peers")]
-    pub peers: Vec<Peer>,
-}
-
-impl NetworkStatusResponse {
-    pub fn new(
-        current_block_identifier: BlockIdentifier,
-        current_block_timestamp: Timestamp,
-        genesis_block_identifier: BlockIdentifier,
-        oldest_block_identifier: Option<BlockIdentifier>,
-        sync_status: SyncStatus,
-        peers: Vec<Peer>,
-    ) -> NetworkStatusResponse {
-        NetworkStatusResponse {
-            current_block_identifier,
-            current_block_timestamp,
-            genesis_block_identifier,
-            oldest_block_identifier,
-            sync_status: Some(sync_status),
-            peers,
-        }
-    }
-}
-
 /// When fetching data by BlockIdentifier, it may be possible to only specify
 /// the index or hash. If neither property is specified, it is assumed that the
 /// client is making a request at the current block.
@@ -1266,7 +1194,7 @@ impl NetworkStatusResponse {
 pub struct PartialBlockIdentifier {
     #[serde(rename = "index")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<i64>,
+    pub index: Option<u64>,
 
     #[serde(rename = "hash")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1278,27 +1206,6 @@ impl PartialBlockIdentifier {
         PartialBlockIdentifier {
             index: None,
             hash: None,
-        }
-    }
-}
-
-/// A Peer is a representation of a node's peer.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Peer {
-    #[serde(rename = "peer_id")]
-    pub peer_id: String,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl Peer {
-    pub fn new(peer_id: String) -> Peer {
-        Peer {
-            peer_id,
-            metadata: None,
         }
     }
 }
@@ -1470,45 +1377,6 @@ impl SubAccountIdentifier {
         SubAccountIdentifier {
             address,
             metadata: None,
-        }
-    }
-}
-
-/// SyncStatus is used to provide additional context about an implementation's
-/// sync status. It is often used to indicate that an implementation is healthy
-/// when it cannot be queried  until some sync phase occurs.  If an
-/// implementation is immediately queryable, this model is often not populated.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct SyncStatus {
-    /// CurrentIndex is the index of the last synced block in the current stage.
-    #[serde(rename = "current_index")]
-    pub current_index: i64,
-
-    /// TargetIndex is the index of the block that the implementation is
-    /// attempting to sync to in the current stage.
-    #[serde(rename = "target_index")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub target_index: Option<i64>,
-
-    /// Stage is the phase of the sync process.
-    #[serde(rename = "stage")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stage: Option<String>,
-
-    /// Stage is the phase of the sync process.
-    #[serde(rename = "synced")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub synced: Option<bool>,
-}
-
-impl SyncStatus {
-    pub fn new(current_index: i64, synced: Option<bool>) -> SyncStatus {
-        SyncStatus {
-            current_index,
-            target_index: None,
-            stage: None,
-            synced,
         }
     }
 }

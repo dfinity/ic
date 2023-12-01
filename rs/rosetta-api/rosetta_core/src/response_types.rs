@@ -1,7 +1,9 @@
+use crate::identifiers::BlockIdentifier;
 use crate::identifiers::NetworkIdentifier;
 use crate::objects::Currency;
 use crate::objects::Error;
 use crate::objects::Object;
+use crate::objects::ObjectMap;
 use serde::{Deserialize, Serialize};
 
 /// A NetworkListResponse contains all NetworkIdentifiers that the node can
@@ -235,5 +237,127 @@ pub struct OperationStatus {
 impl OperationStatus {
     pub fn new(status: String, successful: bool) -> OperationStatus {
         OperationStatus { status, successful }
+    }
+}
+
+/// NetworkStatusResponse contains basic information about the node's view of a
+/// blockchain network. It is assumed that any BlockIdentifier.Index less than
+/// or equal to CurrentBlockIdentifier.Index can be queried.  If a Rosetta
+/// implementation prunes historical state, it should populate the optional
+/// `oldest_block_identifier` field with the oldest block available to query. If
+/// this is not populated, it is assumed that the `genesis_block_identifier` is
+/// the oldest queryable block.  If a Rosetta implementation performs some
+/// pre-sync before it is possible to query blocks, sync_status should be
+/// populated so that clients can still monitor healthiness. Without this field,
+/// it may appear that the implementation is stuck syncing and needs to be
+/// terminated.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct NetworkStatusResponse {
+    /// The block_identifier uniquely identifies a block in a particular network.
+    #[serde(rename = "current_block_identifier")]
+    pub current_block_identifier: BlockIdentifier,
+
+    /// The timestamp of the block in milliseconds since the Unix Epoch. The
+    /// timestamp is stored in milliseconds because some blockchains produce
+    /// blocks more often than once a second.
+    #[serde(rename = "current_block_timestamp")]
+    pub current_block_timestamp: u64,
+
+    /// The block_identifier uniquely identifies a block in a particular network.
+    #[serde(rename = "genesis_block_identifier")]
+    pub genesis_block_identifier: BlockIdentifier,
+
+    /// The block_identifier uniquely identifies a block in a particular network.
+    #[serde(rename = "oldest_block_identifier")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oldest_block_identifier: Option<BlockIdentifier>,
+
+    /// SyncStatus is used to provide additional context about an implementation's sync status. This object is often used by implementations to indicate healthiness when block data cannot be queried until some sync phase completes or cannot be determined by comparing the timestamp of the most recent block with the current time.
+    #[serde(rename = "sync_status")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_status: Option<SyncStatus>,
+
+    #[serde(rename = "peers")]
+    pub peers: Vec<Peer>,
+}
+
+impl NetworkStatusResponse {
+    pub fn new(
+        current_block_identifier: BlockIdentifier,
+        current_block_timestamp: u64,
+        genesis_block_identifier: BlockIdentifier,
+        oldest_block_identifier: Option<BlockIdentifier>,
+        sync_status: SyncStatus,
+        peers: Vec<Peer>,
+    ) -> NetworkStatusResponse {
+        NetworkStatusResponse {
+            current_block_identifier,
+            current_block_timestamp,
+            genesis_block_identifier,
+            oldest_block_identifier,
+            sync_status: Some(sync_status),
+            peers,
+        }
+    }
+}
+
+/// SyncStatus is used to provide additional context about an implementation's
+/// sync status. It is often used to indicate that an implementation is healthy
+/// when it cannot be queried  until some sync phase occurs.  If an
+/// implementation is immediately queryable, this model is often not populated.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct SyncStatus {
+    /// CurrentIndex is the index of the last synced block in the current stage. This is a separate field from current_block_identifier in NetworkStatusResponse because blocks with indices up to and including the current_index may not yet be queryable by the caller. To reiterate, all indices up to and including current_block_identifier in NetworkStatusResponse must be queryable via the /block endpoint (excluding indices less than oldest_block_identifier).
+    #[serde(rename = "current_index")]
+    pub current_index: i64,
+
+    /// TargetIndex is the index of the block that the implementation is
+    /// attempting to sync to in the current stage.
+    #[serde(rename = "target_index")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_index: Option<i64>,
+
+    /// Stage is the phase of the sync process.
+    #[serde(rename = "stage")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+
+    /// synced is a boolean that indicates if an implementation has synced up to the most recent block. If this field is not populated, the caller should rely on a traditional tip timestamp comparison to determine if an implementation is synced. This field is particularly useful for quiescent blockchains (blocks only produced when there are pending transactions). In these blockchains, the most recent block could have a timestamp far behind the current time but the node could be healthy and at tip.
+    #[serde(rename = "synced")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub synced: Option<bool>,
+}
+
+impl SyncStatus {
+    pub fn new(current_index: i64, synced: Option<bool>) -> SyncStatus {
+        SyncStatus {
+            current_index,
+            target_index: None,
+            stage: None,
+            synced,
+        }
+    }
+}
+
+/// A Peer is a representation of a node's peer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct Peer {
+    #[serde(rename = "peer_id")]
+    pub peer_id: String,
+
+    #[serde(rename = "metadata")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+impl Peer {
+    pub fn new(peer_id: String) -> Peer {
+        Peer {
+            peer_id,
+            metadata: None,
+        }
     }
 }

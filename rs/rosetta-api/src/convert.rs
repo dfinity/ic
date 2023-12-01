@@ -291,9 +291,7 @@ pub fn operations_to_requests(
 }
 
 pub fn block_id(block: &HashedBlock) -> Result<BlockIdentifier, ApiError> {
-    let idx = i64::try_from(block.index).map_err(|_| {
-        ApiError::internal_error("block index is too large to be converted from a u64 to an i64")
-    })?;
+    let idx = block.index;
     Ok(BlockIdentifier::new(idx, from_hash(&block.hash)))
 }
 

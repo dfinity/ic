@@ -49,3 +49,22 @@ impl SubNetworkIdentifier {
         }
     }
 }
+
+/// The block_identifier uniquely identifies a block in a particular network.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct BlockIdentifier {
+    /// This is also known as the block height.
+    #[serde(rename = "index")]
+    pub index: u64,
+
+    /// This should be normalized according to the case specified in the block_hash_case network options.
+    #[serde(rename = "hash")]
+    pub hash: String,
+}
+
+impl BlockIdentifier {
+    pub fn new(index: u64, hash: String) -> BlockIdentifier {
+        BlockIdentifier { index, hash }
+    }
+}

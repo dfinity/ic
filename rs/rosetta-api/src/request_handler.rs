@@ -26,6 +26,7 @@ use icp_ledger::{Block, BlockIndex};
 use rosetta_core::request_types::MetadataRequest;
 use rosetta_core::response_types::NetworkListResponse;
 use std::convert::{TryFrom, TryInto};
+use std::num::TryFromIntError;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -361,7 +362,12 @@ impl RosettaRequestHandler {
 
         Ok(NetworkStatusResponse::new(
             tip_id,
-            tip_timestamp,
+            tip_timestamp.0.try_into().map_err(|err: TryFromIntError| {
+                ApiError::InternalError(
+                    false,
+                    Details::from(format!("Cannot convert timestamp to u64: {}", err)),
+                )
+            })?,
             genesis_block_id,
             oldest_block_id,
             sync_status,
@@ -642,9 +648,6 @@ fn get_block(
         }) => {
             let hash: ic_ledger_hash_of::HashOf<ic_ledger_core::block::EncodedBlock> =
                 convert::to_hash(&block_hash)?;
-            if block_height < 0 {
-                return Err(ApiError::InvalidBlockId(false, Default::default()));
-            }
 
             let idx = block_height as usize;
             if !blocks.is_verified_by_idx(&(idx as u64))? {
@@ -661,9 +664,6 @@ fn get_block(
             index: Some(block_height),
             hash: None,
         }) => {
-            if block_height < 0 {
-                return Err(ApiError::InvalidBlockId(false, Default::default()));
-            }
             let idx = block_height as usize;
             if blocks.is_verified_by_idx(&(idx as u64))? {
                 Ok(blocks.get_hashed_block(&(idx as u64))?)

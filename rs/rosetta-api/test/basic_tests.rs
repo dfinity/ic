@@ -75,6 +75,9 @@ async fn smoke_test() {
                     .timestamp()
                     .into()
             )
+            .unwrap()
+            .0
+            .try_into()
             .unwrap(),
             block_id(scribe.blockchain.front().unwrap()).unwrap(),
             None,
@@ -251,7 +254,7 @@ async fn blocks_test() {
 
     // fetch by index
     let block_id = PartialBlockIdentifier {
-        index: Some(h as i64),
+        index: Some(h.try_into().unwrap()),
         hash: None,
     };
     let msg = BlockRequest::new(req_handler.network_id(), block_id);
@@ -272,8 +275,8 @@ async fn blocks_test() {
     let resp = req_handler.block(msg).await.unwrap();
     let block = resp.block.unwrap();
 
-    assert_eq!(block.block_identifier.index, h as i64);
-    assert_eq!(block.parent_block_identifier.index, h as i64 - 1);
+    assert_eq!(block.block_identifier.index as usize, h);
+    assert_eq!(block.parent_block_identifier.index as usize, h - 1);
     assert_eq!(
         to_hash(&block.parent_block_identifier.hash).unwrap(),
         scribe.blockchain[h - 1].hash
@@ -283,7 +286,7 @@ async fn blocks_test() {
     let trans = block.transactions[0].clone();
 
     let block_id = BlockIdentifier {
-        index: h as i64,
+        index: h.try_into().unwrap(),
         hash: from_hash(&scribe.blockchain[h].hash),
     };
     let msg = BlockTransactionRequest::new(
@@ -356,7 +359,7 @@ async fn blocks_test() {
 
     for block in scribe.blockchain.clone() {
         let partial_block_id = PartialBlockIdentifier {
-            index: Some(block.index as i64),
+            index: Some(block.index),
             hash: None,
         };
         let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
@@ -369,7 +372,7 @@ async fn blocks_test() {
         assert_eq!(resp.clone().block.unwrap().transactions, transactions);
         let transaction = resp.block.unwrap().transactions[0].clone();
         let block_id = BlockIdentifier {
-            index: block.index as i64,
+            index: block.index,
             hash: from_hash(&block.hash),
         };
         let msg = BlockTransactionRequest::new(
@@ -740,7 +743,7 @@ async fn load_from_store_test() {
     assert_eq!(resp.transactions.len() as u64, last_verified - 10 + 1);
     assert_eq!(resp.next_offset, None);
     assert_eq!(
-        resp.transactions.first().unwrap().block_identifier.index as u64,
+        resp.transactions.first().unwrap().block_identifier.index,
         last_verified
     );
     assert_eq!(resp.transactions.last().unwrap().block_identifier.index, 10);

@@ -6,6 +6,7 @@ use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
+use rosetta_core::identifiers::BlockIdentifier;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 
@@ -80,6 +81,15 @@ impl RosettaBlock {
         Ok(Block::decode(self.encoded_block.clone())
             .map_err(anyhow::Error::msg)?
             .transaction)
+    }
+}
+
+impl From<&RosettaBlock> for BlockIdentifier {
+    fn from(block: &RosettaBlock) -> Self {
+        Self {
+            index: block.index,
+            hash: hex::encode(&block.block_hash),
+        }
     }
 }
 

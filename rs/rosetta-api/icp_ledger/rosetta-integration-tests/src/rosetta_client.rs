@@ -32,7 +32,7 @@ impl RosettaClient {
         index: u64,
     ) -> Result<Option<Block>, reqwest::Error> {
         let block_identifier = PartialBlockIdentifier {
-            index: Some(index as i64),
+            index: Some(index),
             hash: None,
         };
         let request = BlockRequest {

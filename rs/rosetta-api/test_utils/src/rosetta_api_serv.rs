@@ -14,7 +14,6 @@ use reqwest::Client as HttpClient;
 use reqwest::StatusCode as HttpStatusCode;
 use rosetta_core::request_types::MetadataRequest;
 use rosetta_core::response_types::NetworkListResponse;
-use std::convert::TryFrom;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -448,7 +447,7 @@ impl RosettaApiHandle {
 
     pub async fn block_at(&self, idx: u64) -> Result<Result<BlockResponse, RosettaError>, String> {
         let block_id = PartialBlockIdentifier {
-            index: Some(i64::try_from(idx).unwrap()),
+            index: Some(idx),
             hash: None,
         };
         let req = BlockRequest::new(self.network_id(), block_id);
@@ -489,7 +488,7 @@ impl RosettaApiHandle {
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < TIMEOUT {
             if let Ok(Ok(resp)) = self.network_status().await {
-                if resp.current_block_identifier.index as u64 >= tip_idx {
+                if resp.current_block_identifier.index >= tip_idx {
                     return Ok(());
                 }
             }
