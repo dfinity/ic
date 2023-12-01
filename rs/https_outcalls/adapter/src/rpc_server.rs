@@ -31,7 +31,7 @@ const HEADERS_LIMIT: usize = 1_024;
 const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 
 /// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
-const USER_AGENT_ADPATER: &str = "ic/1.0";
+const USER_AGENT_ADAPTER: &str = "ic/1.0";
 
 /// implements RPC
 pub struct CanisterHttp {
@@ -388,7 +388,7 @@ fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
         .map(|h| h.0.as_str().to_lowercase())
         .any(|h| h == USER_AGENT.as_str().to_lowercase())
     {
-        header_map.insert(USER_AGENT, HeaderValue::from_static(USER_AGENT_ADPATER));
+        header_map.insert(USER_AGENT, HeaderValue::from_static(USER_AGENT_ADAPTER));
     }
 }
 
