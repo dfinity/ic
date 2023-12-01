@@ -11,7 +11,10 @@ use crate::secret_key_store::{
     SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
-use crate::vault::api::{IDkgCreateDealingVaultError, IDkgProtocolCspVault};
+use crate::vault::api::{
+    IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgProtocolCspVault,
+    IDkgTranscriptInternalBytes,
+};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -19,9 +22,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
     privately_verify_dealing, CommitmentOpening, CommitmentOpeningBytes, EccCurveType,
     IDkgComplaintInternal, IDkgComputeSecretSharesInternalError, IDkgDealingInternal,
-    IDkgTranscriptInternal, IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternal,
-    MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKey,
-    MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
+    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey,
+    MEGaPrivateKeyK256Bytes, MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment,
+    SecretShares, Seed,
 };
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
@@ -32,7 +35,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyDealingPrivateError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation,
+    BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
