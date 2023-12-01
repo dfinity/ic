@@ -235,7 +235,7 @@ impl StateSyncClient for FakeStateSync {
             })
     }
 
-    fn deliver_state_sync(&self, msg: StateSyncMessage, _peer_id: NodeId) {
+    fn deliver_state_sync(&self, msg: StateSyncMessage) {
         if !self.uses_global() {
             self.local_state.set_height(msg.height);
         } else {
@@ -409,9 +409,9 @@ impl StateSyncClient for SharableMockStateSync {
         self.chunk_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunk(id, chunk_id)
     }
-    fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
+    fn deliver_state_sync(&self, msg: StateSyncMessage) {
         self.deliver_state_sync_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().deliver_state_sync(msg, peer_id)
+        self.mock.lock().unwrap().deliver_state_sync(msg)
     }
 }
 

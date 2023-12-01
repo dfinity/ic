@@ -201,7 +201,7 @@ impl OngoingStateSync {
                 let state_sync_c = self.state_sync.clone();
                 let _ = self
                     .rt
-                    .spawn_blocking(move || state_sync_c.deliver_state_sync(msg, peer_id))
+                    .spawn_blocking(move || state_sync_c.deliver_state_sync(msg))
                     .await;
                 self.state_sync_finished = true;
             }

@@ -3,7 +3,6 @@ syntax = "proto3";
 package types.v1;
 
 import "google/protobuf/empty.proto";
-import "p2p/v1/state_sync_manager.proto";
 import "registry/subnet/v1/subnet.proto";
 import "types/v1/canister_http.proto";
 import "types/v1/ecdsa.proto";
@@ -55,9 +54,8 @@ message ArtifactId {
     DkgMessageId dkg_message = 10;
     types.v1.EcdsaArtifactId ecdsa = 6;
     string file_tree_sync = 7;
-    p2p.v1.StateSyncId state_sync = 9;
   }
-  reserved 4, 5;
+  reserved 4, 5, 9;
 }
 
 message DkgMessageId {

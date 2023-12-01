@@ -1,7 +1,6 @@
 use ic_types::{
     artifact::{StateSyncArtifactId, StateSyncMessage},
     chunkable::{ArtifactChunk, ChunkId, Chunkable},
-    NodeId,
 };
 
 pub trait StateSyncClient: Send + Sync {
@@ -23,6 +22,5 @@ pub trait StateSyncClient: Send + Sync {
     /// Get a specific chunk from the specified state.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk>;
     /// Finish a state sync by delivering the `StateSyncMessage` returned in `Chunkable::add_chunks`.
-    /// TODO: (NET-1469) In the future peer_id should be removed from this interface since it has no relevance.
-    fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId);
+    fn deliver_state_sync(&self, msg: StateSyncMessage);
 }
