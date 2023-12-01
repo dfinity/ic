@@ -533,7 +533,5 @@ pub fn encode_metrics(
 /// Whether we should store inactive neurons in stable memory, i.e. stop storing their secondary
 /// copies in heap memory.
 fn should_store_inactive_neurons_only_in_stable_memory() -> bool {
-    // We do not turn on the flag in cfg(test) because we want to still test the case where it is
-    // not turned on.
-    cfg! { feature = "test" }
+    true
 }
