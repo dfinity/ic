@@ -5,10 +5,11 @@ use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
     CspSecretKeyStoreContainsError, CspTlsKeygenError, CspTlsSignError,
-    IDkgCreateDealingVaultError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
-    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault,
-    PublicRandomSeedGenerator, PublicRandomSeedGeneratorError, SecretKeyStoreCspVault,
-    ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault, ValidatePksAndSksError,
+    IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgProtocolCspVault,
+    IDkgTranscriptInternalBytes, MultiSignatureCspVault, NiDkgCspVault, PksAndSksContainsErrors,
+    PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
+    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
+    ThresholdSignatureCspVault, ValidatePksAndSksError,
 };
 use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{
@@ -23,8 +24,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptInternalBytes, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -41,7 +41,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
+    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
     ExtendedDerivationPath,
 };
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};

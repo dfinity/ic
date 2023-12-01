@@ -1,13 +1,13 @@
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
-use crate::vault::api::ThresholdEcdsaSignerCspVault;
+use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::KeyId;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
-    IDkgTranscriptInternalBytes, ThresholdEcdsaSigShareInternal,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;

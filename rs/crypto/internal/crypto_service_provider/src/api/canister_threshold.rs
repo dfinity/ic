@@ -2,8 +2,8 @@
 
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternal, MEGaPublicKey,
-    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -14,7 +14,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
+    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
     ExtendedDerivationPath, ThresholdEcdsaSigInputs,
 };
 use ic_types::crypto::AlgorithmId;
@@ -24,7 +24,9 @@ use std::collections::{BTreeMap, BTreeSet};
 pub mod errors;
 pub use errors::*;
 
-use crate::vault::api::IDkgCreateDealingVaultError;
+use crate::vault::api::{
+    IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
+};
 
 /// Crypto service provider (CSP) client for interactive distributed key
 /// generation (IDkg) for canister threshold signatures.

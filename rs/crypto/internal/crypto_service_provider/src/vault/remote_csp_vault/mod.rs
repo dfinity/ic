@@ -3,14 +3,13 @@ use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
-    CspTlsKeygenError, CspTlsSignError, IDkgCreateDealingVaultError, PksAndSksContainsErrors,
-    ValidatePksAndSksError,
+    CspTlsKeygenError, CspTlsSignError, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
+    IDkgTranscriptInternalBytes, PksAndSksContainsErrors, ValidatePksAndSksError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptInternalBytes, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -26,7 +25,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
+    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
     ExtendedDerivationPath,
 };
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
