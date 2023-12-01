@@ -160,6 +160,7 @@ system_test(
     tags = [
         "experimental_system_test_colocation",
         "subnet_recovery",
+        "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
