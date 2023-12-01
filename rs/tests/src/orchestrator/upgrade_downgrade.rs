@@ -20,7 +20,10 @@ use crate::{
         test_env_api::*,
     },
     orchestrator::utils::{
-        rw_message::{can_read_msg, can_read_msg_with_retries, store_message},
+        rw_message::{
+            can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+            store_message,
+        },
         subnet_recovery::{enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test},
         upgrade::*,
     },
@@ -227,6 +230,15 @@ fn upgrade_downgrade_roundtrip(
     start_node(&logger, &faulty_node);
     assert_assigned_replica_version(&faulty_node, upgrade_version, env.logger());
 
+    // make sure that state sync is completed
+    cert_state_makes_progress_with_retries(
+        &faulty_node.get_public_url(),
+        faulty_node.effective_canister_id(),
+        &logger,
+        secs(600),
+        secs(10),
+    );
+
     assert!(can_read_msg(
         &logger,
         &faulty_node.get_public_url(),
@@ -268,6 +280,15 @@ fn upgrade_downgrade_roundtrip(
         &subnet_node,
         downgrade_version,
         &logger,
+    );
+
+    // make sure that state sync is completed
+    cert_state_makes_progress_with_retries(
+        &subnet_node.get_public_url(),
+        subnet_node.effective_canister_id(),
+        &logger,
+        secs(600),
+        secs(10),
     );
 
     let msg_3 = "hello world after upgrade!";
