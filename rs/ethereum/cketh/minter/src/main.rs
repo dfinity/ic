@@ -459,7 +459,15 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         let mut writer = MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
 
         fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+            const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
+
             read_state(|s| {
+                w.encode_gauge(
+                    "cketh_minter_stable_memory_bytes",
+                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    "Size of the stable memory allocated by this canister.",
+                )?;
+
                 w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
                     .value(
                         &[("canister", "cketh-minter")],
