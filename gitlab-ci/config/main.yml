@@ -145,15 +145,6 @@ bazel-build-fuzzers-archives:
       cd "${CI_PROJECT_DIR}"/bin
       ./build-all-fuzzers.sh --zip
 
-.bazel-rules-pipeline-no-merge-train:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
-
 .bazel-test-all:
   extends:
     - .build-k8s
@@ -284,7 +275,22 @@ bazel-system-test-hourly:
 bazel-system-test-hotfix:
   extends:
     - .bazel-test-all
-    - .rules-prod-hotfix-pipeline
+  #  If on the RC branch, whether "hotfix" is in the commit message or not,
+  #  always perform automatic execution of the prod hotfix tests. This means that, hotfix
+  #  tests are not only exercised on hotfix pipelines, but are also exercised on nightly
+  #  release qualification pipelines to ensure the hotfix tests are always working.
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hotfix"
 
@@ -338,7 +344,13 @@ bazel-test-all-rebuild:
 bazel-test-macos:
   extends:
     - .bazel-test-all
-    - .bazel-rules-pipeline-no-merge-train
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   tags:
     - macos
   variables:

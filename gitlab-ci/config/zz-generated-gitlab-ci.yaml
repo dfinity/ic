@@ -38,14 +38,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     SHELL_WRAPPER: "/usr/bin/time"
-".bazel-rules-pipeline-no-merge-train":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
 ".bazel-test-all":
   after_script:
     - |
@@ -369,16 +361,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     SHELL_WRAPPER: "/usr/bin/time"
-".cargo-rules":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" && $DISKIMG_BRANCH == ""
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "trigger"
-      when: manual
 ".ic-build-image":
   artifacts:
     expire_in: 3 days
@@ -418,31 +400,12 @@
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
-".rules-parent-pipeline":
-  rules:
-    - allow_failure: true
-      if: $CI_PARENT_PIPELINE_SOURCE == "trigger"
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
 ".rules-post-master":
   rules:
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       when: manual
     - if: $SCHEDULE_NAME == "run-all-master"
-".rules-prod-hotfix-pipeline":
-  rules:
-    - if: "$CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/"
-      when: always
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
-      when: manual
-    - allow_failure: true
-      if: "$CI_MERGE_REQUEST_TITLE =~ /(\\[rc\\]|hotfix)/i"
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
 ".rules-rollout-pipeline-auto":
   rules:
     - allow_failure: true
@@ -453,11 +416,6 @@
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "trigger"
-      when: manual
-".rules-rollout-pipeline-run-on-trigger":
-  rules:
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "trigger"
       when: manual
@@ -968,7 +926,6 @@ bazel-system-test-hotfix:
     when: always
   extends:
     - ".bazel-test-all"
-    - ".rules-prod-hotfix-pipeline"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:7deec1cbe9df4360bae3a8c648cce063b11c8241b811b6012fc906e53d356379
   needs: []
@@ -1609,7 +1566,6 @@ bazel-test-macos:
     when: always
   extends:
     - ".bazel-test-all"
-    - ".bazel-rules-pipeline-no-merge-train"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:7deec1cbe9df4360bae3a8c648cce063b11c8241b811b6012fc906e53d356379
   needs: []
