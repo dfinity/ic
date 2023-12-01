@@ -26,6 +26,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nervous_system/governance",
+    "//rs/nns/gtc_accounts",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/ledger_core",

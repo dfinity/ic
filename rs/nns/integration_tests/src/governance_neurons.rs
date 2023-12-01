@@ -9,6 +9,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance::pb::v1::{
+    governance::SeedAccounts,
     governance_error::ErrorType,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{
@@ -179,7 +180,7 @@ fn test_spawn_neuron() {
             None,
             "There is more than one neuron with the same id."
         );
-
+        nns_builder.governance.proto.seed_accounts = Some(SeedAccounts::default());
         let nns_init_payload = nns_builder.build();
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 

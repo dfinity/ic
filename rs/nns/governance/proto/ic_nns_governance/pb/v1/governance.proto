@@ -195,8 +195,12 @@ message NeuronInfo {
   uint64 stake_e8s = 8;
   // Timestamp when this neuron joined the community fund.
   optional uint64 joined_community_fund_timestamp_seconds = 9;
-  // If this neuron is a known neuron, this is data associated with it, including the neuron's name and (optionally) a description.
+  // If this neuron is a known neuron, this is data associated
+  // with it, including the neuron's name and (optionally) a description.
   optional KnownNeuronData known_neuron_data = 10;
+  // The type of the Neuron. See [NeuronType] for a description
+  // of the different states.
+  optional NeuronType neuron_type = 11;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -373,6 +377,25 @@ message Neuron {
 
   // If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
   optional KnownNeuronData known_neuron_data = 18;
+
+  // The type of the Neuron. See [NeuronType] for a description
+  // of the different states.
+  optional NeuronType neuron_type = 22;
+}
+
+// Types of a Neuron.
+enum NeuronType {
+  // Placeholder value due to the proto3 requirement for a zero default.
+  // This is an invalid type; neurons should not be assigned this value.
+  NEURON_TYPE_UNSPECIFIED = 0;
+
+  // Represents neurons initially created for Seed accounts in the
+  // Genesis Token Canister, or those descended from such neurons.
+  NEURON_TYPE_SEED = 1;
+
+  // Represents neurons initially created for Early Contributor Token (ECT)
+  // accounts in the Genesis Token Canister, or those descended from such neurons.
+  NEURON_TYPE_ECT = 2;
 }
 
 // The types of votes the Neuron can issue.
@@ -2023,6 +2046,16 @@ message Governance {
     uint64 dissolving_neurons_staked_maturity_e8s_equivalent_sum = 22;
     map<uint64, double> not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets = 23;
     uint64 not_dissolving_neurons_staked_maturity_e8s_equivalent_sum = 24;
+    uint64 seed_neuron_count = 26;
+    uint64 ect_neuron_count = 27;
+    uint64 total_staked_e8s_seed = 28;
+    uint64 total_staked_e8s_ect = 29;
+    uint64 total_staked_maturity_e8s_equivalent_seed = 30;
+    uint64 total_staked_maturity_e8s_equivalent_ect = 31;
+    map<uint64, double> dissolving_neurons_e8s_buckets_seed = 32;
+    map<uint64, double> dissolving_neurons_e8s_buckets_ect = 33;
+    map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
+    map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
   }
 
   GovernanceCachedMetrics metrics = 15;
@@ -2113,6 +2146,40 @@ message Governance {
   // A Structure used during upgrade to store the index of topics for neurons to their followers.
   // This is the inverse of what is stored in a Neuron (its followees).
   map<int32, FollowersMap> topic_followee_index = 22;
+
+  // The list of seed accounts existing in the Genesis Token Canister (GTC). These accounts are used during the
+  // tagging process of Seed Neurons in the NNS.
+  message SeedAccounts {
+    // An individual seed account existing in the Genesis Token Canister (GTC). This account is used during the
+    // tagging process of Seed Neurons in the NNS. The structure of the Seed Account allows for idempotent
+    // processing of all SeedAccounts in the NNS Governance Canister's heartbeat.
+    message SeedAccount {
+      // The id of the Account in the GTC.
+      string account_id = 1;
+
+      // The timestamp in seconds of when this SeedAccount began tagging of its Seed Neurons. If set to None,
+      // this account has yet to be processed. If set to Some, this account has began or finished processing.
+      optional uint64 tag_start_timestamp_seconds = 2;
+
+      // The timestamp in seconds of when this SeedAccount finished tagging of its Seed Neurons. If set to None,
+      // this account has yet to be processed, or has started processing. If set to Some, this account has
+      // finished processing.
+      optional uint64 tag_end_timestamp_seconds = 3;
+
+      // The count of errors encountered when processing this SeedAccount. This is used when considering whether
+      // this SeedAccount is eligible for tagging. If the error_count is too high, the tagging process will ignore
+      // it and continue on to the next SeedAccount.
+      uint64 error_count = 4;
+
+      // The type of the Neuron (either Seed or ECT). This type will be applied to all neurons found in
+      // the tagging process for this account.
+      NeuronType neuron_type = 5;
+    }
+
+    repeated SeedAccount accounts = 1;
+  }
+
+  optional SeedAccounts seed_accounts = 23;
 
   reserved 6;
   reserved "authz";

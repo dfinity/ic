@@ -33,7 +33,8 @@ use ic_nns_governance::{
             Followees,
         },
         proposal::{self},
-        Empty, GovernanceError, ManageNeuron, ManageNeuronResponse, NetworkEconomics, Topic,
+        Empty, GovernanceError, ManageNeuron, ManageNeuronResponse, NetworkEconomics, NeuronType,
+        Topic,
     },
 };
 use ic_sns_swap::pb::v1::governance_error::ErrorType::RequiresNotDissolving;
@@ -218,6 +219,15 @@ fn test_merge_neurons_fails() {
                 .set_creation_timestamp(10)
                 .set_kyc_verified(true)
                 .set_not_for_profit(true),
+        )
+        .add_neuron(
+            NeuronBuilder::new(22, icp_to_e8s(3_456), principal(123))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
+        )
+        .add_neuron(
+            NeuronBuilder::new(23, icp_to_e8s(3_456), principal(123))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
+                .set_neuron_type(NeuronType::Seed),
         )
         .create();
 
@@ -477,6 +487,17 @@ fn test_merge_neurons_fails() {
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == PreconditionFailed as i32 &&
            msg == "ManageNeuron following of source and target does not match");
+
+    // 19. Neurons with unequal NeuronType can't be merged
+    assert_matches!(
+        nns.merge_neurons(
+            &NeuronId { id: 22 },
+            &principal(123),
+            &NeuronId { id: 23 },
+        ),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == PreconditionFailed as i32 &&
+            msg == "Source neuron's neuron_type field does not match target");
 }
 
 #[test]
