@@ -81,9 +81,10 @@ use ic_nns_governance::{
         Governance as GovernanceProto, GovernanceChange, GovernanceError,
         IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
-        NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider,
-        OpenSnsTokenSwap, Proposal, ProposalChange, ProposalData, ProposalDataChange,
+        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics,
+        Neuron, NeuronChange, NeuronState, NeuronsFundData, NeuronsFundParticipation,
+        NeuronsFundSnapshot, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalChange,
+        ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
@@ -1431,6 +1432,48 @@ async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewar
     )
     .unwrap();
     assert_eq!(actual_node_provider_reward, expected_node_provider_reward);
+}
+
+#[tokio::test]
+async fn test_mint_monthly_node_provider_rewards() {
+    // Step 1: prepare the canister state and the Governance minting account.
+    let mut driver = fake::FakeDriver::default();
+    let node_provider = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(1)),
+        reward_account: None,
+    };
+    driver.create_account_with_funds(
+        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None),
+        1_000_000_000,
+    );
+    let mut gov = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            node_providers: vec![node_provider.clone()],
+            most_recent_monthly_node_provider_rewards: Some(MostRecentMonthlyNodeProviderRewards {
+                timestamp: 0,
+                rewards: vec![],
+            }),
+            ..Default::default()
+        },
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Run twice heartbeat so that minting rewards is reached.
+    gov.run_periodic_tasks().now_or_never();
+    gov.run_periodic_tasks().now_or_never();
+
+    // Step 3: Verify that node provider rewards are minted.
+    let most_recent_monthly_node_provider_rewards = gov
+        .heap_data
+        .most_recent_monthly_node_provider_rewards
+        .unwrap();
+    assert!(most_recent_monthly_node_provider_rewards.timestamp > 0);
+    assert_eq!(most_recent_monthly_node_provider_rewards.rewards.len(), 1);
+    let reward = most_recent_monthly_node_provider_rewards.rewards[0].clone();
+    assert_eq!(reward.node_provider.unwrap(), node_provider);
 }
 
 #[tokio::test]

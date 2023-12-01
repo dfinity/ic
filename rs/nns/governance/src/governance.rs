@@ -62,13 +62,11 @@ use dfn_core::println;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, SECONDS_PER_DAY,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
-use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -4064,9 +4062,13 @@ impl Governance {
         let _ = self.reward_node_providers(rewards.clone()).await;
         self.update_most_recent_monthly_node_provider_rewards(rewards);
 
-        let _unused_canister_status_response =
-            ic_nervous_system_clients::canister_status::canister_status::<DfnRuntime>(
-                CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
+        // Commit the minting status by making a canister call.
+        let _unused_canister_status_response = self
+            .env
+            .call_canister_method(
+                GOVERNANCE_CANISTER_ID,
+                "get_build_metadata",
+                Encode!().unwrap_or_default(),
             )
             .await;
 
@@ -7766,7 +7768,8 @@ impl Governance {
         let mut rewards = RewardNodeProviders::default();
 
         // Maps node providers to their rewards in XDR
-        let xdr_permyriad_rewards = self.get_node_providers_monthly_xdr_rewards().await?;
+        let xdr_permyriad_rewards: NodeProvidersMonthlyXdrRewards =
+            self.get_node_providers_monthly_xdr_rewards().await?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
         let avg_xdr_permyriad_per_icp = self
