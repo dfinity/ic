@@ -5,7 +5,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::certification::Verifier;
-use ic_interfaces::p2p::consensus::ChangeResult;
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
@@ -38,7 +38,7 @@ use ic_types::batch::{
     CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::{
-    artifact::{Priority, StateSyncArtifactId, UnvalidatedArtifactMutation},
+    artifact::{Priority, StateSyncArtifactId},
     chunkable::{ChunkId, ChunkableArtifact},
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -278,11 +278,7 @@ fn rejoining_node_doesnt_accumulate_states() {
 
                 let chunkable = dst_state_sync.create_chunkable_state(&id);
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))]);
-
+                dst_state_sync.deliver_state_sync(dst_msg);
                 assert_eq!(
                     src_state_manager.get_latest_state().take(),
                     dst_state_manager.get_latest_state().take()
@@ -1790,14 +1786,8 @@ fn delivers_state_adverts_once() {
             hash,
         };
 
-        let ChangeResult { adverts, .. } = state_sync.process_changes(Default::default());
-        assert_eq!(adverts.len(), 1);
-        assert_eq!(adverts[0].id, id);
-        assert!(state_sync.has_artifact(&id));
-
-        let ChangeResult { adverts, .. } = state_sync.process_changes(Default::default());
-        assert_eq!(adverts.len(), 0);
-        assert!(state_sync.has_artifact(&id));
+        assert!(state_sync.get_validated_by_identifier(&id).is_some());
+        assert!(state_sync.get_validated_by_identifier(&id).is_some());
     });
 }
 
@@ -1977,10 +1967,7 @@ fn can_do_simple_state_sync_transfer() {
             let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2176,10 +2163,7 @@ fn can_state_sync_from_cache() {
 
                 // Download chunk 1
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))]);
+                dst_state_sync.deliver_state_sync(dst_msg);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -2209,10 +2193,7 @@ fn can_state_sync_from_cache() {
                 let _res = pipe_meta_manifest(&msg, &mut *chunkable, false);
                 let dst_msg = pipe_manifest(&msg, &mut *chunkable, false).unwrap();
 
-                dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))]);
+                dst_state_sync.deliver_state_sync(dst_msg);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(3))
@@ -2310,10 +2291,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                 assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
 
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                    dst_msg,
-                    node_test_id(0),
-                ))]);
+                dst_state_sync.deliver_state_sync(dst_msg);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -2422,10 +2400,7 @@ fn state_sync_can_reject_invalid_chunks() {
 
             // Provide correct chunks to dst
             let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2476,10 +2451,7 @@ fn can_state_sync_into_existing_checkpoint() {
             );
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
@@ -2551,10 +2523,7 @@ fn can_group_small_files_in_state_sync() {
 
             let dst_msg = pipe_state_sync(msg, chunkable);
 
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2604,10 +2573,7 @@ fn can_commit_after_prev_state_is_gone() {
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             dst_state_manager.remove_states_below(height(2));
 
@@ -2662,10 +2628,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
             let (tip_height, tip) = dst_state_manager.take_tip();
@@ -2710,10 +2673,7 @@ fn can_state_sync_based_on_old_checkpoint() {
             let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -2899,10 +2859,7 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -2947,10 +2904,7 @@ fn can_commit_below_state_sync() {
             assert_eq!(tip_height, height(0));
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
             dst_state_manager.flush_tip_channel();
@@ -3001,10 +2955,7 @@ fn can_state_sync_below_commit() {
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(vec![UnvalidatedArtifactMutation::Insert((
-                dst_msg,
-                node_test_id(0),
-            ))]);
+            dst_state_sync.deliver_state_sync(dst_msg);
             assert_eq!(
                 dst_state_manager.checkpoint_heights(),
                 vec![height(1), height(2)]
