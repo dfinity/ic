@@ -7,7 +7,6 @@ import atexit
 import os
 import pathlib
 import sys
-import tempfile
 import time
 from typing import Callable, List, Optional, TypeVar
 
@@ -15,8 +14,6 @@ import configargparse
 import invoke
 
 CONTAINER_COMMAND = "sudo podman "
-SYS_DIR_PREFIX = "podman_sys_dir_"
-DEFAULT_TMP_PREFIX = "/tmp"
 
 ReturnType = TypeVar('ReturnType') # https://docs.python.org/3/library/typing.html#generics
 def retry(func: Callable[[], ReturnType], num_retries: int = 3 ) -> ReturnType:
@@ -176,19 +173,6 @@ def get_args():
         action="store_true"
     )
 
-    parser.add_argument(
-        "--temp-container-sys-dir",
-        help="Container engine (podman) will use the specified dir to store its system files. It will remove the files before exiting.",
-        type=str,
-    )
-
-    parser.add_argument(
-        "--tmpfs-container-sys-dir",
-        help="Create and mount a tmpfs to store its system files. It will be unmounted before exiting.",
-        default=False,
-        action="store_true"
-    )
-
     return parser.parse_args()
 
 
@@ -220,39 +204,6 @@ def build_and_export(container_cmd: str,
                                 destination_tar_filename)
 
 
-def make_tmpfs(base_dir: str = DEFAULT_TMP_PREFIX) -> str:
-    """
-    Mount a tmpfs volume in a subdirectory of the given `base_dir`.
-    Auto unmount at exit.
-
-    This seems to work across environments:
-      - CI - running K8S containerd runners
-      - gitlab-ci/container/container-run.sh
-
-    Returns the unique tmpfs mount point
-    """
-    unique_tag = os.getpid()
-    temp_sys_dir = f"/tmp/tmpfs_{unique_tag}"
-    tmpfs_name = f"tmpfs_{unique_tag}"
-    invoke.run(f"mkdir -p {temp_sys_dir}")
-    invoke.run(f"sudo mount -t tmpfs {tmpfs_name} {temp_sys_dir}")
-    atexit.register(lambda: invoke.run(f"sudo umount {temp_sys_dir}"))
-    return temp_sys_dir
-
-
-def process_temp_sys_dir_args(temp_container_sys_dir: Optional[str],
-                              tmpfs_container_sys_dir: Optional[str]) -> Optional[str]:
-    assert not (temp_container_sys_dir and tmpfs_container_sys_dir), \
-        "temp_container_sys_dir and tmpfs_container_sys_dir flags are mutually exclusive"
-    if temp_container_sys_dir:
-        return temp_container_sys_dir
-
-    if tmpfs_container_sys_dir:
-        return make_tmpfs()
-
-    return None
-
-
 def main():
     args = get_args()
 
@@ -263,7 +214,6 @@ def main():
     image_tag = generate_image_tag(destination_tar_filename)
     context_dir = args.context_dir
     no_cache = args.no_cache
-    temp_sys_dir = process_temp_sys_dir_args(args.temp_container_sys_dir, args.tmpfs_container_sys_dir)
 
     # Bazel can't read files. (: Resolve them here, instead.
     if args.file_build_args:
@@ -274,17 +224,8 @@ def main():
     def build_func(container_cmd):
         return build_and_export(container_cmd, build_args, context_dir, args.dockerfile, image_tag, no_cache, destination_tar_filename)
 
-    if temp_sys_dir:
-        container_sys_dir = tempfile.mkdtemp(prefix=SYS_DIR_PREFIX, dir=temp_sys_dir)
-        container_run_dir = tempfile.mkdtemp(prefix=SYS_DIR_PREFIX, dir=temp_sys_dir)
-        # podman runs via sudo, so the files have root uid/gid.
-        # Use sudo to remove the files.
-        atexit.register(lambda: invoke.run(f"sudo rm -rf {container_sys_dir} {container_run_dir}"))
-        container_cmd = f"{CONTAINER_COMMAND} --root {container_sys_dir} --runroot {container_run_dir} "
-        build_func(container_cmd)
-    else:
-        build_func(CONTAINER_COMMAND)
-        remove_image(image_tag)
+    build_func(CONTAINER_COMMAND)
+    remove_image(image_tag)
 
 
 if __name__ == "__main__":

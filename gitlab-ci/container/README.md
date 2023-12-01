@@ -74,7 +74,6 @@ sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=
   -u 1000:1001 -e HOSTUSER=john -e VERSION=8bb1564701c56424f77f16ef067599a1c1dc7c37 \
   --hostname=devenv-container --add-host devenv-container:127.0.0.1 \
   --entrypoint= --init --hostuser=john \
-  --mount type=tmpfs,destination=/var/sysimage \
   --mount type=bind,source=/home/john/dev/ic-ctr-run-usr-cfg,target=/ic \
   --mount type=bind,source=/home/john,target=/home/john \
   --mount type=bind,source=/home/john /.cache,target=/home/ubuntu/.cache \

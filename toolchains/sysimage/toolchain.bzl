@@ -25,8 +25,6 @@ def _build_container_filesystem_impl(ctx):
         inputs.append(ctx.file.dockerfile)
         args.extend(["--dockerfile", ctx.file.dockerfile.path])
 
-    # Dir mounts prepared in `gitlab-ci/container/container-run.sh`
-    args.extend(["--tmpfs-container-sys-dir"])
     args.extend(["--no-cache"])
 
     tool = ctx.attr._tool
