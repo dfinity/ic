@@ -1448,6 +1448,9 @@ pub struct Governance {
 
     /// For validating neuron related data.
     neuron_data_validator: NeuronDataValidator,
+
+    /// Scope guard for minting node provider rewards.
+    minting_node_provider_rewards: bool,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1600,6 +1603,7 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
+            minting_node_provider_rewards: false,
         }
     }
 
@@ -1623,6 +1627,7 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
+            minting_node_provider_rewards: false,
         }
     }
 
@@ -4058,9 +4063,20 @@ impl Governance {
 
     /// Mint and transfer monthly node provider rewards
     async fn mint_monthly_node_provider_rewards(&mut self) -> Result<(), GovernanceError> {
+        if self.minting_node_provider_rewards {
+            // There is an ongoing attempt to mint node provider rewards. Do nothing.
+            return Ok(());
+        }
+
+        // Acquire the lock before doing anything meaningful.
+        self.minting_node_provider_rewards = true;
+
         let rewards = self.get_monthly_node_provider_rewards().await?.rewards;
         let _ = self.reward_node_providers(rewards.clone()).await;
         self.update_most_recent_monthly_node_provider_rewards(rewards);
+
+        // Release the lock before commiting the result.
+        self.minting_node_provider_rewards = false;
 
         // Commit the minting status by making a canister call.
         let _unused_canister_status_response = self
