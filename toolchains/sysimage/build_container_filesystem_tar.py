@@ -3,17 +3,16 @@
 # Build a container image and extract the single flattened filesystem into a tar file.
 from __future__ import annotations
 
-import atexit
-import os
 import pathlib
 import sys
 import time
-from typing import Callable, List, Optional, TypeVar
+import uuid
+from typing import Callable, List, TypeVar
 
 import configargparse
 import invoke
 
-CONTAINER_COMMAND = "sudo podman "
+CONTAINER_COMMAND = "podman"
 
 ReturnType = TypeVar('ReturnType') # https://docs.python.org/3/library/typing.html#generics
 def retry(func: Callable[[], ReturnType], num_retries: int = 3 ) -> ReturnType:
@@ -37,8 +36,7 @@ def retry(func: Callable[[], ReturnType], num_retries: int = 3 ) -> ReturnType:
     return func()
 
 
-def build_container(container_cmd: str,
-                    build_args: List[str],
+def build_container(build_args: List[str],
                     context_dir: str,
                     dockerfile: str,
                     image_tag: str,
@@ -49,7 +47,7 @@ def build_container(container_cmd: str,
     build_arg_strings = [f"--build-arg {v}" for v in build_args]
     build_arg_strings_joined = ' '.join(build_arg_strings)
 
-    cmd = f"{container_cmd} "
+    cmd = f"{CONTAINER_COMMAND} "
     cmd += "build "
     cmd += f"-t {image_tag} "
     cmd += f"{build_arg_strings_joined} "
@@ -65,39 +63,34 @@ def build_container(container_cmd: str,
         cmd += f"-f {dockerfile} "
 
     # Context must go last
-    cmd += f"{context_dir} "
+    cmd += f"{context_dir}"
     print(cmd)
     def build_func():
-        invoke.run(cmd)   # Throws on failure
+        # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
+        # podman (no longer in latest version). bazel strips this out - add it
+        # back manually, for now.
+        invoke.run(cmd, env={'PATH':'/usr/bin'})   # Throws on failure
     retry(build_func)
     return image_tag
 
-def export_container_filesystem(container_cmd: str,
-                                image_tag: str,
+def export_container_filesystem(image_tag: str,
                                 destination_tar_filename: str):
     """
     Export the filesystem from an image.
     Creates container - but does not start it, avoiding timestamp and other determinism issues.
     """
     container_name = image_tag + "_container"
-    invoke.run(f"{container_cmd} create --name {container_name} {image_tag}")
-    invoke.run(f"{container_cmd} export -o {destination_tar_filename} {container_name}")
+    # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
+    # podman (no longer in latest version). bazel strips this out - add it back
+    # manually, for now.
+    invoke.run(f"{CONTAINER_COMMAND} create --name {container_name} {image_tag}", env={'PATH':'/usr/bin'})
+    invoke.run(f"{CONTAINER_COMMAND} export -o {destination_tar_filename} {container_name}", env={'PATH':'/usr/bin'})
     invoke.run("sync")
-    invoke.run(f"{container_cmd} container rm {container_name}")
-
-    # Using sudo w/ podman requires changing permissions on the output tar file (not the tar contents)
-    file_owner_uid = os.stat(destination_tar_filename).st_uid
-    root_uid = 0
-    assert file_owner_uid == root_uid, \
-        f"'{destination_tar_filename}' not owned by root. Remove this and the next code block."
-
-    current_user = invoke.run("whoami").stdout.strip()
-    invoke.run(f"sudo chown {current_user} {destination_tar_filename}")
-    invoke.run(f"sudo chgrp {current_user} {destination_tar_filename}")
+    invoke.run(f"{CONTAINER_COMMAND} container rm {container_name}", env={'PATH':'/usr/bin'})
 
 
 def remove_image(image_tag: str):
-    invoke.run(f"{CONTAINER_COMMAND} image rm -f {image_tag}")
+    invoke.run(f"{CONTAINER_COMMAND} image rm -f {image_tag}", env={'PATH':'/usr/bin'})
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -176,33 +169,6 @@ def get_args():
     return parser.parse_args()
 
 
-def generate_image_tag(base: str) -> str:
-    # Image tags need to be unique and follow a specific format
-    # See the (unwieldy) format spec:
-    # https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pulling-manifests
-    # Replace disallowed chars with dashes
-    return base.translate(str.maketrans({'/': '-', '.':'-', ':':'-'}))
-
-
-def build_and_export(container_cmd: str,
-                     build_args: List[str],
-                     context_dir: str,
-                     dockerfile: str,
-                     image_tag: str,
-                     no_cache: bool,
-                     destination_tar_filename: str) -> None:
-
-    build_container(container_cmd,
-                    build_args,
-                    context_dir,
-                    dockerfile,
-                    image_tag,
-                    no_cache)
-
-    export_container_filesystem(container_cmd,
-                                image_tag,
-                                destination_tar_filename)
-
 
 def main():
     args = get_args()
@@ -210,8 +176,7 @@ def main():
     destination_tar_filename = args.output
     build_args = list(args.build_args or [])
 
-    # Use the unique destination filename as the image tag.
-    image_tag = generate_image_tag(destination_tar_filename)
+    image_tag = str(uuid.uuid4()).split('-')[0]
     context_dir = args.context_dir
     no_cache = args.no_cache
 
@@ -220,11 +185,14 @@ def main():
         resolved_file_args = resolve_file_args(context_dir, args.file_build_args)
         build_args.extend(resolved_file_args)
 
-    # Avoid repetition of args. Bind to a function
-    def build_func(container_cmd):
-        return build_and_export(container_cmd, build_args, context_dir, args.dockerfile, image_tag, no_cache, destination_tar_filename)
+    build_container(build_args,
+                    context_dir,
+                    args.dockerfile,
+                    image_tag,
+                    no_cache)
 
-    build_func(CONTAINER_COMMAND)
+    export_container_filesystem(image_tag, destination_tar_filename)
+
     remove_image(image_tag)
 
 
