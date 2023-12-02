@@ -3056,7 +3056,7 @@ Version {
             ..Default::default()
         })
         .unwrap();
-        assert!(render.contains(&format!("Unset the fee collector account")));
+        assert!(render.contains("Unset the fee collector account"));
     }
 
     #[test]
