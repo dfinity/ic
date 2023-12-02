@@ -1,10 +1,7 @@
 use crate::mutations::node_management::common::get_node_operator_id_for_node;
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{
-        are_in_the_same_subnet, encode_or_panic, is_global_ipv4_address, is_valid_ipv4_address,
-        is_valid_ipv4_prefix_length, node_exists_or_panic,
-    },
+    mutations::common::{check_ipv4_config, encode_or_panic, node_exists_or_panic},
     registry::Registry,
 };
 
@@ -47,7 +44,7 @@ impl Registry {
         self.check_caller_is_node_operator(caller_id, node_id);
 
         // Ensure payload is valid
-        self.validate_update_node_ipv4_config_directly(&payload);
+        self.validate_update_node_ipv4_config_directly_payload(&payload);
 
         // Get existing node record and apply the changes
         let mut node_record = self.get_node_or_panic(node_id);
@@ -70,40 +67,19 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
     }
 
-    fn validate_update_node_ipv4_config_directly(
+    fn validate_update_node_ipv4_config_directly_payload(
         &self,
         payload: &UpdateNodeIPv4ConfigDirectlyPayload,
     ) {
         // Ensure the node exists
         node_exists_or_panic(self, payload.node_id);
 
-        // Ensure all are valid IPv4 addresses
-        if !is_valid_ipv4_address(&payload.ip_addr) {
-            panic!("The specified IPv4 address is not valid");
-        }
-
-        for ip_addr in &payload.gateway_ip_addrs {
-            if !is_valid_ipv4_address(ip_addr) {
-                panic!("The specified IPv4 address of the gateway is not valid");
-            }
-        }
-
-        // Ensure the prefix length is valid
-        if !is_valid_ipv4_prefix_length(payload.prefix_length) {
-            panic!("The prefix length is not valid");
-        }
-
-        // Ensure all IPv4 addresses are in the same subnet
-        let mut ip_addresses = payload.gateway_ip_addrs.clone();
-        ip_addresses.push(payload.ip_addr.clone());
-        if !are_in_the_same_subnet(ip_addresses, payload.prefix_length) {
-            panic!("The specified IPv4 addresses are not in the same subnet");
-        }
-
-        // Ensure the IPv4 address is a routable address
-        if !is_global_ipv4_address(&payload.ip_addr) {
-            panic!("The specified IPv4 address is not a global address");
-        }
+        // Ensure validity of IPv4 config
+        check_ipv4_config(
+            payload.ip_addr.to_string(),
+            payload.gateway_ip_addrs.clone(),
+            payload.prefix_length,
+        );
     }
 
     fn check_caller_is_node_operator(&self, caller_id: PrincipalId, node_id: NodeId) {

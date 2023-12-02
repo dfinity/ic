@@ -137,10 +137,6 @@ pub fn is_valid_ipv4_address(ipv4_address: &str) -> bool {
     Ipv4Addr::from_str(ipv4_address).is_ok()
 }
 
-pub fn is_valid_ipv4_prefix_length(prefix_length: u32) -> bool {
-    prefix_length <= 32
-}
-
 pub fn is_global_ipv4_address(ipv4_address: &str) -> bool {
     let ip_address = Ipv4Addr::from_str(ipv4_address).unwrap();
 
@@ -164,6 +160,11 @@ pub fn is_global_ipv4_address(ipv4_address: &str) -> bool {
         && !is_shared
         && !ip_address.is_unspecified()
 }
+
+pub fn is_valid_ipv4_prefix_length(prefix_length: u32) -> bool {
+    prefix_length <= 32
+}
+
 // Check that the given IPv4 addresses are all in the same subnet with respect to the subnet mask
 pub fn are_in_the_same_subnet(ipv4_addresses: Vec<String>, prefix_length: u32) -> bool {
     let bitmask: u32 = !0 << (32 - prefix_length);
@@ -187,6 +188,37 @@ fn extract_subnet_bytes(ipv4_address: &str, subnet_mask: Ipv4Addr) -> Vec<u8> {
         .zip(subnet_mask.octets().iter())
         .map(|(&a, &b)| a & b)
         .collect::<Vec<u8>>()
+}
+
+// Check that a given IPv4 config is valid
+pub fn check_ipv4_config(ip_addr: String, gateway_ip_addrs: Vec<String>, prefix_length: u32) {
+    // Ensure all are valid IPv4 addresses
+    if !is_valid_ipv4_address(&ip_addr) {
+        panic!("The specified IPv4 address is not valid");
+    }
+
+    for gateway_ip_addr in &gateway_ip_addrs {
+        if !is_valid_ipv4_address(gateway_ip_addr) {
+            panic!("The specified IPv4 address of the gateway is not valid");
+        }
+    }
+
+    // Ensure the prefix length is valid
+    if !is_valid_ipv4_prefix_length(prefix_length) {
+        panic!("The prefix length is not valid");
+    }
+
+    // Ensure all IPv4 addresses are in the same subnet
+    let mut all_ip_addrs = gateway_ip_addrs.clone();
+    all_ip_addrs.push(ip_addr.clone());
+    if !are_in_the_same_subnet(all_ip_addrs, prefix_length) {
+        panic!("The specified IPv4 addresses are not in the same subnet");
+    }
+
+    // Ensure the IPv4 address is a routable address
+    if !is_global_ipv4_address(&ip_addr) {
+        panic!("The specified IPv4 address is not a global address");
+    }
 }
 
 #[cfg(test)]

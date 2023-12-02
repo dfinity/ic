@@ -457,6 +457,7 @@ mod tests {
                 public_ipv4_config: None,
             }),
         );
+
         // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
         assert!(check_endpoint_invariants(&snapshot, true).is_ok());
 
