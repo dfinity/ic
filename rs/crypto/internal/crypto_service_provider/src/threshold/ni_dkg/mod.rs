@@ -5,7 +5,7 @@
 //! stateless crypto lib.
 
 use crate::api::{CspPublicKeyStore, NiDkgCspClient};
-use crate::key_id::KeyId;
+use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::vault::api::CspPublicKeyStoreError;
 use crate::Csp;
@@ -119,7 +119,13 @@ impl NiDkgCspClient for Csp {
         resharing_public_coefficients: CspPublicCoefficients,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
         debug!(self.logger; crypto.method_name => "create_resharing_dealing", crypto.dkg_epoch => epoch.get());
-        let key_id = KeyId::from(&resharing_public_coefficients);
+        let key_id = KeyId::try_from(&resharing_public_coefficients).map_err(|e| match e {
+            KeyIdInstantiationError::InvalidArguments(internal_error) => {
+                ni_dkg_errors::CspDkgCreateReshareDealingError::ReshareKeyIdComputationError(
+                    InternalError { internal_error },
+                )
+            }
+        })?;
         self.csp_vault.create_dealing(
             algorithm_id,
             dealer_resharing_index,
@@ -262,7 +268,19 @@ impl NiDkgCspClient for Csp {
         active_keys: BTreeSet<CspPublicCoefficients>,
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
-        let active_key_ids: BTreeSet<KeyId> = active_keys.iter().map(KeyId::from).collect();
+        let active_key_ids = active_keys
+            .iter()
+            .map(KeyId::try_from)
+            .collect::<Result<BTreeSet<KeyId>, KeyIdInstantiationError>>()
+            .map_err(
+                |key_id_instantiation_error| match key_id_instantiation_error {
+                    KeyIdInstantiationError::InvalidArguments(internal_error) => {
+                        ni_dkg_errors::CspDkgRetainThresholdKeysError::KeyIdInstantiationError(
+                            internal_error,
+                        )
+                    }
+                },
+            )?;
         self.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
     }

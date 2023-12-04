@@ -106,6 +106,9 @@ fn map_threshold_sign_error_or_panic(
         CspThresholdSignError::TransientInternalError { internal_error } => {
             ThresholdSignError::TransientInternalError { internal_error }
         }
+        CspThresholdSignError::KeyIdInstantiationError(internal_error) => {
+            ThresholdSignError::KeyIdInstantiationError(internal_error)
+        }
         // Panic, since these would be implementation errors:
         CspThresholdSignError::UnsupportedAlgorithm { .. }
         | CspThresholdSignError::MalformedSecretKey { .. }

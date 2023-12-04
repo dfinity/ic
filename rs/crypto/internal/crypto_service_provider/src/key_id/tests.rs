@@ -373,8 +373,8 @@ t7Ica9iKR8XXVy+W5eyW52YYPbGzXZ0FgxPcOMk3Tm2qx/zJJ7pkN+rJeIEgQHEj
 
         for test in &tests {
             assert_eq!(
-                KeyId::from(&test.input),
-                test.expected_key_id(),
+                KeyId::try_from(&test.input),
+                Ok(test.expected_key_id()),
                 "Parameterized test {:?} failed",
                 &test
             )

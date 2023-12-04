@@ -6,13 +6,11 @@ mod test_retention;
 use super::*;
 use crate::key_id::KeyId;
 use crate::threshold::tests::util::test_threshold_signatures;
-use crate::types as csp_types;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use crate::Csp;
 use assert_matches::assert_matches;
 use fixtures::*;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types_test_utils::ids::NODE_1;
 use proptest::prelude::*;
@@ -235,16 +233,17 @@ fn state_with_transcript(config: &MockDkgConfig, network: MockNetwork) -> StateW
 fn threshold_signatures_should_work(
     network: &MockNetwork,
     config: &MockDkgConfig,
-    transcript: &internal_types::CspNiDkgTranscript,
+    transcript: &CspNiDkgTranscript,
     rng: &mut ChaCha20Rng,
 ) {
-    let internal_types::CspNiDkgTranscript::Groth20_Bls12_381(transcript) = transcript;
+    let CspNiDkgTranscript::Groth20_Bls12_381(transcript) = transcript;
     let public_coefficients = PublicCoefficientsBytes {
         coefficients: transcript.public_coefficients.coefficients.clone(),
     };
-    let public_coefficients = csp_types::CspPublicCoefficients::Bls12_381(public_coefficients);
+    let public_coefficients = CspPublicCoefficients::Bls12_381(public_coefficients);
     let signatories: Vec<(&Csp, KeyId)> = {
-        let key_id = KeyId::from(&public_coefficients);
+        let key_id = KeyId::try_from(&public_coefficients)
+            .expect("error computing KeyId from public coefficients");
         config
             .receivers
             .get()

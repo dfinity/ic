@@ -269,10 +269,14 @@ pub trait NiDkgCspClient {
     /// * the receiver indices are not 0..num_receivers-1 inclusive.
     ///   (`MisnumberedReceiverError`)
     /// * one of the receiver keys is invalid. (`MalformedFsPublicKeyError`)
+    /// * the key ID of the secret key to be reshared could not be computed.
+    ///   (`ReshareKeyIdComputationError`)
     /// * the key to be reshared is not present or malformed.
-    ///   (`ReshareKeyNotFoundError`, `MalformedReshareSecretKeyError`)
+    ///   (`ReshareKeyNotInSecretKeyStoreError`, `MalformedReshareSecretKeyError`)
     /// * the number of public coefficients or receiver keys is unsupported by
     ///   this machine. (`SizeError`)
+    /// * a transient error occurred while computing the resharing dealing (e.g., there was a
+    ///   problem communicating with the remote CSP vault). (`TransientInternalError`)
     #[allow(clippy::too_many_arguments)]
     fn create_resharing_dealing(
         &self,
@@ -514,6 +518,15 @@ pub trait NiDkgCspClient {
     /// There is no guarantee that there are secret keys matching all the listed
     /// public coefficients.  If this method is requested to retain a key that
     /// is not in the secret key store, that key will be ignored.
+    ///
+    /// # Arguments
+    /// * `active_keys` contains the public coefficients of the active keys that need to be kept.
+    ///
+    /// # Errors
+    /// This method SHALL return an error if:
+    /// * a key ID could not be computed from the public coefficients. (`KeyIdInstantiationError`)
+    /// * a transient internal error occurred while retaining the threshold keys, e.g., while
+    ///   communicating with the remote CSP vault. (`TransientInternalError`)
     fn retain_threshold_keys_if_present(
         &self,
         active_keys: BTreeSet<CspPublicCoefficients>,
