@@ -1,4 +1,5 @@
 use crossbeam_channel::Receiver;
+use multiservice_discovery_shared::builders::exec_log_config_structure::ExecLogConfigBuilderImpl;
 use multiservice_discovery_shared::builders::script_log_config_structure::ScriptLogConfigBuilderImpl;
 use multiservice_discovery_shared::filters::ic_name_regex_filter::IcNameRegexFilter;
 use multiservice_discovery_shared::filters::node_regex_id_filter::NodeIDRegexFilter;
@@ -158,6 +159,20 @@ fn generate_config(cli: &CliArgs, targets: Vec<TargetDto>, logger: Logger) {
                     port: subtype.port,
                     bn_port: subtype.bn_port,
                     restart_on_exit: *restart_on_exit,
+                }
+                .build(targets_with_job),
+                Subtype::Exec {
+                    script_path,
+                    cursors_folder,
+                    restart_on_exit,
+                    include_stderr,
+                } => ExecLogConfigBuilderImpl {
+                    bn_port: subtype.bn_port,
+                    port: subtype.port,
+                    script_path: script_path.to_string(),
+                    cursor_folder: cursors_folder.to_string(),
+                    restart_on_exit: *restart_on_exit,
+                    include_stderr: *include_stderr,
                 }
                 .build(targets_with_job),
             },
