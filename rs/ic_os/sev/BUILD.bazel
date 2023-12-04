@@ -17,6 +17,7 @@ rust_library(
         ],
     }) + [
         "//rs/interfaces/registry",
+        "//rs/monitoring/logger",
         "//rs/registry/helpers",
         "//rs/registry/subnet_features",
         "//rs/types/base_types",
@@ -25,6 +26,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:sha2",
+        "@crate_index//:slog",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
     ],

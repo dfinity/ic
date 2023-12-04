@@ -281,8 +281,13 @@ pub fn add_transport_to_sim<F>(
 
     let node_crypto =
         crypto.unwrap_or_else(|| temp_crypto_component_with_tls_keys(&registry_handler, peer));
-    let sev_handshake =
-        sev.unwrap_or_else(|| Arc::new(Sev::new(peer, registry_handler.registry_client.clone())));
+    let sev_handshake = sev.unwrap_or_else(|| {
+        Arc::new(Sev::new(
+            peer,
+            registry_handler.registry_client.clone(),
+            log.clone(),
+        ))
+    });
     registry_handler.registry_client.update_to_latest_version();
 
     sim.host(peer.to_string(), move || {

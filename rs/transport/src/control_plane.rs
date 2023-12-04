@@ -225,8 +225,8 @@ impl TransportImpl {
                                         .expect("Can't panic on infallible");
                                     peer_state.update(ConnectionState::Connected(connected_state));
                             }
-                            // If there is an error completing the H2 handshake, we 
-                            // will retry on a future iteration of the tcp.accept loop 
+                            // If there is an error completing the H2 handshake, we
+                            // will retry on a future iteration of the tcp.accept loop
                         });
                     }
                     Err(err) => {
