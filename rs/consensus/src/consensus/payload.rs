@@ -3,7 +3,7 @@ use crate::consensus::metrics::{
 };
 use ic_consensus_utils::pool_reader::filter_past_payloads;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload},
+    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     consensus::PayloadValidationError,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
@@ -11,7 +11,7 @@ use ic_interfaces::{
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_types::{
-    batch::{BatchPayload, IngressPayload, SelfValidatingPayload, ValidationContext, XNetPayload},
+    batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
     CountBytes, Height, NumBytes, Time,
@@ -60,7 +60,7 @@ impl BatchPayloadSectionBuilder {
         &self,
         payload: &mut BatchPayload,
         height: Height,
-        validation_context: &ValidationContext,
+        proposal_context: &ProposalContext,
         max_size: NumBytes,
         past_payloads: &[(Height, Time, Payload)],
         metrics: &PayloadBuilderMetrics,
@@ -68,15 +68,21 @@ impl BatchPayloadSectionBuilder {
     ) -> NumBytes {
         match self {
             Self::Ingress(builder) => {
-                let past_payloads = builder.filter_past_payloads(past_payloads, validation_context);
-                let ingress =
-                    builder.get_ingress_payload(&past_payloads, validation_context, max_size);
+                let past_payloads = builder
+                    .filter_past_payloads(past_payloads, proposal_context.validation_context);
+                let ingress = builder.get_ingress_payload(
+                    &past_payloads,
+                    proposal_context.validation_context,
+                    max_size,
+                );
                 let size = NumBytes::new(ingress.count_bytes() as u64);
 
                 // Validate the ingress payload as a safety measure
-                if let Err(err) =
-                    builder.validate_ingress_payload(&ingress, &past_payloads, validation_context)
-                {
+                if let Err(err) = builder.validate_ingress_payload(
+                    &ingress,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                ) {
                     error!(
                         logger,
                         "Ingress payload did not pass validation, this is a bug, {:?} @{}",
@@ -117,7 +123,7 @@ impl BatchPayloadSectionBuilder {
 
                 let past_payloads = builder.filter_past_payloads(past_payloads);
                 let (xnet, size) = builder.get_xnet_payload(
-                    validation_context,
+                    proposal_context.validation_context,
                     &past_payloads,
                     max_size * (100 - MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT) / 100,
                 );
@@ -153,7 +159,7 @@ impl BatchPayloadSectionBuilder {
             Self::SelfValidating(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
                 let (self_validating, size) = builder.get_self_validating_payload(
-                    validation_context,
+                    proposal_context.validation_context,
                     &past_payloads,
                     max_size,
                 );
@@ -161,7 +167,7 @@ impl BatchPayloadSectionBuilder {
                 // As a safety measure, the payload is validated, before submitting it.
                 if let Err(e) = builder.validate_self_validating_payload(
                     &self_validating,
-                    validation_context,
+                    proposal_context.validation_context,
                     &past_payloads,
                 ) {
                     error!(logger, "Created an invalid SelfValidatingPayload: {:?}", e);
@@ -195,16 +201,20 @@ impl BatchPayloadSectionBuilder {
                         }
                     });
 
-                let canister_http =
-                    builder.build_payload(height, max_size, &past_payloads, validation_context);
+                let canister_http = builder.build_payload(
+                    height,
+                    max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                );
                 let size = NumBytes::new(canister_http.len() as u64);
 
                 // Check validation as safety measure
                 match builder.validate_payload(
                     height,
+                    proposal_context,
                     &canister_http,
                     &past_payloads,
-                    validation_context,
                 ) {
                     Ok(()) => {
                         payload.canister_http = canister_http;
@@ -234,16 +244,20 @@ impl BatchPayloadSectionBuilder {
                         }
                     });
 
-                let query_stats =
-                    builder.build_payload(height, max_size, &past_payloads, validation_context);
+                let query_stats = builder.build_payload(
+                    height,
+                    max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                );
                 let size = NumBytes::new(query_stats.len() as u64);
 
                 // Check validation as safety measure
                 match builder.validate_payload(
                     height,
+                    proposal_context,
                     &query_stats,
                     &past_payloads,
-                    validation_context,
                 ) {
                     Ok(()) => {
                         payload.query_stats = query_stats;
@@ -280,16 +294,17 @@ impl BatchPayloadSectionBuilder {
         &self,
         height: Height,
         payload: &BatchPayload,
-        validation_context: &ValidationContext,
+        proposal_context: &ProposalContext,
         past_payloads: &[(Height, Time, Payload)],
     ) -> Result<NumBytes, PayloadValidationError> {
         match self {
             Self::Ingress(builder) => {
-                let past_payloads = builder.filter_past_payloads(past_payloads, validation_context);
+                let past_payloads = builder
+                    .filter_past_payloads(past_payloads, proposal_context.validation_context);
                 builder.validate_ingress_payload(
                     &payload.ingress,
                     &past_payloads,
-                    validation_context,
+                    proposal_context.validation_context,
                 )?;
                 Ok(NumBytes::new(payload.ingress.count_bytes() as u64))
             }
@@ -297,7 +312,7 @@ impl BatchPayloadSectionBuilder {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
                 Ok(builder.validate_xnet_payload(
                     &payload.xnet,
-                    validation_context,
+                    proposal_context.validation_context,
                     &past_payloads,
                 )?)
             }
@@ -305,7 +320,7 @@ impl BatchPayloadSectionBuilder {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
                 Ok(builder.validate_self_validating_payload(
                     &payload.self_validating,
-                    validation_context,
+                    proposal_context.validation_context,
                     &past_payloads,
                 )?)
             }
@@ -321,9 +336,9 @@ impl BatchPayloadSectionBuilder {
 
                 builder.validate_payload(
                     height,
+                    proposal_context,
                     &payload.canister_http,
                     &past_payloads,
-                    validation_context,
                 )?;
 
                 Ok(NumBytes::new(payload.canister_http.len() as u64))
@@ -340,9 +355,9 @@ impl BatchPayloadSectionBuilder {
 
                 builder.validate_payload(
                     height,
+                    proposal_context,
                     &payload.query_stats,
                     &past_payloads,
-                    validation_context,
                 )?;
 
                 Ok(NumBytes::new(payload.query_stats.len() as u64))
@@ -357,8 +372,8 @@ mod tests {
     use ic_interfaces::messaging::XNetPayloadValidationError;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::mock_time;
-    use ic_types::RegistryVersion;
+    use ic_test_utilities::{mock_time, types::ids::node_test_id};
+    use ic_types::{batch::ValidationContext, RegistryVersion};
 
     struct TestXNetPayloadBuilder {
         return_size: u64,
@@ -396,6 +411,11 @@ mod tests {
             certified_height: Height::new(0),
             time: mock_time(),
         };
+        let proposal_context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &validation_context,
+        };
+
         let metrics = PayloadBuilderMetrics::new(MetricsRegistry::default());
         let mut payload = BatchPayload::default();
 
@@ -409,7 +429,7 @@ mod tests {
         payload_builder.build_payload(
             &mut payload,
             Height::new(1),
-            &validation_context,
+            &proposal_context,
             NumBytes::new(4 * 1024 * 1024),
             &[],
             &metrics,
@@ -427,7 +447,7 @@ mod tests {
         payload_builder.build_payload(
             &mut payload,
             Height::new(1),
-            &validation_context,
+            &proposal_context,
             NumBytes::new(20_000),
             &[],
             &metrics,

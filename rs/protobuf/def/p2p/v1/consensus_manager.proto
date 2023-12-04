@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package p2p.v1;
+
+message AdvertUpdate {
+  uint64 commit_id = 1;
+  uint64 slot_id = 2;
+  oneof update {
+    bytes artifact = 3;
+    Advert advert = 4;
+  }
+}
+
+message Advert {
+  bytes id = 1;
+  bytes attribute = 2;
+}

@@ -3,8 +3,11 @@ pub mod int_map;
 mod page_allocator;
 mod storage;
 
+use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_config::flag_status::FlagStatus;
+use ic_metrics::buckets::decimal_buckets;
+use ic_metrics::MetricsRegistry;
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_utils::{deterministic_operations::deterministic_copy_from_slice, fs::write_all_vectored};
@@ -12,13 +15,17 @@ pub use page_allocator::{
     allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
     PageDeltaSerialization, PageSerialization,
 };
-use storage::Storage;
-pub use storage::StorageSerialization;
+use storage::{OverlayFile, OverlayVersion, Storage};
+pub use storage::{
+    OverlayFileSerialization, OverlayIndicesSerialization, StorageSerialization,
+    MAX_NUMBER_OF_OVERLAYS,
+};
 
 use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
 use int_map::{Bounds, IntMap};
 use libc::off_t;
 use page_allocator::Page;
+use prometheus::{HistogramVec, IntCounter, IntCounterVec};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -29,6 +36,62 @@ use std::sync::Arc;
 
 // When persisting data we expand dirty pages to an aligned bucket of given size.
 const WRITE_BUCKET_PAGES: u64 = 16;
+
+const LABEL_OP: &str = "op";
+const LABEL_TYPE: &str = "type";
+const LABEL_OP_FLUSH: &str = "flush";
+const LABEL_OP_MERGE: &str = "merge";
+const LABEL_TYPE_PAGE_DATA: &str = "data";
+const LABEL_TYPE_INDEX: &str = "index";
+
+#[derive(Clone)]
+pub struct StorageMetrics {
+    /// How many bytes are written as part of storage operations, broken down by data vs index and merge vs flush.
+    write_bytes: IntCounterVec,
+    /// Timings of how long it takes to write overlay files.
+    write_duration: HistogramVec,
+    /// Number of overlays not written because they would have been empty.
+    empty_delta_writes: IntCounter,
+}
+
+impl StorageMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        let write_bytes = metrics_registry.int_counter_vec(
+            "storage_layer_write_bytes",
+            "Number of bytes written to disk, broken down by data vs index and merge vs flush.",
+            &[LABEL_OP, LABEL_TYPE],
+        );
+
+        for op in &[LABEL_OP_FLUSH, LABEL_OP_MERGE] {
+            for tp in &[LABEL_TYPE_PAGE_DATA, LABEL_TYPE_INDEX] {
+                write_bytes.with_label_values(&[*op, *tp]);
+            }
+        }
+
+        let write_duration = metrics_registry.histogram_vec(
+            "storage_layer_write_duration_seconds",
+            "Duration of write operation ('flush', 'merge').",
+            // 100µs, 200µs, 500µs, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 100s, 200s, 500s
+            decimal_buckets(-4, 2),
+            &[LABEL_OP],
+        );
+
+        for tp in &[LABEL_OP_FLUSH, LABEL_OP_MERGE] {
+            write_duration.with_label_values(&[*tp]);
+        }
+
+        let empty_delta_writes = metrics_registry.int_counter(
+            "storage_layer_empty_delta_writes",
+            "The number of PageMaps that did not receive any deltas since the last write attempt.",
+        );
+
+        Self {
+            write_bytes,
+            write_duration,
+            empty_delta_writes,
+        }
+    }
+}
 
 struct WriteBuffer<'a> {
     content: Vec<&'a [u8]>,
@@ -69,7 +132,7 @@ impl<'a> WriteBuffer<'a> {
 /// operation. This allows us to simplify canister state management: we can
 /// simply have a copy of the whole PageMap in every canister snapshot.
 #[derive(Clone, Default, Debug)]
-struct PageDelta(IntMap<Page>);
+pub(crate) struct PageDelta(IntMap<Page>);
 
 impl PageDelta {
     /// Gets content of the page at the specified index.
@@ -115,6 +178,11 @@ impl PageDelta {
     fn max_page_index(&self) -> Option<PageIndex> {
         self.0.max_key().map(PageIndex::from)
     }
+
+    /// Number of pages in the PageDelta.
+    fn num_pages(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl<I> From<I> for PageDelta
@@ -147,8 +215,16 @@ pub enum PersistenceError {
         file_size: usize,
         page_size: usize,
     },
+    /// Overlay data is broken.
+    InvalidOverlay { path: String, message: String },
     /// (Slice) size is not equal to page size.
     BadPageSize { expected: usize, actual: usize },
+    /// Some overlay file has a larger version number than the replica supports
+    VersionMismatch {
+        path: String,
+        file_version: u32,
+        supported: OverlayVersion,
+    },
 }
 
 impl PersistenceError {
@@ -189,10 +265,22 @@ impl std::fmt::Display for PersistenceError {
                 "Size of heap file {} is {}, which is not a multiple of the page size {}",
                 path, file_size, page_size
             ),
+            PersistenceError::InvalidOverlay { path, message } => {
+                write!(f, "Overlay file {} is broken: {}", path, message)
+            }
             PersistenceError::BadPageSize { expected, actual } => write!(
                 f,
                 "Bad slice size: expected {}, actual {}",
                 expected, actual
+            ),
+            PersistenceError::VersionMismatch {
+                path,
+                file_version,
+                supported,
+            } => write!(
+                f,
+                "Unsupported overlay version for {}: file version {}, max supported {:?}",
+                path, file_version, supported,
             ),
         }
     }
@@ -413,25 +501,45 @@ impl PageMap {
 
     /// Persists the heap delta contained in this page map to the specified
     /// destination.
-    pub fn persist_delta(&self, dst: PersistDestination) -> Result<(), PersistenceError> {
+    pub fn persist_delta(
+        &self,
+        dst: PersistDestination,
+        metrics: &StorageMetrics,
+    ) -> Result<(), PersistenceError> {
         match dst {
             PersistDestination::BaseFile(dst) => self.persist_to_file(&self.page_delta, &dst),
-            PersistDestination::OverlayFile(_dst) => {
-                //TODO (IC-1306)
-                unimplemented!();
+            PersistDestination::OverlayFile(dst) => {
+                self.persist_to_overlay(&self.page_delta, &dst, metrics)
             }
         }
     }
 
     /// Persists the unflushed delta contained in this page map to the specified
     /// destination.
-    pub fn persist_unflushed_delta(&self, dst: PersistDestination) -> Result<(), PersistenceError> {
+    pub fn persist_unflushed_delta(
+        &self,
+        dst: PersistDestination,
+        metrics: &StorageMetrics,
+    ) -> Result<(), PersistenceError> {
         match dst {
             PersistDestination::BaseFile(dst) => self.persist_to_file(&self.unflushed_delta, &dst),
-            PersistDestination::OverlayFile(_dst) => {
-                //TODO (IC-1306)
-                unimplemented!();
+            PersistDestination::OverlayFile(dst) => {
+                self.persist_to_overlay(&self.unflushed_delta, &dst, metrics)
             }
+        }
+    }
+
+    fn persist_to_overlay(
+        &self,
+        page_delta: &PageDelta,
+        dst: &Path,
+        metrics: &StorageMetrics,
+    ) -> Result<(), PersistenceError> {
+        if !page_delta.is_empty() {
+            OverlayFile::write(page_delta, dst, metrics)
+        } else {
+            metrics.empty_delta_writes.inc();
+            Ok(())
         }
     }
 
@@ -460,7 +568,7 @@ impl PageMap {
 
     /// Returns a sequence of instructions on how to prepare a memory region. It always returns instructions for at least `min_range`,
     /// but the range can be as large as `max_range`, as long as there are no more than `target_complexity` instructions.
-    /// Note that `target_complexity` is only a guide. The result can have more instructions if they are contained in `min_range`, or more
+    /// Note that `target_complexity` is only a guide. The result can have more instructions if they are contained in `min_range`, or fewer
     /// if there are not enough instructions to fill `max_range`.
     /// Assumptions:
     ///       * `min_range` ⊆ `max_range`
@@ -478,7 +586,7 @@ impl PageMap {
     ) -> MemoryInstructions {
         debug_assert!(min_range.start >= max_range.start && min_range.end <= max_range.end);
 
-        let mut instructions = Vec::new();
+        let mut delta_instructions = Vec::new();
 
         // Grow result_range to the right.
         // If `include` is false, stop just short of the next delta page, otherwise include it into instructions.
@@ -543,56 +651,71 @@ impl PageMap {
         while result_range != min_range {
             grow_right(
                 &self.page_delta,
-                &mut instructions,
+                &mut delta_instructions,
                 &mut result_range,
-                &min_range, // Only grow to min_range in the first step
+                &min_range, // Only grow to min_range in the first step.
                 true,
             );
         }
 
-        // Extend range up to max_range by growing right first
-        while instructions.len() < target_complexity && result_range.end < max_range.end {
+        // Extend range up to `max_range` by growing right first.
+        while delta_instructions.len() < target_complexity && result_range.end < max_range.end {
             grow_right(
                 &self.page_delta,
-                &mut instructions,
+                &mut delta_instructions,
                 &mut result_range,
                 &max_range,
                 true,
             );
         }
 
-        // Extend by growing left
-        while instructions.len() < target_complexity && result_range.start > max_range.start {
+        // Extend by growing left.
+        while delta_instructions.len() < target_complexity && result_range.start > max_range.start {
             grow_left(
                 &self.page_delta,
-                &mut instructions,
+                &mut delta_instructions,
                 &mut result_range,
                 &max_range,
                 true,
             );
         }
 
-        // Grow result_range to the edge of the next deltas, but do not include them
+        // Grow `result_range` to the edge of the next deltas, but do not include them.
         grow_left(
             &self.page_delta,
-            &mut instructions,
+            &mut delta_instructions,
             &mut result_range,
             &max_range,
             false,
         );
         grow_right(
             &self.page_delta,
-            &mut instructions,
+            &mut delta_instructions,
             &mut result_range,
             &max_range,
             false,
         );
 
-        //TODO (IC-1306): Memory instructions from overlays
+        let mut filter = BitVec::from_elem(
+            (result_range.end.get() - result_range.start.get()) as usize,
+            false,
+        );
+        for (delta, _) in &delta_instructions {
+            filter.set(
+                (delta.start.get() - result_range.start.get()) as usize,
+                true,
+            );
+        }
+
+        let mut storage_instructions = self
+            .storage
+            .get_memory_instructions(result_range.clone(), &mut filter)
+            .instructions;
+        storage_instructions.extend(delta_instructions);
 
         MemoryInstructions {
             range: result_range,
-            instructions,
+            instructions: storage_instructions,
         }
     }
 
@@ -651,7 +774,7 @@ impl PageMap {
     /// ∀ n . n ≥ self.num_host_pages() ⇒ self.get_page(n) = ZERO_PAGE
     /// ```
     pub fn num_host_pages(&self) -> usize {
-        let pages_in_checkpoint = self.storage.num_host_pages();
+        let pages_in_checkpoint = self.storage.num_logical_pages();
         pages_in_checkpoint.max(
             self.page_delta
                 .max_page_index()

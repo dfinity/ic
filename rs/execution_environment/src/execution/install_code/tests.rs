@@ -9,8 +9,9 @@ use ic_types::{
 };
 
 use ic_ic00_types::{
-    CanisterChange, CanisterInstallMode, CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgs, Method, Payload, UploadChunkArgs, UploadChunkReply,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
+    CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, Method, Payload,
+    UploadChunkArgs, UploadChunkReply,
 };
 use ic_replicated_state::canister_state::NextExecution;
 use ic_test_utilities_execution_environment::{
@@ -1499,7 +1500,7 @@ fn install_chunked_defaults_to_using_target_as_store() {
 
     let canister_id = test.create_canister(CYCLES);
 
-    // Upload two chunks that make up the universal canister.
+    // Upload universal canister.
     let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let hash = UploadChunkReply::decode(&get_reply(
@@ -1537,6 +1538,74 @@ fn install_chunked_defaults_to_using_target_as_store() {
 
     let result = test.ingress(canister_id, "update", wasm);
     assert_matches!(result, Ok(WasmResult::Reply(_)));
+}
+
+#[test]
+fn install_chunked_recorded_in_history() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload universal canister.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Install the universal canister.
+    let _install_response = get_reply(
+        test.subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                canister_id,
+                None,
+                vec![hash],
+                wasm_module_hash.clone(),
+                vec![],
+            )
+            .encode(),
+        ),
+    );
+
+    // Check that the canister history records the install.
+    // Expect 2 changes, first is canister creation.
+    let state = test.canister_state(canister_id);
+    assert_eq!(
+        state
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        2
+    );
+    assert_eq!(
+        state
+            .system_state
+            .get_canister_history()
+            .get_changes(2)
+            .collect::<Vec<_>>()[1],
+        &std::sync::Arc::new(CanisterChange::new(
+            test.time().as_nanos_since_unix_epoch(),
+            1,
+            CanisterChangeOrigin::from_user(test.user_id().get()),
+            CanisterChangeDetails::code_deployment(
+                CanisterInstallMode::Install,
+                wasm_module_hash.try_into().unwrap()
+            ),
+        ))
+    )
 }
 
 #[test]
@@ -1829,4 +1898,266 @@ fn install_chunked_works_fails_from_noncontroller_of_store() {
         }
         other => panic!("Expected reject, but got {:?}", other),
     }
+}
+
+#[test]
+fn install_with_dts_correctly_updates_system_state() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    // Setup of the test: create a canister and set its certified data and
+    // global timer.
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    // It might take multiple DTS steps to finish installation.
+    let ingress_id = test.dts_install_code(payload);
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    // Set the certified data and global timer of the canister.
+    let (ingress_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm()
+            .certified_data_set(&[42])
+            .set_global_timer_method(wasm().inc_global_counter())
+            .api_global_timer_set(u64::MAX)
+            .push_bytes(&[])
+            .append_and_reply()
+            .build(),
+    );
+
+    // It might take multiple DTS steps to finish the update call.
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.certified_data,
+        vec![42]
+    );
+
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .global_timer
+        .to_nanos_since_unix_epoch()
+        .is_some());
+
+    let version_before = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_version;
+
+    let history_entries_before = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    // Reinstall the canister with DTS.
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Reinstall,
+        canister_id: canister_id.get(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    let ingress_id = test.dts_install_code(payload);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.execute_message(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    // Check that the system state is properly updated.
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.certified_data,
+        vec![] as Vec<u8>
+    );
+
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .global_timer
+        .to_nanos_since_unix_epoch()
+        .is_none());
+
+    let version_after = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_version;
+
+    assert_eq!(version_before + 1, version_after);
+
+    let history_entries_after = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    assert_eq!(history_entries_before + 1, history_entries_after);
+}
+
+#[test]
+fn upgrade_with_dts_correctly_updates_system_state() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    // Setup of the test: create a canister and set its certified data and
+    // global timer.
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    // It might take multiple DTS steps to finish installation.
+    let ingress_id = test.dts_install_code(payload);
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    // Set the certified data and global timer of the canister.
+    let (ingress_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm()
+            .certified_data_set(&[42])
+            .set_global_timer_method(wasm().inc_global_counter())
+            .api_global_timer_set(u64::MAX)
+            .push_bytes(&[])
+            .append_and_reply()
+            .build(),
+    );
+
+    // It might take multiple DTS steps to finish the update call.
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.certified_data,
+        vec![42]
+    );
+
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .global_timer
+        .to_nanos_since_unix_epoch()
+        .is_some());
+
+    let version_before = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_version;
+
+    let history_entries_before = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    // Upgrade the canister with DTS.
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Upgrade,
+        canister_id: canister_id.get(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    let ingress_id = test.dts_install_code(payload);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.execute_message(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+
+    // Check that the system state is properly updated.
+
+    // Certified data is preserved on ugprades.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.certified_data,
+        vec![42]
+    );
+
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .global_timer
+        .to_nanos_since_unix_epoch()
+        .is_none());
+
+    let version_after = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_version;
+
+    assert_eq!(version_before + 1, version_after);
+
+    let history_entries_after = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    assert_eq!(history_entries_before + 1, history_entries_after);
 }

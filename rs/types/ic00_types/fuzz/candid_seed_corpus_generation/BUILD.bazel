@@ -5,12 +5,12 @@ sh_binary(
     srcs = ["candid_seed_corpus_generation.sh"],
     args = ["ecdsa_public_key"],
     data = [
-        "//hs/spec_compliance:ic.did",
         "@candid//:didc",
+        "@interface_spec//file",
     ],
     env = {
         "DIDC_PATH": "$(execpath @candid//:didc)",
-        "IC_SPEC": "$(rootpath //hs/spec_compliance:ic.did)",
+        "IC_SPEC": "$(rootpath @interface_spec//file)",
     },
 )
 
@@ -19,12 +19,12 @@ sh_binary(
     srcs = ["candid_seed_corpus_generation.sh"],
     args = ["http_request"],
     data = [
-        "//hs/spec_compliance:ic.did",
         "@candid//:didc",
+        "@interface_spec//file",
     ],
     env = {
         "DIDC_PATH": "$(execpath @candid//:didc)",
-        "IC_SPEC": "$(rootpath //hs/spec_compliance:ic.did)",
+        "IC_SPEC": "$(rootpath @interface_spec//file)",
     },
 )
 
@@ -33,52 +33,25 @@ sh_binary(
     srcs = ["candid_seed_corpus_generation.sh"],
     args = ["sign_with_ecdsa"],
     data = [
-        "//hs/spec_compliance:ic.did",
         "@candid//:didc",
+        "@interface_spec//file",
     ],
     env = {
         "DIDC_PATH": "$(execpath @candid//:didc)",
-        "IC_SPEC": "$(rootpath //hs/spec_compliance:ic.did)",
+        "IC_SPEC": "$(rootpath @interface_spec//file)",
     },
 )
 
-# Currently install_code wouldn't work since there's divergence between spec
-# and the replica type on the optional fields.
-# This would panic our fuzzer on the serialization round-trip
-
-# Spec:
-#  install_code : (record {
-#     mode : variant {install; reinstall; upgrade};
-#     canister_id : canister_id;
-#     wasm_module : wasm_module;
-#     arg : blob;
-#     sender_canister_version : opt nat64;
-#   })
-
-# Replica:
-# pub struct InstallCodeArgs {
-#     pub mode: CanisterInstallMode,
-#     pub canister_id: PrincipalId,
-#     #[serde(with = "serde_bytes")]
-#     pub wasm_module: Vec<u8>,
-#     #[serde(with = "serde_bytes")]
-#     pub arg: Vec<u8>,
-#     pub compute_allocation: Option<candid::Nat>,
-#     pub memory_allocation: Option<candid::Nat>,
-#     pub query_allocation: Option<candid::Nat>,
-#     pub sender_canister_version: Option<u64>,
-# }
-#
-# sh_binary(
-#     name = "decode_install_code_args_libfuzzer_seed_corpus_generation",
-#     srcs = ["candid_seed_corpus_generation.sh"],
-#     args = ["install_code"],
-#     data = [
-#         "//hs/spec_compliance:ic.did",
-#         "@candid//:didc",
-#     ],
-#     env = {
-#         "DIDC_PATH": "$(execpath @candid//:didc)",
-#         "IC_SPEC": "$(rootpath //hs/spec_compliance:ic.did)",
-#     },
-# )
+sh_binary(
+    name = "decode_install_code_args_libfuzzer_seed_corpus_generation",
+    srcs = ["candid_seed_corpus_generation.sh"],
+    args = ["install_code"],
+    data = [
+        "@candid//:didc",
+        "@interface_spec//file",
+    ],
+    env = {
+        "DIDC_PATH": "$(execpath @candid//:didc)",
+        "IC_SPEC": "$(rootpath @interface_spec//file)",
+    },
+)

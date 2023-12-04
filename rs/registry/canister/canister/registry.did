@@ -21,6 +21,7 @@ type AddNodePayload = record {
   prometheus_metrics_endpoint : text;
   http_endpoint : text;
   idkg_dealing_encryption_pk : opt vec nat8;
+  public_ipv4_config : opt vec text;
   xnet_endpoint : text;
   chip_id : opt vec nat8;
   committee_signing_pk : vec nat8;
@@ -195,17 +196,10 @@ type SetFirewallConfigPayload = record {
   firewall_config : text;
   ipv6_prefixes : vec text;
 };
-type SevFeatureStatus = variant {
-  SecureEnabled;
-  Disabled;
-  InsecureIntegrityEnabled;
-  SecureNoUpgradeEnabled;
-  InsecureEnabled;
-};
 type SubnetFeatures = record {
   canister_sandboxing : bool;
-  sev_status : opt SevFeatureStatus;
   http_requests : bool;
+  sev_enabled : opt bool;
 };
 type SubnetType = variant { application; verified_application; system };
 type UpdateApiBoundaryNodeDomainPayload = record {
@@ -231,6 +225,12 @@ type UpdateElectedReplicaVersionsPayload = record {
 };
 type UpdateNodeDirectlyPayload = record {
   idkg_dealing_encryption_pk : opt vec nat8;
+};
+type UpdateNodeIPv4ConfigDirectlyPayload = record {
+  node_id : principal;
+  gateway_ip_addrs : vec text;
+  prefix_length : nat32;
+  ip_addr : text;
 };
 type UpdateNodeOperatorConfigDirectlyPayload = record {
   node_operator_id : opt principal;
@@ -331,6 +331,9 @@ service : {
   update_elected_replica_versions : (UpdateElectedReplicaVersionsPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);
+  update_node_ipv4_config_directly : (UpdateNodeIPv4ConfigDirectlyPayload) -> (
+      Result_1,
+    );
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
   update_node_operator_config_directly : (
       UpdateNodeOperatorConfigDirectlyPayload,

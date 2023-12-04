@@ -15,14 +15,13 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 from crc import INITIAL_CRC, calc_crc
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 LVM_HEADER_SIZE_BYTES = int(2048 * 512)
 BYTES_PER_MEBIBYTE = int(2 ** 20)
 EXTENT_SIZE_BYTES = int(4 * BYTES_PER_MEBIBYTE)
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -52,7 +51,7 @@ def main():
         lvm_entries = read_volume_description(f.read())
     validate_volume_table(lvm_entries)
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = tempfile.mkdtemp()
 
     lvm_image = os.path.join(tmpdir, "partition.img")
     prepare_lvm_image(lvm_entries, lvm_image, vg_name, vg_uuid, pv_uuid)
@@ -94,8 +93,6 @@ def main():
         ],
         check=True,
     )
-
-    print_artifact_info(out_file)
 
 
 def read_volume_description(data):

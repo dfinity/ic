@@ -22,7 +22,8 @@ pub struct SubnetFeatures {
     #[serde(default = "default_http_requests")]
     pub http_requests: bool,
 
-    pub sev_status: Option<SevFeatureStatus>,
+    /// This feature flag controls whether SEV is enabled on this subnet.
+    pub sev_enabled: bool,
 }
 
 fn default_http_requests() -> bool {
@@ -34,14 +35,8 @@ impl Default for SubnetFeatures {
         Self {
             canister_sandboxing: bool::default(),
             http_requests: default_http_requests(),
-            sev_status: Option::<SevFeatureStatus>::default(),
+            sev_enabled: bool::default(),
         }
-    }
-}
-
-impl SubnetFeatures {
-    pub fn sev_status(&self) -> SevFeatureStatus {
-        self.sev_status.unwrap_or(SevFeatureStatus::Disabled)
     }
 }
 
@@ -50,13 +45,7 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
         Self {
             canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
-            sev_status: features.sev_status.map(|s| match s {
-                SevFeatureStatus::Disabled => 0,
-                SevFeatureStatus::InsecureEnabled => 1,
-                SevFeatureStatus::InsecureIntegrityEnabled => 2,
-                SevFeatureStatus::SecureNoUpgradeEnabled => 3,
-                SevFeatureStatus::SecureEnabled => 4,
-            }),
+            sev_enabled: features.sev_enabled.then_some(true),
         }
     }
 }
@@ -66,13 +55,7 @@ impl From<pb::SubnetFeatures> for SubnetFeatures {
         Self {
             canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
-            sev_status: features.sev_status.map(|s| match s {
-                1 => SevFeatureStatus::InsecureEnabled,
-                2 => SevFeatureStatus::InsecureIntegrityEnabled,
-                3 => SevFeatureStatus::SecureNoUpgradeEnabled,
-                4 => SevFeatureStatus::SecureEnabled,
-                _ => SevFeatureStatus::Disabled,
-            }),
+            sev_enabled: features.sev_enabled.unwrap_or_default(),
         }
     }
 }
@@ -92,6 +75,7 @@ impl FromStr for SubnetFeatures {
             match feature {
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
+                "sev_enabled" => features.sev_enabled = true,
                 _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
             }
         }
@@ -139,15 +123,6 @@ impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
     }
 }
 
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize)]
-pub enum SevFeatureStatus {
-    Disabled,
-    InsecureEnabled,
-    InsecureIntegrityEnabled,
-    SecureNoUpgradeEnabled,
-    SecureEnabled,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,31 +144,5 @@ mod tests {
                 ..SubnetFeatures::default()
             }
         );
-    }
-    #[test]
-    fn test_sev_feature() {
-        let features: &[(SevFeatureStatus, &str)] = &[
-            (SevFeatureStatus::Disabled, "SEV_FEATURE_STATUS_UNSPECIFIED"),
-            (
-                SevFeatureStatus::InsecureEnabled,
-                "SEV_FEATURE_STATUS_INSECURE_ENABLED",
-            ),
-            (
-                SevFeatureStatus::InsecureIntegrityEnabled,
-                "SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED",
-            ),
-            (
-                SevFeatureStatus::SecureNoUpgradeEnabled,
-                "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED",
-            ),
-            (
-                SevFeatureStatus::SecureEnabled,
-                "SEV_FEATURE_STATUS_SECURE_ENABLED",
-            ),
-        ];
-        for feature in features {
-            let status: pb::SevFeatureStatus = unsafe { ::std::mem::transmute(feature.0 as i32) };
-            assert_eq!(pb::SevFeatureStatus::as_str_name(&status), feature.1);
-        }
     }
 }

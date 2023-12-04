@@ -101,7 +101,8 @@ function assemble_config_media() {
     cmd+=(--elasticsearch_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
-    cmd+=(--name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_dns_name_servers --config=${DEPLOYMENT})")
+    cmd+=(--ipv6_name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_ipv6_dns_name_servers --config=${DEPLOYMENT})")
+    cmd+=(--ipv4_name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.ipv4_name_servers --metric=hostos_ipv4_dns_name_servers --config=${DEPLOYMENT})")
     cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
     cmd+=(--nns_url "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
     # AMDs cert download links do not support IPv6; NODE-817

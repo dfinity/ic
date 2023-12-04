@@ -301,53 +301,6 @@ enum SubnetType {
   SUBNET_TYPE_VERIFIED_APPLICATION = 4;
 }
 
-// These modes correspond to milestones in the SEV-SNP development plan.
-enum SevFeatureStatus {
-  // The SEV-SNP feature is disabled.
-  //
-  // SEV-SNP enabled machines run the Guest without SEV-SNP.
-  //
-  // Warning: transitioning from SEV_FEATURE_STATUS_SECURE_ENABLED will result loss of all data.
-  SEV_FEATURE_STATUS_UNSPECIFIED = 0;
-
-  // The SEV-SNP feature is enabled in insecure mode.
-  //
-  // SEV-SNP enabled machines run the Guest with SEV-SNP but without disk integrity protection
-  // and storing the KEK (Key Encryption Key) in cleartext.
-  //
-  // Warning: transitioning from any mode other than SEV_FEATURE_STATUS_UNSPECIFIED will result
-  // in loss of all data.
-  SEV_FEATURE_STATUS_INSECURE_ENABLED = 1;
-
-  // The SEV-SNP feature is enabled in insecure mode with disk integrity protection.
-  //
-  // SEV-SNP enabled machines run the Guest with SEV-SNP but with disk integrity protection
-  // and storing the KEK (Key Encryption Key) in cleartext.
-  //
-  // Warning: transitioning to or from this mode will result loss of all data.
-  SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED = 2;
-
-  // The SEV-SNP feature is enabled in secure mode with disk integrity protection.
-  //
-  // SEV-SNP enabled machines run the Guest with SEV-SNP with disk integrty protection
-  // and the KEK (Key Encryption Key) is derived from the measurement.  Upgrades result
-  // in the loss of all data as the KEK is not passed to the new Guest.
-  //
-  // Warning: transitioning to or from this mode except for SEV_FEATURE_STATUS_SECURE_ENABLED
-  // will result in loss of all data.
-  SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED = 3;
-
-  // The SEV-SNP feature is enabled in secure mode with disk integrity protection.
-  //
-  // SEV-SNP enabled machines run the Guest with SEV-SNP with disk integrty protection
-  // and the KEK (Key Encryption Key) is derived from the measurement.  Upgrades do not
-  // result in the loss of data as the KEK is passed to the new Guest.
-  //
-  // Warning: transitioning to or from this mode except for SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED
-  // will result in loss of all data.
-  SEV_FEATURE_STATUS_SECURE_ENABLED = 4;
-}
-
 message SubnetFeatures {
   reserved 1;
   // This feature flag controls whether canister execution happens
@@ -365,11 +318,14 @@ message SubnetFeatures {
   reserved "bitcoin";
   reserved 6;
 
-  // Status of the SEV-SNP feature.
-  optional SevFeatureStatus sev_status = 7;
+  reserved "sev_status";
+  reserved 7;
 
   reserved "onchain_observability";
   reserved 8;
+
+  // Status of the SEV-SNP feature.
+  optional bool sev_enabled = 9;
 }
 
 // Per subnet ECDSA configuration

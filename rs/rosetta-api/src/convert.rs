@@ -291,9 +291,7 @@ pub fn operations_to_requests(
 }
 
 pub fn block_id(block: &HashedBlock) -> Result<BlockIdentifier, ApiError> {
-    let idx = i64::try_from(block.index).map_err(|_| {
-        ApiError::internal_error("block index is too large to be converted from a u64 to an i64")
-    })?;
+    let idx = block.index;
     Ok(BlockIdentifier::new(idx, from_hash(&block.hash)))
 }
 
@@ -310,7 +308,7 @@ pub fn from_model_account_identifier(
 const LAST_HEIGHT: &str = "last_height";
 
 // Last hash is an option because there may be no blocks on the system
-pub fn from_metadata(mut ob: models::Object) -> Result<BlockIndex, ApiError> {
+pub fn from_metadata(mut ob: rosetta_core::objects::ObjectMap) -> Result<BlockIndex, ApiError> {
     let v = ob
         .remove(LAST_HEIGHT)
         .ok_or_else(|| ApiError::internal_error("No value `LAST_HEIGHT` in object"))?;

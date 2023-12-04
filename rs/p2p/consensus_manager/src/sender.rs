@@ -1,6 +1,5 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
-    hash::Hash,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -11,11 +10,11 @@ use bytes::Bytes;
 use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent, consensus::ValidatedPoolReader,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
+use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind};
 use ic_types::NodeId;
-use serde::{Deserialize, Serialize};
 use tokio::{
     runtime::Handle,
     select,
@@ -24,7 +23,7 @@ use tokio::{
     time,
 };
 
-use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, Data, SlotNumber};
+use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, SlotNumber, Update};
 
 /// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
 /// in size are pushed.
@@ -71,14 +70,7 @@ pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     active_adverts: HashMap<Artifact::Id, (JoinHandle<()>, SlotNumber)>,
 }
 
-impl<Artifact> ConsensusManagerSender<Artifact>
-where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
-{
+impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
     pub(crate) fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
@@ -129,10 +121,15 @@ where
 
             self.current_commit_id.inc_assign();
         }
+
+        error!(
+            self.log,
+            "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
+            Artifact::TAG
+        );
     }
 
     fn handle_purge_advert(&mut self, id: &Artifact::Id) {
-        // TODO: Add a warning if we get purge requests for unseen advert.
         if let Some((send_task, free_slot)) = self.active_adverts.remove(id) {
             self.metrics.send_view_consensus_purge_active_total.inc();
             send_task.abort();
@@ -181,41 +178,45 @@ where
         transport: Arc<dyn Transport>,
         commit_id: CommitId,
         slot_number: SlotNumber,
-        advert: Advert<Artifact>,
+        Advert {
+            id,
+            attribute,
+            size,
+            ..
+        }: Advert<Artifact>,
         pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     ) {
         // Try to push artifact if size below threshold && the artifact is not a relay.
-        let push_artifact = advert.size < ARTIFACT_PUSH_THRESHOLD_BYTES;
+        let push_artifact = size < ARTIFACT_PUSH_THRESHOLD_BYTES;
 
-        let data = if push_artifact {
-            let id = advert.id.clone();
-
+        let artifact = if push_artifact {
+            let id = id.clone();
             let artifact = tokio::task::spawn_blocking(move || {
                 pool_reader.read().unwrap().get_validated_by_identifier(&id)
             })
-            .await
-            .expect("Should not be cancelled");
+            .await;
 
             match artifact {
-                Some(artifact) => Data::Artifact(artifact),
-                None => {
+                Ok(Some(artifact)) => Some(artifact),
+                _ => {
                     warn!(log, "Attempted to push Artifact, but the Artifact was not found in the pool. Sending an advert instead.");
-                    Data::Advert(advert)
+                    None
                 }
             }
         } else {
-            Data::Advert(advert)
+            None
         };
 
-        let advert_update = AdvertUpdate {
+        let advert_update: AdvertUpdate<Artifact> = AdvertUpdate {
             slot_number,
             commit_id,
-            data,
+            update: match artifact {
+                Some(artifact) => Update::Artifact(artifact),
+                None => Update::Advert((id, attribute)),
+            },
         };
 
-        let body: Bytes = bincode::serialize(&advert_update)
-            .expect("Serializing advert update")
-            .into();
+        let body = Bytes::from(pb::AdvertUpdate::proxy_encode(advert_update));
 
         let mut in_progress_transmissions = JoinSet::new();
         // stores the connection ID of the last successful transmission to a peer.
@@ -337,6 +338,7 @@ mod tests {
         consensus::U64Artifact,
         mocks::{MockTransport, MockValidatedPoolReader},
     };
+    use ic_protobuf::proxy::ProtoProxy;
     use ic_quic_transport::SendError;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
@@ -601,7 +603,8 @@ mod tests {
                 .expect_push()
                 .times(3)
                 .returning(move |_, r| {
-                    let advert: AdvertUpdate<U64Artifact> = bincode::deserialize(r.body()).unwrap();
+                    let advert: AdvertUpdate<U64Artifact> =
+                        pb::AdvertUpdate::proxy_decode(&r.into_body()).unwrap();
                     commit_id_tx.send(advert.commit_id).unwrap();
                     Ok(())
                 });
@@ -668,7 +671,8 @@ mod tests {
                 .expect_push()
                 .times(2)
                 .returning(move |_, r| {
-                    let advert: AdvertUpdate<U64Artifact> = bincode::deserialize(r.body()).unwrap();
+                    let advert: AdvertUpdate<U64Artifact> =
+                        pb::AdvertUpdate::proxy_decode(&r.into_body()).unwrap();
                     commit_id_tx.send(advert.commit_id).unwrap();
                     Ok(())
                 });

@@ -83,7 +83,9 @@ impl Farm {
 
     pub fn acquire_playnet_certificate(&self, group_name: &str) -> FarmResult<PlaynetCertificate> {
         let path = format!("group/{}/playnet/certificate", group_name);
-        let resp = self.retry_until_success_long(self.post(&path))?;
+        let rb = self.post(&path);
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let resp = self.retry_until_success_long(rbb)?;
         let playnet_cert = resp.json::<PlaynetCertificate>()?;
         Ok(playnet_cert)
     }
@@ -105,7 +107,8 @@ impl Farm {
         let spec = spec.add_meta(env, group_base_name);
         let body = CreateGroupRequest { ttl, spec };
         let rb = Self::json(self.post(&path), &body);
-        let _resp = self.retry_until_success(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let _resp = self.retry_until_success(rbb)?;
         Ok(())
     }
 
@@ -122,7 +125,8 @@ impl Farm {
             .unwrap_or_else(|| vm.required_host_features.clone());
         let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
-        let resp = self.retry_until_success_long(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let resp = self.retry_until_success_long(rbb)?;
         let created_vm = resp.json::<VMCreateResponse>()?;
         // Emit a json log event, to be consumed by log post-processing tools.
         let ipv6 = created_vm.ipv6;
@@ -137,10 +141,11 @@ impl Farm {
         Ok(created_vm)
     }
 
-    pub fn claim_file(&self, file_id: &FileId) -> FarmResult<ClaimResult> {
-        let path = format!("file/{}", file_id);
+    pub fn claim_file(&self, group_name: &str, file_id: &FileId) -> FarmResult<ClaimResult> {
+        let path = format!("group/{}/file/{}", group_name, file_id);
         let rb = self.put(&path);
-        match self.retry_until_success(rb) {
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        match self.retry_until_success(rbb) {
             Ok(resp) => {
                 let expiration = resp.json::<FileExpiration>()?;
                 Ok(ClaimResult::FileClaimed(expiration))
@@ -151,15 +156,25 @@ impl Farm {
     }
 
     /// uploads an image an returns the image id
-    pub fn upload_file<P: AsRef<Path>>(&self, path: P, filename: &str) -> FarmResult<FileId> {
-        let form = multipart::Form::new()
-            .file(filename.to_string(), path)
-            .expect("could not create multipart for image");
+    pub fn upload_file<P: AsRef<Path>>(
+        &self,
+        group_name: &str,
+        path: P,
+        filename: &str,
+    ) -> FarmResult<FileId> {
         let rb = self
-            .post("file")
-            .multipart(form)
+            .post(&format!("group/{}/file", group_name))
             .timeout(TIMEOUT_SETTINGS_LONG.max_http_timeout);
-        let resp = rb.send()?;
+        let path = (&path).to_owned();
+        let rbb = || {
+            let form = multipart::Form::new()
+                .file(filename.to_string(), path)
+                .expect("could not create multipart for image");
+            rb.try_clone()
+                .expect("could not clone a request builder")
+                .multipart(form)
+        };
+        let resp = self.retry_until_success_long(rbb)?;
         let mut file_ids = resp.json::<ImageUploadResponse>()?.image_ids;
         if file_ids.len() != 1 || !file_ids.contains_key(filename) {
             return Err(FarmError::InvalidResponse {
@@ -192,14 +207,16 @@ impl Farm {
             drives: image_specs,
         };
         let rb = Self::json(req, &attach_drives_req);
-        let _resp = self.retry_until_success(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let _resp = self.retry_until_success_long(rbb)?;
         Ok(())
     }
 
     pub fn start_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{}/vm/{}/start", group_name, vm_name);
         let rb = self.put(&path);
-        let _resp = self.retry_until_success(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let _resp = self.retry_until_success(rbb)?;
         let url = self.url_from_path(&format!("group/{}/vm/{}/console/", group_name, vm_name)[..]);
         emit_vm_console_link_event(&self.logger, url, vm_name);
         Ok(())
@@ -208,14 +225,16 @@ impl Farm {
     pub fn destroy_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{}/vm/{}/destroy", group_name, vm_name);
         let rb = self.put(&path);
-        let _resp = self.retry_until_success(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let _resp = self.retry_until_success(rbb)?;
         Ok(())
     }
 
     pub fn reboot_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{}/vm/{}/reboot", group_name, vm_name);
         let rb = self.put(&path);
-        let _resp = self.retry_until_success(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let _resp = self.retry_until_success(rbb)?;
         Ok(())
     }
 
@@ -253,7 +272,8 @@ impl Farm {
     ) -> FarmResult<String> {
         let path = format!("group/{}/dns", group_name);
         let rb = Self::json(self.post(&path), &dns_records);
-        let resp = self.retry_until_success_long(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let resp = self.retry_until_success_long(rbb)?;
         let create_dns_records_result = resp.json::<CreateDnsRecordsResult>()?;
         Ok(create_dns_records_result.suffix)
     }
@@ -269,7 +289,8 @@ impl Farm {
     ) -> FarmResult<String> {
         let path = format!("group/{}/playnet/dns", group_name);
         let rb = Self::json(self.post(&path), &dns_records);
-        let resp = self.retry_until_success_long(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let resp = self.retry_until_success_long(rbb)?;
         let create_dns_records_result = resp.json::<CreateDnsRecordsResult>()?;
         Ok(create_dns_records_result.suffix)
     }
@@ -277,7 +298,8 @@ impl Farm {
     pub fn set_group_ttl(&self, group_name: &str, duration: Duration) -> FarmResult<()> {
         let path = format!("group/{}/ttl/{}", group_name, duration.as_secs());
         let rb = self.put(&path);
-        let _resp = self.retry_until_success(rb)?;
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let _resp = self.retry_until_success(rbb)?;
         Ok(())
     }
 
@@ -312,26 +334,29 @@ impl Farm {
         Url::parse(&format!("{}{}", self.base_url, path)).expect("should not fail!")
     }
 
-    fn retry_until_success_long(
+    fn retry_until_success_long<F: Fn() -> RequestBuilder>(
         &self,
-        rb: RequestBuilder,
+        rbb: F,
     ) -> FarmResult<reqwest::blocking::Response> {
-        self.retry_until_success_(rb, TIMEOUT_SETTINGS_LONG)
+        self.retry_until_success_(rbb, TIMEOUT_SETTINGS_LONG)
     }
 
-    fn retry_until_success(&self, rb: RequestBuilder) -> FarmResult<reqwest::blocking::Response> {
-        self.retry_until_success_(rb, TIMEOUT_SETTINGS)
-    }
-
-    fn retry_until_success_(
+    fn retry_until_success<F: Fn() -> RequestBuilder>(
         &self,
-        rb: RequestBuilder,
+        rbb: F,
+    ) -> FarmResult<reqwest::blocking::Response> {
+        self.retry_until_success_(rbb, TIMEOUT_SETTINGS)
+    }
+
+    fn retry_until_success_<F: Fn() -> RequestBuilder>(
+        &self,
+        rbb: F,
         t_settings: TimeoutSettings,
     ) -> FarmResult<reqwest::blocking::Response> {
         let started_at = Instant::now();
         let mut req_sent_successfully = false;
         loop {
-            let mut req = rb.try_clone().expect("could not clone a request builder");
+            let mut req = rbb();
             let http_timeout = match t_settings.retry_timeout.checked_sub(started_at.elapsed()) {
                 Some(t) if t > t_settings.min_http_timeout => t.min(t_settings.max_http_timeout),
                 _ => break,

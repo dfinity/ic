@@ -115,7 +115,7 @@ pub mod utils {
     pub fn mega_public_key_from_proto(
         proto: &PublicKeyProto,
     ) -> Result<MEGaPublicKey, MEGaPublicKeyFromProtoError> {
-        let curve_type = match AlgorithmIdProto::from_i32(proto.algorithm) {
+        let curve_type = match AlgorithmIdProto::try_from(proto.algorithm).ok() {
             Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
             alg_id => Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm {
                 algorithm_id: alg_id,

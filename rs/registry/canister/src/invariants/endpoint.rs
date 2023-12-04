@@ -425,6 +425,7 @@ mod tests {
                 }),
                 hostos_version_id: None,
                 chip_id: None,
+                public_ipv4_config: None,
             }),
         );
 
@@ -453,8 +454,10 @@ mod tests {
                 }),
                 hostos_version_id: None,
                 chip_id: None,
+                public_ipv4_config: None,
             }),
         );
+
         // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
         assert!(check_endpoint_invariants(&snapshot, true).is_ok());
 
@@ -483,6 +486,7 @@ mod tests {
                 }),
                 hostos_version_id: None,
                 chip_id: None,
+                public_ipv4_config: None,
             }),
         );
         check_endpoint_invariants(&snapshot, true).unwrap();

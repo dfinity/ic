@@ -75,6 +75,7 @@ function read_network_variables() {
             "ipv6_address") ipv6_address="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
             "name_servers") name_servers="${value}" ;;
+            "ipv4_name_servers") ipv4_name_servers="${value}" ;;
         esac
     done <"$1"
 }

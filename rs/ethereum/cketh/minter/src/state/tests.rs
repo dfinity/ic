@@ -758,6 +758,7 @@ fn state_equivalence() {
         active_tasks: Default::default(),
         http_request_counter: 100,
         eth_balance: Default::default(),
+        skipped_blocks: Default::default(),
     };
 
     assert_eq!(
@@ -1018,82 +1019,77 @@ mod eth_balance {
     }
 
     #[test]
-    fn should_update_after_failed_withdrawal() {
-        let mut state = a_state();
+    fn should_update_after_successful_and_failed_withdrawal() {
+        let mut state_before_withdrawal = a_state();
         apply_state_transition(
-            &mut state,
+            &mut state_before_withdrawal,
             &EventType::AcceptedDeposit(received_eth_event()),
         );
 
-        let balance_before = state.eth_balance.clone();
-        let receipt = WithdrawalFlow {
-            withdrawal_amount: Wei::new(1_000_000_000_000),
-            tx_status: TransactionStatus::Failure,
-            ..Default::default()
-        }
-        .apply(&mut state);
-        let balance_after = state.eth_balance.clone();
-
-        assert_eq!(
-            balance_after,
-            EthBalance {
-                eth_balance: balance_before
-                    .eth_balance
-                    .checked_sub(receipt.effective_transaction_fee())
-                    .unwrap(),
-                total_effective_tx_fees: balance_before
-                    .total_effective_tx_fees
-                    .checked_add(receipt.effective_transaction_fee())
-                    .unwrap(),
-                ..balance_before
-            }
-        )
-    }
-
-    #[test]
-    fn should_update_after_successful_withdrawal() {
-        let mut state = a_state();
-        apply_state_transition(
-            &mut state,
-            &EventType::AcceptedDeposit(received_eth_event()),
-        );
-
-        let balance_before = state.eth_balance.clone();
+        let mut state_after_successful_withdrawal = state_before_withdrawal.clone();
+        let balance_before_withdrawal = state_after_successful_withdrawal.eth_balance.clone();
         //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
-        let transaction_price = TransactionPrice {
-            gas_limit: GasAmount::from(21_000_u32),
-            max_fee_per_gas: WeiPerGas::from(7_828_365_474_u64),
-            max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
-        };
-        let _receipt = WithdrawalFlow {
+        let withdrawal_flow = WithdrawalFlow {
             withdrawal_amount: Wei::new(10_000_000_000_000_000),
-            tx_fee: transaction_price.clone(),
+            tx_fee: TransactionPrice {
+                gas_limit: GasAmount::from(21_000_u32),
+                max_fee_per_gas: WeiPerGas::from(7_828_365_474_u64),
+                max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+            },
             effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
             tx_status: TransactionStatus::Success,
             ..Default::default()
-        }
-        .apply(&mut state);
-        let balance_after = state.eth_balance.clone();
+        };
+        withdrawal_flow
+            .clone()
+            .apply(&mut state_after_successful_withdrawal);
+        let balance_after_successful_withdrawal =
+            state_after_successful_withdrawal.eth_balance.clone();
 
         assert_eq!(
-            balance_after,
+            balance_after_successful_withdrawal,
             EthBalance {
-                eth_balance: balance_before
+                eth_balance: balance_before_withdrawal
                     .eth_balance
                     .checked_sub(Wei::from(9_934_054_275_043_000_u64))
                     .unwrap(),
-                total_effective_tx_fees: balance_before
+                total_effective_tx_fees: balance_before_withdrawal
                     .total_effective_tx_fees
                     .checked_add(Wei::from(98_449_949_997_000_u64))
                     .unwrap(),
-                total_unspent_tx_fees: balance_before
+                total_unspent_tx_fees: balance_before_withdrawal
                     .total_unspent_tx_fees
                     .checked_add(Wei::from(65_945_724_957_000_u64))
                     .unwrap()
             }
         );
+
+        let mut state_after_failed_withdrawal = state_before_withdrawal.clone();
+        let receipt_failed = WithdrawalFlow {
+            tx_status: TransactionStatus::Failure,
+            ..withdrawal_flow
+        }
+        .apply(&mut state_after_failed_withdrawal);
+        let balance_after_failed_withdrawal = state_after_failed_withdrawal.eth_balance.clone();
+
+        assert_eq!(
+            balance_after_failed_withdrawal.eth_balance,
+            balance_before_withdrawal
+                .eth_balance
+                .checked_sub(receipt_failed.effective_transaction_fee())
+                .unwrap()
+        );
+        assert_eq!(
+            balance_after_successful_withdrawal.total_effective_tx_fees,
+            balance_after_failed_withdrawal.total_effective_tx_fees
+        );
+        assert_eq!(
+            balance_after_successful_withdrawal.total_unspent_tx_fees,
+            balance_after_failed_withdrawal.total_unspent_tx_fees()
+        );
     }
 
+    #[derive(Clone)]
     struct WithdrawalFlow {
         ledger_burn_index: LedgerBurnIndex,
         nonce: TransactionNonce,

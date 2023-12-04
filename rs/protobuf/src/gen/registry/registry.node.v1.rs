@@ -5,7 +5,7 @@
 pub struct ConnectionEndpoint {
     /// The IP address. Senders SHOULD use dotted-quad notation for IPv4 addresses
     /// and RFC5952 representation for IPv6 addresses (which means that IPv6
-    /// addresses are *not* enclosed in `[` and `]`, as they are not written
+    /// addresses are *not* enclosed in `\[` and `\]`, as they are not written
     /// with the port in the same field).
     ///
     /// Clients MUST be prepared to accept IPv6 addresses in the forms shown in
@@ -22,6 +22,17 @@ pub struct FlowEndpoint {
     /// The IP/port for this flow.
     #[prost(message, optional, tag = "2")]
     pub endpoint: ::core::option::Option<ConnectionEndpoint>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IPv4InterfaceConfig {
+    #[prost(string, tag = "1")]
+    pub ip_addr: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub gateway_ip_addr: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(uint32, tag = "3")]
+    pub prefix_length: u32,
 }
 /// A node: one machine running a replica instance.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -46,4 +57,7 @@ pub struct NodeRecord {
     /// ID of the HostOS version to run.
     #[prost(string, optional, tag = "17")]
     pub hostos_version_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// IPv4 interface configuration
+    #[prost(message, optional, tag = "18")]
+    pub public_ipv4_config: ::core::option::Option<IPv4InterfaceConfig>,
 }

@@ -20,7 +20,6 @@ ic-types = { path = "../../types/types" }
 escargot = "0.5.2"
 on_wire = { path = "../on_wire" }
 rand = "0.8"
-reqwest = { version = "0.11.1", features = [ "native-tls" ] }
 tokio = { workspace = true }
 wasmprinter = "0.2.45"
 wat = "1.0.52"

@@ -4,11 +4,12 @@ use crate::models::seconds::Seconds;
 use crate::{
     convert::{principal_id_from_public_key, to_model_account_identifier},
     errors::ApiError,
-    models::{self, operation::Operation, Object},
+    models::{self, operation::Operation},
     transaction_id::TransactionIdentifier,
 };
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
+use rosetta_core::objects::ObjectMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -142,11 +143,11 @@ impl RequestType {
     }
 }
 
-impl From<RequestResultMetadata> for Object {
+impl From<RequestResultMetadata> for ObjectMap {
     fn from(d: RequestResultMetadata) -> Self {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => o,
-            _ => Object::default(),
+            _ => ObjectMap::default(),
         }
     }
 }
@@ -167,9 +168,9 @@ pub struct RequestResultMetadata {
     pub response: Option<models::Error>,
 }
 
-impl TryFrom<Option<Object>> for RequestResultMetadata {
+impl TryFrom<Option<ObjectMap>> for RequestResultMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a `neuron_identifier` from metadata JSON object: {}",
@@ -223,7 +224,7 @@ pub struct GetProposalInfo {
     pub proposal_id: u64,
 }
 
-impl From<GetProposalInfo> for Object {
+impl From<GetProposalInfo> for ObjectMap {
     fn from(m: GetProposalInfo) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -232,9 +233,9 @@ impl From<GetProposalInfo> for Object {
     }
 }
 
-impl TryFrom<Option<Object>> for GetProposalInfo {
+impl TryFrom<Option<ObjectMap>> for GetProposalInfo {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a `proposal_id` from metadata JSON object: {}",
@@ -406,7 +407,7 @@ pub struct ChangeAutoStakeMaturityMetadata {
     pub requested_setting_for_auto_stake_maturity: bool,
 }
 
-impl From<ChangeAutoStakeMaturityMetadata> for Object {
+impl From<ChangeAutoStakeMaturityMetadata> for ObjectMap {
     fn from(m: ChangeAutoStakeMaturityMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -415,9 +416,9 @@ impl From<ChangeAutoStakeMaturityMetadata> for Object {
     }
 }
 
-impl TryFrom<Option<Object>> for ChangeAutoStakeMaturityMetadata {
+impl TryFrom<Option<ObjectMap>> for ChangeAutoStakeMaturityMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a `neuron_index` from metadata JSON object: {}",
@@ -427,7 +428,7 @@ impl TryFrom<Option<Object>> for ChangeAutoStakeMaturityMetadata {
     }
 }
 
-impl From<SetDissolveTimestampMetadata> for Object {
+impl From<SetDissolveTimestampMetadata> for ObjectMap {
     fn from(m: SetDissolveTimestampMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -436,9 +437,9 @@ impl From<SetDissolveTimestampMetadata> for Object {
     }
 }
 
-impl TryFrom<Option<Object>> for SetDissolveTimestampMetadata {
+impl TryFrom<Option<ObjectMap>> for SetDissolveTimestampMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Set Dissolve Timestamp operation must have a 'dissolve_time_utc_seconds' metadata field.
@@ -461,9 +462,9 @@ pub struct NeuronIdentifierMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for NeuronIdentifierMetadata {
+impl TryFrom<Option<ObjectMap>> for NeuronIdentifierMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a `neuron_index` from metadata JSON object: {}",
@@ -473,7 +474,7 @@ impl TryFrom<Option<Object>> for NeuronIdentifierMetadata {
     }
 }
 
-impl From<NeuronIdentifierMetadata> for Object {
+impl From<NeuronIdentifierMetadata> for ObjectMap {
     fn from(m: NeuronIdentifierMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -491,10 +492,10 @@ pub struct DisburseMetadata {
     pub recipient: Option<AccountIdentifier>,
 }
 
-impl TryFrom<Option<Object>> for DisburseMetadata {
+impl TryFrom<Option<ObjectMap>> for DisburseMetadata {
     type Error = ApiError;
 
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse DISBURSE operation metadata from a JSON object: {}",
@@ -503,7 +504,7 @@ impl TryFrom<Option<Object>> for DisburseMetadata {
         })
     }
 }
-impl From<DisburseMetadata> for Object {
+impl From<DisburseMetadata> for ObjectMap {
     fn from(m: DisburseMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -520,10 +521,10 @@ pub struct KeyMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for KeyMetadata {
+impl TryFrom<Option<ObjectMap>> for KeyMetadata {
     type Error = ApiError;
 
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse hot key management operation metadata from a JSON object: {}",
@@ -533,7 +534,7 @@ impl TryFrom<Option<Object>> for KeyMetadata {
     }
 }
 
-impl From<KeyMetadata> for Object {
+impl From<KeyMetadata> for ObjectMap {
     fn from(m: KeyMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -601,10 +602,10 @@ pub struct SpawnMetadata {
     pub spawned_neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for SpawnMetadata {
+impl TryFrom<Option<ObjectMap>> for SpawnMetadata {
     type Error = ApiError;
 
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse SPAWN operation metadata from a JSON object: {}",
@@ -614,7 +615,7 @@ impl TryFrom<Option<Object>> for SpawnMetadata {
     }
 }
 
-impl From<SpawnMetadata> for Object {
+impl From<SpawnMetadata> for ObjectMap {
     fn from(m: SpawnMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -631,9 +632,9 @@ pub struct RegisterVoteMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for RegisterVoteMetadata {
+impl TryFrom<Option<ObjectMap>> for RegisterVoteMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse REGISTER_VOTE operation metadata from metadata JSON object: {}",
@@ -643,7 +644,7 @@ impl TryFrom<Option<Object>> for RegisterVoteMetadata {
     }
 }
 
-impl From<RegisterVoteMetadata> for Object {
+impl From<RegisterVoteMetadata> for ObjectMap {
     fn from(m: RegisterVoteMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -661,9 +662,9 @@ pub struct MergeMaturityMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for MergeMaturityMetadata {
+impl TryFrom<Option<ObjectMap>> for MergeMaturityMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse MERGE_MATURITY operation metadata from metadata JSON object: {}",
@@ -673,7 +674,7 @@ impl TryFrom<Option<Object>> for MergeMaturityMetadata {
     }
 }
 
-impl From<MergeMaturityMetadata> for Object {
+impl From<MergeMaturityMetadata> for ObjectMap {
     fn from(m: MergeMaturityMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -690,9 +691,9 @@ pub struct StakeMaturityMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for StakeMaturityMetadata {
+impl TryFrom<Option<ObjectMap>> for StakeMaturityMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse STAKE_MATURITY operation metadata from metadata JSON object: {}",
@@ -702,7 +703,7 @@ impl TryFrom<Option<Object>> for StakeMaturityMetadata {
     }
 }
 
-impl From<StakeMaturityMetadata> for Object {
+impl From<StakeMaturityMetadata> for ObjectMap {
     fn from(m: StakeMaturityMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -718,7 +719,7 @@ pub struct NeuronInfoMetadata {
     pub neuron_index: u64,
 }
 
-impl From<PublicKeyOrPrincipal> for Object {
+impl From<PublicKeyOrPrincipal> for ObjectMap {
     fn from(p: PublicKeyOrPrincipal) -> Self {
         match serde_json::to_value(p) {
             Ok(Value::Object(o)) => o,
@@ -727,9 +728,9 @@ impl From<PublicKeyOrPrincipal> for Object {
     }
 }
 
-impl TryFrom<Option<Object>> for NeuronInfoMetadata {
+impl TryFrom<Option<ObjectMap>> for NeuronInfoMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse NEURON_INFO operation metadata from metadata JSON object: {}",
@@ -791,7 +792,7 @@ fn test_parse_neuron_info_metadata_principal() {
     );
 }
 
-impl From<NeuronInfoMetadata> for Object {
+impl From<NeuronInfoMetadata> for ObjectMap {
     fn from(m: NeuronInfoMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -809,9 +810,9 @@ pub struct FollowMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for FollowMetadata {
+impl TryFrom<Option<ObjectMap>> for FollowMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a FOLLOW operation metadata from metadata JSON object: {}",
@@ -821,7 +822,7 @@ impl TryFrom<Option<Object>> for FollowMetadata {
     }
 }
 
-impl From<FollowMetadata> for Object {
+impl From<FollowMetadata> for ObjectMap {
     fn from(m: FollowMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -839,9 +840,9 @@ pub struct ApproveMetadata {
     pub expires_at: Option<u64>,
 }
 
-impl TryFrom<Option<Object>> for ApproveMetadata {
+impl TryFrom<Option<ObjectMap>> for ApproveMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a Approve operation metadata from metadata JSON object: {}",
@@ -851,7 +852,7 @@ impl TryFrom<Option<Object>> for ApproveMetadata {
     }
 }
 
-impl From<ApproveMetadata> for Object {
+impl From<ApproveMetadata> for ObjectMap {
     fn from(m: ApproveMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
@@ -895,7 +896,7 @@ impl TransactionBuilder {
         let mut push_op = |_type: OperationType,
                            account: Option<crate::models::AccountIdentifier>,
                            amount: Option<crate::models::amount::Amount>,
-                           metadata: Option<Object>| {
+                           metadata: Option<ObjectMap>| {
             let operation_identifier = self.allocate_op_id();
             self.ops.push(Operation {
                 operation_identifier,

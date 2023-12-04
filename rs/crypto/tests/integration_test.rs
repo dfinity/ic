@@ -813,9 +813,9 @@ fn algorithm_id_should_match_algorithm_id_proto() {
     assert_eq!(AlgorithmId::iter().count(), algorithm_id_variants);
 
     for i in 0..algorithm_id_variants {
-        assert!(AlgorithmIdProto::from_i32(i as i32).is_some());
+        assert!(AlgorithmIdProto::try_from(i as i32).is_ok());
     }
-    assert!(AlgorithmIdProto::from_i32(algorithm_id_variants as i32).is_none());
+    assert!(AlgorithmIdProto::try_from(algorithm_id_variants as i32).is_err());
 
     assert_eq!(
         AlgorithmId::Placeholder as i32,

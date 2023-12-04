@@ -32,7 +32,7 @@ impl ThresholdSignerInternal {
         let csp_signature = threshold_sig_csp_client
             .threshold_sign(
                 AlgorithmId::from(&pub_coeffs),
-                message.as_signed_bytes().as_slice(),
+                message.as_signed_bytes(),
                 pub_coeffs,
             )
             .map_err(|error| map_threshold_sign_error_or_panic(error, dkg_id))?;
@@ -105,6 +105,9 @@ fn map_threshold_sign_error_or_panic(
         }
         CspThresholdSignError::TransientInternalError { internal_error } => {
             ThresholdSignError::TransientInternalError { internal_error }
+        }
+        CspThresholdSignError::KeyIdInstantiationError(internal_error) => {
+            ThresholdSignError::KeyIdInstantiationError(internal_error)
         }
         // Panic, since these would be implementation errors:
         CspThresholdSignError::UnsupportedAlgorithm { .. }

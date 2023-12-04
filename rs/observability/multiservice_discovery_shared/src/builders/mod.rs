@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::contracts::TargetDto;
 
+pub mod exec_log_config_structure;
 pub mod log_vector_config_structure;
 pub mod prometheus_config_structure;
 pub mod script_log_config_structure;

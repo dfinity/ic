@@ -26,6 +26,7 @@ use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 use crate::{
     core::Run,
     firewall::{FirewallGenerator, SystemdReloader},
+    metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
 };
 
 // Some magical prefix that the public key should have
@@ -89,9 +90,15 @@ impl SnapshotPersister {
     }
 }
 
+#[async_trait]
+pub trait Snapshot: Send + Sync {
+    async fn snapshot(&mut self) -> Result<SnapshotResult, Error>;
+}
+
 #[derive(Debug, Clone)]
 pub struct RegistrySnapshot {
-    pub registry_version: u64,
+    pub version: u64,
+    pub timestamp: u64,
     pub nns_subnet_id: Principal,
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
@@ -99,7 +106,7 @@ pub struct RegistrySnapshot {
     pub nodes: HashMap<String, Node>,
 }
 
-pub struct Runner {
+pub struct Snapshotter {
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     registry_client: Arc<dyn RegistryClient>,
     registry_version_available: Option<RegistryVersion>,
@@ -109,7 +116,25 @@ pub struct Runner {
     persister: Option<SnapshotPersister>,
 }
 
-impl Runner {
+pub struct SnapshotInfo {
+    pub version: u64,
+    pub subnets: usize,
+    pub nodes: usize,
+}
+
+pub struct SnapshotInfoPublished {
+    pub timestamp: u64,
+    pub old: Option<SnapshotInfo>,
+    pub new: SnapshotInfo,
+}
+
+pub enum SnapshotResult {
+    NoNewVersion,
+    NotOldEnough(u64),
+    Published(SnapshotInfoPublished),
+}
+
+impl Snapshotter {
     pub fn new(
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
         registry_client: Arc<dyn RegistryClient>,
@@ -131,7 +156,7 @@ impl Runner {
     }
 
     // Creates a snapshot of the registry for given version
-    fn get_snapshot(&mut self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
+    fn get_snapshot(&self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
         let routing_table = self
             .registry_client
@@ -149,7 +174,13 @@ impl Runner {
             .registry_client
             .get_threshold_signing_public_key_for_subnet(nns_subnet_id, version)
             .context("failed to get NNS public key")? // Result
-            .context("NNS public is key not available")?; // Option
+            .context("NNS public key is not available")?; // Option
+
+        let timestamp = self
+            .registry_client
+            .get_version_timestamp(version)
+            .context("Version timestamp is not available")? // Option
+            .as_secs_since_unix_epoch();
 
         // Generate a temporary hash table with subnet_id to canister ranges mapping for later reference
         let mut ranges_by_subnet = HashMap::new();
@@ -261,7 +292,8 @@ impl Runner {
         nns_key_with_prefix.extend_from_slice(&nns_public_key.into_bytes());
 
         Ok(RegistrySnapshot {
-            registry_version: version.get(),
+            version: version.get(),
+            timestamp,
             nns_subnet_id: nns_subnet_id.get().0,
             nns_public_key: nns_key_with_prefix,
             subnets,
@@ -271,8 +303,8 @@ impl Runner {
 }
 
 #[async_trait]
-impl Run for Runner {
-    async fn run(&mut self) -> Result<(), Error> {
+impl Snapshot for Snapshotter {
+    async fn snapshot(&mut self) -> Result<SnapshotResult, Error> {
         // Fetch latest available registry version
         let version = self.registry_client.get_latest_version();
 
@@ -288,39 +320,82 @@ impl Run for Runner {
             // We check that the versions stop progressing for some period of time
             // and only then allow the initial publishing.
             if self.last_version_change.elapsed() < self.min_version_age {
-                info!(
-                    action = "snapshot",
-                    "Snapshot {version} is not old enough, not publishing"
-                );
-                return Ok(());
+                return Ok(SnapshotResult::NotOldEnough(version.get()));
             }
         }
 
         // Check if we already have this version published
         if self.registry_version_published == Some(version) {
-            return Ok(());
+            return Ok(SnapshotResult::NoNewVersion);
         }
 
-        // Otherwise create a snapshot & publish it
+        // Otherwise create a snapshot
         let snapshot = self.get_snapshot(version)?;
 
+        let result = SnapshotInfoPublished {
+            timestamp: snapshot.timestamp,
+
+            old: self
+                .published_registry_snapshot
+                .load()
+                .as_ref()
+                .map(|x| SnapshotInfo {
+                    version: x.version,
+                    subnets: x.subnets.len(),
+                    nodes: x.nodes.len(),
+                }),
+
+            new: SnapshotInfo {
+                version: version.get(),
+                subnets: snapshot.subnets.len(),
+                nodes: snapshot.nodes.len(),
+            },
+        };
+
+        // Publish the new snapshot
         self.published_registry_snapshot
             .store(Some(Arc::new(snapshot.clone())));
-
-        info!(
-            action = "snapshot",
-            version_old = self.registry_version_published.map(|x| x.get()),
-            version_new = version.get(),
-            nodes = snapshot.nodes.len(),
-            subnets = snapshot.subnets.len(),
-            "New registry snapshot published"
-        );
 
         self.registry_version_published = Some(version);
 
         // Persist the firewall rules if configured
         if let Some(v) = &self.persister {
             v.persist(snapshot).await?;
+        }
+
+        Ok(SnapshotResult::Published(result))
+    }
+}
+
+#[async_trait]
+impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
+    async fn run(&mut self) -> Result<(), Error> {
+        let r = self.0.snapshot().await?;
+
+        match r {
+            SnapshotResult::Published(v) => {
+                info!(
+                    action = "snapshot",
+                    version_old = v.old.as_ref().map(|x| x.version),
+                    version_new = v.new.version,
+                    nodes_old = v.old.as_ref().map(|x| x.nodes),
+                    nodes_new = v.new.nodes,
+                    subnets_old = v.old.as_ref().map(|x| x.subnets),
+                    subnets_new = v.new.subnets,
+                    "New registry snapshot published"
+                );
+
+                let MetricParamsSnapshot { version, timestamp } = &self.1;
+                version.set(v.new.version as i64);
+                timestamp.set(v.timestamp as i64);
+            }
+
+            SnapshotResult::NotOldEnough(v) => info!(
+                action = "snapshot",
+                "Snapshot {v} is not old enough, not publishing"
+            ),
+
+            SnapshotResult::NoNewVersion => {}
         }
 
         Ok(())

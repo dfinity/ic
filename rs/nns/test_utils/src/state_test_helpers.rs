@@ -3,8 +3,9 @@ use crate::common::{
     build_lifeline_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
     NnsInitPayloads,
 };
-use candid::{Decode, Encode, Nat};
+use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
+use cycles_minting_canister::CYCLES_LEDGER_CANISTER_ID;
 use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
 };
@@ -69,6 +70,7 @@ use icrc_ledger_types::icrc1::{
 use num_traits::ToPrimitive;
 use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
+use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -638,7 +640,7 @@ pub fn nns_governance_get_full_neuron(
     state_machine: &mut StateMachine,
     sender: PrincipalId,
     neuron_id: u64,
-) -> Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError> {
+) -> Result<nns_governance_pb::Neuron, GovernanceError> {
     let result = state_machine
         .execute_ingress_as(
             sender,
@@ -657,7 +659,33 @@ pub fn nns_governance_get_full_neuron(
             )
         }
     };
-    Decode!(&result, Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError>).unwrap()
+    Decode!(&result, Result<nns_governance_pb::Neuron, GovernanceError>).unwrap()
+}
+
+pub fn nns_governance_get_neuron_info(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: u64,
+) -> Result<nns_governance_pb::NeuronInfo, GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "get_neuron_info",
+            Encode!(&neuron_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_neuron_info was rejected by the NNS governance canister: {:#?}",
+                reject
+            )
+        }
+    };
+    Decode!(&result, Result<nns_governance_pb::NeuronInfo, GovernanceError>).unwrap()
 }
 
 pub fn nns_governance_get_proposal_info_as_anonymous(
@@ -1691,4 +1719,45 @@ pub fn cmc_set_default_authorized_subnetworks(
     };
 
     nns_wait_for_proposal_execution(machine, proposal_id.id);
+}
+
+pub fn setup_cycles_ledger(state_machine: &StateMachine) {
+    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    enum LedgerArgs {
+        Init(Config),
+    }
+    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    struct Config {
+        pub max_transactions_per_request: u64,
+        pub index_id: Option<candid::Principal>,
+    }
+
+    state_machine.reroute_canister_range(
+        std::ops::RangeInclusive::<CanisterId>::new(
+            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+        ),
+        state_machine.get_subnet_id(),
+    );
+    state_machine.create_canister_with_cycles(
+        Some(CYCLES_LEDGER_CANISTER_ID),
+        Cycles::zero(),
+        None,
+    );
+    let cycles_ledger_wasm = std::fs::read(
+        std::env::var("CYCLES_LEDGER_WASM_PATH").expect("CYCLES_LEDGER_WASM_PATH not set"),
+    )
+    .unwrap();
+    let arg = Encode!(&LedgerArgs::Init(Config {
+        max_transactions_per_request: 50,
+        index_id: None,
+    }))
+    .unwrap();
+    state_machine
+        .install_existing_canister(
+            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+            cycles_ledger_wasm,
+            arg,
+        )
+        .expect("Installing cycles ledger failed");
 }

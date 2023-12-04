@@ -21,9 +21,10 @@ impl CspSigner for Csp {
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> CryptoResult<CspSignature> {
+        let message_len = message.len();
         match algorithm_id {
             AlgorithmId::Ed25519 => {
                 let result = self
@@ -34,7 +35,7 @@ impl CspSigner for Csp {
                     MetricsDomain::BasicSignature,
                     "sign_basic",
                     "message",
-                    message.len(),
+                    message_len,
                     MetricsResult::from(&result),
                 );
                 result
@@ -48,7 +49,7 @@ impl CspSigner for Csp {
                     MetricsDomain::MultiSignature,
                     "sign_multi",
                     "message",
-                    message.len(),
+                    message_len,
                     MetricsResult::from(&result),
                 );
                 result

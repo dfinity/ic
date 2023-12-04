@@ -1050,7 +1050,7 @@ impl ProposalData {
         let mut no = 0;
         let mut undecided = 0;
         for ballot in self.ballots.values() {
-            let lhs: &mut u64 = if let Some(vote) = Vote::from_i32(ballot.vote) {
+            let lhs: &mut u64 = if let Ok(vote) = Vote::try_from(ballot.vote) {
                 match vote {
                     Vote::Unspecified => &mut undecided,
                     Vote::Yes => &mut yes,
@@ -1093,31 +1093,21 @@ impl ProposalData {
     /// The result is only meaningful if a decision on the proposal's result can be made, i.e.,
     /// either there is a majority of yes-votes or the proposal's deadline has passed.
     pub fn is_accepted(&self) -> bool {
-        let majority_required_to_adopt =
-            NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER;
+        let minimum_yes_proportion_of_exercised = self.minimum_yes_proportion_of_exercised();
+        let minimum_yes_proportion_of_total = self.minimum_yes_proportion_of_total();
 
-        let minimum_yes_proportion_of_total = Percentage::from_basis_points(
-            self.minimum_yes_proportion_of_total
-                .and_then(|percentage| percentage.basis_points)
-                .unwrap_or(
-                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
-                        .basis_points
-                        .unwrap(),
-                ),
+        debug_assert!(
+            minimum_yes_proportion_of_exercised < Percentage::from_basis_points(10_000),
+            "minimum_yes_proportion_of_exercised ({minimum_yes_proportion_of_exercised}) should be < 100%"
+        );
+        debug_assert!(
+            minimum_yes_proportion_of_exercised >= Percentage::from_basis_points(5_000),
+            "minimum_yes_proportion_of_exercised ({minimum_yes_proportion_of_exercised}) should be >= 50%"
         );
 
         debug_assert!(
-            majority_required_to_adopt < Percentage::from_basis_points(10_000),
-            "majority_required_to_adopt ({majority_required_to_adopt}) should be < 100%"
-        );
-        debug_assert!(
-            majority_required_to_adopt >= Percentage::from_basis_points(5_000),
-            "majority_required_to_adopt ({majority_required_to_adopt}) should be >= 50%"
-        );
-
-        debug_assert!(
-            minimum_yes_proportion_of_total <= majority_required_to_adopt,
-            "minimum_yes_proportion_of_total ({minimum_yes_proportion_of_total}) should be <= majority_required_to_adopt ({majority_required_to_adopt})"
+            minimum_yes_proportion_of_total <= minimum_yes_proportion_of_exercised,
+            "minimum_yes_proportion_of_total ({minimum_yes_proportion_of_total}) should be <= minimum_yes_proportion_of_exercised ({minimum_yes_proportion_of_exercised})"
         );
 
         let Some(tally) = &self.latest_tally else {
@@ -1136,7 +1126,7 @@ impl ProposalData {
             tally.yes,
             tally.no,
             tally.yes + tally.no,
-            majority_required_to_adopt,
+            minimum_yes_proportion_of_exercised,
         ) == Vote::Yes;
 
         // We'll convert the values to u128 to prevent overflow.
@@ -1197,15 +1187,7 @@ impl ProposalData {
             .as_ref()
             .expect("expected latest_tally to not be None");
 
-        let minimum_yes_proportion_of_exercised = Percentage::from_basis_points(
-            self.minimum_yes_proportion_of_exercised
-                .and_then(|percentage| percentage.basis_points)
-                .unwrap_or(
-                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
-                        .basis_points
-                        .unwrap(),
-                ),
-        );
+        let minimum_yes_proportion_of_exercised = self.minimum_yes_proportion_of_exercised();
 
         Self::majority_decision(
             tally.yes,
@@ -1213,6 +1195,30 @@ impl ProposalData {
             tally.total,
             minimum_yes_proportion_of_exercised,
         )
+    }
+
+    pub fn minimum_yes_proportion_of_total(&self) -> Percentage {
+        let minimum_yes_proportion_of_total = self
+            .minimum_yes_proportion_of_total
+            .unwrap_or(NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER);
+        // make sure minimum_yes_proportion_of_total.basis_points isn't None
+        if minimum_yes_proportion_of_total.basis_points.is_some() {
+            minimum_yes_proportion_of_total
+        } else {
+            NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+        }
+    }
+
+    pub fn minimum_yes_proportion_of_exercised(&self) -> Percentage {
+        let minimum_yes_proportion_of_exercised = self
+            .minimum_yes_proportion_of_exercised
+            .unwrap_or(NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER);
+        // make sure minimum_yes_proportion_of_exercised.basis_points isn't None
+        if minimum_yes_proportion_of_exercised.basis_points.is_some() {
+            minimum_yes_proportion_of_exercised
+        } else {
+            NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+        }
     }
 
     /// Considers the amount of 'yes' and 'no' voting power in relation to the total voting power,

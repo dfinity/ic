@@ -1,7 +1,7 @@
 use crate::address::Address;
 use crate::eth_logs::{report_transaction_error, ReceivedEthEventError};
-use crate::eth_rpc::BlockSpec;
-use crate::eth_rpc_client::{EthRpcClient, DefaultTransport};
+use crate::eth_rpc::{BlockSpec, HttpOutcallError};
+use crate::eth_rpc_client::{DefaultTransport, EthRpcClient};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LedgerMintIndex};
@@ -94,37 +94,60 @@ async fn scrap_eth_logs_range_inclusive(
 ) -> Option<BlockNumber> {
     /// The maximum block spread is introduced by Cloudflare limits.
     /// https://developers.cloudflare.com/web3/ethereum-gateway/
-    const MAX_BLOCK_SPREAD: u16 = 800;
+    const MAX_BLOCK_SPREAD: u16 = 799;
     match from.cmp(&to) {
         Ordering::Less | Ordering::Equal => {
             let max_to = from
                 .checked_add(BlockNumber::from(MAX_BLOCK_SPREAD))
                 .unwrap_or(BlockNumber::MAX);
-            let last_scraped_block_number = min(max_to, to);
+            let mut last_block_number = min(max_to, to);
             log!(
                 DEBUG,
                 "Scrapping ETH logs from block {:?} to block {:?}...",
                 from,
-                last_scraped_block_number
+                last_block_number
             );
 
-            let (transaction_events, errors) = match crate::eth_logs::last_received_eth_events(
-                contract_address,
-                from,
-                last_scraped_block_number,
-            )
-            .await
-            {
-                Ok((events, errors)) => (events, errors),
-                Err(e) => {
-                    log!(
+            let (transaction_events, errors) = loop {
+                match crate::eth_logs::last_received_eth_events(
+                    contract_address,
+                    from,
+                    last_block_number,
+                )
+                .await
+                {
+                    Ok((events, errors)) => break (events, errors),
+                    Err(e) => {
+                        log!(
                         INFO,
-                        "Failed to get ETH logs from block {from} to block {last_scraped_block_number}: {e:?}",
+                        "Failed to get ETH logs from block {from} to block {last_block_number}: {e:?}",
                     );
-                    return None;
-                }
+                        if e.has_http_outcall_error_matching(
+                            HttpOutcallError::is_response_too_large,
+                        ) {
+                            if from == last_block_number {
+                                mutate_state(|s| {
+                                    process_event(s, EventType::SkippedBlock(last_block_number));
+                                    s.last_scraped_block_number = last_block_number;
+                                });
+                                return Some(last_block_number);
+                            } else {
+                                let new_last_block_number = from
+                                    .checked_add(last_block_number
+                                            .checked_sub(from)
+                                            .expect("last_scraped_block_number is greater or equal than from")
+                                            .div_by_two())
+                                    .expect("must be less than last_scraped_block_number");
+                                log!(INFO, "Too many logs received in range [{from}, {last_block_number}]. Will retry with range [{from}, {new_last_block_number}]");
+                                last_block_number = new_last_block_number;
+                                continue;
+                            }
+                        }
+                        return None;
+                    }
+                };
             };
-            let has_new_events = !transaction_events.is_empty();
+
             for event in transaction_events {
                 log!(
                     INFO,
@@ -155,7 +178,7 @@ async fn scrap_eth_logs_range_inclusive(
                     mutate_state(|s| process_event(s, EventType::AcceptedDeposit(event)));
                 }
             }
-            if has_new_events {
+            if read_state(State::has_events_to_mint) {
                 ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint_cketh()));
             }
             for error in errors {
@@ -172,8 +195,8 @@ async fn scrap_eth_logs_range_inclusive(
                 }
                 report_transaction_error(error);
             }
-            mutate_state(|s| s.last_scraped_block_number = last_scraped_block_number);
-            Some(last_scraped_block_number)
+            mutate_state(|s| s.last_scraped_block_number = last_block_number);
+            Some(last_block_number)
         }
         Ordering::Greater => {
             ic_cdk::trap(&format!(

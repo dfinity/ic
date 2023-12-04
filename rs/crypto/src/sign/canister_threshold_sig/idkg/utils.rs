@@ -13,7 +13,7 @@ use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyOpeningError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
+use ic_types::crypto::canister_threshold_sig::idkg::{BatchSignedIDkgDealing, IDkgTranscript};
 use ic_types::crypto::KeyPurpose;
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
 use std::convert::TryFrom;
@@ -46,7 +46,8 @@ pub fn retrieve_mega_public_key_from_registry(
     Ok(mega_pubkey)
 }
 
-fn fetch_idkg_dealing_encryption_public_key_from_registry(
+/// Query the registry for the proto of the MEGa public key of `node_id` receiver.
+pub fn fetch_idkg_dealing_encryption_public_key_from_registry(
     node_id: &NodeId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
@@ -105,17 +106,14 @@ impl From<IDkgDealingExtractionError> for IDkgVerifyOpeningError {
     }
 }
 
-/// Finds in `transcript` the dealing of the dealer `dealer_id`, and returns
-/// this dealing together with the index that corresponds to the dealer.
+/// Finds in `transcript` the dealing of the dealer `dealer_id` and converts it
+/// to internal representation, and returns this dealing together with the index
+/// that corresponds to the dealer.
 pub(crate) fn index_and_dealing_of_dealer(
     dealer_id: NodeId,
     transcript: &IDkgTranscript,
 ) -> Result<(NodeIndex, IDkgDealingInternal), IDkgDealingExtractionError> {
-    let (index, signed_dealing) = transcript
-        .verified_dealings
-        .iter()
-        .find(|(_index, signed_dealing)| signed_dealing.dealer_id() == dealer_id)
-        .ok_or(IDkgDealingExtractionError::MissingDealingInTranscript { dealer_id })?;
+    let (index, signed_dealing) = index_and_batch_signed_dealing_of_dealer(dealer_id, transcript)?;
     let internal_dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
         IDkgDealingExtractionError::SerializationError {
             internal_error: format!(
@@ -124,5 +122,19 @@ pub(crate) fn index_and_dealing_of_dealer(
             ),
         }
     })?;
-    Ok((*index, internal_dealing))
+    Ok((index, internal_dealing))
+}
+
+/// Finds in `transcript` the dealing of the dealer `dealer_id`, and returns
+/// this dealing together with the index that corresponds to the dealer.
+pub(crate) fn index_and_batch_signed_dealing_of_dealer(
+    dealer_id: NodeId,
+    transcript: &IDkgTranscript,
+) -> Result<(NodeIndex, &BatchSignedIDkgDealing), IDkgDealingExtractionError> {
+    let (index, signed_dealing) = transcript
+        .verified_dealings
+        .iter()
+        .find(|(_index, signed_dealing)| signed_dealing.dealer_id() == dealer_id)
+        .ok_or(IDkgDealingExtractionError::MissingDealingInTranscript { dealer_id })?;
+    Ok((*index, signed_dealing))
 }

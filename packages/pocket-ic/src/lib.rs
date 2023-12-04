@@ -34,7 +34,7 @@
 use crate::common::rest::{
     ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, InstanceId, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory,
-    RawStableMemory, RawTime, RawWasmResult, SubnetKind,
+    RawStableMemory, RawTime, RawWasmResult,
 };
 use candid::{
     decode_args, encode_args,
@@ -50,6 +50,7 @@ use ic_cdk::api::management_canister::{
     provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
 };
 use reqwest::Url;
+use schemars::JsonSchema;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
@@ -445,8 +446,12 @@ impl PocketIc {
     }
 
     /// Creates a canister with a specific canister ID and optional custom settings.
-    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS subnet.
-    /// Panics if the canister ID is not contained in any of the subnets, of if it is already in use.
+    /// Returns an error if the canister ID is already in use.
+    /// Panics if the canister ID is not contained in any of the subnets.
+    ///
+    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS
+    /// subnet range, it is not intended to be used on regular app or system subnets,
+    /// where it can lead to conflicts on which the function panics.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
     pub fn create_canister_with_id(
         &self,
@@ -454,27 +459,7 @@ impl PocketIc {
         settings: Option<CanisterSettings>,
         canister_id: CanisterId,
     ) -> Result<CanisterId, String> {
-        use SubnetKind::{Application, System};
-
-        let subnet_id = self.get_subnet(canister_id);
-        if subnet_id.is_none() {
-            return Err(format!(
-                "Canister ID {} is not contained in any subnet",
-                canister_id
-            ));
-        }
-        if let Some(subnet_id) = subnet_id {
-            let config = self.topology.0.get(&subnet_id).unwrap();
-            if config.subnet_kind == Application || config.subnet_kind == System {
-                return Err(
-                    "Create canister with ID is only supported for Bitcoin, Fiduciary, II, SNS and NNS subnets".into()
-                );
-            }
-        }
-
-        let CanisterIdRecord {
-            canister_id: actual_canister_id,
-        } = call_candid_as(
+        let res = call_candid_as(
             self,
             Principal::management_canister(),
             RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
@@ -485,9 +470,13 @@ impl PocketIc {
                 specified_id: Some(canister_id),
             },),
         )
-        .map(|(x,)| x)
-        .unwrap();
-        Ok(actual_canister_id)
+        .map(|(x,)| x);
+        match res {
+            Ok(CanisterIdRecord {
+                canister_id: actual_canister_id,
+            }) => Ok(actual_canister_id),
+            Err(e) => Err(format!("{:?}", e)),
+        }
     }
 
     /// Create a canister on a specific subnet with optional custom settings.
@@ -839,6 +828,38 @@ where
     })
 }
 
+/// Call a canister candid update method, anonymous.
+pub fn update_candid<Input, Output>(
+    env: &PocketIc,
+    canister_id: CanisterId,
+    method: &str,
+    input: Input,
+) -> Result<Output, CallError>
+where
+    Input: ArgumentEncoder,
+    Output: for<'a> ArgumentDecoder<'a>,
+{
+    update_candid_as(env, canister_id, Principal::anonymous(), method, input)
+}
+
+/// Call a canister candid update method, authenticated. The sender can be impersonated (i.e., the
+/// signature is not verified).
+pub fn update_candid_as<Input, Output>(
+    env: &PocketIc,
+    canister_id: CanisterId,
+    sender: Principal,
+    method: &str,
+    input: Input,
+) -> Result<Output, CallError>
+where
+    Input: ArgumentEncoder,
+    Output: for<'a> ArgumentDecoder<'a>,
+{
+    with_candid(input, |bytes| {
+        env.update_call(canister_id, sender, method, bytes)
+    })
+}
+
 /// A helper function that we use to implement both [`call_candid`] and
 /// [`query_candid`].
 pub fn with_candid<Input, Output>(
@@ -911,11 +932,13 @@ pub enum TryFromError {
 /// convention: the most significant digit is the corresponding reject
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
-#[derive(PartialOrd, Ord, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
+)]
 pub enum ErrorCode {
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
-    CanisterOutputQueueFull = 201,
+    CanisterQueueFull = 201,
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
@@ -971,7 +994,7 @@ impl TryFrom<u64> for ErrorCode {
         match err {
             101 => Ok(ErrorCode::SubnetOversubscribed),
             102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
-            201 => Ok(ErrorCode::CanisterOutputQueueFull),
+            201 => Ok(ErrorCode::CanisterQueueFull),
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
@@ -1034,7 +1057,9 @@ impl std::fmt::Display for ErrorCode {
 /// The error that is sent back to users from the IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in the ingress history.
-#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
+)]
 pub struct UserError {
     /// The error code.
     pub code: ErrorCode,
@@ -1084,12 +1109,8 @@ Could not find the PocketIC binary.
 The PocketIC binary could not be found at {:?}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
 or place it in your current working directory (you are running PocketIC from {:?}).
 
-Run the following commands to get the binary:
-    curl -sLO https://download.dfinity.systems/ic/29ec86dc9f9ca4691d4d4386c8b2aa41e14d9d16/openssl-static-binaries/x86_64-$platform/pocket-ic.gz
-    gzip -d pocket-ic.gz
-    chmod +x pocket-ic
-where $platform is 'linux' for Linux and 'darwin' for Intel/rosetta-enabled Darwin.
-        ", &bin_path, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
+To download the binary, please visit https://github.com/dfinity/pocketic."
+, &bin_path, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
     }
 
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.

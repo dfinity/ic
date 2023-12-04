@@ -24,6 +24,7 @@ pub enum CanisterCallRequest {
     GetState(GetStateRequest),
     GetSnsCanistersSummary(GetSnsCanistersSummaryRequest),
     DeployNewSns(DeployNewSnsRequest),
+    GetBuildMetadata(()),
 }
 #[derive(Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Clone)]
 #[allow(clippy::large_enum_variant)]
@@ -85,6 +86,9 @@ impl EnvironmentFixture {
             "deploy_new_sns" => {
                 CanisterCallRequest::DeployNewSns(Decode!(&args, DeployNewSnsRequest)?)
             }
+            // Used to make dummy canister calls in order to commit canister state, so that they do
+            // not get rolled back if a panic occurs later.
+            "get_build_metadata" => CanisterCallRequest::GetBuildMetadata(Decode!(&args)?),
             _ => panic!("Unsupported method_name `{method_name}` in decode_canister_call."),
         };
 

@@ -16,6 +16,7 @@ use dashmap::DashMap;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
+use rayon::prelude::*;
 use tracing::warn;
 use url::Url;
 
@@ -185,7 +186,7 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
         // Filter out bad nodes
         let mut nodes = nodes
-            .into_iter()
+            .into_par_iter()
             .filter_map(Result::ok) // Filter any green thread errors
             .filter_map(Result::ok) // Filter any `check` errors
             .collect::<Vec<_>>();
@@ -207,12 +208,12 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
         // Filter out nodes that fail the predicates
         let nodes = nodes
-            .into_iter()
+            .into_par_iter()
             .filter(|x| x.height >= min_height) // Filter below min_height
             .filter(|x| x.ok_count >= self.min_ok_count) // Filter below min_ok_count
+            .map(|x| x.node)
             .collect::<Vec<_>>();
 
-        let nodes = nodes.into_iter().map(|x| x.node).collect();
         Subnet { nodes, ..subnet }
     }
 }
@@ -268,11 +269,15 @@ pub trait Check: Send + Sync {
 
 pub struct Checker {
     http_client: Arc<dyn HttpClient>,
+    timeout: Duration,
 }
 
 impl Checker {
-    pub fn new(http_client: Arc<dyn HttpClient>) -> Self {
-        Self { http_client }
+    pub fn new(http_client: Arc<dyn HttpClient>, timeout: Duration) -> Self {
+        Self {
+            http_client,
+            timeout,
+        }
     }
 }
 
@@ -283,7 +288,8 @@ impl Check for Checker {
         let u = Url::from_str(&format!("https://{}:{}/api/v2/status", node.id, node.port))
             .map_err(|err| CheckError::Generic(err.to_string()))?;
 
-        let request = reqwest::Request::new(Method::GET, u);
+        let mut request = reqwest::Request::new(Method::GET, u);
+        *request.timeout_mut() = Some(self.timeout);
 
         // Execute request
         let start_time = Instant::now();

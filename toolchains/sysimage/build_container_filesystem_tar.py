@@ -13,7 +13,6 @@ from typing import Callable, List, Optional, TypeVar
 
 import configargparse
 import invoke
-from reproducibility import print_artifact_info
 
 CONTAINER_COMMAND = "sudo podman "
 SYS_DIR_PREFIX = "podman_sys_dir_"
@@ -286,8 +285,6 @@ def main():
     else:
         build_func(CONTAINER_COMMAND)
         remove_image(image_tag)
-
-    print_artifact_info(destination_tar_filename)
 
 
 if __name__ == "__main__":

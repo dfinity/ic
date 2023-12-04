@@ -391,8 +391,8 @@ impl GovernanceProto {
     /// This name does not follow our naming pattern, because "mode" is already
     /// used by prost::Message.
     pub fn get_mode(&self) -> governance::Mode {
-        let result = governance::Mode::from_i32(self.mode)
-            .unwrap_or_else(|| panic!("Unknown mode ({})", self.mode));
+        let result = governance::Mode::try_from(self.mode)
+            .unwrap_or_else(|_| panic!("Unknown mode ({})", self.mode));
 
         assert!(
             result != governance::Mode::Unspecified,
@@ -487,7 +487,7 @@ impl ValidGovernanceProto {
 
     /// Because enum fields (such as mode) are of type i32, not FooEnum.
     fn valid_mode_or_err(governance_proto: &GovernanceProto) -> Result<governance::Mode, String> {
-        let mode = match governance::Mode::from_i32(governance_proto.mode) {
+        let mode = match governance::Mode::try_from(governance_proto.mode).ok() {
             Some(mode) => mode,
             None => {
                 return Err(format!(
@@ -749,7 +749,7 @@ impl Governance {
 
     pub fn set_mode(&mut self, mode: i32, caller: PrincipalId) {
         let mode =
-            governance::Mode::from_i32(mode).unwrap_or_else(|| panic!("Unknown mode: {}", mode));
+            governance::Mode::try_from(mode).unwrap_or_else(|_| panic!("Unknown mode: {}", mode));
 
         if !self.is_swap_canister(caller) {
             panic!("Caller must be the swap canister.");
@@ -3214,7 +3214,7 @@ impl Governance {
                 .as_ref()
                 .expect("Proposal must have an action");
 
-            let vote = Vote::from_i32(request.vote).unwrap_or(Vote::Unspecified);
+            let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
             if vote == Vote::Unspecified {
                 // Invalid vote specified, i.e., not yes or no.
                 return Err(GovernanceError::new_with_message(
@@ -3938,7 +3938,7 @@ impl Governance {
     /// Similarly, if the translation results in Unspecified, panics (in
     /// non-release builds) or defaults to Normal (in release builds).
     fn mode(&self) -> governance::Mode {
-        let result = governance::Mode::from_i32(self.proto.mode).unwrap_or_else(|| {
+        let result = governance::Mode::try_from(self.proto.mode).unwrap_or_else(|_| {
             debug_assert!(
                 false,
                 "Governance is in an unknown mode: {}",
@@ -4644,7 +4644,18 @@ impl Governance {
         for proposal_id in &considered_proposals {
             if let Some(proposal) = self.get_proposal_data(*proposal_id) {
                 for (voter, ballot) in &proposal.ballots {
-                    if !Vote::from(ballot.vote).eligible_for_rewards() {
+                    #[allow(clippy::blocks_in_if_conditions)]
+                    if !Vote::try_from(ballot.vote)
+                        .unwrap_or_else(|_| {
+                            println!(
+                                "{}Vote::from invoked with unexpected value {}.",
+                                log_prefix(),
+                                ballot.vote
+                            );
+                            Vote::Unspecified
+                        })
+                        .eligible_for_rewards()
+                    {
                         continue;
                     }
 

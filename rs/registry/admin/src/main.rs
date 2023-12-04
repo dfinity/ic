@@ -152,7 +152,7 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
-use std::net::{Ipv6Addr, TcpStream};
+use std::net::Ipv6Addr;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
@@ -252,8 +252,6 @@ impl ProposeToCreateSubnetCmd {
             subnet_configuration::get_default_config_params(self.subnet_type, self.node_ids.len());
         let gossip_config = p2p::build_default_gossip_config();
         // set subnet params
-        self.ingress_bytes_per_block_soft_cap
-            .get_or_insert(subnet_config.ingress_bytes_per_block_soft_cap);
         self.max_ingress_bytes_per_message
             .get_or_insert(subnet_config.max_ingress_bytes_per_message);
         self.max_ingress_messages_per_block
@@ -931,6 +929,10 @@ struct ProposeToUpdateElectedReplicaVersionsCmd {
     pub replica_version_to_elect: Option<String>,
 
     #[clap(long)]
+    /// The launch measurement of the replica version to elect.
+    pub guest_launch_measurement: Option<String>,
+
+    #[clap(long)]
     /// The hex-formatted SHA-256 hash of the archive served by
     /// 'release_package_urls'.
     pub release_package_sha256_hex: Option<String>,
@@ -966,7 +968,7 @@ impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
             replica_version_to_elect: self.replica_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurement_sha256_hex: self.guest_launch_measurement.clone(),
             replica_versions_to_unelect: self.replica_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
@@ -990,10 +992,6 @@ struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     // Assigns this subnet ID to the newly created subnet
     pub subnet_id_override: Option<PrincipalId>,
-
-    #[clap(long)]
-    /// Maximum amount of bytes per block. This is a soft cap.
-    pub ingress_bytes_per_block_soft_cap: Option<u64>,
 
     #[clap(long)]
     /// Maximum amount of bytes per message. This is a hard cap.
@@ -1151,6 +1149,10 @@ struct ProposeToCreateSubnetCmd {
     /// subnet.
     #[clap(long)]
     pub max_number_of_canisters: Option<u64>,
+
+    /// The features that are enabled and disabled on the subnet.
+    #[clap(long)]
+    pub features: Option<SubnetFeatures>,
 }
 
 /// Parse the options that are used to create EcdsaInitialConfig option
@@ -1239,7 +1241,7 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
         CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
-            ingress_bytes_per_block_soft_cap: self.ingress_bytes_per_block_soft_cap.unwrap(),
+            ingress_bytes_per_block_soft_cap: Default::default(),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap(),
             max_block_payload_size: self.max_block_payload_size.unwrap(),
@@ -1274,7 +1276,7 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             max_instructions_per_install_code: self
                 .max_instructions_per_install_code
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
-            features: SubnetFeatures::default(),
+            features: self.features.unwrap_or_default().into(),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
@@ -1821,7 +1823,7 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
-            features: self.features,
+            features: self.features.map(|v| v.into()),
             ecdsa_config,
             ecdsa_key_signing_enable,
             ecdsa_key_signing_disable,
@@ -4379,32 +4381,85 @@ async fn get_subnet_record_with_details(
         .with_node_details(all_nodes_with_details)
 }
 
-/// Check if a connection to the Url can be established ==> Url is reachable
-fn is_url_reachable(url: &Url) -> bool {
-    let addrs = match url.socket_addrs(|| None) {
-        Ok(addrs) => addrs,
-        Err(err) => {
-            eprintln!("WARNING: could not resolve {}: {}", url, err);
-            return false;
-        }
+/// Utility function to convert a Url to a host:port string.
+fn url_to_host_with_port(url: Url) -> String {
+    let host = url.host_str().unwrap_or("");
+    let host = if host.contains(':') && !host.starts_with('[') && !host.ends_with(']') {
+        // Likely an IPv6 address, enclose in brackets
+        format!("[{}]", host)
+    } else {
+        // IPv4 or hostname
+        host.to_string()
     };
-    for addr in addrs.into_iter() {
-        // A Url may have multiple IP addresses so we'll check if any of them are reachable
-        match TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(1)) {
-            Ok(_) => return true,
-            Err(err) => {
-                if url.to_string().contains(&addr.to_string()) {
-                    eprintln!("WARNING: could not connect to {}: {}, skipping", url, err);
-                } else {
-                    eprintln!(
-                        "WARNING: could not connect to {} ({}): {}, skipping",
-                        addr, url, err
-                    );
-                }
+    let port = url.port_or_known_default().unwrap_or(8080);
+
+    format!("{}:{}", host, port)
+}
+
+/// Utility function to find NNS URLs that the local machine can connect to.
+async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
+    let retries_max = 3;
+    let timeout_duration = tokio::time::Duration::from_secs(10);
+
+    for i in 1..=retries_max {
+        let tasks: Vec<_> = nns_urls
+            .iter()
+            .map(|url| {
+                Box::pin(async move {
+                    let host_with_port = url_to_host_with_port(url.clone());
+
+                    match tokio::net::lookup_host(host_with_port.clone()).await {
+                        Ok(ips) => {
+                            for ip in ips {
+                                match tokio::time::timeout(
+                                    timeout_duration,
+                                    tokio::net::TcpStream::connect(ip),
+                                )
+                                .await
+                                {
+                                    Ok(connection) => match connection {
+                                        Ok(_) => return Some(url.clone()),
+                                        Err(err) => {
+                                            eprintln!(
+                                                "WARNING: Failed to connect to {}: {:?}",
+                                                ip, err
+                                            );
+                                        }
+                                    },
+                                    Err(err) => {
+                                        eprintln!(
+                                            "WARNING: Failed to connect to {}: {:?}",
+                                            ip, err
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("WARNING: Failed to lookup {}: {:?}", host_with_port, err);
+                        }
+                    }
+                    None
+                })
+            })
+            .collect();
+
+        // Wait for the first task to complete ==> until we have a reachable NNS URL.
+        // select_all returns the completed future at position 0, and the remaining futures at position 2.
+        match futures::future::select_all(tasks).await.0 {
+            Some(url) => return vec![url],
+            None => {
+                eprintln!(
+                    "WARNING: None of the provided NNS urls are reachable. Retrying in 5 seconds... ({}/{})",
+                    i,
+                    retries_max
+                );
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
         }
     }
-    false
+
+    Vec::new()
 }
 
 /// `main()` method for the `ic-admin` utility.
@@ -4412,16 +4467,18 @@ fn is_url_reachable(url: &Url) -> bool {
 async fn main() {
     let opts: Opts = Opts::parse();
 
-    // Check all NNS urls in parallel to see which ones are reachable (and join async)
-    let reachable_nns_urls: Vec<Url> = opts
-        .nns_urls
-        .iter()
-        .filter(|addr| is_url_reachable(addr))
-        .cloned()
-        .collect();
+    let reachable_nns_urls = find_reachable_nns_urls(opts.nns_urls.clone()).await;
 
     if reachable_nns_urls.is_empty() {
         panic!("None of the provided NNS urls are reachable");
+    } else {
+        eprintln!(
+            "Using NNS URLs: {:?}",
+            reachable_nns_urls
+                .iter()
+                .map(|url| url.as_str())
+                .collect::<Vec<_>>()
+        );
     }
 
     let registry_canister = RegistryCanister::new(reachable_nns_urls.clone());

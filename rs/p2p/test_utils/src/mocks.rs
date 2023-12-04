@@ -31,7 +31,7 @@ mock! {
 
         fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk>;
 
-        fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId);
+        fn deliver_state_sync(&self, msg: StateSyncMessage);
     }
 }
 

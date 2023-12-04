@@ -137,9 +137,15 @@ user.bazelrc
 # OS X
 .DS_Store
 
-# Potential files produced in devcontainer
+# Bind-mounts to devcontainer
 .cache
 .rustup
 .bash_history
 .zcompdump*
 .zsh*
+.npm
+.ssh
+.aws
+.viminfo
+.local
+.config

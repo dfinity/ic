@@ -14,7 +14,7 @@ use maplit::hashmap;
 use prost::Message;
 use std::{
     borrow::Cow,
-    collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
+    collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap, HashSet},
     ops::RangeBounds,
 };
 
@@ -275,8 +275,9 @@ where
         self.main.contains_key(&neuron_id.id)
     }
 
-    pub fn len(&self) -> u64 {
-        self.main.len()
+    pub fn len(&self) -> usize {
+        // We can't possibly have usize::MAX neurons, but we casting it in a saturating way anyway.
+        self.main.len().min(usize::MAX as u64) as usize
     }
 
     #[allow(dead_code)] // TODO(NNS1-2416): Re-enable clippy once we start actually using this code.
@@ -294,6 +295,24 @@ where
         self.main
             .range(range)
             .map(|(_neuron_id, neuron)| self.reconstitute_neuron(neuron))
+    }
+
+    /// Returns all neuron ids as a set. Note that this method can take ~1B instructions and
+    /// probably shouldn't be used outside of upgrades.
+    pub fn stable_neuron_ids(&self) -> HashSet<u64> {
+        self.main
+            .range(u64::MIN..=u64::MAX)
+            .map(|(neuron_id, _)| neuron_id)
+            .collect()
+    }
+
+    /// Returns the number of entries for some of the storage sections.
+    pub fn lens(&self) -> NeuronStorageLens {
+        NeuronStorageLens {
+            hot_keys: self.hot_keys_map.len(),
+            followees: self.followees_map.len(),
+            known_neuron_data: self.known_neuron_data_map.len(),
+        }
     }
 
     /// Internal function to take what's in the main map and fill in the remaining data from
@@ -416,6 +435,13 @@ where
             // Handle id field not set.
             .ok_or(NeuronStoreError::NeuronIdIsNone)
     }
+}
+
+/// Number of entries for each section of the neuron storage. Only the ones needed are defined.
+pub struct NeuronStorageLens {
+    pub hot_keys: u64,
+    pub followees: u64,
+    pub known_neuron_data: u64,
 }
 
 #[cfg(test)]

@@ -15,6 +15,7 @@ use ic_cketh_minter::endpoints::{
     CandidBlockTag, EthTransaction, RetrieveEthRequest, RetrieveEthStatus, TxFinalizedStatus,
     WithdrawalArg, WithdrawalError,
 };
+use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
@@ -60,6 +61,13 @@ const DEFAULT_WITHDRAWAL_TRANSACTION_HASH: &str =
 const DEFAULT_WITHDRAWAL_TRANSACTION: &str = "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256";
 const MINTER_ADDRESS: &str = "0xfd644a761079369962386f8e4259217c2a10b8d0";
 const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
+
+const HELPER_SMART_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
+const RECEIVED_ETH_EVENT_TOPIC: &str =
+    "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435";
+const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
+
+const MAX_ETH_LOGS_BLOCK_RANGE: u64 = 799;
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -182,7 +190,7 @@ fn should_block_deposit_from_blocked_address() {
 #[test]
 fn should_not_mint_when_logs_inconsistent() {
     let deposit_params = DepositParams::default();
-    let (ankr_logs, block_pi_logs) = {
+    let (ankr_logs, public_node_logs) = {
         let ankr_log_entry = deposit_params.eth_log_entry();
         let mut cloudflare_log_entry = ankr_log_entry.clone();
         cloudflare_log_entry.amount += 1;
@@ -191,12 +199,12 @@ fn should_not_mint_when_logs_inconsistent() {
             vec![ethers_core::types::Log::from(cloudflare_log_entry)],
         )
     };
-    assert_ne!(ankr_logs, block_pi_logs);
+    assert_ne!(ankr_logs, public_node_logs);
 
     CkEthSetup::new()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
-                .respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
+                .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
                 .respond_with(JsonRpcProvider::Cloudflare, ankr_logs.clone())
         }))
         .expect_no_mint();
@@ -309,7 +317,7 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
                     },
                 )
                 .modify_response(
-                    JsonRpcProvider::BlockPi,
+                    JsonRpcProvider::PublicNode,
                     &mut |response: &mut ethers_core::types::TransactionReceipt| {
                         response.status = Some(1.into())
                     },
@@ -347,7 +355,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
                 },
             )
             .modify_response(
-                JsonRpcProvider::BlockPi,
+                JsonRpcProvider::PublicNode,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740743_u64.into()
                 },
@@ -399,6 +407,7 @@ fn should_reimburse() {
         .expect_withdrawal_request_accepted();
 
     let withdrawal_id = cketh.withdrawal_id().clone();
+    let (tx, _sig) = default_signed_eip_1559_transaction();
     let cketh = cketh
         .wait_and_validate_withdrawal(
             ProcessWithdrawalParams::default().with_mock_eth_get_transaction_receipt(move |mock| {
@@ -431,14 +440,21 @@ fn should_reimburse() {
     cketh.env.advance_time(PROCESS_REIMBURSEMENT);
     cketh.env.tick();
 
-    let gas_cost = Nat::from(21_000_u64 * EFFECTIVE_GAS_PRICE);
+    let cost_of_failed_transaction = withdrawal_amount
+        .0
+        .to_u128()
+        .unwrap()
+        .checked_sub(tx.value.unwrap().as_u128())
+        .unwrap();
+    assert_eq!(cost_of_failed_transaction, 693_077_873_418_000);
+
     let balance_after_withdrawal = cketh.balance_of(caller);
     assert_eq!(
         balance_after_withdrawal,
-        balance_before_withdrawal.clone() - gas_cost.clone()
+        balance_before_withdrawal.clone() - cost_of_failed_transaction
     );
 
-    let reimbursed_amount = balance_before_withdrawal.clone() - gas_cost.clone();
+    let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
     let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1);
     let failed_tx_hash =
         "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
@@ -457,7 +473,7 @@ fn should_reimburse() {
     cketh
         .call_ledger_get_transaction(reimbursed_in_block)
         .expect_mint(Mint {
-            amount: reimbursed_amount,
+            amount: reimbursed_amount.clone(),
             to: Account {
                 owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
                 subaccount: None,
@@ -508,7 +524,7 @@ fn should_reimburse() {
             }},
         EventPayload::ReimbursedEthWithdrawal {
             transaction_hash: Some("0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()),
-            reimbursed_amount: balance_before_withdrawal - gas_cost,
+            reimbursed_amount,
             withdrawal_id: withdrawal_id.clone(),
             reimbursed_in_block: withdrawal_id + 1,
         },
@@ -705,14 +721,14 @@ fn should_not_overlap_when_scrapping_logs() {
 
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(800_u64))
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
-            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
-            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -722,21 +738,21 @@ fn should_not_overlap_when_scrapping_logs() {
         .checked_add(BlockNumber::from(1_u64))
         .unwrap();
     let second_to_block = second_from_block
-        .checked_add(BlockNumber::from(800_u64))
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
-            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
-            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
 
     cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: second_to_block.into(),
         }]);
@@ -752,21 +768,23 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .build()
         .expect_rpc_calls(&cketh);
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
-    let to_block = from_block.checked_add(BlockNumber::from(800_u64)).unwrap();
+    let to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": from_block,
             "toBlock": to_block,
-            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
-            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
-        .respond_with(JsonRpcProvider::BlockPi, json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
+        .respond_with(JsonRpcProvider::PublicNode, json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
         .build()
         .expect_rpc_calls(&cketh);
 
     let cketh = cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
@@ -780,15 +798,15 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .with_request_params(json!([{
             "fromBlock": from_block,
             "toBlock": to_block,
-            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
-            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
 
     cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: Nat::from(to_block),
         }]);
@@ -808,8 +826,8 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
         .with_request_params(json!([{
             "fromBlock": from_block,
             "toBlock": from_block,
-            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
-            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -827,7 +845,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         .expect_rpc_calls(&cketh);
 
     let cketh = cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
@@ -845,18 +863,207 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         .with_request_params(json!([{
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
-            "address": ["0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1"],
-            "topics": ["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]
+            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
 
     cketh
-        .check_audit_logs_and_upgrade()
+        .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: last_finalized_block.into(),
         }]);
+}
+
+#[test]
+fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
+    let safe_block_number = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 100;
+    let finalized_block_number = safe_block_number - 32;
+    let cketh = CkEthSetup::new().check_audit_logs_and_upgrade(UpgradeArg {
+        ethereum_block_height: Some(CandidBlockTag::Safe),
+        ..Default::default()
+    });
+    cketh.env.tick();
+
+    let cketh = cketh
+        .deposit(
+            DepositParams::default()
+                .with_mock_eth_get_block_by_number(move |mock| {
+                    mock.with_request_params(json!(["safe", false]))
+                        .respond_for_all_with(block_response(safe_block_number))
+                })
+                .with_mock_eth_get_logs(move |mock| {
+                    mock.with_request_params(json!([{
+                        "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                        "toBlock": BlockNumber::from(safe_block_number),
+                        "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                        "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                    }]))
+                }),
+        )
+        .expect_mint();
+
+    let cketh = cketh
+        .check_audit_logs_and_upgrade(UpgradeArg {
+            ethereum_block_height: Some(CandidBlockTag::Finalized),
+            ..Default::default()
+        })
+        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+            block_number: safe_block_number.into(),
+        }]);
+    cketh.env.tick();
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
+        .respond_for_all_with(block_response(finalized_block_number))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh
+        .assert_has_no_rpc_call(&JsonRpcMethod::EthGetLogs)
+        .check_audit_logs_and_upgrade(Default::default())
+        .assert_has_no_event_satisfying(|event| {
+            matches!(event, EventPayload::SyncedToBlock { block_number }
+                if block_number != &Nat::from(safe_block_number) && block_number != &Nat::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL))
+        });
+}
+
+#[test]
+fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
+    let cketh = CkEthSetup::new();
+    let deposit = DepositParams::default().eth_log_entry();
+    // around 600 bytes per log
+    // we need at least 3334 logs to reach the 2MB limit
+    let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_500);
+    assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
+
+    let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .unwrap();
+    let half_to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE / 2))
+        .unwrap();
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": from_block,
+                "toBlock": to_block,
+                "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&cketh);
+    }
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": half_to_block,
+            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+        }]))
+        .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh
+        .check_audit_logs_and_upgrade(Default::default())
+        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+            block_number: half_to_block.into(),
+        }])
+        .assert_has_no_event_satisfying(|event| matches!(event, EventPayload::SkippedBlock { .. }));
+}
+
+#[test]
+fn should_skip_single_block_containing_too_many_events() {
+    let cketh = CkEthSetup::new();
+    let deposit = DepositParams::default().eth_log_entry();
+    // around 600 bytes per log
+    // we need at least 3334 logs to reach the 2MB limit
+    let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_500);
+    assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
+                "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&cketh);
+    }
+
+    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
+                "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&cketh);
+    }
+
+    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&cketh);
+    }
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
+            "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
+            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+        }]))
+        .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh
+        .check_audit_logs_and_upgrade(Default::default())
+        .assert_has_unique_events_in_order(&vec![
+            EventPayload::SkippedBlock {
+                block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1).into(),
+            },
+            EventPayload::SyncedToBlock {
+                block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3).into(),
+            },
+        ]);
 }
 
 fn assert_contains_unique_event(events: &[Event], payload: EventPayload) {
@@ -905,7 +1112,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
         ledger_id: ledger_id.get().0,
         next_transaction_nonce: 0.into(),
         ethereum_block_height: CandidBlockTag::Finalized,
-        ethereum_contract_address: Some("0x907b6EFc1a398fD88A8161b3cA02eEc8Eaf72ca1".to_string()),
+        ethereum_contract_address: Some(HELPER_SMART_CONTRACT_ADDRESS.to_string()),
         minimum_withdrawal_amount: CKETH_TRANSFER_FEE.into(),
         last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
     };
@@ -938,7 +1145,7 @@ impl From<EthLogEntry> for ethers_core::types::Log {
             "logIndex": format!("0x{:x}", DEFAULT_DEPOSIT_LOG_INDEX),
             "removed": false,
             "topics": [
-                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                RECEIVED_ETH_EVENT_TOPIC,
                 format!("0x000000000000000000000000{}", hex::encode(log_entry.from_address.as_ref())),
                 log_entry.encoded_principal
             ],
@@ -951,6 +1158,36 @@ impl From<EthLogEntry> for ethers_core::types::Log {
 
 fn empty_logs() -> Vec<ethers_core::types::Log> {
     vec![]
+}
+
+fn multi_logs_for_single_transaction(
+    log_entry: EthLogEntry,
+    num_logs: usize,
+) -> Vec<ethers_core::types::Log> {
+    let mut logs = Vec::with_capacity(num_logs);
+    for log_index in 0..num_logs {
+        let mut log = ethers_core::types::Log::from(log_entry.clone());
+        log.log_index = Some(log_index.into());
+        logs.push(log);
+    }
+    logs
+}
+
+fn all_eth_get_logs_response_size_estimates() -> Vec<u64> {
+    vec![
+        100 + HEADER_SIZE_LIMIT,
+        2048 + HEADER_SIZE_LIMIT,
+        4096 + HEADER_SIZE_LIMIT,
+        8192 + HEADER_SIZE_LIMIT,
+        16_384 + HEADER_SIZE_LIMIT,
+        32_768 + HEADER_SIZE_LIMIT,
+        65_536 + HEADER_SIZE_LIMIT,
+        131_072 + HEADER_SIZE_LIMIT,
+        262_144 + HEADER_SIZE_LIMIT,
+        524_288 + HEADER_SIZE_LIMIT,
+        1_048_576 + HEADER_SIZE_LIMIT,
+        2_000_000,
+    ]
 }
 
 fn fee_history() -> ethers_core::types::FeeHistory {
@@ -1420,20 +1657,42 @@ impl CkEthSetup {
         .unwrap()
     }
 
-    fn upgrade_minter(&self) {
+    fn upgrade_minter(&self, upgrade_arg: UpgradeArg) {
         self.env
             .upgrade_canister(
                 self.minter_id,
                 minter_wasm(),
-                Encode!(&MinterArg::UpgradeArg(Default::default())).unwrap(),
+                Encode!(&MinterArg::UpgradeArg(upgrade_arg)).unwrap(),
             )
             .unwrap();
     }
 
-    fn check_audit_logs_and_upgrade(self) -> Self {
+    fn check_audit_logs_and_upgrade(self, upgrade_arg: UpgradeArg) -> Self {
         self.check_audit_log();
         self.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
-        self.upgrade_minter();
+        self.upgrade_minter(upgrade_arg);
+        self
+    }
+
+    fn assert_has_no_rpc_call(self, method: &JsonRpcMethod) -> Self {
+        for _ in 0..MAX_TICKS {
+            if let Some(unexpected_request) = self
+                .env
+                .canister_http_request_contexts()
+                .values()
+                .map(|context| {
+                    crate::mock::JsonRpcRequest::from_str(
+                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
+                    )
+                    .expect("BUG: invalid JSON RPC method")
+                })
+                .find(|rpc_request| rpc_request.method.to_string() == method.to_string())
+            {
+                panic!("Unexpected RPC call: {:?}", unexpected_request);
+            }
+            self.env.tick();
+            self.env.advance_time(Duration::from_nanos(1));
+        }
         self
     }
 }
@@ -1472,6 +1731,16 @@ impl DepositParams {
             from_address: self.from_address,
             transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
         }
+    }
+
+    pub fn with_mock_eth_get_block_by_number<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder + 'static,
+    >(
+        mut self,
+        override_mock: F,
+    ) -> Self {
+        self.override_rpc_eth_get_block_by_number = Box::new(override_mock);
+        self
     }
 
     pub fn with_mock_eth_get_logs<
@@ -1957,7 +2226,7 @@ impl TransactionReceiptProcessWithdrawal {
     }
 
     fn check_audit_logs_and_upgrade(mut self) -> Self {
-        self.setup = self.setup.check_audit_logs_and_upgrade();
+        self.setup = self.setup.check_audit_logs_and_upgrade(Default::default());
         self
     }
 
@@ -1991,7 +2260,7 @@ mod mock {
     };
     use ic_state_machine_tests::{
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponsePayload,
-        PayloadBuilder, StateMachine,
+        PayloadBuilder, RejectCode, StateMachine,
     };
     use serde::de::DeserializeOwned;
     use serde::Serialize;
@@ -2035,7 +2304,7 @@ mod mock {
     pub enum JsonRpcProvider {
         //order is top-to-bottom and must match order used in production
         Ankr,
-        BlockPi,
+        PublicNode,
         Cloudflare,
     }
 
@@ -2043,14 +2312,15 @@ mod mock {
         fn url(&self) -> &str {
             match self {
                 JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
-                JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
+                JsonRpcProvider::PublicNode => "https://ethereum.publicnode.com",
                 JsonRpcProvider::Cloudflare => "https://cloudflare-eth.com",
             }
         }
     }
 
-    struct JsonRpcRequest {
-        method: JsonRpcMethod,
+    #[derive(Debug)]
+    pub struct JsonRpcRequest {
+        pub method: JsonRpcMethod,
         id: u64,
         params: serde_json::Value,
     }
@@ -2083,6 +2353,7 @@ mod mock {
         provider: JsonRpcProvider,
         json_rpc_method: JsonRpcMethod,
         match_request_params: Option<serde_json::Value>,
+        max_response_bytes: Option<u64>,
     }
 
     impl JsonRpcRequestMatcher {
@@ -2092,11 +2363,17 @@ mod mock {
                 provider,
                 json_rpc_method: method,
                 match_request_params: None,
+                max_response_bytes: None,
             }
         }
 
         pub fn with_request_params(mut self, params: Option<serde_json::Value>) -> Self {
             self.match_request_params = params;
+            self
+        }
+
+        pub fn with_max_response_bytes(mut self, max_response_bytes: Option<u64>) -> Self {
+            self.max_response_bytes = max_response_bytes;
             self
         }
     }
@@ -2107,6 +2384,12 @@ mod mock {
                 .headers
                 .iter()
                 .any(|header| header.name == "Content-Type" && header.value == "application/json");
+            let has_expected_max_response_bytes =
+                match (self.max_response_bytes, context.max_response_bytes) {
+                    (Some(expected), Some(actual)) => expected == actual.get(),
+                    (Some(_), None) => false,
+                    (None, _) => true,
+                };
             let request_body = context
                 .body
                 .as_ref()
@@ -2117,6 +2400,7 @@ mod mock {
 
             self.http_method == context.http_method
                 && self.provider.url() == context.url
+                && has_expected_max_response_bytes
                 && has_json_content_type_header
                 && self.json_rpc_method == json_rpc_request.method
                 && self
@@ -2136,7 +2420,6 @@ mod mock {
     impl StubOnce {
         fn expect_rpc_call(self, env: &StateMachine, canister_id_cleanup_response: CanisterId) {
             self.tick_until_next_http_request(env);
-            let mut payload = PayloadBuilder::new();
             let (id, context) = env
                 .canister_http_request_contexts()
                 .into_iter()
@@ -2153,11 +2436,29 @@ mod mock {
                     .id
             };
 
-            let response = json!({
+            let response_body = serde_json::to_vec(&json!({
                 "jsonrpc":"2.0",
                 "result": self.response_result,
                 "id": request_id,
-            });
+            }))
+            .unwrap();
+
+            if let Some(max_response_bytes) = context.max_response_bytes {
+                if (response_body.len() as u64) > max_response_bytes.get() {
+                    let mut payload = PayloadBuilder::new();
+                    payload = payload.http_response_failure(
+                        id,
+                        RejectCode::SysFatal,
+                        format!(
+                            "Http body exceeds size limit of {} bytes.",
+                            max_response_bytes
+                        ),
+                    );
+                    env.execute_payload(payload);
+                    return;
+                }
+            }
+
             let clean_up_context = match context.transform.clone() {
                 Some(transform) => transform.context,
                 None => vec![],
@@ -2166,7 +2467,7 @@ mod mock {
                 response: OutCallHttpResponse {
                     status: 200.into(),
                     headers: vec![],
-                    body: serde_json::to_vec(&response).unwrap(),
+                    body: response_body,
                 },
                 context: clean_up_context.to_vec(),
             };
@@ -2183,11 +2484,28 @@ mod mock {
             )
             .unwrap();
 
+            if let Some(max_response_bytes) = context.max_response_bytes {
+                if (clean_up_response.body.len() as u64) > max_response_bytes.get() {
+                    let mut payload = PayloadBuilder::new();
+                    payload = payload.http_response_failure(
+                        id,
+                        RejectCode::SysFatal,
+                        format!(
+                            "Http body exceeds size limit of {} bytes.",
+                            max_response_bytes
+                        ),
+                    );
+                    env.execute_payload(payload);
+                    return;
+                }
+            }
+
             let http_response = CanisterHttpResponsePayload {
                 status: 200_u128,
                 headers: vec![],
                 body: clean_up_response.body,
             };
+            let mut payload = PayloadBuilder::new();
             payload = payload.http_response(id, &http_response);
             env.execute_payload(payload);
         }
@@ -2221,6 +2539,7 @@ mod mock {
             MockJsonRpcProvidersBuilder {
                 json_rpc_method,
                 json_rpc_params: None,
+                max_response_bytes: None,
                 responses: Default::default(),
             }
         }
@@ -2235,12 +2554,18 @@ mod mock {
     pub struct MockJsonRpcProvidersBuilder {
         json_rpc_method: JsonRpcMethod,
         json_rpc_params: Option<serde_json::Value>,
+        max_response_bytes: Option<u64>,
         responses: BTreeMap<JsonRpcProvider, serde_json::Value>,
     }
 
     impl MockJsonRpcProvidersBuilder {
         pub fn with_request_params(mut self, params: serde_json::Value) -> Self {
             self.json_rpc_params = Some(params);
+            self
+        }
+
+        pub fn with_max_response_bytes(mut self, max_response_bytes: u64) -> Self {
+            self.max_response_bytes = Some(max_response_bytes);
             self
         }
 
@@ -2295,7 +2620,8 @@ mod mock {
             self.responses.into_iter().for_each(|(provider, response)| {
                 stubs.push(StubOnce {
                     matcher: JsonRpcRequestMatcher::new(provider, self.json_rpc_method.clone())
-                        .with_request_params(self.json_rpc_params.clone()),
+                        .with_request_params(self.json_rpc_params.clone())
+                        .with_max_response_bytes(self.max_response_bytes),
                     response_result: response,
                 });
             });

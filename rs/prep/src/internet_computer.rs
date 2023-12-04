@@ -331,7 +331,7 @@ impl IcConfig {
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
         topology_config: TopologyConfig,
-        replica_version_id: Option<ReplicaVersion>,
+        replica_version_id: ReplicaVersion,
         generate_subnet_records: bool,
         nns_subnet_index: Option<u64>,
         release_package_url: Option<Url>,
@@ -345,7 +345,7 @@ impl IcConfig {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
-            initial_replica_version_id: replica_version_id.unwrap_or_default(),
+            initial_replica_version_id: replica_version_id,
             generate_subnet_records,
             nns_subnet_index,
             initial_release_package_url: release_package_url,

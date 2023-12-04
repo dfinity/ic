@@ -10,7 +10,7 @@ use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::EcdsaKeyId;
+use ic_ic00_types::{EcdsaKeyId, NodeMetrics, NodeMetricsHistoryResponse};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
@@ -2076,13 +2076,40 @@ impl BlockmakerMetricsTimeSeries {
         Ok(())
     }
 
+    /// Returns a reference to the running stats (if any).
+    pub fn running_stats(&self) -> Option<(&Time, &BlockmakerStatsMap)> {
+        self.0.last_key_value()
+    }
+
     /// Returns an iterator pointing at the first element of a chronologically sorted time series
-    /// whose timestamp is above or equal to the given time.
+    /// whose timestamp is above or equal to the given time (excluding the running stats for today).
     pub fn metrics_since(&self, time: Time) -> impl Iterator<Item = (&Time, &BlockmakerStatsMap)> {
-        use std::ops::Bound;
+        // TODO(MR-524): This could be made simpler if the internal data representation would be different. Consider changing this.
         self.0
-            .range((Bound::Included(&time), Bound::Unbounded))
+            .iter()
+            .take(self.0.len().saturating_sub(1))
+            .filter(move |(batch_time, _)| *batch_time >= &time)
             .take(BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS)
+    }
+
+    pub fn node_metrics_history(&self, time: Time) -> Vec<NodeMetricsHistoryResponse> {
+        self.metrics_since(time)
+            .map(|(time, stats_map)| {
+                let node_metrics = stats_map
+                    .node_stats
+                    .iter()
+                    .map(|(node_id, stats)| NodeMetrics {
+                        node_id: node_id.get(),
+                        num_blocks_total: stats.blocks_proposed_total,
+                        num_block_failures_total: stats.blocks_not_proposed_total,
+                    })
+                    .collect();
+                NodeMetricsHistoryResponse {
+                    timestamp_nanos: time.as_nanos_since_unix_epoch(),
+                    node_metrics,
+                }
+            })
+            .collect()
     }
 }
 

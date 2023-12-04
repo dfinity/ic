@@ -15,6 +15,7 @@ use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
     Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
 };
+use maplit::btreeset;
 use std::str::FromStr;
 
 #[test]
@@ -53,17 +54,30 @@ fn should_display_block_sync() {
     DashboardAssert::assert_that(dashboard)
         .has_no_elements_matching("#last-observed-block-number")
         .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270")
-        .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207");
+        .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
+        .has_no_elements_matching("#skipped-blocks");
 
     let dashboard = DashboardTemplate {
         last_observed_block: Some(BlockNumber::from(4552271_u32)),
         last_synced_block: BlockNumber::from(4552270_u32),
+        skipped_blocks: btreeset! {BlockNumber::from(3552270_u32), BlockNumber::from(2552270_u32)},
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(dashboard)
         .has_last_observed_block_href("https://sepolia.etherscan.io/block/4552271")
         .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270")
-        .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207");
+        .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
+        .has_skipped_blocks(
+            r#"<a href="https://sepolia.etherscan.io/block/2552270"><code>2552270</code></a>, <a href="https://sepolia.etherscan.io/block/3552270"><code>3552270</code></a>"#,
+        );
+
+    let dashboard_with_single_skipped_block = DashboardTemplate {
+        skipped_blocks: btreeset! {BlockNumber::from(3552270_u32)},
+        ..initial_dashboard()
+    };
+    DashboardAssert::assert_that(dashboard_with_single_skipped_block).has_skipped_blocks(
+        r#"<a href="https://sepolia.etherscan.io/block/3552270"><code>3552270</code></a>"#,
+    );
 }
 
 #[test]
@@ -405,7 +419,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
     DashboardAssert::assert_that(dashboard)
         .has_eth_balance("8_900_000_000_000_000")
         .has_total_effective_tx_fees("42_000_000_000_000")
-        .has_total_unspent_tx_fees("21_000_000_000_000")
+        .has_total_unspent_tx_fees("42_000_000_000_000")
         .has_finalized_transactions(
             1,
             &vec![
@@ -573,7 +587,7 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "17",
                 "123",
-                "1_079_000_000_000_000",
+                "1_058_000_000_000_000",
                 "0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762",
             ],
         )
@@ -582,7 +596,7 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "16",
                 "123",
-                "1_079_000_000_000_000",
+                "1_058_000_000_000_000",
                 "0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e",
             ],
         );
@@ -746,6 +760,14 @@ mod assertions {
                 "#last-synced-block-number > td > a",
                 expected_href,
                 "wrong last synced block href",
+            )
+        }
+
+        pub fn has_skipped_blocks(&self, expected_links: &str) -> &Self {
+            self.has_html_value(
+                "#skipped-blocks > td",
+                expected_links,
+                "wrong skipped blocks",
             )
         }
 
@@ -933,6 +955,18 @@ mod assertions {
             let selector = Selector::parse(selector).unwrap();
             let actual_value = only_one(&mut self.actual.select(&selector));
             let string_value = actual_value.text().collect::<String>();
+            assert_eq!(
+                string_value, expected_value,
+                "{}. Rendered html: {}",
+                error_msg, self.rendered_html
+            );
+            self
+        }
+
+        fn has_html_value(&self, selector: &str, expected_value: &str, error_msg: &str) -> &Self {
+            let selector = Selector::parse(selector).unwrap();
+            let actual_value = only_one(&mut self.actual.select(&selector));
+            let string_value = actual_value.inner_html();
             assert_eq!(
                 string_value, expected_value,
                 "{}. Rendered html: {}",

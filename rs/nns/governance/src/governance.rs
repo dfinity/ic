@@ -18,7 +18,8 @@ use crate::{
         get_neurons_fund_audit_info_response,
         governance::{
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
+            seed_accounts::SeedAccount,
+            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand, SeedAccounts,
         },
         governance_error::ErrorType,
         manage_neuron,
@@ -42,7 +43,7 @@ use crate::{
         KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
         ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
         MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
-        NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        NeuronState, NeuronType, NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, OpenSnsTokenSwap,
         Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
@@ -76,6 +77,7 @@ use ic_nns_constants::{
     IS_MATCHED_FUNDING_ENABLED, IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED, LIFELINE_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -172,7 +174,7 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 220_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 280_000;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
@@ -355,22 +357,6 @@ impl From<Result<NeuronsFundAuditInfo, GovernanceError>> for GetNeuronsFundAudit
     }
 }
 
-/// Converts a Vote integer enum value into a typed enum value.
-impl From<i32> for Vote {
-    fn from(vote_integer: i32) -> Vote {
-        match Vote::from_i32(vote_integer) {
-            Some(v) => v,
-            None => {
-                println!(
-                    "{}Vote::from invoked with unexpected value {}.",
-                    LOG_PREFIX, vote_integer
-                );
-                Vote::Unspecified
-            }
-        }
-    }
-}
-
 impl Vote {
     /// Returns whether this vote is eligible for voting reward.
     fn eligible_for_rewards(&self) -> bool {
@@ -394,6 +380,18 @@ impl ManageNeuron {
             (None, None) => Ok(None),
             (None, Some(id)) => Ok(Some(id.clone())),
             (Some(nid), None) => Ok(Some(NeuronIdOrSubaccount::NeuronId(*nid))),
+        }
+    }
+}
+
+impl Command {
+    fn allowed_when_resources_are_low(&self) -> bool {
+        match self {
+            // Only making proposals and registering votes are needed to pass proposals.
+            // Therefore we should disallow others when resources are low.
+            Command::RegisterVote(_) => true,
+            Command::MakeProposal(_) => true,
+            _ => false,
         }
     }
 }
@@ -719,7 +717,7 @@ impl Proposal {
                 Action::Motion(_) => Topic::Governance,
                 Action::ApproveGenesisKyc(_) => Topic::Kyc,
                 Action::ExecuteNnsFunction(m) => {
-                    if let Some(mt) = NnsFunction::from_i32(m.nns_function) {
+                    if let Ok(mt) = NnsFunction::try_from(m.nns_function) {
                         match mt {
                             NnsFunction::Unspecified => {
                                 println!("{}ERROR: NnsFunction::Unspecified", LOG_PREFIX);
@@ -838,7 +836,7 @@ impl Action {
     fn allowed_when_resources_are_low(&self) -> bool {
         match &self {
             Action::ExecuteNnsFunction(update) => {
-                match NnsFunction::from_i32(update.nns_function) {
+                match NnsFunction::try_from(update.nns_function).ok() {
                     Some(f) => f.allowed_when_resources_are_low(),
                     None => false,
                 }
@@ -1060,7 +1058,7 @@ impl ProposalData {
         let mut no = 0;
         let mut undecided = 0;
         for ballot in self.ballots.values() {
-            let lhs: &mut u64 = if let Some(vote) = Vote::from_i32(ballot.vote) {
+            let lhs: &mut u64 = if let Ok(vote) = Vote::try_from(ballot.vote) {
                 match vote {
                     Vote::Unspecified => &mut undecided,
                     Vote::Yes => &mut yes,
@@ -1292,7 +1290,7 @@ impl Storable for Topic {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        Self::from_i32(i32::from_be_bytes(bytes.as_ref().try_into().unwrap()))
+        Self::try_from(i32::from_be_bytes(bytes.as_ref().try_into().unwrap()))
             .expect("Failed to read i32 as Topic")
     }
 }
@@ -1452,6 +1450,9 @@ pub struct Governance {
 
     /// For validating neuron related data.
     neuron_data_validator: NeuronDataValidator,
+
+    /// Scope guard for minting node provider rewards.
+    minting_node_provider_rewards: bool,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1579,8 +1580,37 @@ impl Governance {
                 latest_round_available_e8s_equivalent: Some(0),
             })
         }
+        // Step 2: seed_accounts
+        // If the seed_accounts is None, then populate it with the `SEED_ROUND_ACCOUNTS` data
+        if governance_proto.seed_accounts.is_none() {
+            let seed_round_accounts = SEED_ROUND_ACCOUNTS
+                .iter()
+                .map(|(account_id, _)| SeedAccount {
+                    account_id: account_id.to_string(),
+                    tag_start_timestamp_seconds: None,
+                    tag_end_timestamp_seconds: None,
+                    error_count: 0,
+                    neuron_type: NeuronType::Seed as i32,
+                })
+                .collect::<Vec<_>>();
 
-        // Step 2: Break out Neurons from governance_proto. Neurons are managed separately by
+            let ect_accounts: Vec<SeedAccount> = ECT_ACCOUNTS
+                .iter()
+                .map(|(account_id, _)| SeedAccount {
+                    account_id: account_id.to_string(),
+                    tag_start_timestamp_seconds: None,
+                    tag_end_timestamp_seconds: None,
+                    error_count: 0,
+                    neuron_type: NeuronType::Ect as i32,
+                })
+                .collect::<Vec<_>>();
+
+            governance_proto.seed_accounts = Some(SeedAccounts {
+                accounts: [seed_round_accounts, ect_accounts].concat(),
+            })
+        }
+
+        // Step 3: Break out Neurons from governance_proto. Neurons are managed separately by
         // NeuronStore. NeuronStore is in charge of Neurons, because some are stored in stable
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
@@ -1604,6 +1634,7 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
+            minting_node_provider_rewards: false,
         }
     }
 
@@ -1627,6 +1658,7 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
+            minting_node_provider_rewards: false,
         }
     }
 
@@ -2472,6 +2504,7 @@ impl Governance {
                 .joined_community_fund_timestamp_seconds,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            neuron_type: parent_neuron.neuron_type,
         };
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
@@ -2747,6 +2780,7 @@ impl Governance {
             // considered part of the community fund.
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
+            neuron_type: None,
         };
 
         // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
@@ -2877,7 +2911,7 @@ impl Governance {
     /// equal to that amount, minus the transfer fee.
     ///
     /// The child neuron doesn't inherit any of the properties of the parent
-    /// neuron, except its following.
+    /// neuron, except its following and whether it's a genesis neuron.
     ///
     /// On success returns the newly created neuron's id.
     ///
@@ -3060,6 +3094,7 @@ impl Governance {
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            neuron_type: None,
         };
 
         self.add_neuron(child_nid.id, child_neuron.clone())?;
@@ -3919,6 +3954,7 @@ impl Governance {
                     joined_community_fund_timestamp_seconds: None,
                     known_neuron_data: None,
                     spawn_at_timestamp_seconds: None,
+                    neuron_type: None,
                 };
                 self.add_neuron(nid.id, neuron)
             }
@@ -4062,9 +4098,30 @@ impl Governance {
 
     /// Mint and transfer monthly node provider rewards
     async fn mint_monthly_node_provider_rewards(&mut self) -> Result<(), GovernanceError> {
+        if self.minting_node_provider_rewards {
+            // There is an ongoing attempt to mint node provider rewards. Do nothing.
+            return Ok(());
+        }
+
+        // Acquire the lock before doing anything meaningful.
+        self.minting_node_provider_rewards = true;
+
         let rewards = self.get_monthly_node_provider_rewards().await?.rewards;
         let _ = self.reward_node_providers(rewards.clone()).await;
         self.update_most_recent_monthly_node_provider_rewards(rewards);
+
+        // Release the lock before commiting the result.
+        self.minting_node_provider_rewards = false;
+
+        // Commit the minting status by making a canister call.
+        let _unused_canister_status_response = self
+            .env
+            .call_canister_method(
+                GOVERNANCE_CANISTER_ID,
+                "get_build_metadata",
+                Encode!().unwrap_or_default(),
+            )
+            .await;
 
         Ok(())
     }
@@ -4723,100 +4780,39 @@ impl Governance {
         };
 
         // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
-        let request = DeployNewSnsRequest {
-            sns_init_payload: Some(sns_init_payload),
-        };
-        let request = match Encode!(&request) {
-            Ok(ok) => ok,
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Failed to encode request for deploy_new_sns Candid \
-                             method call: {}\nrequest: {:#?}",
-                        err, request,
-                    ),
-                ));
-            }
-        };
-        let deploy_new_sns_result = self
-            .env
-            .call_canister_method(SNS_WASM_CANISTER_ID, "deploy_new_sns", request)
-            .await;
+        // Do NOT return Err right away using the ? operator, because we must refund maturity to the
+        // Neurons' Fund before returning.
+        let mut deploy_new_sns_response: Result<DeployNewSnsResponse, GovernanceError> =
+            call_deploy_new_sns(&mut self.env, sns_init_payload).await;
 
-        // Step 3: Inspect call result.
-        let deploy_new_sns_response: Vec<u8> = match deploy_new_sns_result {
-            Ok(ok) => ok,
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Failed to send deploy_new_sns request to SNS_WASM canister: {:?}",
-                        err,
-                    ),
-                ));
-            }
-        };
-
-        // Step 4: Decode response.
-        let deploy_new_sns_response = match Decode!(&deploy_new_sns_response, DeployNewSnsResponse)
-        {
-            Ok(ok) => ok,
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Failed to send deploy_new_sns request to SNS_WASM canister: {}",
-                        err,
-                    ),
-                ));
-            }
-        };
+        // Step 3: React to response from deploy_new_sns (Ok or Err).
 
         let proposal_id = ProposalId {
             id: executed_create_service_nervous_system_proposal.proposal_id,
         };
-        if deploy_new_sns_response.error.is_some() {
-            if is_matched_neurons_fund_participation_enabled {
-                if let Some(initial_neurons_fund_participation_snapshot) =
-                    initial_neurons_fund_participation_snapshot
-                {
-                    let refund_outcome = self.refund_maturity_to_neurons_fund(
-                        &proposal_id,
-                        initial_neurons_fund_participation_snapshot,
-                    );
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "deploy_new_sns response contained an error: {:#?}. refund_outcome = {:#?}",
-                            deploy_new_sns_response, refund_outcome
-                        ),
-                    ));
-                } else {
-                    // Nothing to refund
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "deploy_new_sns response contained an error: {:#?}.",
-                            deploy_new_sns_response
-                        ),
-                    ));
-                }
-            } else {
-                let failed_refunds = refund_community_fund_maturity(
+
+        // Step 3.1: If the call was not successful, issue refunds (and then, return).
+        if let Err(ref mut err) = &mut deploy_new_sns_response {
+            if !is_matched_neurons_fund_participation_enabled {
+                let refund_result = refund_community_fund_maturity(
                     &mut self.neuron_store,
                     &executed_create_service_nervous_system_proposal.neurons_fund_participants,
                 );
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "deploy_new_sns response contained an error: {:#?}. failed_refunds = {:#?}",
-                        deploy_new_sns_response, failed_refunds,
-                    ),
-                ));
-            };
+                err.error_message += &format!(" refund_result: {:#?}", refund_result);
+            } else if let Some(initial_neurons_fund_participation_snapshot) =
+                initial_neurons_fund_participation_snapshot
+            {
+                let refund_result = self.refund_maturity_to_neurons_fund(
+                    &proposal_id,
+                    initial_neurons_fund_participation_snapshot,
+                );
+                err.error_message += &format!(" refund result: {:#?}", refund_result);
+            }
         }
-        // Creation of an SNS was a success. Record this fact for latter settlement.
+        let deploy_new_sns_response = deploy_new_sns_response?;
+
+        // Step 3.2: Otherwise, deploy_new_sns was successful. Record this fact for latter
+        // settlement.
         let proposal_data = self.mut_proposal_data_or_fail(
             &proposal_id,
             "in execute_create_service_nervous_system_proposal",
@@ -5894,7 +5890,7 @@ impl Governance {
             .map(|p| p.topic())
             .unwrap_or(Topic::Unspecified);
 
-        let vote = Vote::from_i32(pb.vote).unwrap_or(Vote::Unspecified);
+        let vote = Vote::try_from(pb.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
             // Invalid vote specified, i.e., not yes or no.
             return Err(GovernanceError::new_with_message(
@@ -5995,7 +5991,7 @@ impl Governance {
         }
 
         // Validate topic exists
-        let topic = Topic::from_i32(follow_request.topic).ok_or_else(|| {
+        let topic = Topic::try_from(follow_request.topic).map_err(|_| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
@@ -6217,6 +6213,7 @@ impl Governance {
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            neuron_type: None,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -6357,6 +6354,14 @@ impl Governance {
         caller: &PrincipalId,
         mgmt: &ManageNeuron,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
+        if !mgmt
+            .command
+            .as_ref()
+            .map(|command| command.allowed_when_resources_are_low())
+            .unwrap_or_default()
+        {
+            self.check_heap_can_grow()?;
+        }
         // We run claim or refresh before we check whether a neuron exists because it
         // may not in the case of the neuron being claimed
         if let Some(Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
@@ -6493,6 +6498,15 @@ impl Governance {
     /// process.
     pub async fn run_periodic_tasks(&mut self) {
         self.process_proposals();
+        // Commit whatever changes were just made by process_proposals by making a canister call.
+        let _unused_canister_status_response = self
+            .env
+            .call_canister_method(
+                GOVERNANCE_CANISTER_ID,
+                "get_build_metadata",
+                Encode!().unwrap_or_default(),
+            )
+            .await;
 
         // First try to mint node provider rewards (once per month).
         if self.is_time_to_mint_monthly_node_provider_rewards() {
@@ -6539,6 +6553,8 @@ impl Governance {
         // Try to update maturity modulation (once per day).
         } else if self.should_update_maturity_modulation() {
             self.update_maturity_modulation().await;
+        } else if self.can_tag_seed_neurons() {
+            self.tag_seed_neurons().await;
         // Try to spawn neurons (potentially multiple times per day).
         } else if self.can_spawn_neurons() {
             self.spawn_neurons().await;
@@ -6867,7 +6883,17 @@ impl Governance {
                     for (voter, ballot) in proposal.ballots.iter() {
                         let voting_rights = (ballot.voting_power as f64) * reward_weight;
                         total_voting_rights += voting_rights;
-                        if Vote::from(ballot.vote).eligible_for_rewards() {
+                        #[allow(clippy::blocks_in_if_conditions)]
+                        if Vote::try_from(ballot.vote)
+                            .unwrap_or_else(|_| {
+                                println!(
+                                    "{}Vote::from invoked with unexpected value {}.",
+                                    LOG_PREFIX, ballot.vote
+                                );
+                                Vote::Unspecified
+                            })
+                            .eligible_for_rewards()
+                        {
                             *voters_to_used_voting_right
                                 .entry(NeuronId { id: *voter })
                                 .or_insert(0f64) += voting_rights;
@@ -7224,7 +7250,7 @@ impl Governance {
         // the Neurons' Fund the previous Lifecycle should be set to allow for retries.
         let original_sns_token_swap_lifecycle = proposal_data
             .sns_token_swap_lifecycle
-            .and_then(Lifecycle::from_i32)
+            .and_then(|v| Lifecycle::try_from(v).ok())
             .unwrap_or(Lifecycle::Unspecified);
         // Validate the state machine
         let initial_neurons_fund_participation = match (
@@ -7684,7 +7710,7 @@ impl Governance {
         // success.
         if proposal_data
             .sns_token_swap_lifecycle
-            .and_then(Lifecycle::from_i32)
+            .and_then(|v| Lifecycle::try_from(v).ok())
             .unwrap_or(Lifecycle::Unspecified)
             .is_terminal()
         {
@@ -7796,7 +7822,8 @@ impl Governance {
         let mut rewards = RewardNodeProviders::default();
 
         // Maps node providers to their rewards in XDR
-        let xdr_permyriad_rewards = self.get_node_providers_monthly_xdr_rewards().await?;
+        let xdr_permyriad_rewards: NodeProvidersMonthlyXdrRewards =
+            self.get_node_providers_monthly_xdr_rewards().await?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
         let avg_xdr_permyriad_per_icp = self
@@ -7972,6 +7999,20 @@ impl Governance {
                     neuron.minted_stake_e8s();
             }
 
+            if neuron.is_seed_neuron() {
+                metrics.seed_neuron_count += 1;
+                metrics.total_staked_e8s_seed += neuron.minted_stake_e8s();
+                metrics.total_staked_maturity_e8s_equivalent_seed +=
+                    neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+            }
+
+            if neuron.is_ect_neuron() {
+                metrics.ect_neuron_count += 1;
+                metrics.total_staked_e8s_ect += neuron.minted_stake_e8s();
+                metrics.total_staked_maturity_e8s_equivalent_ect +=
+                    neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+            }
+
             let bucket = dissolve_delay_seconds / (6 * ONE_MONTH_SECONDS);
             match neuron.state(now) {
                 NeuronState::Unspecified => (),
@@ -7983,58 +8024,85 @@ impl Governance {
                 NeuronState::Dissolving => {
                     {
                         // Neurons with minted stake count metrics
-                        let e8s_entry = metrics
-                            .dissolving_neurons_e8s_buckets
-                            .entry(bucket)
-                            .or_insert(0.0);
-                        *e8s_entry += neuron.minted_stake_e8s() as f64;
-
-                        let count_entry = metrics
-                            .dissolving_neurons_count_buckets
-                            .entry(bucket)
-                            .or_insert(0);
-                        *count_entry += 1;
+                        increment_e8s_bucket(
+                            &mut metrics.dissolving_neurons_e8s_buckets,
+                            bucket,
+                            neuron.minted_stake_e8s(),
+                        );
+                        increment_count_bucket(
+                            &mut metrics.dissolving_neurons_count_buckets,
+                            bucket,
+                        );
 
                         metrics.dissolving_neurons_count += 1;
                     }
                     {
                         // Staked maturity metrics
                         let increment = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+                        increment_e8s_bucket(
+                            &mut metrics.dissolving_neurons_staked_maturity_e8s_equivalent_buckets,
+                            bucket,
+                            increment,
+                        );
                         metrics.dissolving_neurons_staked_maturity_e8s_equivalent_sum += increment;
-                        let e8s_entry = metrics
-                            .dissolving_neurons_staked_maturity_e8s_equivalent_buckets
-                            .entry(bucket)
-                            .or_insert(0.0);
-                        *e8s_entry += increment as f64;
+                    }
+                    {
+                        if neuron.is_seed_neuron() {
+                            increment_e8s_bucket(
+                                &mut metrics.dissolving_neurons_e8s_buckets_seed,
+                                bucket,
+                                neuron.minted_stake_e8s(),
+                            );
+                        } else if neuron.is_ect_neuron() {
+                            increment_e8s_bucket(
+                                &mut metrics.dissolving_neurons_e8s_buckets_ect,
+                                bucket,
+                                neuron.minted_stake_e8s(),
+                            );
+                        }
                     }
                 }
                 NeuronState::NotDissolving => {
                     {
                         // Neurons with minted stake count metrics
-                        let e8s_entry = metrics
-                            .not_dissolving_neurons_e8s_buckets
-                            .entry(bucket)
-                            .or_insert(0.0);
-                        *e8s_entry += neuron.minted_stake_e8s() as f64;
+                        increment_e8s_bucket(
+                            &mut metrics.not_dissolving_neurons_e8s_buckets,
+                            bucket,
+                            neuron.minted_stake_e8s(),
+                        );
 
-                        let count_entry = metrics
-                            .not_dissolving_neurons_count_buckets
-                            .entry(bucket)
-                            .or_insert(0);
-                        *count_entry += 1;
-
+                        increment_count_bucket(
+                            &mut metrics.not_dissolving_neurons_count_buckets,
+                            bucket,
+                        );
                         metrics.not_dissolving_neurons_count += 1;
                     }
                     {
                         // Staked maturity metrics
                         let increment = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+                        increment_e8s_bucket(
+                            &mut metrics
+                                .not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets,
+                            bucket,
+                            increment,
+                        );
                         metrics.not_dissolving_neurons_staked_maturity_e8s_equivalent_sum +=
                             increment;
-                        let e8s_entry = metrics
-                            .not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets
-                            .entry(bucket)
-                            .or_insert(0.0);
-                        *e8s_entry += increment as f64;
+                    }
+                    {
+                        if neuron.is_seed_neuron() {
+                            increment_e8s_bucket(
+                                &mut metrics.not_dissolving_neurons_e8s_buckets_seed,
+                                bucket,
+                                neuron.minted_stake_e8s(),
+                            );
+                        } else if neuron.is_ect_neuron() {
+                            increment_e8s_bucket(
+                                &mut metrics.not_dissolving_neurons_e8s_buckets_ect,
+                                bucket,
+                                neuron.minted_stake_e8s(),
+                            );
+                        }
                     }
                 }
             }
@@ -8050,6 +8118,82 @@ impl Governance {
 
     pub fn neuron_data_validation_summary(&self) -> NeuronDataValidationSummary {
         self.neuron_data_validator.summary()
+    }
+}
+
+/// Does what the name says: calls the deploy_new_sns method on the sns-wasm canister.
+///
+/// Currently, Err is returned in the following cases:
+///
+///   * Fail to encode request. Not sure how this can happen. I guess if the input is too big, and
+///     we run out of memory? If that's right, this won't happen if the input is not excessively
+///     large.
+///
+///   * Fail to make call. This could be the result of sns-wasm being stopped, deleted, or something
+///     like that. Currently, there is no intention to ever do those things (except during an
+///     upgrade).
+///
+///   * Fail to decode reply. This would most likely result from sns-wasm sending a response that
+///     lacks a required field (presumably, the result of a non-backwards compatible interface
+///     change). It might be possible to avoid this case by upgrading governance. Ideally, upgrading
+///     governance would have been done before sns-wasm was upgraded (that is, upgrading the client
+///     before the server), but late is better than never.
+///
+///   * DeployNewSnsResponse.error is populated. See documentation for the deploy_new_sns Candid
+///     method supplied by sns-wasm.
+///
+/// All of these are of type External.
+///
+/// If Ok is returned, it can be assumed that the error field is not populated.
+async fn call_deploy_new_sns(
+    env: &mut Box<dyn Environment>,
+    sns_init_payload: SnsInitPayload,
+) -> Result<DeployNewSnsResponse, GovernanceError> {
+    // Step 2.1: Construct request
+    let request = DeployNewSnsRequest {
+        sns_init_payload: Some(sns_init_payload),
+    };
+    let request = Encode!(&request).map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::External,
+            format!(
+                "Failed to encode request for deploy_new_sns Candid \
+                     method call: {}\nrequest: {:#?}",
+                err, request,
+            ),
+        )
+    })?;
+
+    // Step 2.2: Send the request and wait for reply..
+    let deploy_new_sns_response = env
+        .call_canister_method(SNS_WASM_CANISTER_ID, "deploy_new_sns", request)
+        .await
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Failed to send deploy_new_sns request to SNS_WASM canister: {:?}",
+                    err,
+                ),
+            )
+        })?;
+
+    // Step 2.3; Decode the response.
+    let deploy_new_sns_response =
+        Decode!(&deploy_new_sns_response, DeployNewSnsResponse).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Failed to decode deploy_new_sns response: {}", err),
+            )
+        })?;
+
+    // Step 2.4: Convert to Result (from DeployNewSnsResponse).
+    match deploy_new_sns_response.error {
+        Some(err) => Err(GovernanceError::new_with_message(
+            ErrorType::External,
+            format!("Error in deploy_new_sns response: {:?}", err),
+        )),
+        None => Ok(deploy_new_sns_response),
     }
 }
 
@@ -9135,4 +9279,14 @@ impl FromStr for BitcoinNetwork {
 pub struct BitcoinSetConfigProposal {
     pub network: BitcoinNetwork,
     pub payload: Vec<u8>,
+}
+
+fn increment_e8s_bucket(buckets: &mut HashMap<u64, f64>, bucket: u64, increment: u64) {
+    let e8s_entry = buckets.entry(bucket).or_insert(0.0);
+    *e8s_entry += increment as f64;
+}
+
+fn increment_count_bucket(buckets: &mut HashMap<u64, u64>, bucket: u64) {
+    let count_entry = buckets.entry(bucket).or_insert(0);
+    *count_entry += 1;
 }

@@ -14,7 +14,7 @@ use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType};
 use ethnum;
 use ic_canister_log::log;
-use ic_cdk::api::call::{RejectionCode};
+use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
     TransformContext,
@@ -612,6 +612,19 @@ pub enum HttpOutcallError {
     },
 }
 
+impl HttpOutcallError {
+    pub fn is_response_too_large(&self) -> bool {
+        match self {
+            Self::IcError { code, message } => is_response_too_large(code, message),
+            _ => false,
+        }
+    }
+}
+
+pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
+    code == &RejectionCode::SysFatal && message.contains("size limit")
+}
+
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
@@ -764,17 +777,9 @@ where
         //     (request,),
         //     cycles,
         // )
-        let response: HttpResponse = match T::http_request(
-            provider,
-            request,
-            cycles,
-        )
-        .await
-        {
+        let response: HttpResponse = match T::http_request(provider, request, cycles).await {
             Ok(response) => response,
-            Err((code, message))
-                if code == RejectionCode::SysFatal && message.contains("size limit") =>
-            {
+            Err((code, message)) if is_response_too_large(&code, &message) => {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
                     return Err(HttpOutcallError::IcError { code, message }.into());
@@ -789,7 +794,8 @@ where
 
         log!(
             TRACE_HTTP,
-            "Got response: {} from url: {} with status: {}",
+            "Got response (with {} bytes): {} from url: {} with status: {}",
+            response.body.len(),
             String::from_utf8_lossy(&response.body),
             url,
             response.status

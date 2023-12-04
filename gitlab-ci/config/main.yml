@@ -100,7 +100,7 @@ bazel-build-fuzzers:
   extends:
     - .bazel-test-all
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing --build_tag_filters=libfuzzer"
+    BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/..."
 
@@ -108,7 +108,7 @@ bazel-build-fuzzers-afl:
   extends:
     - .bazel-test-all
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=afl"
+    BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/..."
 
@@ -145,15 +145,6 @@ bazel-build-fuzzers-archives:
       cd "${CI_PROJECT_DIR}"/bin
       ./build-all-fuzzers.sh --zip
 
-.bazel-rules-pipeline-no-merge-train:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
-
 .bazel-test-all:
   extends:
     - .build-k8s
@@ -181,8 +172,7 @@ bazel-build-fuzzers-archives:
       junit: bazel-testlogs-gitlab/**/test.xml
   variables:
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
-    BAZEL_CI_CONFIG: "--config=ci"
+    BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     BAZEL_COMMAND: "test"
     BAZEL_TARGETS: "//..."
@@ -224,7 +214,7 @@ bazel-test-coverage:
       - cov_html
   variables:
     BAZEL_COMMAND: "coverage"
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --combined_report=lcov"
+    BAZEL_EXTRA_ARGS: "--combined_report=lcov"
   script:
     - |
       bazel query --universe_scope=//... \
@@ -244,52 +234,58 @@ bazel-test-all:
     - !reference [.bazel-test-all, rules]
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ /^release-.+/'
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going $BAZEL_EXTRA_ARGS_RULES"
+    BAZEL_EXTRA_ARGS: "--keep_going $BAZEL_EXTRA_ARGS_RULES"
   timeout: 80 minutes
 
+# TODO(IDX-3048): Delete when confirmed it is not required anymore.
 linux-openssl-static-binaries:
   extends:
     - .bazel-test-all
-    - .bazel-rules-pipeline-no-merge-train
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
   variables:
     DFINITY_OPENSSL_STATIC: 1
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//publish/binaries:upload"
-
-# VER-1818: bazelified system tests should not block pre-master pipelines, as they run on a new (WIP) test driver implementation.
-bazel-test-all-allow-to-fail:
-  extends:
-    - .bazel-test-all
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      when: manual
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
-  variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
-  allow_failure: true
 
 bazel-system-test-hourly:
   extends:
     - .bazel-test-all
     - .rules-post-master
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly"
+    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hourly"
   timeout: 120 minutes
 
 bazel-system-test-hotfix:
   extends:
     - .bazel-test-all
-    - .rules-prod-hotfix-pipeline
+  #  If on the RC branch, whether "hotfix" is in the commit message or not,
+  #  always perform automatic execution of the prod hotfix tests. This means that, hotfix
+  #  tests are not only exercised on hotfix pipelines, but are also exercised on nightly
+  #  release qualification pipelines to ensure the hotfix tests are always working.
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hotfix"
+    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hotfix"
 
 bazel-system-test-staging:
   extends:
     - .bazel-test-all
     - .rules-rollout-pipeline-auto
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_staging"
+    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_staging"
   allow_failure: true
 
 bazel-system-test-nightly:
@@ -297,7 +293,7 @@ bazel-system-test-nightly:
     - .bazel-test-all
     - .rules-rollout-pipeline-auto
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_nightly"
+    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_nightly"
   timeout: 7h 30m
 
 bazel-system-test-nightly-nns:
@@ -309,14 +305,14 @@ bazel-system-test-nightly-nns:
       allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "nns-nightly"'
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_nightly_nns"
+    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_nightly_nns"
   timeout: 60 minutes
 
 bazel-config-check-all-rebuild:
   extends:
     - .bazel-test-all
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=check"
+    BAZEL_EXTRA_ARGS: "--keep_going --config=check"
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/..."
 
@@ -325,36 +321,46 @@ bazel-test-all-rebuild:
     - .bazel-test-all
     - .rules-post-master
   variables:
+    BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
   timeout: 2h
-  script:
-    - !reference [.bazel-test-all, script]
 
 bazel-test-macos:
   extends:
     - .bazel-test-all
-    - .bazel-rules-pipeline-no-merge-train
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   tags:
     - macos
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
+    BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
     BAZEL_COMMAND: "test"
-    BAZEL_EXTRA_ARGS: "--config macos_ci --test_tag_filters=test_macos"
+    BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos"
     BAZEL_TARGETS: "//rs/... //publish/binaries/..."
   timeout: 90 minutes
 
+# TODO(IDX-3048): Delete when confirmed it is not required anymore.
 macos-openssl-static-binaries:
   extends:
     - .bazel-test-all
-    - .bazel-rules-pipeline-no-merge-train
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
   tags:
     - macos
   variables:
     DFINITY_OPENSSL_STATIC: 1
     BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
+    BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
     BAZEL_COMMAND: "build"
-    BAZEL_EXTRA_ARGS: "--config macos_ci"
     BAZEL_TARGETS: "//publish/binaries:upload"
   script:
     - !reference [.bazel-test-all, script]
@@ -575,7 +581,7 @@ check-bins-linux:
     - .build-k8s
     - .rules-master-pipeline-no-merge-train
   needs:
-    - job: linux-openssl-static-binaries
+    - job: bazel-test-all
       artifacts: false
   image:
     # 21.04
@@ -583,7 +589,7 @@ check-bins-linux:
   before_script: /bin/true
   after_script: /bin/true
   variables:
-    ARTIFACT_PREFIX: openssl-static-binaries/x86_64-linux
+    ARTIFACT_PREFIX: binaries/x86_64-linux
   script:
     - |
       set -exuo pipefail
@@ -989,6 +995,7 @@ tnet-test:
   variables:
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/tests/k8s:tnetctl"
+  allow_failure: true
   script:
     - |
       # TODO: switch to bazel after chrono issue is handled

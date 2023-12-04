@@ -646,10 +646,10 @@ pub enum EcdsaMessage {
     EcdsaOpening(EcdsaOpening),
 }
 
-impl From<&EcdsaMessage> for pb::EcdsaMessage {
-    fn from(value: &EcdsaMessage) -> Self {
+impl From<EcdsaMessage> for pb::EcdsaMessage {
+    fn from(value: EcdsaMessage) -> Self {
         use pb::ecdsa_message::Msg;
-        let msg = match value {
+        let msg = match &value {
             EcdsaMessage::EcdsaSignedDealing(x) => Msg::SignedDealing(x.into()),
             EcdsaMessage::EcdsaDealingSupport(x) => Msg::DealingSupport(x.into()),
             EcdsaMessage::EcdsaSigShare(x) => Msg::SigShare(x.into()),
@@ -660,10 +660,10 @@ impl From<&EcdsaMessage> for pb::EcdsaMessage {
     }
 }
 
-impl TryFrom<&pb::EcdsaMessage> for EcdsaMessage {
+impl TryFrom<pb::EcdsaMessage> for EcdsaMessage {
     type Error = ProxyDecodeError;
 
-    fn try_from(proto: &pb::EcdsaMessage) -> Result<Self, Self::Error> {
+    fn try_from(proto: pb::EcdsaMessage) -> Result<Self, Self::Error> {
         use pb::ecdsa_message::Msg;
         let Some(msg) = &proto.msg else {
             return Err(ProxyDecodeError::MissingField("EcdsaMessage::msg"));
@@ -896,8 +896,8 @@ impl From<(EcdsaMessageType, EcdsaPrefix, CryptoHash)> for EcdsaArtifactId {
     }
 }
 
-impl From<&EcdsaArtifactId> for pb::EcdsaArtifactId {
-    fn from(value: &EcdsaArtifactId) -> Self {
+impl From<EcdsaArtifactId> for pb::EcdsaArtifactId {
+    fn from(value: EcdsaArtifactId) -> Self {
         use pb::ecdsa_artifact_id::Kind;
         let kind = match value.clone() {
             EcdsaArtifactId::Dealing(p, h) => Kind::Dealing(pb::PrefixHashPair {
@@ -925,9 +925,9 @@ impl From<&EcdsaArtifactId> for pb::EcdsaArtifactId {
     }
 }
 
-impl TryFrom<&pb::EcdsaArtifactId> for EcdsaArtifactId {
+impl TryFrom<pb::EcdsaArtifactId> for EcdsaArtifactId {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::EcdsaArtifactId) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::EcdsaArtifactId) -> Result<Self, Self::Error> {
         use pb::ecdsa_artifact_id::Kind;
         let kind = value
             .kind
@@ -1230,23 +1230,23 @@ pub enum EcdsaMessageAttribute {
     EcdsaOpening(IDkgTranscriptId),
 }
 
-impl From<&EcdsaMessageAttribute> for pb::EcdsaMessageAttribute {
-    fn from(value: &EcdsaMessageAttribute) -> Self {
+impl From<EcdsaMessageAttribute> for pb::EcdsaMessageAttribute {
+    fn from(value: EcdsaMessageAttribute) -> Self {
         use pb::ecdsa_message_attribute::Kind;
         let kind = match value {
-            EcdsaMessageAttribute::EcdsaSignedDealing(id) => Kind::SignedDealing(id.into()),
-            EcdsaMessageAttribute::EcdsaDealingSupport(id) => Kind::DealingSupport(id.into()),
-            EcdsaMessageAttribute::EcdsaSigShare(id) => Kind::SigShare((*id).into()),
-            EcdsaMessageAttribute::EcdsaComplaint(id) => Kind::Complaint(id.into()),
-            EcdsaMessageAttribute::EcdsaOpening(id) => Kind::Opening(id.into()),
+            EcdsaMessageAttribute::EcdsaSignedDealing(id) => Kind::SignedDealing((&id).into()),
+            EcdsaMessageAttribute::EcdsaDealingSupport(id) => Kind::DealingSupport((&id).into()),
+            EcdsaMessageAttribute::EcdsaSigShare(id) => Kind::SigShare(id.into()),
+            EcdsaMessageAttribute::EcdsaComplaint(id) => Kind::Complaint((&id).into()),
+            EcdsaMessageAttribute::EcdsaOpening(id) => Kind::Opening((&id).into()),
         };
         Self { kind: Some(kind) }
     }
 }
 
-impl TryFrom<&pb::EcdsaMessageAttribute> for EcdsaMessageAttribute {
+impl TryFrom<pb::EcdsaMessageAttribute> for EcdsaMessageAttribute {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::EcdsaMessageAttribute) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::EcdsaMessageAttribute) -> Result<Self, Self::Error> {
         use pb::ecdsa_message_attribute::Kind;
         let Some(kind) = &value.kind else {
             return Err(ProxyDecodeError::MissingField(

@@ -4,10 +4,13 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
+use rand::seq::SliceRandom;
+use rayon::prelude::*;
 use tracing::{error, info};
 
 use crate::{
     metrics::{MetricParamsPersist, WithMetricsPersist},
+    routes::ErrorCause,
     snapshot::{Node, Subnet},
 };
 
@@ -50,6 +53,22 @@ pub struct RouteSubnet {
     pub range_start: u256,
     pub range_end: u256,
     pub nodes: Vec<Node>,
+}
+
+impl RouteSubnet {
+    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Node>, ErrorCause> {
+        let nodes = self
+            .nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
+        }
+
+        Ok(nodes)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,23 +137,27 @@ impl Persist for Persister {
             return PersistStatus::SkippedEmpty;
         }
 
+        let node_count = subnets.iter().map(|x| x.nodes.len()).sum::<usize>() as u32;
+
         // Generate a list of subnets with a single canister range
         // Can contain several entries with the same subnet ID
-        let mut rt_subnets = vec![];
+        let mut rt_subnets = subnets
+            .into_par_iter()
+            .map(|subnet| {
+                let id = subnet.id.to_string();
+                let nodes = subnet.nodes;
 
-        let mut node_count: u32 = 0;
-        for subnet in subnets.into_iter() {
-            node_count += subnet.nodes.len() as u32;
-
-            for range in subnet.ranges.into_iter() {
-                rt_subnets.push(Arc::new(RouteSubnet {
-                    id: subnet.id.to_string(),
-                    range_start: principal_bytes_to_u256(range.start.as_slice()),
-                    range_end: principal_bytes_to_u256(range.end.as_slice()),
-                    nodes: subnet.nodes.clone(),
-                }))
-            }
-        }
+                subnet.ranges.into_par_iter().map(move |range| {
+                    Arc::new(RouteSubnet {
+                        id: id.clone(),
+                        range_start: principal_bytes_to_u256(range.start.as_slice()),
+                        range_end: principal_bytes_to_u256(range.end.as_slice()),
+                        nodes: nodes.clone(),
+                    })
+                })
+            })
+            .flatten()
+            .collect::<Vec<_>>();
 
         // Sort subnets by range_start for the binary search to work in lookup()
         rt_subnets.sort_by_key(|x| x.range_start);

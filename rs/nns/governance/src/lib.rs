@@ -145,6 +145,7 @@ pub mod neurons_fund;
 pub mod pb;
 pub mod proposals;
 mod reward;
+pub mod seed_accounts;
 pub mod storage;
 mod subaccount_index;
 
@@ -500,6 +501,12 @@ pub fn encode_metrics(
             "The total amount of Neurons' staked maturity",
         )?;
 
+        w.encode_gauge(
+            "governance_seed_neuron_count",
+            metrics.seed_neuron_count as f64,
+            "The count of seed Neurons",
+        )?;
+
         encode_dissolve_delay_buckets(
             w
                 .gauge_vec(
@@ -528,4 +535,10 @@ pub fn encode_metrics(
     )?;
 
     Ok(())
+}
+
+/// Whether we should store inactive neurons in stable memory, i.e. stop storing their secondary
+/// copies in heap memory.
+fn should_store_inactive_neurons_only_in_stable_memory() -> bool {
+    true
 }

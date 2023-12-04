@@ -103,13 +103,30 @@ genrule(
     cmd = "gunzip -c $< > $@",
 )
 
+genrule(
+    name = "decompress_testnet_headers",
+    srcs = ["@bitcoin_adapter_testnet_headers//file"],
+    outs = ["testnet_headers.json"],
+    cmd = "gunzip -c $< > $@",
+)
+
+genrule(
+    name = "decompress_testnet_blocks",
+    srcs = ["@bitcoin_adapter_testnet_blocks//file"],
+    outs = ["testnet_blocks.json"],
+    cmd = "gunzip -c $< > $@",
+)
+
 rust_test_suite(
     name = "adapter_integration",
+    timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     data = [
         ":decompress_mainnet_blocks",
         ":decompress_mainnet_headers",
+        ":decompress_testnet_blocks",
+        ":decompress_testnet_headers",
         "@bitcoin-core//:bitcoin-core",
         "@bitcoin-core//:bitcoind",
     ],
@@ -117,6 +134,8 @@ rust_test_suite(
         "BITCOIN_CORE_PATH": "$(rootpath @bitcoin-core//:bitcoind)",
         "HEADERS_DATA_PATH": "$(rootpath :decompress_mainnet_headers)",
         "BLOCKS_DATA_PATH": "$(rootpath :decompress_mainnet_blocks)",
+        "TESTNET_HEADERS_DATA_PATH": "$(rootpath :decompress_testnet_headers)",
+        "TESTNET_BLOCKS_DATA_PATH": "$(rootpath :decompress_testnet_blocks)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["requires-network"],

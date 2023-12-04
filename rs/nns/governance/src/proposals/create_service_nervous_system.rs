@@ -364,9 +364,6 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             max_icp_e8s,
         ) {
             // If matched funding is enabled, we don't need to populate the old fields
-            // TODO NNS1-2687: Once this ticket is being worked on, this branch
-            // will always be taken, making the entire `match` expression a no-op,
-            // so let's just remove it entirely.
             min_max_icp_bounds if IS_MATCHED_FUNDING_ENABLED => min_max_icp_bounds,
             // Otherwise, let's "reconstruct" the missing fields.
             (
@@ -500,11 +497,6 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
                         .unwrap_or_default(),
                 },
             );
-
-        // TODO NNS1-2687: move this check to sns/init
-        if IS_MATCHED_FUNDING_ENABLED && swap_parameters.neurons_fund_participation.is_none() {
-            defects.push("Error: neurons_fund_participation must be specified.".to_string());
-        }
 
         if !defects.is_empty() {
             return Err(format!(

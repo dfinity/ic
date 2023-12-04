@@ -17,6 +17,7 @@ ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-types = { path = "../types/types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 serde = { workspace = true }

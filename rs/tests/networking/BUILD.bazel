@@ -67,6 +67,7 @@ system_test(
     name = "canister_http_time_out_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -82,6 +83,7 @@ system_test(
     name = "firewall_max_connections_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
@@ -105,6 +107,7 @@ system_test(
     name = "network_reliability_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -116,6 +119,7 @@ system_test(
     name = "query_workload_long_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -128,6 +132,7 @@ system_test(
     name = "update_workload_large_payload",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

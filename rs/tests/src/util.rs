@@ -720,7 +720,6 @@ pub async fn agent_with_identity_mapping(
 ) -> Result<Agent, AgentError> {
     let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_hostnames(true)
         .danger_accept_invalid_certs(true);
 
     let builder = match (
@@ -826,6 +825,38 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
                 "Expect code {:?} did not match {:?}. Reject message: {}",
                 code, reject_code, reject_message
             ),
+            others => panic!(
+                "Expected call to fail with a replica error but got {:?} instead",
+                others
+            ),
+        },
+    }
+}
+
+pub(crate) fn assert_reject_msg<T: std::fmt::Debug>(
+    res: Result<T, AgentError>,
+    code: RejectCode,
+    partial_message: &str,
+) {
+    match res {
+        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
+        Err(agent_error) => match agent_error {
+            AgentError::ReplicaError(RejectResponse {
+                reject_code,
+                reject_message,
+                ..
+            }) => {
+                assert_eq!(
+                    code, reject_code,
+                    "Expect code {:?} did not match {:?}. Reject message: {}",
+                    code, reject_code, reject_message
+                );
+                assert!(
+                    reject_message.contains(partial_message),
+                    "Actual reject message: {}",
+                    reject_message
+                );
+            }
             others => panic!(
                 "Expected call to fail with a replica error but got {:?} instead",
                 others

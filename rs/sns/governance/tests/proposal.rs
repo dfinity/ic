@@ -154,6 +154,12 @@ mod early_decision {
                 base_proposal_with_more_votes_decision's decision: {base_proposal_with_more_votes_decision:?}.\
                 \nbase_proposal: {base_proposal:?}, base_proposal_with_more_votes: {base_proposal_with_more_votes:?}",
             );
+
+            // Check that is_accepted is also monotonic
+            assert_eq!(
+                base_proposal.is_accepted(),
+                base_proposal_with_more_votes.is_accepted(),
+            );
         }
 
         // If early_decision is unspecified, it should be able to go
@@ -211,6 +217,42 @@ mod early_decision {
             };
             let base_proposal_with_more_no_votes_decision = base_proposal_with_more_no_votes.early_decision();
             assert_eq!(base_proposal_with_more_no_votes_decision, Vote::No);
+        }
+
+        // base_proposal.is_accepted() should agree with base_proposal.early_decision()
+        #[test]
+        fn early_decision_implies_accepted(
+            minimum_yes_proportion_of_total in 0u64..5_000,
+            minimum_yes_proportion_of_exercised in 5_000u64..9_999,
+            yes in 0u64..1_000_000,
+            no in 0u64..1_000_000,
+            uncast in 0u64..1_000_000,
+        ) {
+            let total = yes + no + uncast;
+            let base_proposal = ProposalData {
+                latest_tally: Some(Tally {
+                    yes,
+                    no,
+                    total,
+                    timestamp_seconds: 1,
+                }),
+                proposal_creation_timestamp_seconds: 1,
+                initial_voting_period_seconds: 10,
+                minimum_yes_proportion_of_total: Some(Percentage::from_basis_points(
+                    minimum_yes_proportion_of_total,
+                )),
+                minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(
+                    minimum_yes_proportion_of_exercised,
+                )),
+                ..Default::default()
+            };
+            let base_proposal_decision = base_proposal.early_decision();
+
+            match base_proposal_decision {
+                Vote::Unspecified => {},
+                Vote::Yes => assert!(base_proposal.is_accepted()),
+                Vote::No => assert!(!base_proposal.is_accepted()),
+            }
         }
     }
 

@@ -98,36 +98,6 @@ async fn test_ip_rate_limit() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn test_ip_rate_limit_replenish() -> Result<(), Error> {
-    let app = Router::new().route("/", post(dummy_call));
-    let app = RateLimit::try_from(2).unwrap().add_ip_rate_limiting(app);
-    let mut app = app
-        .layer(middleware::from_fn(body_to_subnet_context))
-        .layer(middleware::from_fn(add_ip_to_request));
-
-    let subnet_id_1 = "f7crg-kabae";
-    let request1 = request_with_subnet_id(subnet_id_1);
-    let response1 = app.call(request1).await.unwrap();
-    let request2 = request_with_subnet_id(subnet_id_1);
-    let response2 = app.call(request2).await.unwrap();
-    let sleep_time = std::time::Duration::from_secs(1);
-    std::thread::sleep(sleep_time);
-    let request3 = request_with_subnet_id(subnet_id_1);
-    let response3 = app.call(request3).await.unwrap();
-    let request4 = request_with_subnet_id(subnet_id_1);
-    let response4 = app.call(request4).await.unwrap();
-    let request5 = request_with_subnet_id(subnet_id_1);
-    let response5 = app.call(request5).await.unwrap();
-    assert_eq!(response1.status(), StatusCode::OK);
-    assert_eq!(response2.status(), StatusCode::OK);
-    assert_eq!(response3.status(), StatusCode::OK);
-    assert_eq!(response4.status(), StatusCode::OK);
-    assert_eq!(response5.status(), StatusCode::TOO_MANY_REQUESTS);
-
-    Ok(())
-}
-
-#[tokio::test]
 async fn test_subnet_rate_limit() -> Result<(), Error> {
     let app = Router::new().route("/", post(dummy_call));
     let app = RateLimit::try_from(2)
@@ -160,37 +130,5 @@ async fn test_subnet_rate_limit() -> Result<(), Error> {
     assert_eq!(response4.status(), StatusCode::OK);
     assert_eq!(response5.status(), StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(response6.status(), StatusCode::TOO_MANY_REQUESTS);
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_subnet_rate_limit_replenish() -> Result<(), Error> {
-    let app = Router::new().route("/", post(dummy_call));
-    let app = RateLimit::try_from(2)
-        .unwrap()
-        .add_subnet_rate_limiting(app);
-    let mut app = app
-        .layer(middleware::from_fn(body_to_subnet_context))
-        .layer(middleware::from_fn(add_ip_to_request));
-
-    let subnet_id_1 = "f7crg-kabae";
-    let request1 = request_with_subnet_id(subnet_id_1);
-    let response1 = app.call(request1).await.unwrap();
-    let request2 = request_with_subnet_id(subnet_id_1);
-    let response2 = app.call(request2).await.unwrap();
-    let sleep_time = std::time::Duration::from_secs(1);
-    std::thread::sleep(sleep_time);
-    let request3 = request_with_subnet_id(subnet_id_1);
-    let response3 = app.call(request3).await.unwrap();
-    let request4 = request_with_subnet_id(subnet_id_1);
-    let response4 = app.call(request4).await.unwrap();
-    let request5 = request_with_subnet_id(subnet_id_1);
-    let response5 = app.call(request5).await.unwrap();
-    assert_eq!(response1.status(), StatusCode::OK);
-    assert_eq!(response2.status(), StatusCode::OK);
-    assert_eq!(response3.status(), StatusCode::OK);
-    assert_eq!(response4.status(), StatusCode::OK);
-    assert_eq!(response5.status(), StatusCode::TOO_MANY_REQUESTS);
-
     Ok(())
 }

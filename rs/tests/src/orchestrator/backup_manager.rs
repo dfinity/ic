@@ -156,7 +156,6 @@ pub fn test(env: TestEnv) {
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),
         None,
-        true,
         &log,
     );
     run_ecdsa_signature_test(&nns_canister, &log, key);

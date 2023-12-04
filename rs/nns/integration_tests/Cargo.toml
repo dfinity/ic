@@ -38,6 +38,7 @@ ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 lazy_static = "1.4.0"
 lifeline = { path = "../handlers/lifeline/impl" }
@@ -79,7 +80,6 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-xrc-types = "1.0.0"
-libsecp256k1 = "0.7.0"
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }

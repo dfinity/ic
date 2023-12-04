@@ -39,6 +39,7 @@ use ic_protobuf::types::{v1 as pb, v1::artifact::Kind};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
+    hash::Hash,
     sync::Arc,
 };
 use strum_macros::{EnumIter, IntoStaticStr};
@@ -67,8 +68,8 @@ pub enum ArtifactAttribute {
     Empty(()),
 }
 
-impl From<&ArtifactAttribute> for pb::ArtifactAttribute {
-    fn from(value: &ArtifactAttribute) -> Self {
+impl From<ArtifactAttribute> for pb::ArtifactAttribute {
+    fn from(value: ArtifactAttribute) -> Self {
         use pb::artifact_attribute::Kind;
         let kind = match value {
             ArtifactAttribute::ConsensusMessage(x) => Kind::ConsensusMessage(x.into()),
@@ -79,11 +80,11 @@ impl From<&ArtifactAttribute> for pb::ArtifactAttribute {
     }
 }
 
-impl TryFrom<&pb::ArtifactAttribute> for ArtifactAttribute {
+impl TryFrom<pb::ArtifactAttribute> for ArtifactAttribute {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::ArtifactAttribute) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ArtifactAttribute) -> Result<Self, Self::Error> {
         use pb::artifact_attribute::Kind;
-        let Some(ref kind) = value.kind else {
+        let Some(kind) = value.kind else {
             return Err(ProxyDecodeError::MissingField("ArtifactAttribute::kind"));
         };
         Ok(match kind {
@@ -105,11 +106,10 @@ pub enum ArtifactId {
     DkgMessage(DkgMessageId),
     EcdsaMessage(EcdsaMessageId),
     FileTreeSync(FileTreeSyncId),
-    StateSync(StateSyncArtifactId),
 }
 
-impl From<&ArtifactId> for pb::ArtifactId {
-    fn from(value: &ArtifactId) -> Self {
+impl From<ArtifactId> for pb::ArtifactId {
+    fn from(value: ArtifactId) -> Self {
         use pb::artifact_id::Kind;
         let kind = match value {
             ArtifactId::ConsensusMessage(x) => Kind::Consensus(x.into()),
@@ -119,30 +119,27 @@ impl From<&ArtifactId> for pb::ArtifactId {
             ArtifactId::EcdsaMessage(x) => Kind::Ecdsa(x.into()),
             ArtifactId::CanisterHttpMessage(x) => Kind::CanisterHttp(x.into()),
             ArtifactId::FileTreeSync(x) => Kind::FileTreeSync(x.clone()),
-            ArtifactId::StateSync(x) => Kind::StateSync(x.clone().into()),
         };
         Self { kind: Some(kind) }
     }
 }
 
-impl TryFrom<&pb::ArtifactId> for ArtifactId {
+impl TryFrom<pb::ArtifactId> for ArtifactId {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::ArtifactId) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ArtifactId) -> Result<Self, Self::Error> {
         use pb::artifact_id::Kind;
         let kind = value
             .kind
-            .as_ref()
             .ok_or_else(|| ProxyDecodeError::MissingField("ArtifactId::kind"))?;
 
         Ok(match kind {
             Kind::Consensus(x) => ArtifactId::ConsensusMessage(x.try_into()?),
             Kind::Ingress(x) => ArtifactId::IngressMessage(x.try_into()?),
-            Kind::DkgMessage(x) => ArtifactId::DkgMessage(x.into()),
+            Kind::DkgMessage(x) => ArtifactId::DkgMessage(x.try_into()?),
             Kind::Certification(x) => ArtifactId::CertificationMessage(x.try_into()?),
             Kind::Ecdsa(x) => ArtifactId::EcdsaMessage(x.try_into()?),
             Kind::CanisterHttp(x) => ArtifactId::CanisterHttpMessage(x.clone().try_into()?),
             Kind::FileTreeSync(x) => ArtifactId::FileTreeSync(x.clone()),
-            Kind::StateSync(x) => ArtifactId::StateSync(x.clone().into()),
         })
     }
 }
@@ -200,7 +197,6 @@ impl From<&ArtifactId> for ArtifactTag {
             ArtifactId::EcdsaMessage(_) => ArtifactTag::EcdsaArtifact,
             ArtifactId::FileTreeSync(_) => ArtifactTag::FileTreeSyncArtifact,
             ArtifactId::IngressMessage(_) => ArtifactTag::IngressArtifact,
-            ArtifactId::StateSync(_) => ArtifactTag::StateSyncArtifact,
         }
     }
 }
@@ -230,7 +226,6 @@ impl From<&Artifact> for ArtifactTag {
 pub struct ArtifactFilter {
     pub consensus_filter: ConsensusMessageFilter,
     pub certification_filter: CertificationMessageFilter,
-    pub state_sync_filter: StateSyncFilter,
     pub no_filter: (),
 }
 
@@ -267,15 +262,75 @@ pub type ArtifactPriorityFn =
 /// parameterized by a type variable, which is of `ArtifactKind` trait.
 /// It is mostly a convenience to pass around a collection of types
 /// instead of all of them individually.
-pub trait ArtifactKind: Sized {
+pub trait ArtifactKind: Send + Sized + 'static {
     const TAG: ArtifactTag;
-    type Id;
-    type Message;
-    type Attribute;
-    type Filter: Default;
+
+    /// Protobuf ID wire type
+    type PbId: prost::Message + Default;
+    /// Protobuf to rust conversion error
+    type PbIdError: std::error::Error + Into<ProxyDecodeError>;
+    /// Rust artifact ID type. Needs to implement Hash etc. such that it can be used
+    /// as an index in data structures.
+    type Id: Into<Self::PbId>
+        + TryFrom<Self::PbId, Error = Self::PbIdError>
+        + Hash
+        + Clone
+        + PartialEq
+        + Eq
+        + Send
+        + Sync
+        + 'static;
+
+    type PbMessage: prost::Message + Default;
+    type PbMessageError: std::error::Error + Into<ProxyDecodeError>;
+    type Message: Into<Self::PbMessage>
+        + TryFrom<Self::PbMessage, Error = Self::PbMessageError>
+        + Send
+        + Sync
+        + 'static;
+
+    type PbAttribute: prost::Message + Default;
+    /// Protobuf to rust conversion error
+    type PbAttributeError: std::error::Error + Into<ProxyDecodeError>;
+    type Attribute: Into<Self::PbAttribute>
+        + TryFrom<Self::PbAttribute, Error = Self::PbAttributeError>
+        + Send
+        + Sync
+        + 'static;
+
+    type PbFilter: prost::Message + Default;
+    type PbFilterError: std::error::Error + Into<ProxyDecodeError>;
+    type Filter: Into<Self::PbFilter>
+        + TryFrom<Self::PbFilter, Error = Self::PbFilterError>
+        + Default;
 
     /// Returns the advert of the given message.
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
+}
+
+impl<Artifact: ArtifactKind> TryFrom<GossipAdvert> for Advert<Artifact>
+where
+    ArtifactId: TryInto<Artifact::Id, Error = ArtifactId> + From<Artifact::Id>,
+    ArtifactAttribute:
+        TryInto<Artifact::Attribute, Error = ArtifactAttribute> + From<Artifact::Attribute>,
+{
+    type Error = String;
+    fn try_from(advert: GossipAdvert) -> Result<Advert<Artifact>, Self::Error> {
+        let artifact_id = advert.artifact_id;
+        let artifact_attribute = advert.attribute;
+        let size = advert.size;
+        match (artifact_id.try_into(), artifact_attribute.try_into()) {
+            (Ok(id), Ok(attribute)) => Ok(Advert {
+                id,
+                attribute,
+                size,
+                integrity_hash: advert.integrity_hash,
+            }),
+            _ => Err(String::from(
+                "Gossipadvert can not be converted to Advert<Artifact> type",
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -312,47 +367,6 @@ where
     }
 }
 
-// This instance is currently not used, but may become handy.
-impl<Artifact: ArtifactKind> TryFrom<GossipAdvert> for Advert<Artifact>
-where
-    ArtifactId: TryInto<Artifact::Id, Error = ArtifactId> + From<Artifact::Id>,
-    ArtifactAttribute:
-        TryInto<Artifact::Attribute, Error = ArtifactAttribute> + From<Artifact::Attribute>,
-{
-    type Error = GossipAdvert;
-    fn try_from(advert: GossipAdvert) -> Result<Advert<Artifact>, Self::Error> {
-        let artifact_id = advert.artifact_id;
-        let artifact_attribute = advert.attribute;
-        let size = advert.size;
-        match (artifact_id.try_into(), artifact_attribute.try_into()) {
-            (Ok(id), Ok(attribute)) => Ok(Advert {
-                id,
-                attribute,
-                size,
-                integrity_hash: advert.integrity_hash,
-            }),
-            (Err(artifact_id), Ok(attribute)) => Err(GossipAdvert {
-                artifact_id,
-                attribute: attribute.into(),
-                size,
-                integrity_hash: advert.integrity_hash,
-            }),
-            (Ok(artifact_id), Err(attribute)) => Err(GossipAdvert {
-                artifact_id: artifact_id.into(),
-                attribute,
-                size,
-                integrity_hash: advert.integrity_hash,
-            }),
-            (Err(artifact_id), Err(attribute)) => Err(GossipAdvert {
-                artifact_id,
-                attribute,
-                size,
-                integrity_hash: advert.integrity_hash,
-            }),
-        }
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Consensus artifacts
 
@@ -364,8 +378,8 @@ pub struct ConsensusMessageId {
     pub height: Height,
 }
 
-impl From<&ConsensusMessageId> for pb::ConsensusMessageId {
-    fn from(value: &ConsensusMessageId) -> Self {
+impl From<ConsensusMessageId> for pb::ConsensusMessageId {
+    fn from(value: ConsensusMessageId) -> Self {
         Self {
             hash: Some(pb::ConsensusMessageHash::from(&value.hash)),
             height: value.height.get(),
@@ -373,9 +387,9 @@ impl From<&ConsensusMessageId> for pb::ConsensusMessageId {
     }
 }
 
-impl TryFrom<&pb::ConsensusMessageId> for ConsensusMessageId {
+impl TryFrom<pb::ConsensusMessageId> for ConsensusMessageId {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::ConsensusMessageId) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ConsensusMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
             hash: try_from_option_field(value.hash.as_ref(), "ConsensusMessageId::hash")?,
             height: Height::new(value.height),
@@ -441,8 +455,8 @@ impl From<&IngressMessageId> for MessageId {
     }
 }
 
-impl From<&IngressMessageId> for pb::IngressMessageId {
-    fn from(value: &IngressMessageId) -> Self {
+impl From<IngressMessageId> for pb::IngressMessageId {
+    fn from(value: IngressMessageId) -> Self {
         Self {
             expiry: value.expiry.as_nanos_since_unix_epoch(),
             message_id: value.message_id.as_bytes().to_vec(),
@@ -450,9 +464,9 @@ impl From<&IngressMessageId> for pb::IngressMessageId {
     }
 }
 
-impl TryFrom<&pb::IngressMessageId> for IngressMessageId {
+impl TryFrom<pb::IngressMessageId> for IngressMessageId {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::IngressMessageId) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::IngressMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
             expiry: Time::from_nanos_since_unix_epoch(value.expiry),
             message_id: value.message_id.as_slice().try_into()?,
@@ -471,8 +485,8 @@ pub struct CertificationMessageId {
     pub height: Height,
 }
 
-impl From<&CertificationMessageId> for pb::CertificationMessageId {
-    fn from(value: &CertificationMessageId) -> Self {
+impl From<CertificationMessageId> for pb::CertificationMessageId {
+    fn from(value: CertificationMessageId) -> Self {
         Self {
             hash: Some(pb::CertificationMessageHash::from(&value.hash)),
             height: value.height.get(),
@@ -489,9 +503,9 @@ pub struct CertificationMessageFilter {
 // -----------------------------------------------------------------------------
 // DKG artifacts
 
-impl TryFrom<&pb::CertificationMessageId> for CertificationMessageId {
+impl TryFrom<pb::CertificationMessageId> for CertificationMessageId {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::CertificationMessageId) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::CertificationMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
             hash: try_from_option_field(value.hash.as_ref(), "CertificationMessageId::hash")?,
             height: Height::new(value.height),
@@ -632,6 +646,20 @@ impl ChunkableArtifact for StateSyncMessage {
     }
 }
 
+/// Used to satisfy `ArtifactKind` trait. This is needed as long as the old state sync version exists.
+impl From<()> for StateSyncMessage {
+    fn from(_: ()) -> Self {
+        unreachable!()
+    }
+}
+
+/// Used to satisfy `ArtifactKind` trait. This is needed as long as the old state sync version exists.
+impl From<StateSyncMessage> for () {
+    fn from(_: StateSyncMessage) -> Self {
+        unreachable!()
+    }
+}
+
 // We need a custom Hash instance to skip checkpoint_root in order
 // for integrity_hash to produce the same result on different nodes.
 //
@@ -652,17 +680,11 @@ impl std::hash::Hash for StateSyncMessage {
     }
 }
 
-/// State sync filter is by height.
-#[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StateSyncFilter {
-    pub height: Height,
-}
-
 // ------------------------------------------------------------------------------
 // Conversions
 
-impl From<&Artifact> for pb::Artifact {
-    fn from(value: &Artifact) -> Self {
+impl From<Artifact> for pb::Artifact {
+    fn from(value: Artifact) -> Self {
         let kind = match value {
             Artifact::ConsensusMessage(x) => Kind::Consensus(x.clone().into()),
             Artifact::IngressMessage(x) => Kind::SignedIngress(x.binary().clone().into()),
@@ -671,9 +693,7 @@ impl From<&Artifact> for pb::Artifact {
             Artifact::EcdsaMessage(x) => Kind::Ecdsa(x.into()),
             Artifact::CanisterHttpMessage(x) => Kind::HttpShare(x.into()),
             Artifact::FileTreeSync(x) => Kind::FileTreeSync(x.clone().into()),
-            Artifact::StateSync(_) => {
-                panic!("state sync messages are not supposed to be serialized!")
-            }
+            Artifact::StateSync(_) => unimplemented!(),
         };
         Self { kind: Some(kind) }
     }
@@ -695,7 +715,7 @@ impl TryFrom<pb::Artifact> for Artifact {
             }),
             Kind::Certification(x) => Artifact::CertificationMessage(x.try_into()?),
             Kind::Dkg(x) => Artifact::DkgMessage(x.try_into()?),
-            Kind::Ecdsa(x) => Artifact::EcdsaMessage((&x).try_into()?),
+            Kind::Ecdsa(x) => Artifact::EcdsaMessage(x.try_into()?),
             Kind::HttpShare(x) => Artifact::CanisterHttpMessage(x.try_into()?),
             Kind::FileTreeSync(x) => Artifact::FileTreeSync(x.try_into()?),
         })
@@ -707,7 +727,6 @@ impl From<ArtifactFilter> for pb::ArtifactFilter {
         Self {
             consensus_filter: Some(filter.consensus_filter.into()),
             certification_message_filter: Some(filter.certification_filter.into()),
-            state_sync_filter: Some(filter.state_sync_filter.into()),
         }
     }
 }
@@ -723,10 +742,6 @@ impl TryFrom<pb::ArtifactFilter> for ArtifactFilter {
             certification_filter: try_from_option_field(
                 filter.certification_message_filter,
                 "ArtifactFilter.certification_message_filter",
-            )?,
-            state_sync_filter: try_from_option_field(
-                filter.state_sync_filter,
-                "ArtifactFilter.state_sync_filter",
             )?,
             no_filter: (),
         })
@@ -761,23 +776,6 @@ impl From<CertificationMessageFilter> for pb::CertificationMessageFilter {
 impl TryFrom<pb::CertificationMessageFilter> for CertificationMessageFilter {
     type Error = ProxyDecodeError;
     fn try_from(filter: pb::CertificationMessageFilter) -> Result<Self, Self::Error> {
-        Ok(Self {
-            height: Height::from(filter.height),
-        })
-    }
-}
-
-impl From<StateSyncFilter> for pb::StateSyncFilter {
-    fn from(filter: StateSyncFilter) -> Self {
-        Self {
-            height: filter.height.get(),
-        }
-    }
-}
-
-impl TryFrom<pb::StateSyncFilter> for StateSyncFilter {
-    type Error = ProxyDecodeError;
-    fn try_from(filter: pb::StateSyncFilter) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::from(filter.height),
         })

@@ -60,6 +60,7 @@ use registry_canister::{
         node_management::{
             do_add_node::AddNodePayload, do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
+            do_update_node_ipv4_config_directly::UpdateNodeIPv4ConfigDirectlyPayload,
         },
         prepare_canister_migration::PrepareCanisterMigrationPayload,
         reroute_canister_ranges::RerouteCanisterRangesPayload,
@@ -917,6 +918,26 @@ fn update_node_directly_(payload: UpdateNodeDirectlyPayload) -> Result<(), Strin
     let result = registry_mut().do_update_node_directly(payload);
     recertify_registry();
     result
+}
+
+#[export_name = "canister_update update_node_ipv4_config_directly"]
+fn update_node_ipv4_config_directly() {
+    // This method can be called by anyone
+    println!(
+        "{}call: update_node_ipv4_config_directly from: {}",
+        LOG_PREFIX,
+        dfn_core::api::caller()
+    );
+    over_may_reject(candid_one, update_node_ipv4_config_directly_);
+}
+
+#[candid_method(update, rename = "update_node_ipv4_config_directly")]
+fn update_node_ipv4_config_directly_(
+    payload: UpdateNodeIPv4ConfigDirectlyPayload,
+) -> Result<(), String> {
+    registry_mut().do_update_node_ipv4_config_directly(payload);
+    recertify_registry();
+    Ok(())
 }
 
 #[export_name = "canister_update remove_node_directly"]

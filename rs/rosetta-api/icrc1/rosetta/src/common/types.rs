@@ -3,181 +3,23 @@ use std::time::Duration;
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use candid::Deserialize;
-
-use ic_base_types::CanisterId;
-use ic_icrc1_tokens_u64::U64;
-use ic_ledger_canister_core::ledger::LedgerTransaction;
-use serde::Serialize;
-use serde_json::Number;
+use rosetta_core::identifiers::BlockIdentifier;
 
 use super::storage::types::RosettaBlock;
+use ic_icrc1_tokens_u64::U64;
+use ic_ledger_canister_core::ledger::LedgerTransaction;
+use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::objects::Currency;
+use rosetta_core::objects::ObjectMap;
+use serde::Serialize;
+use serde_json::Number;
 
 // Generated from the [Rosetta API specification v1.4.13](https://github.com/coinbase/rosetta-specifications/blob/v1.4.13/api.json)
 // Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html
 
-const DEFAULT_BLOCKCHAIN: &str = "Internet Computer";
-
-pub type Object = serde_json::map::Map<String, serde_json::Value>;
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct MetadataRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkListResponse {
-    pub network_identifiers: Vec<NetworkIdentifier>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkIdentifier {
-    pub blockchain: String,
-
-    pub network: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_network_identifier: Option<SubNetworkIdentifier>,
-}
-
-impl NetworkIdentifier {
-    pub fn for_ledger_id(ledger_id: CanisterId) -> Self {
-        let network = hex::encode(ledger_id.get().into_vec());
-        NetworkIdentifier {
-            blockchain: DEFAULT_BLOCKCHAIN.to_string(),
-            network,
-            sub_network_identifier: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SubNetworkIdentifier {
-    pub network: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkOptionsResponse {
-    pub version: Version,
-
-    pub allow: Allow,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Version {
-    pub rosetta_version: String,
-
-    pub node_version: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub middleware_version: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Allow {
-    pub operation_statuses: Vec<OperationStatus>,
-
-    pub operation_types: Vec<String>,
-
-    pub errors: Vec<Error>,
-
-    pub historical_balance_lookup: bool,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp_start_index: Option<i64>,
-
-    pub call_methods: Vec<String>,
-
-    pub balance_exemptions: Vec<BalanceExemption>,
-
-    pub mempool_coins: bool,
-
-    #[serde(
-        default,
-        with = "::serde_with::rust::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub block_hash_case: Option<Option<Case>>,
-
-    #[serde(
-        default,
-        with = "::serde_with::rust::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub transaction_hash_case: Option<Option<Case>>,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub struct BalanceExemption {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_account_address: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub currency: Option<Box<Currency>>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exemption_type: Option<ExemptionType>,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Currency {
-    pub symbol: String,
-
-    pub decimals: u8,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum ExemptionType {
-    GreaterOrEqual,
-    LessOrEqual,
-    Dynamic,
-}
-
-impl Default for ExemptionType {
-    fn default() -> ExemptionType {
-        Self::GreaterOrEqual
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub enum Case {
-    UpperCase,
-    LowerCase,
-    CaseSensitive,
-    Null,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct OperationStatus {
-    pub status: String,
-
-    pub successful: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Error {
-    pub code: u32,
-
-    pub message: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-
-    pub retriable: bool,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
-}
-
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct Error(pub rosetta_core::objects::Error);
 const ERROR_CODE_INVALID_NETWORK_ID: u32 = 1;
 const ERROR_CODE_UNABLE_TO_FIND_BLOCK: u32 = 2;
 const ERROR_CODE_INVALID_BLOCK_IDENTIFIER: u32 = 3;
@@ -186,13 +28,22 @@ const ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER: u32 = 5;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(self.0)).into_response()
     }
 }
-
+impl From<Error> for rosetta_core::objects::Error {
+    fn from(value: Error) -> Self {
+        value.0
+    }
+}
+impl From<rosetta_core::objects::Error> for Error {
+    fn from(value: rosetta_core::objects::Error) -> Self {
+        Error(value)
+    }
+}
 impl Error {
     pub fn invalid_network_id(expected: &NetworkIdentifier) -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_INVALID_NETWORK_ID,
             message: "Invalid network identifier".into(),
             description: Some(format!(
@@ -201,21 +52,21 @@ impl Error {
             )),
             retriable: false,
             details: None,
-        }
+        })
     }
 
     pub fn unable_to_find_block(description: String) -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_UNABLE_TO_FIND_BLOCK,
             message: "Unable to find block".into(),
             description: Some(description),
             retriable: false,
             details: None,
-        }
+        })
     }
 
     pub fn invalid_block_identifier() -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_INVALID_BLOCK_IDENTIFIER,
             message: "Invalid block identifier provided".into(),
             description: Some(
@@ -223,79 +74,28 @@ impl Error {
             ),
             retriable: false,
             details: None,
-        }
+        })
     }
 
     pub fn failed_to_build_block_response(description: String) -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE,
             message: "Failed to build block response".into(),
             description: Some(description),
             retriable: false,
             details: None,
-        }
+        })
     }
 
     pub fn invalid_transaction_identifier() -> Self {
-        Self {
+        Self(rosetta_core::objects::Error {
             code: ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER,
             message: "Invalid transaction identifier provided".into(),
             description: Some("Invalid transaction identifier provided.".into()),
             retriable: false,
             details: None,
-        }
+        })
     }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkRequest {
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct BlockIdentifier {
-    pub index: u64,
-    pub hash: String,
-}
-
-impl From<&RosettaBlock> for BlockIdentifier {
-    fn from(block: &RosettaBlock) -> Self {
-        Self {
-            index: block.index,
-            hash: hex::encode(&block.block_hash),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SyncStatus {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub current_index: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub target_index: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stage: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub synced: Option<bool>,
-}
-
-/// NetworkStatusResponse contains basic information about the node's view of a
-/// blockchain network.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NetworkStatusResponse {
-    pub current_block_identifier: BlockIdentifier,
-    /// The timestamp of the block in milliseconds since the Unix Epoch.
-    pub current_block_timestamp: u64,
-    pub genesis_block_identifier: BlockIdentifier,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub oldest_block_identifier: Option<BlockIdentifier>,
-    // TODO: sync status should be displayed as it is helpful, but work
-    // needs to be done in order to share syncing status.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sync_status: Option<SyncStatus>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -319,7 +119,7 @@ pub struct Transaction {
     pub transaction_identifier: TransactionIdentifier,
     pub operations: Vec<Operation>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 impl Transaction {
@@ -341,7 +141,7 @@ pub struct Operation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<ObjectMap>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -397,7 +197,7 @@ pub struct ApproveMetadata {
     pub expires_at: Option<u64>,
 }
 
-impl From<ApproveMetadata> for Object {
+impl From<ApproveMetadata> for ObjectMap {
     fn from(m: ApproveMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(serde_json::Value::Object(o)) => o,
@@ -451,7 +251,7 @@ impl TransactionBuilder {
         let mut push_operation = |r#type: OperationType,
                                   account: AccountIdentifier,
                                   amount: Option<String>,
-                                  metadata: Option<Object>| {
+                                  metadata: Option<ObjectMap>| {
             operations.push(Operation {
                 operation_identifier: OperationIdentifier {
                     index: operations.len() as u64,
@@ -551,7 +351,7 @@ impl TransactionBuilder {
             }
         };
 
-        let mut metadata = Object::new();
+        let mut metadata = ObjectMap::new();
         if let Some(created_at_time) = transaction.created_at_time() {
             metadata.insert(
                 "created_at_time".to_string(),
@@ -759,7 +559,7 @@ mod test {
     fn currency_strategy() -> impl Strategy<Value = Currency> {
         (decimals_strategy(), symbol_strategy()).prop_map(|(decimals, symbol)| Currency {
             symbol,
-            decimals,
+            decimals: decimals.into(),
             metadata: None,
         })
     }
@@ -907,7 +707,7 @@ mod test {
             }
         };
 
-        let mut metadata = Object::new();
+        let mut metadata = ObjectMap::new();
         if let Some(memo) = &transaction.memo {
             let value = serde_json::Value::Array(
                 memo.0

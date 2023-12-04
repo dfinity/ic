@@ -25,6 +25,7 @@ ic-cdk = { workspace = true }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
+ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -53,12 +54,15 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-replica-tests = { path = "../../replica_tests" }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 lazy_static = "1.4.0"
 maplit = "1.0"
 rand = { version = "0.8.4", features = ["small_rng"] }
@@ -70,6 +74,7 @@ build-info-build = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }

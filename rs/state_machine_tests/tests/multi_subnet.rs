@@ -10,13 +10,13 @@ use ic_types::{
     CanisterId, Cycles, SubnetId,
 };
 use ic_universal_canister::{wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
 fn test_setup(
-    subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     subnet_list: Vec<SubnetId>,
@@ -68,7 +68,7 @@ fn counter_canister_call_test() {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
     // Set up the two state machines for the two (app) subnets.
-    let subnets = Arc::new(RwLock::new(HashMap::new()));
+    let subnets = Arc::new(RwLock::new(BTreeMap::new()));
     let now = std::time::SystemTime::now();
     let env1 = test_setup(
         subnets.clone(),

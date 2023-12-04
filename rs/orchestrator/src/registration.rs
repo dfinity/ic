@@ -197,6 +197,7 @@ impl NodeRegistration {
             p2p_flow_endpoints: vec![],
             chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
             prometheus_metrics_endpoint: "".to_string(),
+            public_ipv4_config: None,
         }
     }
 

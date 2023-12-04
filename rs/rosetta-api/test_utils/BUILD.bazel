@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/rosetta-api",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
     "//rs/types/types",
     "@crate_index//:base64",
     "@crate_index//:hex",

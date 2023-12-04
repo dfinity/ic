@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
 use ic_ic00_types::EcdsaKeyId;
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_protobuf::registry::subnet::v1::{SubnetFeatures as pbSubnetFeatures, SubnetRecord};
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
@@ -129,14 +129,17 @@ impl Registry {
         let subnet_id = payload.subnet_id;
         let subnet_record = self.get_subnet_or_panic(subnet_id);
         if let Some(old_features) = subnet_record.features {
-            let old_features = SubnetFeatures::from(old_features);
-            if payload.features.unwrap().sev_status == old_features.sev_status {
+            // Compare as `SubnetFeatures`, to avoid having to worry about
+            // `None` vs `Some(false)`.
+            let new_features: SubnetFeatures = payload.features.clone().unwrap().into();
+            let old_features: SubnetFeatures = old_features.into();
+            if new_features.sev_enabled == old_features.sev_enabled {
                 return;
             }
         }
         panic!(
-            "{}Proposal attempts to change sev_status for Subnet '{}', \
-                        but sev_status can only be set during subnet creation.",
+            "{}Proposal attempts to change sev_enabled for Subnet '{}', \
+                        but sev_enabled can only be set during subnet creation.",
             LOG_PREFIX, subnet_id
         );
     }
@@ -219,7 +222,7 @@ pub struct UpdateSubnetPayload {
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
-    pub features: Option<SubnetFeatures>,
+    pub features: Option<pbSubnetFeatures>,
 
     /// This defines keys held by the subnet,
     pub ecdsa_config: Option<EcdsaConfig>,
@@ -321,6 +324,8 @@ fn merge_subnet_record(
         ssh_backup_access,
     } = payload;
 
+    let features: Option<pbSubnetFeatures> = features.map(|v| SubnetFeatures::from(v).into());
+
     maybe_set!(subnet_record, max_ingress_bytes_per_message);
     maybe_set!(subnet_record, max_ingress_messages_per_block);
     maybe_set!(subnet_record, max_block_payload_size);
@@ -381,7 +386,7 @@ mod tests {
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{GossipConfig, SubnetRecord};
-    use ic_registry_subnet_features::{SevFeatureStatus, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
     use ic_types::{
@@ -432,11 +437,14 @@ mod tests {
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
-            features: Some(SubnetFeatures {
-                canister_sandboxing: false,
-                http_requests: false,
-                sev_status: None,
-            }),
+            features: Some(
+                SubnetFeatures {
+                    canister_sandboxing: false,
+                    http_requests: false,
+                    sev_enabled: false,
+                }
+                .into(),
+            ),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
@@ -554,11 +562,14 @@ mod tests {
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
-            features: Some(SubnetFeatures {
-                canister_sandboxing: false,
-                http_requests: false,
-                sev_status: None,
-            }),
+            features: Some(
+                SubnetFeatures {
+                    canister_sandboxing: false,
+                    http_requests: false,
+                    sev_enabled: false,
+                }
+                .into(),
+            ),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
@@ -606,7 +617,7 @@ mod tests {
                     SubnetFeatures {
                         canister_sandboxing: false,
                         http_requests: false,
-                        sev_status: None,
+                        sev_enabled: false,
                     }
                     .into()
                 ),
@@ -1165,10 +1176,10 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "Proposal attempts to change sev_status for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
-                    but sev_status can only be set during subnet creation."
+        expected = "Proposal attempts to change sev_enabled for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
+                    but sev_enabled can only be set during subnet creation."
     )]
-    fn test_sev_status_cannot_be_changed() {
+    fn test_sev_enabled_cannot_be_changed() {
         let mut registry = invariant_compliant_registry(0);
 
         let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
@@ -1176,7 +1187,7 @@ mod tests {
 
         let mut subnet_list_record = registry.get_subnet_list_record();
 
-        // Create the subnet we will update that changes sev_status
+        // Create the subnet we will update that changes sev_enabled
         let subnet_record = get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
 
         let subnet_id = subnet_test_id(1000);
@@ -1187,11 +1198,14 @@ mod tests {
         ));
 
         let mut payload = make_empty_update_payload(subnet_id);
-        payload.features = Some(SubnetFeatures {
-            canister_sandboxing: false,
-            http_requests: false,
-            sev_status: Some(SevFeatureStatus::SecureEnabled),
-        });
+        payload.features = Some(
+            SubnetFeatures {
+                canister_sandboxing: false,
+                http_requests: false,
+                sev_enabled: true,
+            }
+            .into(),
+        );
 
         // Should panic because we are changing SubnetFeatures
         registry.do_update_subnet(payload);

@@ -1,9 +1,15 @@
 use ic_icrc_rosetta::common::types::{
-    BlockIdentifier, BlockRequest, BlockResponse, BlockTransactionRequest,
-    BlockTransactionResponse, MetadataRequest, NetworkIdentifier, NetworkListResponse,
-    NetworkRequest, NetworkStatusResponse, PartialBlockIdentifier, TransactionIdentifier,
+    BlockRequest, BlockResponse, BlockTransactionRequest, BlockTransactionResponse,
+    PartialBlockIdentifier, TransactionIdentifier,
 };
+use ic_rosetta_api::models::MempoolResponse;
 use reqwest::{Client, Url};
+use rosetta_core::identifiers::BlockIdentifier;
+use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::request_types::NetworkRequest;
+use rosetta_core::response_types::NetworkListResponse;
+use rosetta_core::response_types::NetworkStatusResponse;
 use url::ParseError;
 
 pub struct RosettaClient {
@@ -94,6 +100,22 @@ impl RosettaClient {
                 network_identifier,
                 block_identifier,
                 transaction_identifier,
+            })
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    pub async fn mempool(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> reqwest::Result<MempoolResponse> {
+        self.http_client
+            .post(self.url("/mempool"))
+            .json(&NetworkRequest {
+                network_identifier,
+                metadata: None,
             })
             .send()
             .await?

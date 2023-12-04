@@ -14,5 +14,9 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+ciborium = { workspace = true }
+hex = "0.4.2"
 ic-agent = { workspace = true }
+ic-cbor = "1.2.0"
+ic-certification = "1.2.0"
 icrc-ledger-types = { path = "../icrc-ledger-types", version = "0.1.2" }

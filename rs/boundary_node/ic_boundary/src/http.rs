@@ -1,10 +1,13 @@
 use async_trait::async_trait;
-use http_body::{Body as HttpBody, LengthLimitError, Limited};
+use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
 use hyper::body;
 use reqwest::{Error as ReqwestError, Request, Response};
 use rustls::Error as RustlsError;
 
 use crate::{core::error_source, dns::DnsError, routes::ErrorCause};
+
+/// Standard response used to pass between middlewares
+pub type AxumResponse = http::Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>;
 
 // TODO remove this wrapper?
 #[async_trait]

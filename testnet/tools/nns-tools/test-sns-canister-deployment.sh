@@ -38,6 +38,10 @@ ensure_variable_set NEURON_ID
 ensure_variable_set WALLET_CANISTER
 ensure_variable_set PEM
 
+CONFIG_FILE="${CONFIG_FILE:-"$NNS_TOOLS_DIR"/sns_default_test_init_params_v2.yml}"
+
+echo "Using SNS config file: $CONFIG_FILE"
+
 # Install the sns binary corresponding to the latest NNS Governance canister
 SNS_CLI_VERSION=${GIT_COMMIT:-$(nns_canister_git_version "${NNS_URL}" "governance")}
 install_binary sns "$SNS_CLI_VERSION" "$MY_DOWNLOAD_DIR"
@@ -136,7 +140,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
     # propose new SNS
     echo "Proposing new SNS!" | tee -a "${LOG_FILE}"
 
-    if ! propose_new_sns "$NNS_URL" "$NEURON_ID"; then
+    if ! propose_new_sns "$NNS_URL" "$NEURON_ID" "$CONFIG_FILE"; then
         print_red "Failed to create a new SNS via 1-proposal initialization with mainnet version!"
     else
 
@@ -184,7 +188,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
     # propose new SNS
     echo "Proposing new SNS!" | tee -a "${LOG_FILE}"
 
-    if ! propose_new_sns "$NNS_URL" "$NEURON_ID"; then
+    if ! propose_new_sns "$NNS_URL" "$NEURON_ID" "$CONFIG_FILE"; then
         print_red "Failed to create a new SNS via 1-proposal initialization with new version!"
     else
 

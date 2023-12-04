@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-askama = { version = "0.11.1", features = ["serde-json"] }
+askama = { workspace = true }
 clap = { workspace = true }
 eyre = "0.6.8"
 lazy_static = "1.4.0"

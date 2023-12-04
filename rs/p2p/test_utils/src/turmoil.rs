@@ -163,6 +163,21 @@ where
     Ok(())
 }
 
+/// Runs the tokio simulation for the provided duration.
+/// If Ok(true) is returned all clients have completed.
+pub fn run_simulation_for(sim: &mut Sim, timeout: Duration) -> turmoil::Result {
+    let now = sim.elapsed();
+    loop {
+        if sim.elapsed() > timeout + now {
+            break;
+        }
+        if sim.step()? {
+            panic!("Simulation finished while checking condition");
+        }
+    }
+    Ok(())
+}
+
 /// Runs the tokio simulation until the timeout is reached.
 /// Panics if simulation finishes or condition evaluates to true.
 pub fn wait_for_timeout<F>(sim: &mut Sim, f: F, timeout: Duration) -> turmoil::Result
@@ -266,8 +281,13 @@ pub fn add_transport_to_sim<F>(
 
     let node_crypto =
         crypto.unwrap_or_else(|| temp_crypto_component_with_tls_keys(&registry_handler, peer));
-    let sev_handshake =
-        sev.unwrap_or_else(|| Arc::new(Sev::new(peer, registry_handler.registry_client.clone())));
+    let sev_handshake = sev.unwrap_or_else(|| {
+        Arc::new(Sev::new(
+            peer,
+            registry_handler.registry_client.clone(),
+            log.clone(),
+        ))
+    });
     registry_handler.registry_client.update_to_latest_version();
 
     sim.host(peer.to_string(), move || {
@@ -326,17 +346,17 @@ pub fn add_transport_to_sim<F>(
                 None
             };
 
-            let transport = Arc::new(QuicTransport::build(
+            let transport = Arc::new(QuicTransport::start(
                 &log,
                 &MetricsRegistry::default(),
-                tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
                 node_crypto_clone,
                 registry_client,
                 sev_handshake_clone,
                 peer,
                 topology_watcher_clone.clone(),
                 Either::Right(custom_udp),
-                router,
+                router.unwrap_or_default(),
             ));
 
             consensus_builder.run(transport.clone(), topology_watcher_clone.clone());

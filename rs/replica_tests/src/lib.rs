@@ -38,7 +38,7 @@ use ic_types::{
     messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
-    CanisterId, Height, NodeId, Time,
+    CanisterId, Height, NodeId, ReplicaVersion, Time,
 };
 use prost::Message;
 use slog_scope::info;
@@ -225,8 +225,7 @@ pub fn get_ic_config() -> IcConfig {
         SubnetConfig::new(
             subnet_index,
             subnet_nodes,
-            None,
-            None,
+            ReplicaVersion::default(),
             None,
             None,
             None,
@@ -255,7 +254,7 @@ pub fn get_ic_config() -> IcConfig {
     IcConfig::new(
         prep_dir,
         topology_config,
-        /* replica_version_id= */ None,
+        ReplicaVersion::default(),
         /* generate_subnet_records= */ true,
         /* nns_subnet_id= */ Some(subnet_index),
         /* release_package_url= */ None,

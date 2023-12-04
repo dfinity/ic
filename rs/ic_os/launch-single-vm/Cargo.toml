@@ -12,7 +12,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type"}
 ic-types = { path = "../../types/types" }
 
 clap = { workspace = true }
-reqwest = { version = "0.11.1", features = ["blocking", "multipart", "stream"] }
+reqwest = { workspace = true }
 serde = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"

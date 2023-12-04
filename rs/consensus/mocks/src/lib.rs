@@ -5,6 +5,7 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::{
+    batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
     validation::ValidationResult,
 };
@@ -42,12 +43,12 @@ mock! {
             subnet_records: &SubnetRecords,
         ) -> BatchPayload;
 
-        fn validate_payload(
+        fn validate_payload<'a>(
             &self,
             height: Height,
+            proposal_context: &ProposalContext<'a>,
             payload: &Payload,
             past_payloads: &[(Height, Time, Payload)],
-            context: &ValidationContext,
         ) -> ValidationResult<PayloadValidationError>;
     }
 }

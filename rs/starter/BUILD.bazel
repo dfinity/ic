@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",
+    "//rs/registry/subnet_features",
     "//rs/types/ic00_types",
     "//rs/types/types",
     "@crate_index//:anyhow",

@@ -249,7 +249,7 @@ pub async fn get_balance(
     acc: AccountIdentifier,
 ) -> Result<Tokens, ApiError> {
     let block_id = height.map(|h| PartialBlockIdentifier {
-        index: Some(h as i64),
+        index: Some(h.try_into().unwrap()),
         hash: None,
     });
     let mut msg =

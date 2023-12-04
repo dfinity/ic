@@ -38,6 +38,7 @@ use ic_interfaces::{
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::artifact_manager::{ArtifactProcessorEvent, JoinGuard},
     p2p::consensus::PriorityFnAndFilterProducer,
+    p2p::state_sync::StateSyncClient,
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::SysTimeSource,
 };
@@ -51,7 +52,6 @@ use ic_p2p::{start_p2p, MAX_ADVERT_BUFFER};
 use ic_quic_transport::DummyUdpSocket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_state_manager::state_sync::{StateSync, StateSyncArtifact};
 use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation},
@@ -71,22 +71,14 @@ use ic_types::{
 };
 use std::{
     collections::HashMap,
+    convert::Infallible,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
 use tokio::sync::mpsc::Sender as TokioSender;
 
-const ENABLE_NEW_STATE_SYNC: bool = true;
 const ENABLE_NEW_P2P_CONSENSUS: bool = false;
-
-/// The P2P state sync client.
-pub enum P2PStateSyncClient {
-    /// The main client variant.
-    Client(StateSync),
-    /// The test client variant.
-    TestClient(),
-}
 
 enum P2PSenders {
     Old(Sender<GossipAdvert>),
@@ -152,7 +144,7 @@ pub fn setup_consensus_and_p2p(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     catch_up_package: CatchUpPackage,
-    state_sync_client: P2PStateSyncClient,
+    state_sync_client: Arc<dyn StateSyncClient>,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
@@ -328,47 +320,13 @@ pub fn setup_consensus_and_p2p(
     };
 
     // StateSync
-    let state_sync_client = match state_sync_client {
-        P2PStateSyncClient::Client(client) if ENABLE_NEW_STATE_SYNC => {
-            let state_sync_client = Arc::new(client);
-            let (state_sync_router, state_sync_manager_rx) =
-                ic_state_sync_manager::build_axum_router(
-                    state_sync_client.clone(),
-                    log.clone(),
-                    metrics_registry,
-                );
-
-            p2p_router = Some(state_sync_router.merge(p2p_router.unwrap_or_default()));
-
-            Some((state_sync_client, state_sync_manager_rx))
-        }
-        P2PStateSyncClient::Client(client) => {
-            let advert_tx = advert_tx.clone();
-            let (jh, sender) = run_artifact_processor(
-                Arc::clone(&time_source) as Arc<_>,
-                metrics_registry.clone(),
-                Box::new(client.clone()) as Box<_>,
-                move |req| {
-                    if let ArtifactProcessorEvent::Advert(advert) = req {
-                        let _ = advert_tx.send(advert.into());
-                    }
-                },
-            );
-            join_handles.push(jh);
-            backends.insert(
-                StateSyncArtifact::TAG,
-                Box::new(ArtifactClientHandle {
-                    pool_reader: Box::new(client),
-                    sender,
-                }),
-            );
-
-            None
-        }
-        P2PStateSyncClient::TestClient() => None,
-    };
-
-    let sev_handshake = Arc::new(Sev::new(node_id, registry_client.clone()));
+    let (state_sync_router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
+        state_sync_client.clone(),
+        log.clone(),
+        metrics_registry,
+    );
+    p2p_router = Some(state_sync_router.merge(p2p_router.unwrap_or_default()));
+    let sev_handshake = Arc::new(Sev::new(node_id, registry_client.clone(), log.clone()));
 
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
@@ -385,29 +343,27 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
-    let quic_transport = Arc::new(ic_quic_transport::QuicTransport::build(
+    let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         log,
         metrics_registry,
-        rt_handle.clone(),
+        rt_handle,
         tls_config,
         registry_client.clone(),
         sev_handshake.clone(),
         node_id,
         topology_watcher.clone(),
         Either::<_, DummyUdpSocket>::Left(transport_addr),
-        p2p_router,
+        p2p_router.unwrap_or_default(),
     ));
 
-    if let Some((state_sync_client, state_sync_manager_rx)) = state_sync_client {
-        let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
-            log.clone(),
-            metrics_registry,
-            rt_handle,
-            quic_transport.clone(),
-            state_sync_client,
-            state_sync_manager_rx,
-        );
-    }
+    let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
+        log.clone(),
+        metrics_registry,
+        rt_handle,
+        quic_transport.clone(),
+        state_sync_client,
+        state_sync_manager_rx,
+    );
 
     new_p2p_consensus.run(quic_transport, topology_watcher);
 
@@ -916,9 +872,20 @@ pub type TestArtifactId = FileTreeSyncId;
 /// `TestArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for TestArtifact {
     const TAG: ArtifactTag = ArtifactTag::FileTreeSyncArtifact;
+    type PbMessageError = Infallible;
+    type PbMessage = ic_protobuf::types::v1::FileTreeSyncArtifact;
     type Message = TestArtifactMessage;
+
+    type PbId = String;
+    type PbIdError = Infallible;
     type Id = TestArtifactId;
+
+    type PbAttributeError = Infallible;
+    type PbAttribute = ();
     type Attribute = ();
+
+    type PbFilterError = Infallible;
+    type PbFilter = ();
     type Filter = ();
 
     /// The function converts a TestArtifactMessage to an advert for a

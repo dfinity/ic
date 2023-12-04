@@ -11,6 +11,7 @@ pub mod cycles_account_manager;
 pub mod empty_wasm;
 pub mod history;
 pub mod ingress_selector;
+pub mod io;
 pub mod message_routing;
 pub mod notification;
 pub mod p2p;

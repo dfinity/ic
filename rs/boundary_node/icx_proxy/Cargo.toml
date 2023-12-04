@@ -34,10 +34,7 @@ http-body = "0.4"
 hyper = { version = "0.14.26", features = ["client", "http2", "http1"] }
 hyper-rustls = { version = "0.24.0", features = ["http2"] }
 itertools = { workspace = true }
-ic-agent = { workspace = true, default-features = false, features = [
-    "hyper",
-    "reqwest",
-] }
+ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"

@@ -82,9 +82,9 @@ pub fn build_default_gossip_config() -> GossipConfig {
 impl From<GossipAdvert> for pb::GossipAdvert {
     fn from(advert: GossipAdvert) -> Self {
         Self {
-            attribute: Some((&advert.attribute).into()),
+            attribute: Some(advert.attribute.into()),
             size: advert.size as u64,
-            artifact_id: Some((&advert.artifact_id).into()),
+            artifact_id: Some(advert.artifact_id.into()),
             integrity_hash: advert.integrity_hash.0,
         }
     }
@@ -94,12 +94,9 @@ impl TryFrom<pb::GossipAdvert> for GossipAdvert {
     type Error = ProxyDecodeError;
     fn try_from(advert: pb::GossipAdvert) -> Result<Self, Self::Error> {
         Ok(Self {
-            attribute: try_from_option_field(advert.attribute.as_ref(), "GossipAdvert::attribute")?,
+            attribute: try_from_option_field(advert.attribute, "GossipAdvert::attribute")?,
             size: advert.size as usize,
-            artifact_id: try_from_option_field(
-                advert.artifact_id.as_ref(),
-                "GossipAdvert::artifact_id",
-            )?,
+            artifact_id: try_from_option_field(advert.artifact_id, "GossipAdvert::artifact_id")?,
             integrity_hash: CryptoHash(advert.integrity_hash),
         })
     }

@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:serde_with",
+]
+
+MACRO_DEPENDENCIES = [
+]
+
+ALIASES = {
+}
+
+rust_library(
+    name = "rosetta-core",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "rosetta_core",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

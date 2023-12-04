@@ -98,23 +98,26 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                     "idna",
                 ],
             ),
+            "aide": crate.spec(
+                version = "0.12.0",
+                features = [
+                    "axum",
+                ],
+            ),
             "arbitrary": crate.spec(
                 version = "^1.3.0",
             ),
             "arc-swap": crate.spec(
                 version = "^1",
             ),
-            "atomic-counter": crate.spec(
-                version = "^1.0.1",
-            ),
             "anyhow": crate.spec(
                 version = "^1",
             ),
             "arrayvec": crate.spec(
-                version = "^0.5.1",
+                version = "^0.7.4",
             ),
             "askama": crate.spec(
-                version = "^0.11.1",
+                version = "^0.12.1",
                 features = [
                     "serde-json",
                 ],
@@ -123,16 +126,16 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^2.0.1",
             ),
             "assert_cmd": crate.spec(
-                version = "^0.12",
+                version = "^2.0.12",
             ),
             "assert_matches": crate.spec(
                 version = "^1.5.0",
             ),
             "async-recursion": crate.spec(
-                version = "^0.3.2",
+                version = "^1.0.5",
             ),
             "async-scoped": crate.spec(
-                version = "^0.7.1",
+                version = "^0.8.0",
                 features = [
                     "use-tokio",
                 ],
@@ -282,6 +285,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "cloudflare": crate.spec(
                 version = "^0.9.1",
+                default_features = False,
+                features = [
+                    "rustls-tls",
+                ],
             ),
             "colored": crate.spec(
                 version = "^2.0.0",
@@ -524,6 +531,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "ic-canister-log": crate.spec(
                 version = "0.2.0",
             ),
+            "ic-cbor": crate.spec(
+                version = "^1.2.0",
+            ),
             "ic-cdk": crate.spec(
                 version = "^0.10.0",
             ),
@@ -535,6 +545,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
+            ),
+            "ic-certification": crate.spec(
+                version = "^1.2.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -606,7 +619,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.4.1",
             ),
             "k256": crate.spec(
-                version = "^0.13.1",
+                version = "^0.13.2",
                 features = [
                     "arithmetic",
                     "ecdsa",
@@ -657,7 +670,11 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
-                rev = "0394778a3c4608842670674aca40a0feaea01059",
+                rev = "c18f6ad2639b448968d461096abc76af8a069980",
+                default_features = False,
+                features = [
+                    "rustls-tls-webpki-roots",
+                ],
             ),
             "minicbor": crate.spec(
                 version = "^0.19.1",
@@ -681,12 +698,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.12",
                 features = [
                     "future",
-                ],
-            ),
-            "native-tls": crate.spec(
-                version = "^0.2.7",
-                features = [
-                    "alpn",
                 ],
             ),
             "nix": crate.spec(
@@ -732,12 +743,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "openssh-keys": crate.spec(
                 version = "^0.5.0",
-            ),
-            "openssl": crate.spec(
-                version = "^0.10.55",
-            ),
-            "openssl-sys": crate.spec(
-                version = "0.9",
             ),
             "opentelemetry_0_18_0": crate.spec(
                 package = "opentelemetry",
@@ -800,7 +805,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.3",
             ),
             "pprof": crate.spec(
-                version = "^0.12.1",
+                version = "^0.13.0",
                 features = [
                     "flamegraph",
                     "prost-codec",
@@ -837,6 +842,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "prometheus-http-query": crate.spec(
                 version = "^0.6.6",
+                default_features = False,
+                features = [
+                    "rustls-tls-webpki-roots",
+                ],
             ),
             "proptest": crate.spec(
                 version = "^1.0.0",
@@ -851,13 +860,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.3.0",
             ),
             "prost": crate.spec(
-                version = "^0.11",
+                version = "^0.12",
             ),
             "prost-build": crate.spec(
-                version = "^0.11",
+                version = "^0.12",
             ),
             "prost-derive": crate.spec(
-                version = "^0.11",
+                version = "^0.12",
             ),
             "protobuf": crate.spec(
                 version = "^2.27.1",
@@ -911,13 +920,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^1.3.9",
             ),
             "reqwest": crate.spec(
-                version = "^0.11.1",
+                version = "^0.11.22",
+                default_features = False,
                 features = [
                     "blocking",
                     "json",
                     "multipart",
-                    "native-tls",
-                    "rustls-tls",
+                    "rustls-tls-webpki-roots",
                     "stream",
                 ],
             ),
@@ -977,6 +986,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "rusty-fork": crate.spec(
                 version = "^0.3.0",
+            ),
+            "schemars": crate.spec(
+                version = "0.8.16",
             ),
             "scoped_threadpool": crate.spec(
                 version = "0.1.*",
@@ -1168,10 +1180,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "tiny_http": crate.spec(
                 version = "^0.10.0",
             ),
-            "tiny-keccak": crate.spec(
-                version = "^2.0.0",
-                features = ["keccak"],
-            ),
             "time": crate.spec(
                 version = "^0.3.20",
             ),
@@ -1192,9 +1200,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "tokio-metrics": crate.spec(
                 version = "^0.3.0",
-            ),
-            "tokio-openssl": crate.spec(
-                version = "^0.6.1",
             ),
             "tokio-rustls": crate.spec(
                 version = "^0.24.0",
@@ -1227,10 +1232,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.9",
+                version = "^0.10",
             ),
             "tonic-build": crate.spec(
-                version = "^0.9",
+                version = "^0.10",
             ),
             "tower": crate.spec(
                 version = "^0.4.13",

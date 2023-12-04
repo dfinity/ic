@@ -417,10 +417,7 @@ impl EthTransactions {
                     withdrawal_id: ledger_burn_index,
                     to: maybe_reimburse.from,
                     to_subaccount: maybe_reimburse.from_subaccount,
-                    reimbursed_amount: maybe_reimburse
-                        .withdrawal_amount
-                        .checked_sub(finalized_tx.effective_transaction_fee())
-                        .expect("the fee paid should never be greater than the withdrawn amount"),
+                    reimbursed_amount: *finalized_tx.transaction_amount(),
                     transaction_hash: Some(receipt.transaction_hash),
                 },
             );

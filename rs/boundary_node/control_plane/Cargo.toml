@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = "1.0.58"
 arc-swap = "1.6.0"
-async-scoped = { version = "0.7", features = ["use-tokio"] }
+async-scoped = { workspace = true }
 async-trait = "0.1.56"
 axum = "0.6.1"
 bytes = { workspace = true }
@@ -31,7 +31,7 @@ opentelemetry = "0.18.0"
 opentelemetry-prometheus = "0.11.0"
 prometheus = { workspace = true }
 regex = "1.7.1"
-reqwest = { version = "0.11.11", features = ["json"] }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }

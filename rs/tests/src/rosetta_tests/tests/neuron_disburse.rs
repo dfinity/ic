@@ -12,12 +12,13 @@ use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::Neuron;
-use ic_rosetta_api::models::{ConstructionPayloadsResponse, Object};
+use ic_rosetta_api::models::ConstructionPayloadsResponse;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{Disburse, Status};
 use ic_rosetta_test_utils::RequestInfo;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
+use rosetta_core::objects::ObjectMap;
 use serde_json::json;
 use slog::Logger;
 use std::collections::HashMap;
@@ -222,7 +223,7 @@ async fn test_disburse_raw(
     });
     let req = req.to_string();
 
-    let metadata: Object = serde_json::from_slice(
+    let metadata: ObjectMap = serde_json::from_slice(
         &ros.raw_construction_endpoint("metadata", req.as_bytes())
             .await
             .unwrap()
@@ -230,7 +231,7 @@ async fn test_disburse_raw(
     )
     .unwrap();
 
-    let mut req: Object = serde_json::from_str(&req).unwrap();
+    let mut req: ObjectMap = serde_json::from_str(&req).unwrap();
     req.insert("metadata".to_string(), metadata.into());
     req.insert(
         "public_keys".to_string(),

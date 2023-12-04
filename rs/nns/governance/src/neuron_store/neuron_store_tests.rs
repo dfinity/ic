@@ -404,7 +404,7 @@ fn test_neuron_store_builds_index_unless_provided() {
     assert_eq!(neuron_store.topic_followee_index.num_entries(), 4);
     assert_eq!(
         neuron_store
-            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(3).unwrap())
+            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(3).unwrap())
             .into_iter()
             .collect::<HashSet<_>>(),
         hashset! {NeuronId { id: 3 }, NeuronId { id: 1 }}
@@ -416,7 +416,7 @@ fn test_neuron_store_builds_index_unless_provided() {
     assert_eq!(neuron_store.topic_followee_index.num_entries(), 0);
     assert_eq!(
         neuron_store
-            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(3).unwrap()),
+            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(3).unwrap()),
         vec![]
     );
 }
@@ -614,7 +614,12 @@ fn test_from_active_to_inactive() {
 
     // Step 3: veriifies that the neuron is in both heap and stable.
     assert_neuron_in_neuron_store_eq(&neuron_store, &modified_neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 }
 
@@ -628,7 +633,12 @@ fn test_from_inactive_to_active() {
 
     // Step 1.2: verifies that the neuron is in both stable and heap.
     assert_neuron_in_neuron_store_eq(&neuron_store, &neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 
     // Step 2: modifies the neuron to be active by funding it.
@@ -656,7 +666,12 @@ fn test_from_inactive_to_inactive() {
 
     // Step 1.2: verifies that the neuron is in both stable and heap.
     assert_neuron_in_neuron_store_eq(&neuron_store, &neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 
     // Step 2: modifies the neuron to be still inactive.
@@ -670,7 +685,12 @@ fn test_from_inactive_to_inactive() {
 
     // Step 3: veriifies that the neuron is modified and is only in heap.
     assert_neuron_in_neuron_store_eq(&neuron_store, &modified_neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 }
 
@@ -695,7 +715,12 @@ fn test_from_stale_inactive_to_inactive() {
 
     // Step 3: veriifies that the neuron is not modified but now in both heap and stable.
     assert_neuron_in_neuron_store_eq(&neuron_store, &neuron);
-    assert!(is_neuron_in_heap(&neuron_store, neuron_id));
+    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
+    // only in stable memory.
+    assert_eq!(
+        is_neuron_in_heap(&neuron_store, neuron_id),
+        !should_store_inactive_neurons_only_in_stable_memory()
+    );
     assert!(is_neuron_in_stable(neuron_id));
 }
 
@@ -728,4 +753,56 @@ fn test_from_stale_inactive_to_active() {
     assert_neuron_in_neuron_store_eq(&neuron_store, &modified_neuron);
     assert!(is_neuron_in_heap(&neuron_store, neuron_id));
     assert!(!is_neuron_in_stable(neuron_id));
+}
+
+// TODO(NNS1-2765): remove this test after the one-time removal.
+#[cfg(feature = "test")]
+#[test]
+fn test_remove_inactive_neuron_copy_on_heap() {
+    // Step 1.1: set up 1 active neuron and 1 inactive neuron.
+    let active_neuron = Neuron {
+        cached_neuron_stake_e8s: 1,
+        ..simple_neuron(1)
+    };
+    let inactive_neuron = Neuron {
+        cached_neuron_stake_e8s: 0,
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
+        ..simple_neuron(2)
+    };
+
+    // Step 2: create neuron store with no neurons and add both into it.
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    neuron_store.add_neuron(active_neuron.clone()).unwrap();
+    neuron_store.add_neuron(inactive_neuron.clone()).unwrap();
+
+    // Step 3: verify the existence of both neurons: only one copy exists.
+    assert!(is_neuron_in_heap(&neuron_store, active_neuron.id.unwrap()));
+    assert!(!is_neuron_in_stable(active_neuron.id.unwrap()));
+    assert!(!is_neuron_in_heap(
+        &neuron_store,
+        inactive_neuron.id.unwrap()
+    ));
+    assert!(is_neuron_in_stable(inactive_neuron.id.unwrap()));
+
+    // Step 4: simulate a backup of NeuronStore and add the inactive neuron into heap_neurons.
+    // Note that this diverges from  NeuronStore's public API because we are testing the
+    // transition between 2 versions of the canister: from having copies of inactive neurons on heap
+    // to the version where there is no such copy, and within this test the NeuronStore is at the
+    // second version.
+    let mut heap_neurons = neuron_store.take_heap_neurons();
+    let topic_followee_index = neuron_store.take_heap_topic_followee_index();
+    heap_neurons.insert(inactive_neuron.id.unwrap().id, inactive_neuron.clone());
+
+    // Step 5: restore the NeuronStore..
+    let neuron_store = NeuronStore::new_restored(heap_neurons, topic_followee_index);
+
+    // Step 6: verify that the existence of both neurons: active neuron is on heap only and inactive
+    // neuron is on stable only because of the one-time removal logic.
+    assert!(is_neuron_in_heap(&neuron_store, active_neuron.id.unwrap()));
+    assert!(!is_neuron_in_stable(active_neuron.id.unwrap()));
+    assert!(!is_neuron_in_heap(
+        &neuron_store,
+        inactive_neuron.id.unwrap()
+    ));
+    assert!(is_neuron_in_stable(inactive_neuron.id.unwrap()));
 }

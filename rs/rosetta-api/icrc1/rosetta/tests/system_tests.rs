@@ -8,10 +8,9 @@ use ic_icrc_rosetta::{
     common::{
         storage::types::RosettaBlock,
         types::{
-            AccountIdentifier, Amount, ApproveMetadata, Block, BlockIdentifier, BlockResponse,
-            BlockTransactionResponse, Currency, NetworkIdentifier, Object, Operation,
-            OperationIdentifier, OperationType, PartialBlockIdentifier, Transaction,
-            TransactionIdentifier,
+            AccountIdentifier, Amount, ApproveMetadata, Block, BlockResponse,
+            BlockTransactionResponse, Operation, OperationIdentifier, OperationType,
+            PartialBlockIdentifier, Transaction, TransactionIdentifier,
         },
     },
     Metadata,
@@ -19,6 +18,7 @@ use ic_icrc_rosetta::{
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::{start_rosetta, RosettaOptions, DEFAULT_DECIMAL_PLACES};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use ic_starter_tests::{start_replica, ReplicaBins, ReplicaStarterConfig};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::{
@@ -28,6 +28,10 @@ use icrc_ledger_types::{
     icrc3::blocks::GetBlocksRequest,
 };
 use lazy_static::lazy_static;
+use rosetta_core::identifiers::BlockIdentifier;
+use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::objects::Currency;
+use rosetta_core::objects::ObjectMap;
 use serde_json::Number;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -98,8 +102,11 @@ async fn test_network_list() {
         .await
         .expect("Unable to call network_list")
         .network_identifiers;
-    let expected = NetworkIdentifier::for_ledger_id(
-        CanisterId::try_from(Principal::anonymous().as_slice()).unwrap(),
+    let expected = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(Principal::anonymous().as_slice())
+            .unwrap()
+            .to_string(),
     );
     assert_eq!(network_list, vec![expected]);
 }
@@ -161,8 +168,12 @@ async fn test_network_status() {
 
     let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
         .expect("Unable to parse url");
-    let network_identifier =
-        NetworkIdentifier::for_ledger_id(CanisterId::try_from(ledger_id.as_slice()).unwrap());
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string(),
+    );
 
     let rosetta_response = client
         .network_status(network_identifier.clone())
@@ -305,7 +316,7 @@ fn expected_operations(
                 amount: "1000000000000".to_string(),
                 currency: Currency {
                     symbol: symbol.clone(),
-                    decimals,
+                    decimals: decimals.into(),
                     metadata: None,
                 },
             }),
@@ -322,7 +333,7 @@ fn expected_operations(
                 amount: "100000000000".to_string(),
                 currency: Currency {
                     symbol: symbol.clone(),
-                    decimals,
+                    decimals: decimals.into(),
                     metadata: None,
                 },
             }),
@@ -340,7 +351,7 @@ fn expected_operations(
                     amount: "-100000000".to_string(),
                     currency: Currency {
                         symbol: symbol.clone(),
-                        decimals,
+                        decimals: decimals.into(),
                         metadata: None,
                     },
                 }),
@@ -357,7 +368,7 @@ fn expected_operations(
                     amount: "100000000".to_string(),
                     currency: Currency {
                         symbol: symbol.clone(),
-                        decimals,
+                        decimals: decimals.into(),
                         metadata: None,
                     },
                 }),
@@ -374,7 +385,7 @@ fn expected_operations(
                     amount: "-10000".to_string(),
                     currency: Currency {
                         symbol: symbol.clone(),
-                        decimals,
+                        decimals: decimals.into(),
                         metadata: None,
                     },
                 }),
@@ -392,7 +403,7 @@ fn expected_operations(
                 amount: "-100000000".to_string(),
                 currency: Currency {
                     symbol: symbol.clone(),
-                    decimals,
+                    decimals: decimals.into(),
                     metadata: None,
                 },
             }),
@@ -435,7 +446,7 @@ fn expected_operations(
                     amount: "-10000".to_string(),
                     currency: Currency {
                         symbol: symbol.clone(),
-                        decimals,
+                        decimals: decimals.into(),
                         metadata: None,
                     },
                 }),
@@ -468,7 +479,7 @@ fn create_expected_rosetta_responses(
             .map(hex::encode)
             .unwrap_or_else(|| block_hash.clone());
         let transaction_hash = block.get_transaction().unwrap().hash().to_string();
-        let mut transaction_metadata = Object::new();
+        let mut transaction_metadata = ObjectMap::new();
         if index == 0 {
             transaction_metadata.insert(
                 "created_at_time".to_string(),
@@ -550,8 +561,12 @@ async fn test_block() {
 
     let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
         .expect("Unable to parse url");
-    let network_identifier =
-        NetworkIdentifier::for_ledger_id(CanisterId::try_from(ledger_id.as_slice()).unwrap());
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string(),
+    );
 
     for (index, expected_response) in expected_responses.into_iter().enumerate() {
         let partial_block_identifier = match index % 3 {
@@ -596,7 +611,7 @@ fn create_expected_block_hashes_and_block_transaction_responses(
         let block = RosettaBlock::from_generic_block(block, index as u64).unwrap();
         let block_hash = hex::encode(&block.block_hash);
         let transaction_hash = block.get_transaction().unwrap().hash().to_string();
-        let mut metadata = Object::new();
+        let mut metadata = ObjectMap::new();
         if index == 0 {
             metadata.insert(
                 "created_at_time".to_string(),
@@ -673,8 +688,13 @@ async fn test_block_transaction() {
 
     let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
         .expect("Unable to parse url");
-    let network_identifier =
-        NetworkIdentifier::for_ledger_id(CanisterId::try_from(ledger_id.as_slice()).unwrap());
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string()
+            .to_string(),
+    );
 
     for (index, (expected_block_hash, expected_response)) in
         expected_responses.into_iter().enumerate()
@@ -696,4 +716,62 @@ async fn test_block_transaction() {
             .expect("Failed to find block transaction in Rosetta");
         assert_eq!(received_block_response, expected_response);
     }
+}
+
+#[tokio::test]
+async fn test_mempool() {
+    let replica_context = local_replica::start_new_local_replica().await;
+    let replica_url = format!("http://localhost:{}", replica_context.port);
+    // Deploy an ICRC-1 ledger canister
+    let icrc_ledger_canister_id =
+        local_replica::deploy_icrc_ledger_with_default_args(&replica_context).await;
+    let ledger_id = Principal::from(icrc_ledger_canister_id);
+
+    // Create a testing agent and make one transfer.
+    // Empty ledger has no certified data and rosetta would crash on startup.
+    // TODO: remove this when the ICRC ledger is fixed to create certified data on init.
+    let ic_agent = local_replica::get_testing_agent(&replica_context).await;
+    let icrc_agent = Icrc1Agent {
+        agent: ic_agent,
+        ledger_canister_id: icrc_ledger_canister_id.into(),
+    };
+    icrc_agent
+        .transfer(TransferArg {
+            from_subaccount: TEST_ACCOUNT.subaccount,
+            to: *TEST_ACCOUNT_2,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(100_000_000_000u64),
+        })
+        .await
+        .expect("Failed to generate a new transfer operation")
+        .expect("Failed to mint");
+
+    let rosetta_context = start_rosetta(
+        &rosetta_bin(),
+        RosettaOptions {
+            ledger_id,
+            network_url: Some(replica_url),
+            offline: false,
+            ..RosettaOptions::default()
+        },
+    )
+    .await;
+
+    let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
+        .expect("Unable to parse url");
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string(),
+    );
+
+    let transaction_identifiers = client
+        .mempool(network_identifier)
+        .await
+        .expect("Unable to call mempool")
+        .transaction_identifiers;
+    assert_eq!(transaction_identifiers, vec![]);
 }

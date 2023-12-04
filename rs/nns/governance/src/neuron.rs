@@ -1,3 +1,4 @@
+use crate::pb::v1::NeuronType;
 use crate::{
     governance,
     governance::{
@@ -104,7 +105,7 @@ impl Neuron {
         self.followees
             .iter()
             .filter_map(|(topic, followees)| {
-                let topic = match Topic::from_i32(*topic) {
+                let topic = match Topic::try_from(*topic).ok() {
                     Some(topic) => topic,
                     None => {
                         println!(
@@ -646,6 +647,7 @@ impl Neuron {
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
             known_neuron_data: self.known_neuron_data.as_ref().cloned(),
+            neuron_type: self.neuron_type,
         }
     }
 
@@ -739,9 +741,12 @@ impl Neuron {
     ///
     /// The exact criteria is subject to change. Currently, all of the following must hold:
     ///
-    ///     1. Not funded: No stake, and no (unstaked) maturity.
-    ///     2. Dissolved sufficiently "long ago": Precisely, dissolved as of now - 2 weeks.
-    ///     3. Member of the Neuron's Fund.
+    ///     1. Not seed: NeuronType is not NeuronType::Seed
+    ///     2. Not ect: NeuronType is not NeuronType::Ect
+    ///     3. Not funded: No stake, and no (unstaked) maturity.
+    ///     4. Dissolved sufficiently "long ago": Precisely, dissolved as of now - 2 weeks.
+    ///     5. Member of the Neuron's Fund.
+    ///
     ///
     /// Remarks about condition 2:
     ///
@@ -753,13 +758,18 @@ impl Neuron {
     /// B. This is why this method has the `now` parameter.
     pub fn is_inactive(&self, now: u64) -> bool {
         // Require condition 1.
-        if self.is_funded() {
+        if self.is_seed_neuron() || self.is_ect_neuron() {
             return false;
         }
 
         // Require condition 2.
+        if self.is_funded() {
+            return false;
+        }
 
-        // 2.1: Interpret dissolve_state field.
+        // Require condition 3.
+
+        // 3.1: Interpret dissolve_state field.
         let dissolved_at_timestamp_seconds = match self.dissolved_at_timestamp_seconds() {
             // None -> not dissolving -> will be dissolved in the future -> not dissolved now ->
             // certainly was not dissolved sufficiently "long" ago!
@@ -769,7 +779,7 @@ impl Neuron {
             Some(ok) => ok,
         };
 
-        // 2.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
+        // 3.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
         // Thus, we can evaluate whether that happened sufficiently long ago.
         let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * SECONDS_PER_DAY;
         if dissolved_at_timestamp_seconds > max_dissolved_at_timestamp_seconds_to_be_inactive {
@@ -783,6 +793,18 @@ impl Neuron {
 
         // All requirements have been met.
         true
+    }
+
+    pub fn is_seed_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Seed as i32)
+    }
+
+    pub fn is_ect_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Ect as i32)
+    }
+
+    pub fn is_genesis_neuron(&self) -> bool {
+        self.is_ect_neuron() || self.is_seed_neuron()
     }
 
     pub fn is_funded(&self) -> bool {
@@ -843,6 +865,16 @@ pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl 
         std::ops::Bound::Unbounded => u64::MAX,
     };
     first..=last
+}
+
+impl NeuronInfo {
+    pub fn is_seed_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Seed as i32)
+    }
+
+    pub fn is_ect_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Ect as i32)
+    }
 }
 
 #[cfg(test)]

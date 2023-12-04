@@ -192,7 +192,7 @@ impl std::fmt::Display for ConnectionEstablishError {
 pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-    rt: Handle,
+    rt: &Handle,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
@@ -200,15 +200,13 @@ pub(crate) fn start_connection_manager(
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
     socket: Either<SocketAddr, impl AsyncUdpSocket>,
-    router: Option<Router>,
+    router: Router,
 ) {
     let topology = watcher.borrow().clone();
 
     let metrics = QuicTransportMetrics::new(metrics_registry);
 
-    let router = router
-        .map(|r| r.route_layer(from_fn_with_state(metrics.clone(), collect_metrics)))
-        .unwrap_or_default();
+    let router = router.route_layer(from_fn_with_state(metrics.clone(), collect_metrics));
 
     // We use a random reset key here. The downside of this is that
     // during a crash and restart the peer will not recognize our

@@ -632,7 +632,7 @@ fn induct_loopback_stream_with_memory_limit_impl(
     let msg = loopback_stream.messages().iter().nth(1).unwrap().1;
     expected_loopback_stream.push(generate_reject_response(
         msg.clone(),
-        RejectCode::SysTransient,
+        RejectCode::CanisterError,
         StateError::OutOfMemory {
             requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
             available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
@@ -2420,7 +2420,7 @@ fn induct_stream_slices_with_memory_limit_impl(
     expected_stream.increment_signals_end();
     expected_stream.push(generate_reject_response(
         request1,
-        RejectCode::SysTransient,
+        RejectCode::CanisterError,
         StateError::OutOfMemory {
             requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
             available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,

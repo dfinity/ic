@@ -5,24 +5,11 @@ use crate::{
     manifest::build_file_group_chunks, StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP,
     NUMBER_OF_CHECKPOINT_THREADS,
 };
-use ic_base_types::NodeId;
-use ic_interfaces::{
-    p2p::{
-        artifact_manager::{ArtifactClient, ArtifactProcessor},
-        consensus::ChangeResult,
-        state_sync::StateSyncClient,
-    },
-    time_source::{SysTimeSource, TimeSource},
-};
-use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
-    artifact::{
-        Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncFilter,
-        StateSyncMessage, UnvalidatedArtifactMutation,
-    },
+    artifact::{Priority, StateSyncArtifactId, StateSyncMessage},
     chunkable::{ArtifactChunk, ChunkId, Chunkable, ChunkableArtifact},
-    crypto::crypto_hash,
     state_sync::FileGroupChunks,
     Height,
 };
@@ -66,39 +53,8 @@ impl StateSync {
             self.state_manager.malicious_flags.clone(),
         ))
     }
-}
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct StateSyncArtifact;
-
-impl ArtifactKind for StateSyncArtifact {
-    const TAG: ArtifactTag = ArtifactTag::StateSyncArtifact;
-    type Id = StateSyncArtifactId;
-    type Message = StateSyncMessage;
-    type Attribute = ();
-    type Filter = StateSyncFilter;
-
-    fn message_to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
-        let size: u64 = msg
-            .manifest
-            .file_table
-            .iter()
-            .map(|file_info| file_info.size_bytes)
-            .sum();
-        Advert {
-            id: StateSyncArtifactId {
-                height: msg.height,
-                hash: msg.root_hash.clone(),
-            },
-            attribute: (),
-            size: size as usize,
-            integrity_hash: crypto_hash(msg).get(),
-        }
-    }
-}
-
-impl ArtifactClient<StateSyncArtifact> for StateSync {
-    fn get_validated_by_identifier(
+    pub fn get_validated_by_identifier(
         &self,
         msg_id: &StateSyncArtifactId,
     ) -> Option<StateSyncMessage> {
@@ -154,23 +110,9 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         state_sync_message
     }
 
-    fn has_artifact(&self, msg_id: &StateSyncArtifactId) -> bool {
-        self.state_manager
-            .states
-            .read()
-            .states_metadata
-            .iter()
-            .any(|(height, metadata)| {
-                *height == msg_id.height && metadata.root_hash() == Some(&msg_id.hash)
-            })
-    }
-
     // Enumerates all recent fully certified (i.e. referenced in a CUP) states that
     // is above the filter height.
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &StateSyncFilter,
-    ) -> Vec<Advert<StateSyncArtifact>> {
+    fn get_all_validated_ids_by_height(&self, height: Height) -> Vec<StateSyncArtifactId> {
         let heights = match self.state_manager.state_layout.checkpoint_heights() {
             Ok(heights) => heights,
             Err(err) => {
@@ -186,7 +128,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         heights
             .into_iter()
             .filter_map(|h| {
-                if h > filter.height {
+                if h > height {
                     let metadata = states.states_metadata.get(&h)?;
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
@@ -199,7 +141,10 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
                         meta_manifest,
                         state_sync_file_group: Default::default(),
                     };
-                    Some(StateSyncArtifact::message_to_advert(&msg))
+                    Some(StateSyncArtifactId {
+                        height: msg.height,
+                        hash: msg.root_hash.clone(),
+                    })
                 } else {
                     None
                 }
@@ -207,7 +152,8 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
             .collect()
     }
 
-    fn get_priority_function(
+    #[allow(clippy::type_complexity)]
+    pub fn get_priority_function(
         &self,
     ) -> Box<dyn Fn(&StateSyncArtifactId, &()) -> Priority + Send + Sync + 'static> {
         use ic_interfaces_state_manager::StateReader;
@@ -278,100 +224,15 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
             Priority::Stash
         })
     }
-
-    /// Get StateSync Filter for re-transmission purpose.
-    ///
-    /// Anything below or equal to the filter represents what the local
-    /// state_manager already has.
-    ///
-    /// Return the highest certified height as the filter.
-    fn get_filter(&self) -> StateSyncFilter {
-        StateSyncFilter {
-            height: *self
-                .state_manager
-                .list_state_heights(CERT_CERTIFIED)
-                .last()
-                .unwrap_or(&Height::from(0)),
-        }
-    }
-
-    /// Returns requested state as a Chunkable artifact for StateSync.
-    fn get_chunk_tracker(&self, id: &StateSyncArtifactId) -> Box<dyn Chunkable + Send + Sync> {
-        self.create_chunkable_state(id)
-    }
-}
-
-impl ArtifactProcessor<StateSyncArtifact> for StateSync {
-    // Returns the states checkpointed since the last time process_changes was
-    // called.
-    fn process_changes(
-        &self,
-        _time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactMutation<StateSyncArtifact>>,
-    ) -> ChangeResult<StateSyncArtifact> {
-        // Processes received state sync artifacts.
-        for artifact_event in artifact_events {
-            match artifact_event {
-                UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
-                    let height = message.height;
-                    info!(
-                        self.log,
-                        "Received state {} from peer {}", message.height, peer_id
-                    );
-
-                    let ro_layout = self
-                        .state_manager
-                        .state_layout
-                        .checkpoint(height)
-                        .expect("failed to create checkpoint layout");
-                    let state = crate::checkpoint::load_checkpoint_parallel(
-                        &ro_layout,
-                        self.state_manager.own_subnet_type,
-                        &self.state_manager.metrics.checkpoint_metrics,
-                        self.state_manager.get_fd_factory(),
-                    )
-                    .expect("failed to recover checkpoint");
-
-                    self.state_manager.on_synced_checkpoint(
-                        state,
-                        height,
-                        message.manifest,
-                        message.meta_manifest,
-                        message.root_hash,
-                    );
-                }
-                UnvalidatedArtifactMutation::Remove(_) => {}
-            }
-        }
-
-        let filter = StateSyncFilter {
-            height: self.state_manager.states.read().last_advertised,
-        };
-        let adverts = self.get_all_validated_by_filter(&filter);
-        if let Some(artifact) = adverts.last() {
-            self.state_manager.states.write().last_advertised = artifact.id.height;
-        }
-
-        ChangeResult {
-            adverts,
-            purged: Vec::new(),
-            poll_immediately: false,
-        }
-    }
 }
 
 impl StateSyncClient for StateSync {
     /// Non-blocking.
     fn available_states(&self) -> Vec<StateSyncArtifactId> {
-        // Using height 0 here is sane because for state sync `get_all_validated_by_filter`
+        // Using height 0 here is sane because for state sync `get_all_validated_ids_by_height`
         // return at most the number of states present on the node. Currently this is usually 1-2.
-        let filter = StateSyncFilter {
-            height: Height::from(0),
-        };
-        self.get_all_validated_by_filter(&filter)
-            .into_iter()
-            .map(|a| a.id)
-            .collect()
+        let height = Height::from(0);
+        self.get_all_validated_ids_by_height(height)
     }
 
     /// Non-blocking.
@@ -382,7 +243,7 @@ impl StateSyncClient for StateSync {
         if self.get_priority_function()(id, &()) != Priority::Fetch {
             return None;
         }
-        Some(self.get_chunk_tracker(id))
+        Some(self.create_chunkable_state(id))
     }
 
     /// Non-Blocking.
@@ -397,10 +258,34 @@ impl StateSyncClient for StateSync {
     }
 
     /// Blocking. Makes synchronous file system calls.
-    fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
-        let _ = self.process_changes(
-            &SysTimeSource::new(),
-            vec![UnvalidatedArtifactMutation::Insert((msg, peer_id))],
+    fn deliver_state_sync(&self, message: StateSyncMessage) {
+        let height = message.height;
+        info!(self.log, "Received state {} at height", message.height);
+        let ro_layout = self
+            .state_manager
+            .state_layout
+            .checkpoint(height)
+            .expect("failed to create checkpoint layout");
+        let state = crate::checkpoint::load_checkpoint_parallel(
+            &ro_layout,
+            self.state_manager.own_subnet_type,
+            &self.state_manager.metrics.checkpoint_metrics,
+            self.state_manager.get_fd_factory(),
+        )
+        .expect("failed to recover checkpoint");
+
+        self.state_manager.on_synced_checkpoint(
+            state,
+            height,
+            message.manifest,
+            message.meta_manifest,
+            message.root_hash,
         );
+
+        let height = self.state_manager.states.read().last_advertised;
+        let ids = self.get_all_validated_ids_by_height(height);
+        if let Some(ids) = ids.last() {
+            self.state_manager.states.write().last_advertised = ids.height;
+        }
     }
 }

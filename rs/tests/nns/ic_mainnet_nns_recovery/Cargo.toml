@@ -25,7 +25,7 @@ ic-sns-wasm = { path = "../../../nns/sns-wasm" }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
 tests = { path = "../../" }
 ic-types = { path = "../../../types/types" }
-reqwest = "0.11.1"
+reqwest = { workspace = true }
 serde = { workspace = true }
 slog = { version = "2.5.2" }
 url = "2.1.1"

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+- Convenience functions `update_candid` and `update_candid_as`.
+
+
+
+## 2.0.1 - 2023-11-23
+
+### Added
+- Support for PocketIC server version 2.0.1
+
+
+### Changed
+- When the PocketIC binary is not found, the error now points to the PocketIC repo instead of the download link
+
+
 
 ## 2.0.0 - 2023-11-21
 

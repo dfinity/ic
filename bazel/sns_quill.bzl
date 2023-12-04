@@ -7,10 +7,10 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["sns-quill"])
 """
 
-VERSION = "0.4.0"
+VERSION = "0.4.2-beta.1"
 SHA256 = {
-    "linux": "9add78732579525a4793dcc39955ab83b89166d66fda7a45422ecdfdef996485",
-    "macos": "dfa3a0496a968440904bc9b0711aaac6497aa4c294191fe5d41c4c3495eb9da7",
+    "linux": "88c00f0da9c4963922c67514e9321401560e2eaa56b6f505a8f5356c5ffe53bf",
+    "macos": "6f9363ea9aecbeebb2f079ea42f65d602282d19550506207f8b8538c37466906",
 }
 
 URL = "https://github.com/dfinity/sns-quill/releases/download/v{version}/sns-quill-{platform}-{arch}"

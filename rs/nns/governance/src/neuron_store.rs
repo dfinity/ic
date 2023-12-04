@@ -4,6 +4,7 @@ use crate::{
     },
     neuron::neuron_id_range_to_u64_range,
     pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
+    should_store_inactive_neurons_only_in_stable_memory,
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
@@ -154,20 +155,6 @@ impl From<NeuronStoreError> for GovernanceError {
     }
 }
 
-pub fn get_neuron_subaccount(
-    neuron_store: &NeuronStore,
-    neuron_id: NeuronId,
-) -> Result<Subaccount, NeuronStoreError> {
-    neuron_store.with_neuron(&neuron_id, |neuron| {
-        neuron
-            .subaccount()
-            .map_err(|_| NeuronStoreError::InvalidSubaccount {
-                neuron_id,
-                subaccount_bytes: neuron.account.clone(),
-            })
-    })?
-}
-
 trait PracticalClock: Clock + Send + Sync + Debug + DynClone {}
 dyn_clone::clone_trait_object!(PracticalClock);
 
@@ -204,20 +191,17 @@ pub struct NeuronStore {
     /// All accesses to heap_neurons need to be aware that it is only guaranteed that active neurons
     /// are always returned, and the current use cases are (which also means new use cases should be
     /// evaluated this way):
-    /// - building indexes on post_upgrade: soon to be deprecated since we switched to indexes
-    ///   persisted through upgrades.
     /// - computing cached entries: when it involves neurons, it mostly cares about stake, maturity
     ///   and NF fund.
+    /// - validating indexes by checking whether each neuron in the heap has corresponding entires
+    ///   in the indexes.
     /// - `Governance::validate`: soon to be deprecated since we have subaccount index.
-    /// - Copying inactive neurons from heap to stable storage: it is intended to only loop through
-    ///   neurons in heap.
     /// - `voting_eligible_neurons()`: inactive neurons have been dissolved for 14 days, so it
     ///   cannot be voting eligible.
     /// - `list_community_fund_neuron_ids` and `list_active_neurons_fund_neurons`: inactive neurons
     ///   must not be NF.
     /// - `list_neurons_ready_to_unstake_maturity`: inactive neurons have 0 stake (which also means
     ///   0 staked maturity), so no inactive neurons need to unstake maturity.
-    /// - `list_known_neuron_ids`: soon to be deprecated because of known neuron index.
     /// - `list_ready_to_spawn_neuron_ids`: inactive neurons must have 0 maturity, and spawning
     ///   neurons must have maturity.
     heap_neurons: BTreeMap<u64, Neuron>,
@@ -282,10 +266,19 @@ impl NeuronStore {
     // neuron indexes and inactive neurons) and persisted data are already calculated (e.g.
     // topic_followee_index).
     pub fn new_restored(
-        heap_neurons: BTreeMap<u64, Neuron>,
+        mut heap_neurons: BTreeMap<u64, Neuron>,
         topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
     ) -> Self {
         let clock = Box::new(IcClock::new());
+
+        // TODO(NNS1-2765): clean up after it executes once.
+        if crate::should_store_inactive_neurons_only_in_stable_memory() {
+            // Retains only the neurons not found in stable storage.
+            let stable_storage_neuron_ids = with_stable_neuron_store(|stable_neuron_store| {
+                stable_neuron_store.stable_neuron_ids()
+            });
+            heap_neurons.retain(|neuron_id, _| !stable_storage_neuron_ids.contains(neuron_id));
+        }
 
         Self {
             heap_neurons,
@@ -364,7 +357,13 @@ impl NeuronStore {
 
     /// Get the number of neurons in the Store
     pub fn len(&self) -> usize {
-        self.heap_neurons.len()
+        let heap_len = self.heap_neurons.len();
+        if !should_store_inactive_neurons_only_in_stable_memory() {
+            return heap_len;
+        }
+
+        let stable_len = with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len());
+        heap_len + stable_len
     }
 
     /// Add a new neuron
@@ -380,8 +379,10 @@ impl NeuronStore {
             with_stable_neuron_store_mut(|stable_neuron_store| {
                 stable_neuron_store.create(neuron.clone())
             })?;
-            // Write as secondary copy in heap.
-            self.heap_neurons.insert(neuron_id.id, neuron.clone());
+            if !should_store_inactive_neurons_only_in_stable_memory() {
+                // Write as secondary copy in heap.
+                self.heap_neurons.insert(neuron_id.id, neuron.clone());
+            }
         } else {
             // Write as primary copy in heap.
             self.heap_neurons.insert(neuron_id.id, neuron.clone());
@@ -442,8 +443,10 @@ impl NeuronStore {
                     stable_neuron_store.delete(*neuron_id)
                 });
 
-                // Remove the secondary copy.
-                self.heap_neurons.remove(&neuron_id.id);
+                if !should_store_inactive_neurons_only_in_stable_memory() {
+                    // Remove the secondary copy.
+                    self.heap_neurons.remove(&neuron_id.id);
+                }
             }
         }
 
@@ -501,14 +504,25 @@ impl NeuronStore {
                 .map(|neuron| Cow::Owned(neuron))
         });
         match (stable_neuron, heap_neuron) {
-            (Some(stable), Some(_)) => Ok((stable, StorageLocation::Stable)),
+            (Some(stable), Some(_)) => {
+                if should_store_inactive_neurons_only_in_stable_memory() {
+                    println!(
+                        "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
+                        we are at risk of having stale copies",
+                        LOG_PREFIX, neuron_id
+                    );
+                }
+                Ok((stable, StorageLocation::Stable))
+            }
             (Some(stable), None) => {
-                // This is not desirable, but we will be able to recover from it as writing it again
-                // will create a copy on heap, but log a warning since something might be wrong.
-                println!(
-                    "{}WARNING: neuron {:?} is in stable memory without a copy on the heap",
-                    LOG_PREFIX, neuron_id
-                );
+                if !should_store_inactive_neurons_only_in_stable_memory() {
+                    // This is not desirable, but we will be able to recover from it as writing it again
+                    // will create a copy on heap, but log a warning since something might be wrong.
+                    println!(
+                        "{}WARNING: neuron {:?} is in stable memory without a copy on the heap",
+                        LOG_PREFIX, neuron_id
+                    );
+                }
                 Ok((stable, StorageLocation::Stable))
             }
             (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
@@ -552,9 +566,14 @@ impl NeuronStore {
                 with_stable_neuron_store_mut(|stable_neuron_store| {
                     stable_neuron_store.create(neuron.clone())
                 })?;
-                // Now the neuron in heap becomes its secondary copy and the one in stable memory is
-                // the primary copy.
-                self.heap_neurons.insert(neuron_id.id, neuron);
+
+                if should_store_inactive_neurons_only_in_stable_memory() {
+                    self.heap_neurons.remove(&neuron_id.id);
+                } else {
+                    // Now the neuron in heap becomes its secondary copy and the one in stable memory is
+                    // the primary copy.
+                    self.heap_neurons.insert(neuron_id.id, neuron);
+                }
             }
             (StorageLocation::Stable, StorageLocation::Heap) => {
                 // Now the neuron in heap becomes its primary copy and the one in stable memory is
@@ -571,8 +590,10 @@ impl NeuronStore {
                     with_stable_neuron_store_mut(|stable_neuron_store| {
                         stable_neuron_store.update(neuron.clone())
                     })?;
-                    // Update the secondary copy.
-                    self.heap_neurons.insert(neuron_id.id, neuron);
+                    if !should_store_inactive_neurons_only_in_stable_memory() {
+                        // Update the secondary copy.
+                        self.heap_neurons.insert(neuron_id.id, neuron);
+                    }
                 }
             }
         };
@@ -847,7 +868,7 @@ impl NeuronStore {
 
     // Census
 
-    pub fn stable_neuron_store_len(&self) -> u64 {
+    pub fn stable_neuron_store_len(&self) -> usize {
         with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len())
     }
 

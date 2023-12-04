@@ -46,6 +46,11 @@ use crate::eth_rpc::into_nat;
 /// // Ceiling checked division by scalar
 /// assert_eq!(three_apples.checked_div_ceil(0_u8), None);
 /// assert_eq!(three_apples.checked_div_ceil(2_u8), Some(Apples::TWO));
+///
+/// // (Floor) division by two
+/// assert_eq!(Apples::ONE.div_by_two(), Apples::ZERO);
+/// assert_eq!(Apples::TWO.div_by_two(), Apples::ONE);
+/// assert_eq!(three_apples.div_by_two(), Apples::ONE);
 /// ```
 pub struct CheckedAmountOf<Unit>(ethnum::u256, PhantomData<Unit>);
 
@@ -137,6 +142,10 @@ impl<Unit> CheckedAmountOf<Unit> {
         } else {
             Self::from_inner(quotient).checked_increment()
         }
+    }
+
+    pub fn div_by_two(self) -> Self {
+        Self::from_inner(self.0 >> 1)
     }
 
     pub fn as_f64(&self) -> f64 {

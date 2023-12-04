@@ -12,7 +12,6 @@ use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use serde_bytes::ByteBuf;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
@@ -944,10 +943,10 @@ impl IDkgTranscript {
         self.receivers.position(receiver_id).is_some()
     }
 
-    /// Returns a copy of the raw internal transcript as `serde_bytes::ByteBuf`.
+    /// Returns a copy of the raw internal transcript.
     #[inline]
-    pub fn transcript_as_bytebuf(&self) -> ByteBuf {
-        ByteBuf::from(self.internal_transcript_raw.clone())
+    pub fn transcript_to_bytes(&self) -> Vec<u8> {
+        self.internal_transcript_raw.clone()
     }
 }
 
@@ -985,10 +984,10 @@ pub struct IDkgDealing {
 }
 
 impl IDkgDealing {
-    /// Returns a copy of the internal dealing as `serde_bytes::ByteBuf`.
+    /// Returns a copy of the internal dealing.
     #[inline]
-    pub fn dealing_as_bytebuf(&self) -> IDkgDealingBytes {
-        IDkgDealingBytes::from(self.internal_dealing_raw.clone())
+    pub fn dealing_to_bytes(&self) -> Vec<u8> {
+        self.internal_dealing_raw.clone()
     }
 }
 
@@ -1016,8 +1015,6 @@ impl SignedBytesWithoutDomainSeparator for IDkgDealing {
         serde_cbor::to_vec(&self).unwrap()
     }
 }
-
-pub type IDkgDealingBytes = serde_bytes::ByteBuf;
 
 /// The signed dealing sent by dealers
 ///

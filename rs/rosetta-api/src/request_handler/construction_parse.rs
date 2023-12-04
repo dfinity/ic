@@ -1,14 +1,13 @@
 use crate::convert::{self, from_arg, to_model_account_identifier};
 use crate::errors::ApiError;
-use crate::models::{
-    ConstructionParseRequest, ConstructionParseResponse, Object, ParsedTransaction,
-};
+use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
     PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
     Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
+use rosetta_core::objects::ObjectMap;
 
 use ic_nns_governance::pb::v1::{
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
@@ -120,7 +119,7 @@ impl RosettaRequestHandler {
 /// Handle SEND.
 fn send(
     requests: &mut Vec<Request>,
-    metadata: &mut Object,
+    metadata: &mut ObjectMap,
     arg: Blob,
     from: AccountIdentifier,
 ) -> Result<(), ApiError> {
@@ -600,9 +599,10 @@ mod tests {
     use crate::models::{
         ConstructionCombineRequest, ConstructionDeriveRequest, ConstructionParseRequest,
         ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, Currency, CurveType,
-        Object, PublicKey, Signature, SignatureType,
+        PublicKey, Signature, SignatureType,
     };
     use crate::request_handler::RosettaRequestHandler;
+    use rosetta_core::objects::ObjectMap;
 
     #[test]
     fn test_payloads_parse_identity() {
@@ -722,7 +722,7 @@ mod tests {
 
         fn check_metadata(
             expected_metadata: Option<ConstructionPayloadsRequestMetadata>,
-            actual_metadata: Object,
+            actual_metadata: ObjectMap,
         ) -> std::result::Result<(), TestCaseError> {
             match expected_metadata {
                 None => {

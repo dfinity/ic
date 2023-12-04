@@ -1,13 +1,13 @@
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
-use crate::vault::api::ThresholdEcdsaSignerCspVault;
+use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::KeyId;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
-    IDkgTranscriptInternalBytes, ThresholdEcdsaSigShareInternal,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
@@ -24,9 +24,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 {
     fn ecdsa_sign_share(
         &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
+        derivation_path: ExtendedDerivationPath,
+        hashed_message: Vec<u8>,
+        nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         kappa_unmasked_raw: IDkgTranscriptInternalBytes,
         lambda_masked_raw: IDkgTranscriptInternalBytes,
@@ -53,9 +53,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         let start_time = self.metrics.now();
         let result = self.ecdsa_sign_share_internal(
-            derivation_path,
-            hashed_message,
-            nonce,
+            &derivation_path,
+            &hashed_message[..],
+            &nonce,
             &key,
             &kappa_unmasked,
             &lambda_masked,

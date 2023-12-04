@@ -21,6 +21,7 @@ use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
+    batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     p2p::consensus::MutablePool,
@@ -157,6 +158,7 @@ where
 
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             subnet_test_id(0),
+            node_test_id(0),
             registry_client,
             ingress_manager,
             Arc::new(FakeXNetPayloadBuilder::new()),
@@ -309,12 +311,16 @@ fn validate_payload(
         registry_version: RegistryVersion::from(1),
         certified_height: Height::from(CERTIFIED_HEIGHT),
     };
+    let proposal_context = ProposalContext {
+        proposer: node_test_id(0),
+        validation_context: &validation_context,
+    };
 
     payload_builder.validate_payload(
         Height::from(CERTIFIED_HEIGHT + 1),
+        &proposal_context,
         payload,
         &past_payloads,
-        &validation_context,
     )
 }
 

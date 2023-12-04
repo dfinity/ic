@@ -290,19 +290,19 @@ impl BoundaryNodeWithVm {
         let image_id = create_and_upload_config_disk_image(
             self,
             env,
-            &pot_setup.farm_group_name,
+            &pot_setup.infra_group_name,
             &farm,
             opt_existing_playnet_cert,
         )?;
 
         farm.attach_disk_images(
-            &pot_setup.farm_group_name,
+            &pot_setup.infra_group_name,
             &self.name,
             "usb-storage",
             vec![image_id],
         )?;
 
-        farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
+        farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
 
         if self.has_ipv4 {
             // Provision an A record pointing ic{ix}.farm.dfinity.systems
@@ -434,7 +434,7 @@ impl BoundaryNode {
             self.vm_allocation.clone(),
             self.required_host_features.clone(),
         );
-        let allocated_vm = farm.create_vm(&pot_setup.farm_group_name, create_vm_req)?;
+        let allocated_vm = farm.create_vm(&pot_setup.infra_group_name, create_vm_req)?;
 
         Ok(BoundaryNodeWithVm {
             name: self.name,
@@ -645,7 +645,7 @@ fn create_and_upload_config_disk_image(
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
 
-    let image_id = farm.upload_file(compressed_img_path, &mk_compressed_img_path())?;
+    let image_id = farm.upload_file(group_name, compressed_img_path, &mk_compressed_img_path())?;
     info!(farm.logger, "Uploaded image: {}", image_id);
 
     Ok(image_id)

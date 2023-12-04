@@ -33,6 +33,9 @@ pub struct Cli {
 
     #[command(flatten, next_help_heading = "cache")]
     pub cache: CacheConfig,
+
+    #[command(flatten, next_help_heading = "retry")]
+    pub retry: RetryConfig,
 }
 
 #[derive(Args)]
@@ -77,6 +80,10 @@ pub struct ListenConfig {
     #[clap(long, default_value = "600")]
     pub http_timeout: u64,
 
+    /// Timeout for the whole HTTP request in seconds when doing health checks
+    #[clap(long, default_value = "3")]
+    pub http_timeout_check: u64,
+
     /// Timeout for the HTTP connect phase in seconds
     #[clap(long, default_value = "2")]
     pub http_timeout_connect: u64,
@@ -108,14 +115,6 @@ pub struct HealthChecksConfig {
     /// How many attempts to do when checking a node
     #[clap(long, default_value = "3")]
     pub check_retries: u32,
-
-    /// How long to wait between retries in seconds
-    #[clap(long, default_value = "1")]
-    pub check_retry_interval: u64,
-
-    /// Minimum registry version snapshot to process
-    #[clap(long, default_value = "0")]
-    pub min_registry_version: u64,
 
     /// Minimum required OK health checks
     /// for a replica to be included in the routing table
@@ -178,7 +177,7 @@ pub struct CacheConfig {
     #[clap(long)]
     pub cache_size_bytes: Option<u64>,
     /// Maximum size of a single cached response item in bytes
-    #[clap(long, default_value = "65536")]
+    #[clap(long, default_value = "131072")]
     pub cache_max_item_size_bytes: u64,
     /// Time-to-live for cache entries in seconds
     #[clap(long, default_value = "1")]
@@ -186,4 +185,17 @@ pub struct CacheConfig {
     /// Whether to cache non-anonymous requests
     #[clap(long, default_value = "false")]
     pub cache_non_anonymous: bool,
+}
+
+#[derive(Args)]
+pub struct RetryConfig {
+    /// How many times to retry a failed request.
+    /// Should be in range [0..10], value of 0 disables the retries.
+    /// If there are less healthy nodes in the subnet - then less retries would be done.
+    #[clap(long, default_value = "2", value_parser = clap::value_parser!(u8).range(0..11))]
+    pub retry_count: u8,
+
+    /// Whether to retry update calls
+    #[clap(long, default_value = "false")]
+    pub retry_update_call: bool,
 }

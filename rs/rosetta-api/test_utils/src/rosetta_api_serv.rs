@@ -3,6 +3,7 @@ use ic_rosetta_api::models::*;
 use ic_types::CanisterId;
 
 use icp_ledger::{AccountIdentifier, BlockIndex};
+use rosetta_core::request_types::NetworkRequest;
 use slog::info;
 
 use crate::store_threshold_sig_pk;
@@ -11,7 +12,8 @@ use ic_types::messages::Blob;
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client as HttpClient;
 use reqwest::StatusCode as HttpStatusCode;
-use std::convert::TryFrom;
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::NetworkListResponse;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -129,7 +131,7 @@ impl RosettaApiHandle {
         api_serv.wait_for_startup().await;
         assert_eq!(
             api_serv.network_list().await.unwrap(),
-            Ok(NetworkListResponse::new(vec![api_serv.network_id()]))
+            Ok(NetworkListResponse::new(vec![api_serv.network_id().0]))
         );
         api_serv
     }
@@ -380,7 +382,7 @@ impl RosettaApiHandle {
     pub async fn network_status(
         &self,
     ) -> Result<Result<NetworkStatusResponse, RosettaError>, String> {
-        let req = NetworkRequest::new(self.network_id());
+        let req = NetworkRequest::new(self.network_id().into());
         to_rosetta_response(
             self.post_json_request(
                 &format!("http://{}/network/status", self.api_url),
@@ -445,7 +447,7 @@ impl RosettaApiHandle {
 
     pub async fn block_at(&self, idx: u64) -> Result<Result<BlockResponse, RosettaError>, String> {
         let block_id = PartialBlockIdentifier {
-            index: Some(i64::try_from(idx).unwrap()),
+            index: Some(idx),
             hash: None,
         };
         let req = BlockRequest::new(self.network_id(), block_id);
@@ -486,7 +488,7 @@ impl RosettaApiHandle {
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < TIMEOUT {
             if let Ok(Ok(resp)) = self.network_status().await {
-                if resp.current_block_identifier.index as u64 >= tip_idx {
+                if resp.current_block_identifier.index >= tip_idx {
                     return Ok(());
                 }
             }

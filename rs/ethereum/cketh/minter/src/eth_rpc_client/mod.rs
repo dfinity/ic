@@ -13,7 +13,7 @@ use crate::state::State;
 use async_trait::async_trait;
 use candid::CandidType;
 use ic_canister_log::log;
-use ic_cdk::api::call::{CallResult, RejectionCode};
+use ic_cdk::api::call::CallResult;
 use ic_cdk::api::management_canister::http_request::{CanisterHttpRequestArgument, HttpResponse};
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::BTreeMap;
@@ -91,7 +91,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
         match self.providers {
             Some(ref providers) => providers,
             None => match self.chain {
-                EthereumNetwork::Ethereum => MAINNET_PROVIDERS,
+                EthereumNetwork::Mainnet => MAINNET_PROVIDERS,
                 EthereumNetwork::Sepolia => SEPOLIA_PROVIDERS,
             },
         }
@@ -196,6 +196,11 @@ impl<T: RpcTransport> EthRpcClient<T> {
     ) -> Result<Block, MultiCallError<Block>> {
         use crate::eth_rpc::GetBlockByNumberParams;
 
+        let expected_block_size = match self.chain {
+            EthereumNetwork::Sepolia => 12 * 1024,
+            EthereumNetwork::Mainnet => 24 * 1024,
+        };
+
         let results: MultiCallResults<Block> = self
             .parallel_call(
                 "eth_getBlockByNumber",
@@ -203,7 +208,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
                     block,
                     include_full_transactions: false,
                 },
-                ResponseSizeEstimate::new(12 * 1024),
+                ResponseSizeEstimate::new(expected_block_size),
             )
             .await;
         results.reduce_with_equality()
@@ -335,6 +340,24 @@ pub enum MultiCallError<T> {
     InconsistentResults(MultiCallResults<T>),
 }
 
+impl<T> MultiCallError<T> {
+    pub fn has_http_outcall_error_matching<P: Fn(&HttpOutcallError) -> bool>(
+        &self,
+        predicate: P,
+    ) -> bool {
+        match self {
+            MultiCallError::ConsistentError(RpcError::HttpOutcallError(error)) => predicate(error),
+            MultiCallError::ConsistentError(_) => false,
+            MultiCallError::InconsistentResults(results) => {
+                results.results.values().any(|result| match result {
+                    Err(RpcError::HttpOutcallError(error)) => predicate(error),
+                    _ => false,
+                })
+            }
+        }
+    }
+}
+
 impl<T: Debug + PartialEq> MultiCallResults<T> {
     pub fn reduce_with_equality(self) -> Result<T, MultiCallError<T>> {
         let mut results = self.all_ok()?.into_iter();
@@ -435,9 +458,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                                 .1
                                 .into_iter()
                                 .chain(second.1)
-                                .map(|(provider, result)| {
-                                    (provider, Ok(result))
-                                }),
+                                .map(|(provider, result)| (provider, Ok(result))),
                         ));
                     log!(
                         INFO,

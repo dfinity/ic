@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Nat};
 use ic_ic00_types::CanisterSettingsArgs;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
@@ -6,14 +6,23 @@ use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
+/// `um5iw-rqaaa-aaaaq-qaaba-cai`
+pub const CYCLES_LEDGER_CANISTER_ID: PrincipalId = PrincipalId::new(
+    10,
+    [
+        0, 0, 0, 0, 2, 16, 0, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ],
+);
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 
 pub const PERMYRIAD_DECIMAL_PLACES: u32 = 4;
 
 pub const CREATE_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 4);
 pub const TOP_UP_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 2);
+pub const MINT_CYCLES_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 2);
 
 /// Cycles penalty charged for sending bad requests that incur a lot of work.
 pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revisit fair pricing. Currently costs significantly more than an update call
@@ -43,6 +52,7 @@ pub struct CyclesCanisterInitPayload {
     pub minting_account_id: Option<AccountIdentifier>,
     pub last_purged_notification: Option<BlockIndex>,
     pub exchange_rate_canister: Option<ExchangeRateCanister>,
+    pub cycles_ledger_canister_id: Option<CanisterId>,
 }
 
 /// Argument taken by top up notification endpoint
@@ -165,8 +175,44 @@ impl std::fmt::Display for NotifyError {
     }
 }
 
+pub type NotifyMintCyclesResult = Result<NotifyMintCyclesSuccess, NotifyError>;
+
+/// Argument taken by `notify_mint_cycles` endpoint
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct NotifyMintCyclesArg {
+    pub block_index: BlockIndex,
+    pub to_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+    pub deposit_memo: Option<Vec<u8>>,
+}
+
+/// Result of `notify_mint_cycles` in case of success
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct NotifyMintCyclesSuccess {
+    /// Cycles ledger block index of deposit
+    pub block_index: icrc_ledger_types::icrc1::transfer::BlockIndex,
+    /// Amount of cycles that were minted and deposited to the cycles ledger
+    pub minted: Nat,
+    /// New balance of the cycles ledger account
+    pub balance: Nat,
+}
+
+/// Argument taken by the cycles ledger's `deposit` endpoint
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct CyclesLedgerDepositArgs {
+    pub to: Account,
+    pub memo: Option<Vec<u8>>,
+}
+
+/// Result of the cycles ledger's `deposit` endpoint
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct CyclesLedgerDepositResult {
+    pub balance: Nat,
+    pub block_index: Nat,
+}
+
 pub const MEMO_CREATE_CANISTER: Memo = Memo(0x41455243); // == 'CREA'
 pub const MEMO_TOP_UP_CANISTER: Memo = Memo(0x50555054); // == 'TPUP'
+pub const MEMO_MINT_CYCLES: Memo = Memo(0x544e494d); // == 'MINT'
 
 pub fn create_canister_txn(
     amount: Tokens,

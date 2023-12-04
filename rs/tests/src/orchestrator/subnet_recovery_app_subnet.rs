@@ -37,34 +37,59 @@ use crate::orchestrator::utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use crate::orchestrator::utils::subnet_recovery::*;
+use crate::tecdsa::tecdsa_signature_test::{make_key, KEY_ID1};
 use crate::util::*;
 use ic_base_types::NodeId;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
 use ic_recovery::{file_sync_helper, get_node_metrics};
+use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
-const APP_NODES: i32 = 3;
-const UNASSIGNED_NODES: i32 = 3;
+const APP_NODES: usize = 3;
+const UNASSIGNED_NODES: usize = 3;
+
+const DKG_INTERVAL_LARGE: u64 = 99;
+const NNS_NODES_LARGE: usize = 40;
+const APP_NODES_LARGE: usize = 44;
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
-pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
+pub fn setup(
+    nns_nodes: Option<usize>,
+    app_nodes: usize,
+    unassigned_nodes: usize,
+    dkg_interval: u64,
+    env: TestEnv,
+) {
+    let mut nns = if let Some(nns_nodes) = nns_nodes {
+        Subnet::new(SubnetType::System)
+            .with_dkg_interval_length(Height::from(dkg_interval))
+            .add_nodes(nns_nodes)
+    } else {
+        Subnet::fast_single_node(SubnetType::System)
+            .with_dkg_interval_length(Height::from(dkg_interval))
+    };
+    nns = nns.with_ecdsa_config(EcdsaConfig {
+        quadruples_to_create_in_advance: 3,
+        key_ids: vec![make_key(KEY_ID1)],
+        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+    });
+
     let mut ic = InternetComputer::new()
-        .add_subnet(
-            Subnet::fast_single_node(SubnetType::System)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-        )
+        .add_subnet(nns)
         .with_unassigned_nodes(unassigned_nodes);
     if app_nodes > 0 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(app_nodes.try_into().unwrap()),
+                .with_dkg_interval_length(Height::from(dkg_interval))
+                .add_nodes(app_nodes),
         );
     }
 
@@ -73,39 +98,53 @@ pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
+pub fn setup_large_tecdsa(env: TestEnv) {
+    setup(
+        Some(NNS_NODES_LARGE),
+        0,
+        APP_NODES_LARGE,
+        DKG_INTERVAL_LARGE,
+        env,
+    );
+}
+
 pub fn setup_same_nodes_tecdsa(env: TestEnv) {
-    setup(0, APP_NODES, env);
+    setup(None, 0, APP_NODES, DKG_INTERVAL, env);
 }
 
 pub fn setup_failover_nodes_tecdsa(env: TestEnv) {
-    setup(0, APP_NODES + UNASSIGNED_NODES, env);
+    setup(None, 0, APP_NODES + UNASSIGNED_NODES, DKG_INTERVAL, env);
 }
 
 pub fn setup_same_nodes(env: TestEnv) {
-    setup(APP_NODES, 0, env);
+    setup(None, APP_NODES, 0, DKG_INTERVAL, env);
 }
 
 pub fn setup_failover_nodes(env: TestEnv) {
-    setup(APP_NODES, UNASSIGNED_NODES, env);
+    setup(None, APP_NODES, UNASSIGNED_NODES, DKG_INTERVAL, env);
 }
 
 pub fn test_with_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, true, true);
+    app_subnet_recovery_test(env, APP_NODES, true, true);
 }
 
 pub fn test_without_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, true, false);
+    app_subnet_recovery_test(env, APP_NODES, true, false);
 }
 
 pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, false, true);
+    app_subnet_recovery_test(env, APP_NODES, false, true);
+}
+
+pub fn test_large_with_tecdsa(env: TestEnv) {
+    app_subnet_recovery_test(env, APP_NODES_LARGE, false, true);
 }
 
 pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
-    app_subnet_recovery_test(env, false, false);
+    app_subnet_recovery_test(env, APP_NODES, false, false);
 }
 
-pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
+pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool, ecdsa: bool) {
     let logger = env.logger();
 
     let master_version = env.get_initial_replica_version().unwrap();
@@ -128,7 +167,6 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     ));
 
     let root_subnet_id = topology_snapshot.root_subnet_id();
-    let subnet_size = APP_NODES.try_into().unwrap();
 
     let create_new_subnet = !topology_snapshot
         .subnets()
@@ -148,18 +186,10 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
                 &nns_canister,
                 subnet_size,
                 master_version.clone(),
-                true,
                 &logger,
             )
         } else {
-            enable_ecdsa_on_subnet(
-                &nns_node,
-                &nns_canister,
-                root_subnet_id,
-                None,
-                false,
-                &logger,
-            )
+            enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, root_subnet_id, &logger)
         }
     });
 
@@ -345,6 +375,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
 
     if ecdsa {
         if !create_new_subnet {
+            disable_ecdsa_on_subnet(&nns_node, root_subnet_id, &nns_canister, &logger);
             let app_key =
                 enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, subnet_id, &logger);
             assert_eq!(ecdsa_pub_key.unwrap(), app_key)

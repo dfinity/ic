@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:schemars",
     "@crate_index//:reqwest",
     "@crate_index//:ic-cdk",
     "@crate_index//:candid",
@@ -32,7 +33,7 @@ rust_library(
     name = "pocket-ic",
     srcs = glob(["src/**"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "2.0.0",
+    version = "2.0.1",
     deps = DEPENDENCIES,
 )
 

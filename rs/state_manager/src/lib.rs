@@ -40,8 +40,9 @@ use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory, page_map::PersistenceError, PageIndex, PageMap,
-    ReplicatedState,
+    canister_state::execution_state::SandboxMemory,
+    page_map::{PersistenceError, StorageMetrics},
+    PageIndex, PageMap, ReplicatedState,
 };
 use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, ReadOnly, StateLayout};
 use ic_types::{
@@ -138,6 +139,7 @@ pub struct StateManagerMetrics {
     tip_handler_queue_length: IntGauge,
     decode_slice_status: IntCounterVec,
     height_update_time_seconds: Histogram,
+    storage_metrics: StorageMetrics,
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
 }
@@ -375,6 +377,7 @@ impl StateManagerMetrics {
             tip_handler_queue_length,
             decode_slice_status,
             height_update_time_seconds,
+            storage_metrics: StorageMetrics::new(metrics_registry),
             latest_hash_tree_size,
             latest_hash_tree_max_index,
         }
@@ -3365,7 +3368,7 @@ impl CertifiedStreamStore for StateManagerImpl {
 
         Ok(CertifiedStreamSlice {
             payload: stream_encoding::encode_tree(slice_as_tree),
-            merkle_proof: v1::Witness::proxy_encode(witness).expect("Failed to serialize witness."),
+            merkle_proof: v1::Witness::proxy_encode(witness),
             certification,
         })
     }

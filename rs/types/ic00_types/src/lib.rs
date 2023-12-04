@@ -75,6 +75,8 @@ pub enum Method {
     BitcoinSendTransactionInternal, // API for sending transactions to the network.
     BitcoinGetSuccessors,           // API for fetching blocks from the network.
 
+    NodeMetricsHistory,
+
     // These methods are only available on test IC instances where there is a
     // need to fabricate cycles without burning ICP first.
     ProvisionalCreateCanisterWithCycles,
@@ -1015,7 +1017,7 @@ impl TryFrom<i32> for CanisterInstallMode {
     type Error = CanisterInstallModeError;
 
     fn try_from(item: i32) -> Result<Self, Self::Error> {
-        match CanisterInstallModeProto::from_i32(item) {
+        match CanisterInstallModeProto::try_from(item).ok() {
             Some(CanisterInstallModeProto::Install) => Ok(CanisterInstallMode::Install),
             Some(CanisterInstallModeProto::Reinstall) => Ok(CanisterInstallMode::Reinstall),
             Some(CanisterInstallModeProto::Upgrade) => Ok(CanisterInstallMode::Upgrade),
@@ -1032,7 +1034,7 @@ impl TryFrom<CanisterInstallModeV2Proto> for CanisterInstallModeV2 {
     fn try_from(item: CanisterInstallModeV2Proto) -> Result<Self, Self::Error> {
         match item.canister_install_mode_v2.unwrap() {
             ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode(item) => {
-                match CanisterInstallModeProto::from_i32(item) {
+                match CanisterInstallModeProto::try_from(item).ok() {
                     Some(CanisterInstallModeProto::Install) => Ok(CanisterInstallModeV2::Install),
                     Some(CanisterInstallModeProto::Reinstall) => {
                         Ok(CanisterInstallModeV2::Reinstall)
@@ -1833,12 +1835,12 @@ impl TryFrom<pb_registry_crypto::EcdsaKeyId> for EcdsaKeyId {
     fn try_from(item: pb_registry_crypto::EcdsaKeyId) -> Result<Self, Self::Error> {
         Ok(Self {
             curve: EcdsaCurve::try_from(
-                pb_registry_crypto::EcdsaCurve::from_i32(item.curve).ok_or(
+                pb_registry_crypto::EcdsaCurve::try_from(item.curve).map_err(|_| {
                     ProxyDecodeError::ValueOutOfRange {
                         typ: "EcdsaKeyId",
                         err: format!("Unable to convert {} to an EcdsaCurve", item.curve),
-                    },
-                )?,
+                    }
+                })?,
             )?,
             name: item.name,
         })
@@ -2165,6 +2167,53 @@ pub enum QueryMethod {
     BitcoinGetUtxosQuery,
     BitcoinGetBalanceQuery,
 }
+
+/// `CandidType` for `NodeMetricsHistoryArgs`
+/// ```text
+/// record {
+///     subnet_id: principal;
+///     start_at_timestamp_nanos: nat64;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct NodeMetricsHistoryArgs {
+    pub subnet_id: PrincipalId,
+    pub start_at_timestamp_nanos: u64,
+}
+
+impl Payload<'_> for NodeMetricsHistoryArgs {}
+
+/// `CandidType` for `NodeMetrics`
+/// ```text
+/// record {
+///     node_id : principal;
+///     num_blocks_total : nat64;
+///     num_block_failures_total : nat64;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct NodeMetrics {
+    pub node_id: PrincipalId,
+    pub num_blocks_total: u64,
+    pub num_block_failures_total: u64,
+}
+
+impl Payload<'_> for NodeMetrics {}
+
+/// `CandidType` for `NodeMetricsHistoryResponse`
+/// ```text
+/// record {
+///     timestamp_nanos : nat64;
+///     node_metrics : vec node_metrics;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct NodeMetricsHistoryResponse {
+    pub timestamp_nanos: u64,
+    pub node_metrics: Vec<NodeMetrics>,
+}
+
+impl Payload<'_> for NodeMetricsHistoryResponse {}
 
 /// Struct used for encoding/decoding
 /// `(record {

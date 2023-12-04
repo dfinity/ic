@@ -195,7 +195,7 @@ async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
             .result()
             .unwrap()
     };
-    let lifecycle = lifecycle.and_then(Lifecycle::from_i32).unwrap();
+    let lifecycle = lifecycle.and_then(|v| Lifecycle::try_from(v).ok()).unwrap();
     if !lifecycle.is_terminal() {
         let derived_swap_state = {
             let request = sns_request_provider.get_derived_swap_state(CallMode::Query);

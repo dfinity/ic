@@ -55,7 +55,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:prost",
-    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde-bytes-repr",
     "@crate_index//:serde_cbor",

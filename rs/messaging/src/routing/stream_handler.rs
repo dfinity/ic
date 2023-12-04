@@ -2,7 +2,7 @@ use crate::message_routing::LatencyMetrics;
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_error_types::RejectCode;
+use ic_error_types::{ErrorCode, RejectCode};
 use ic_logger::{debug, error, fatal, trace, ReplicaLogger};
 use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
@@ -644,8 +644,9 @@ impl StreamHandlerImpl {
                                     // Critical error, responses should always be inducted successfully.
                                     error!(
                                         self.log,
-                                        "{}: Inducting response failed: {:?}",
+                                        "{}: Inducting response failed: {} {:?}",
                                         CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                                        err,
                                         response
                                     );
                                     self.metrics.critical_error_induct_response_failed.inc()
@@ -885,19 +886,7 @@ fn generate_reject_response(
 
 /// Maps a `StateError` resulting from a failed induction to a `RejectCode`.
 fn reject_code_for_state_error(err: &StateError) -> RejectCode {
-    match err {
-        StateError::QueueFull { .. } => RejectCode::SysTransient,
-        StateError::CanisterOutOfCycles(_) => RejectCode::SysTransient,
-        StateError::CanisterNotFound(_) => RejectCode::DestinationInvalid,
-        StateError::CanisterStopped(_) => RejectCode::CanisterReject,
-        StateError::CanisterStopping(_) => RejectCode::CanisterReject,
-        StateError::InvariantBroken(_) => RejectCode::SysTransient,
-        StateError::UnknownSubnetMethod(_) => RejectCode::CanisterReject,
-        StateError::NonMatchingResponse { .. } => RejectCode::SysFatal,
-        StateError::InvalidSubnetPayload => RejectCode::CanisterReject,
-        StateError::OutOfMemory { .. } => RejectCode::SysTransient,
-        StateError::BitcoinNonMatchingResponse { .. } => RejectCode::SysTransient,
-    }
+    ErrorCode::from(err).into()
 }
 
 /// Ensures that the given signals are valid (strictly increasing, before

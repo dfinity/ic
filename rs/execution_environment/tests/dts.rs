@@ -574,7 +574,7 @@ fn dts_pending_upgrade_with_heartbeat() {
     let result = env.await_ingress(read, 10).unwrap();
 
     let mut expected = vec![12; 10]; // heartbeat
-    expected.extend([13; 5].iter()); // global timer
+    expected.extend([78; 5].iter()); // global timer is disabled after upgrade
     expected.extend([78; 5].iter()); // work()
     assert_eq!(result, WasmResult::Reply(expected));
 }

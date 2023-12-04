@@ -35,7 +35,6 @@ use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{p2p, CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload;
@@ -91,7 +90,7 @@ pub async fn await_proposal_execution(
             .await
             .unwrap_or_else(|| panic!("could not obtain proposal status"));
 
-        match ProposalStatus::from_i32(proposal_info.status).unwrap() {
+        match ProposalStatus::try_from(proposal_info.status).unwrap() {
             ProposalStatus::Open => {
                 // This proposal is still open
                 info!(log, "{:?} is open...", proposal_id,)
@@ -576,7 +575,7 @@ pub async fn submit_create_application_subnet_proposal(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
-        ingress_bytes_per_block_soft_cap: config.ingress_bytes_per_block_soft_cap,
+        ingress_bytes_per_block_soft_cap: Default::default(),
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
@@ -599,7 +598,7 @@ pub async fn submit_create_application_subnet_proposal(
         max_instructions_per_message: scheduler.max_instructions_per_message.get(),
         max_instructions_per_round: scheduler.max_instructions_per_round.get(),
         max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
-        features: SubnetFeatures::default(),
+        features: Default::default(),
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],

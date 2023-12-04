@@ -7522,3 +7522,62 @@ fn upload_chunk_charges_if_failing() {
         initial_balance - expected_charge,
     );
 }
+
+/// Check that a canister can call the chunk store methods on itself even if it
+/// isn't a controller of itself.
+#[test]
+fn chunk_store_methods_succeed_from_canister_itself() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    assert!(!test
+        .canister_state(uc)
+        .system_state
+        .controllers
+        .contains(&uc.into()));
+
+    let methods = [
+        (
+            Method::UploadChunk,
+            UploadChunkArgs {
+                canister_id: uc.into(),
+                chunk: vec![1, 2, 3, 4, 5],
+            }
+            .encode(),
+        ),
+        (
+            Method::ClearChunkStore,
+            ClearChunkStoreArgs {
+                canister_id: uc.into(),
+            }
+            .encode(),
+        ),
+        (
+            Method::StoredChunks,
+            StoredChunksArgs {
+                canister_id: uc.into(),
+            }
+            .encode(),
+        ),
+    ];
+
+    for (method, args) in methods {
+        let wasm = wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                method,
+                call_args()
+                    .other_side(args)
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::new(CYCLES.get() / 2),
+            )
+            .build();
+
+        let _result = get_reply(test.ingress(uc, "update", wasm));
+    }
+}

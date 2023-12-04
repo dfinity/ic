@@ -18,6 +18,7 @@ use ic_nns_common::{
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_nns_governance::pb::v1::NeuronType;
 use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, Environment, Governance, HeapGrowthPotential,
@@ -189,6 +190,7 @@ pub struct NeuronBuilder {
     joined_community_fund: Option<u64>,
     do_not_create_subaccount: bool,
     spawn_at_timestamp_seconds: Option<u64>,
+    neuron_type: Option<i32>,
 }
 
 impl From<Neuron> for NeuronBuilder {
@@ -214,6 +216,7 @@ impl From<Neuron> for NeuronBuilder {
             joined_community_fund: neuron.joined_community_fund_timestamp_seconds,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            neuron_type: neuron.neuron_type,
         }
     }
 }
@@ -237,6 +240,7 @@ impl NeuronBuilder {
             joined_community_fund: None,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            neuron_type: None,
         }
     }
 
@@ -258,6 +262,7 @@ impl NeuronBuilder {
             joined_community_fund: None,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            neuron_type: None,
         }
     }
 
@@ -357,6 +362,11 @@ impl NeuronBuilder {
         self
     }
 
+    pub fn set_neuron_type(mut self, neuron_type: NeuronType) -> Self {
+        self.neuron_type = Some(neuron_type as i32);
+        self
+    }
+
     pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
         let subaccount = match self.do_not_create_subaccount {
             false => {
@@ -396,6 +406,7 @@ impl NeuronBuilder {
             followees: self.followees,
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
+            neuron_type: self.neuron_type,
             ..Neuron::default()
         }
     }
@@ -1054,6 +1065,12 @@ impl NNSBuilder {
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {
         self.environment_builder.set_start_time(seconds);
+        self
+    }
+
+    pub fn push_mock_reply(mut self, canister_call_reply: CanisterCallReply) -> Self {
+        self.environment_builder
+            .push_mock_reply(canister_call_reply);
         self
     }
 

@@ -884,30 +884,61 @@ fn test_mainnet_data() {
     let blocks_data_path =
         std::env::var("BLOCKS_DATA_PATH").expect("Failed to get test data path env variable");
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
     let genesis: BlockHash = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
         .parse()
         .unwrap();
 
+    let rt = tokio::runtime::Runtime::new().unwrap();
     let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin(
         rt.handle(),
         headers_data_path,
         blocks_data_path,
     );
 
-    let (adapter_client, _path) = start_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger.clone(),
-        bitcoin::Network::Bitcoin,
-    );
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (adapter_client, _path) =
+        start_adapter_and_client(&rt, vec![bitcoind_addr], logger, bitcoin::Network::Bitcoin);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
-    // Block 950,989's block hash.
+    // Block 350,989's block hash.
     let anchor: BlockHash = "0000000000000000035908aacac4c97fb4e172a1758bbbba2ee2b188765780eb"
         .parse()
         .unwrap();
 
-    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor[..].to_vec(), 10, 50);
+    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor[..].to_vec(), 10, 250);
     assert_eq!(blocks.len(), 10);
+}
+
+// This test makes use of testnet data. It first syncs the headerchain until the adapter
+// checkpoint is passed and then requests 9 blocks.
+#[test]
+fn test_testnet_data() {
+    let logger = no_op_logger();
+    let headers_data_path = std::env::var("TESTNET_HEADERS_DATA_PATH")
+        .expect("Failed to get test data path env variable");
+    let blocks_data_path = std::env::var("TESTNET_BLOCKS_DATA_PATH")
+        .expect("Failed to get test data path env variable");
+
+    let genesis: BlockHash = "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"
+        .parse()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin(
+        rt.handle(),
+        headers_data_path,
+        blocks_data_path,
+    );
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (adapter_client, _path) =
+        start_adapter_and_client(&rt, vec![bitcoind_addr], logger, bitcoin::Network::Testnet);
+    sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
+
+    let anchor: BlockHash = "0000000000ec75f32a0805740a6fa1364cc1683e419e915d99892db97c3e80b2"
+        .parse()
+        .unwrap();
+
+    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 250);
+    assert_eq!(blocks.len(), 9);
 }

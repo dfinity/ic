@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use std::iter::repeat;
 use std::str::FromStr;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{Arc, RwLock},
     time::SystemTime,
 };
@@ -39,7 +39,7 @@ use tokio::runtime::Runtime;
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
 
 pub struct PocketIc {
-    subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     routing_table: RoutingTable,
     /// Constant, created on initialization.
     pub topology: Topology,
@@ -92,8 +92,8 @@ impl PocketIc {
         }
 
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>> =
-            Arc::new(RwLock::new(HashMap::new()));
+        let subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>> =
+            Arc::new(RwLock::new(BTreeMap::new()));
         let mut topology = Topology(HashMap::new());
 
         // Create all StateMachines and the topology from the subnet config infos.
@@ -109,24 +109,26 @@ impl PocketIc {
                 ..Default::default()
             };
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
-            let subnet = StateMachineBuilder::new()
+            let subnet_size = subnet_size(subnet_kind);
+            StateMachineBuilder::new()
                 .with_runtime(runtime.clone())
                 .with_config(Some(sm_config))
                 .with_subnet_id(subnet_id)
                 .with_subnet_list(subnet_ids.clone())
+                .with_subnet_size(subnet_size.try_into().unwrap())
                 .with_routing_table(routing_table.clone())
                 .with_registry_data_provider(registry_data_provider.clone())
                 .with_ecdsa_keys(vec![EcdsaKeyId {
                     curve: EcdsaCurve::Secp256k1,
                     name: format!("master_ecdsa_public_key_{}", subnet_id),
                 }])
+                .with_use_cost_scaling_flag(true)
                 .build_with_subnets(subnets.clone());
-            subnet.set_time(SystemTime::now());
 
-            // What we return to the library:
+            // What will be returned to the client:
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind,
-                size: subnet_size(subnet_kind),
+                size: subnet_size,
                 canister_ranges: ranges.iter().map(|r| from_range(r)).collect(),
             };
             topology.0.insert(subnet_id.get().0, subnet_config);
@@ -150,7 +152,7 @@ impl PocketIc {
 
     fn try_route_canister(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
         let subnet_id = self.routing_table.route(canister_id.into());
-        subnet_id.map(|subnet_id| self.get_subnet_with_id(subnet_id))
+        subnet_id.map(|subnet_id| self.get_subnet_with_id(subnet_id).unwrap())
     }
 
     fn any_subnet(&self) -> Arc<StateMachine> {
@@ -179,13 +181,12 @@ impl PocketIc {
         self.any_subnet()
     }
 
-    fn get_subnet_with_id(&self, subnet_id: SubnetId) -> Arc<StateMachine> {
+    fn get_subnet_with_id(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
         self.subnets
             .read()
             .expect("Failed to get read lock on subnets")
             .get(&subnet_id)
-            .expect("Subnet not found")
-            .clone()
+            .cloned()
     }
 
     fn get_random_subnet_of_type(
@@ -203,7 +204,7 @@ impl PocketIc {
             let index = self.randomness.gen_range(0..n);
             let (subnet_principal, _) = subnets[index];
             let subnet_id = SubnetId::new(PrincipalId(*subnet_principal));
-            Some(self.get_subnet_with_id(subnet_id))
+            self.get_subnet_with_id(subnet_id)
         } else {
             None
         }
@@ -262,8 +263,8 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
 
 fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     let CanisterIdRange { start, end } = range;
-    let start = start.get().into();
-    let end = end.get().into();
+    let start = start.get().0.into();
+    let end = end.get().0.into();
     rest::CanisterIdRange { start, end }
 }
 
@@ -424,12 +425,14 @@ impl Operation for PubKey {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        if !pic.topology.0.contains_key(&self.subnet_id.get().0) {
-            return OpOut::Error(PocketIcError::SubnetNotFound(self.subnet_id.get().0));
-        }
         let subnet = pic.get_subnet_with_id(self.subnet_id);
-        let bytes = threshold_sig_public_key_to_der(subnet.root_key()).unwrap();
-        OpOut::Bytes(bytes)
+        match subnet {
+            Some(subnet) => {
+                let bytes = threshold_sig_public_key_to_der(subnet.root_key()).unwrap();
+                OpOut::Bytes(bytes)
+            }
+            None => OpOut::Error(PocketIcError::SubnetNotFound(self.subnet_id.get().0)),
+        }
     }
 
     fn id(&self) -> OpId {
@@ -464,47 +467,51 @@ impl Operation for ExecuteIngressMessage {
     fn compute(self, pic: &mut PocketIc) -> OpOut {
         let canister_call = self.0.clone();
         let subnet = route_call(pic, canister_call);
-
-        match subnet.submit_ingress_as(
-            self.0.sender,
-            self.0.canister_id,
-            self.0.method,
-            self.0.payload,
-        ) {
-            Err(e) => {
-                eprintln!("Failed to submit ingress message: {}", e);
-                OpOut::Error(PocketIcError::BadIngressMessage(e))
-            }
-            Ok(msg_id) => {
-                // Now, we execute on all subnets until we have the result
-                let max_rounds = 100;
-                for _i in 0..max_rounds {
-                    for subnet_ in pic.subnets.read().unwrap().values() {
-                        subnet_.execute_round();
+        match subnet {
+            Ok(subnet) => {
+                match subnet.submit_ingress_as(
+                    self.0.sender,
+                    self.0.canister_id,
+                    self.0.method,
+                    self.0.payload,
+                ) {
+                    Err(e) => {
+                        eprintln!("Failed to submit ingress message: {}", e);
+                        OpOut::Error(PocketIcError::BadIngressMessage(e))
                     }
-                    match subnet.ingress_status(&msg_id) {
-                        IngressStatus::Known {
-                            state: IngressState::Completed(result),
-                            ..
-                        } => return Ok(result).into(),
-                        IngressStatus::Known {
-                            state: IngressState::Failed(error),
-                            ..
-                        } => {
-                            return Err::<
-                                ic_state_machine_tests::WasmResult,
-                                ic_state_machine_tests::UserError,
-                            >(error)
-                            .into()
+                    Ok(msg_id) => {
+                        // Now, we execute on all subnets until we have the result
+                        let max_rounds = 100;
+                        for _i in 0..max_rounds {
+                            for subnet_ in pic.subnets.read().unwrap().values() {
+                                subnet_.execute_round();
+                            }
+                            match subnet.ingress_status(&msg_id) {
+                                IngressStatus::Known {
+                                    state: IngressState::Completed(result),
+                                    ..
+                                } => return Ok(result).into(),
+                                IngressStatus::Known {
+                                    state: IngressState::Failed(error),
+                                    ..
+                                } => {
+                                    return Err::<
+                                        ic_state_machine_tests::WasmResult,
+                                        ic_state_machine_tests::UserError,
+                                    >(error)
+                                    .into()
+                                }
+                                _ => {}
+                            }
                         }
-                        _ => {}
+                        panic!(
+                            "Failed to answer to ingress {} after {} xnet rounds.",
+                            msg_id, max_rounds
+                        );
                     }
                 }
-                panic!(
-                    "Failed to answer to ingress {} after {} xnet rounds.",
-                    msg_id, max_rounds
-                );
             }
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
         }
     }
 
@@ -521,14 +528,17 @@ impl Operation for Query {
     fn compute(self, pic: &mut PocketIc) -> OpOut {
         let canister_call = self.0.clone();
         let subnet = route_call(pic, canister_call);
-        subnet
-            .query_as(
-                self.0.sender,
-                self.0.canister_id,
-                self.0.method,
-                self.0.payload,
-            )
-            .into()
+        match subnet {
+            Ok(subnet) => subnet
+                .query_as(
+                    self.0.sender,
+                    self.0.canister_id,
+                    self.0.method,
+                    self.0.payload,
+                )
+                .into(),
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
+        }
     }
 
     fn id(&self) -> OpId {
@@ -749,7 +759,13 @@ impl Operation for GetSubnet {
     fn compute(self, pic: &mut PocketIc) -> OpOut {
         let sm = pic.try_route_canister(self.canister_id);
         match sm {
-            Some(sm) => OpOut::SubnetId(sm.get_subnet_id()),
+            Some(sm) => {
+                if sm.canister_exists(self.canister_id) {
+                    OpOut::SubnetId(sm.get_subnet_id())
+                } else {
+                    OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id))
+                }
+            }
             None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
         }
     }
@@ -852,18 +868,26 @@ impl Operation for InstallCanisterAsController {
 // ================================================================================================================= //
 // Helpers
 
-fn route_call(pic: &mut PocketIc, canister_call: CanisterCall) -> Arc<StateMachine> {
+fn route_call(
+    pic: &mut PocketIc,
+    canister_call: CanisterCall,
+) -> Result<Arc<StateMachine>, String> {
     let effective_principal = canister_call.effective_principal.clone();
     match effective_principal {
-        EffectivePrincipal::SubnetId(subnet_id) => pic.get_subnet_with_id(subnet_id),
+        EffectivePrincipal::SubnetId(subnet_id) => pic
+            .get_subnet_with_id(subnet_id)
+            .ok_or(format!("Subnet with ID {subnet_id} not found")),
         EffectivePrincipal::CanisterId(effective_canister_id) => {
-            pic.try_route_canister(effective_canister_id).unwrap()
+            pic.try_route_canister(effective_canister_id).ok_or(format!(
+                "Desired canister ID {effective_canister_id} not contained on any subnet"
+            ))
         }
         EffectivePrincipal::None => {
             if canister_call.canister_id == CanisterId::ic_00() {
-                pic.random_subnet()
+                Ok(pic.random_subnet())
             } else {
-                pic.try_route_canister(canister_call.canister_id).unwrap()
+                pic.try_route_canister(canister_call.canister_id)
+                    .ok_or("Canister not found".into())
             }
         }
     }
@@ -883,17 +907,42 @@ mod tests {
 
     #[test]
     fn state_label_test() {
+        // State label changes.
         let pic = PocketIc::default();
-
         let state0 = pic.get_state_label();
         let canister_id = pic.any_subnet().create_canister(None);
+        pic.any_subnet().add_cycles(canister_id, 2_000_000_000_000);
         let state1 = pic.get_state_label();
-        let _ = pic.any_subnet().delete_canister(canister_id);
+        pic.any_subnet().stop_canister(canister_id).unwrap();
+        pic.any_subnet().delete_canister(canister_id).unwrap();
         let state2 = pic.get_state_label();
 
         assert_ne!(state0, state1);
         assert_ne!(state1, state2);
         assert_ne!(state0, state2);
+
+        // Empyt IC.
+        let pic = PocketIc::default();
+        let state1 = pic.get_state_label();
+        let pic = PocketIc::default();
+        let state2 = pic.get_state_label();
+
+        assert_eq!(state1, state2);
+
+        // Two ICs with the same state.
+        let pic = PocketIc::default();
+        let cid = pic.any_subnet().create_canister(None);
+        pic.any_subnet().add_cycles(cid, 2_000_000_000_000);
+        pic.any_subnet().stop_canister(cid).unwrap();
+        let state3 = pic.get_state_label();
+
+        let pic = PocketIc::default();
+        let cid = pic.any_subnet().create_canister(None);
+        pic.any_subnet().add_cycles(cid, 2_000_000_000_000);
+        pic.any_subnet().stop_canister(cid).unwrap();
+        let state4 = pic.get_state_label();
+
+        assert_eq!(state3, state4);
     }
 
     #[test]

@@ -278,6 +278,11 @@ rust_binary(
         "//rs/replicated_state",
         "//rs/system_api",
         "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:clap",
+        "@crate_index//:eyre",
+        "@crate_index//:ic-agent",
         "@crate_index//:serde_json",
+        "@crate_index//:tokio",
     ],
 )

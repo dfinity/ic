@@ -32,6 +32,7 @@ BASE_DEPENDENCIES = [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/crypto",
@@ -59,7 +60,6 @@ BASE_DEPENDENCIES = [
         "@crate_index//:futures-util",
         "@crate_index//:hex",
         "@crate_index//:ic-xrc-types",
-        "@crate_index//:libsecp256k1",
         "@crate_index//:maplit",
         "@crate_index//:rand",
         # "@crate_index//:randomkit",
@@ -145,10 +145,12 @@ DEV_DATA = [
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
     "src/neurons.csv",
+    "@cycles-ledger.wasm.gz//file",
 ]
 
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
+    "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
     "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
     "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",

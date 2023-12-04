@@ -6,8 +6,7 @@ use ic_icrc1::Block;
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, Log, Status, TransactionWithId, UpgradeArg as IndexUpgradeArg,
-    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    ListSubaccountsArgs, Log, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{
     ChangeFeeCollector, FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
@@ -1290,10 +1289,7 @@ fn test_upgrade_index_to_index_ng() {
                 wait_until_sync_is_completed(env, index_ng_id, ledger_id);
 
                 // Upgrade the index canister to the index-ng.
-                let arg = IndexArg::Upgrade(IndexUpgradeArg {
-                    ledger_id: Some(ledger_id.into()),
-                });
-                let arg = Encode!(&arg).unwrap();
+                let arg = Encode!(&None::<IndexArg>).unwrap();
                 env.upgrade_canister(index_id, index_ng_wasm(), arg)
                     .unwrap();
 

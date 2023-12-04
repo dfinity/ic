@@ -55,7 +55,7 @@ use slog::{info, Logger};
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
-const APP_NODES: i32 = 1;
+const APP_NODES: usize = 1;
 
 const MESSAGE_IN_THE_CANISTER_TO_BE_MIGRATED: &str =
     "Message in the canister to be migrated from source subnet to the destination subnet";
@@ -75,14 +75,14 @@ pub fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(APP_NODES.try_into().unwrap()),
+                .add_nodes(APP_NODES),
         )
         // Destination Subnet
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .halted()
-                .add_nodes(APP_NODES.try_into().unwrap()),
+                .add_nodes(APP_NODES),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");

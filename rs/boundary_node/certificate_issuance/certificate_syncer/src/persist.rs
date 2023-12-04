@@ -1,12 +1,12 @@
 use std::{
     collections::HashMap,
     io::{BufWriter, Write},
-    path::PathBuf,
+    path::{Component, Path, PathBuf},
     sync::{Arc, RwLock},
     time::Instant,
 };
 
-use anyhow::{Context as AnyhowContext, Error};
+use anyhow::{anyhow, Context as AnyhowContext, Error};
 use async_trait::async_trait;
 use mockall::automock;
 use opentelemetry::KeyValue;
@@ -64,6 +64,33 @@ impl Persister {
     }
 }
 
+fn normalize_path(path: PathBuf) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
+
 #[async_trait]
 impl Persist for Persister {
     async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError> {
@@ -72,25 +99,36 @@ impl Persist for Persister {
             .context("failed to create certificates directory")?;
 
         pkgs.iter().try_for_each(|pkg| {
+            // Certificate
+
+            let ssl_certificate_path = normalize_path(
+                Path::new(&self.certificates_path.to_string_lossy().to_string())
+                    .join(format!("{}.pem", &pkg.name)),
+            );
+
+            if ssl_certificate_path.as_path().parent()
+                != Some(Path::new(
+                    &self.certificates_path.to_string_lossy().to_string(),
+                ))
+            {
+                return Err(anyhow!(format!(
+                    "error making a key path:{}/{}.pem",
+                    &self.certificates_path.to_string_lossy().to_string(),
+                    pkg.name
+                )));
+            }
+
+            std::fs::write(ssl_certificate_path, &pkg.pair.1)
+                .context("failed to write certificate")?;
+
             // Private Key
-            let ssl_certificate_key_path = format!(
-                "{}/{}-key.pem",
-                self.certificates_path.to_string_lossy(),
-                pkg.name.to_owned()
+            let ssl_certificate_key_path = normalize_path(
+                Path::new(&self.certificates_path.to_string_lossy().to_string())
+                    .join(format!("{}-key.pem", &pkg.name)),
             );
 
             std::fs::write(ssl_certificate_key_path, &pkg.pair.0)
                 .context("failed to write private key")?;
-
-            // Certificate
-            let ssl_certificate_path = format!(
-                "{}/{}.pem",
-                self.certificates_path.to_string_lossy(),
-                pkg.name.to_owned()
-            );
-
-            std::fs::write(ssl_certificate_path, &pkg.pair.1)
-                .context("failed to write certificate")?;
 
             Ok::<_, Error>(())
         })?;
@@ -99,17 +137,19 @@ impl Persist for Persister {
         let cfgs = pkgs
             .iter()
             .map(|pkg| {
-                let ssl_certificate_key_path = format!(
-                    "{}/{}-key.pem",
-                    self.certificates_path.to_string_lossy(),
-                    pkg.name.to_owned()
-                );
+                let ssl_certificate_path = normalize_path(
+                    Path::new(&self.certificates_path.to_string_lossy().to_string())
+                        .join(format!("{}.pem", &pkg.name)),
+                )
+                .to_string_lossy()
+                .to_string();
 
-                let ssl_certificate_path = format!(
-                    "{}/{}.pem",
-                    self.certificates_path.to_string_lossy(),
-                    pkg.name.to_owned()
-                );
+                let ssl_certificate_key_path = normalize_path(
+                    Path::new(&self.certificates_path.to_string_lossy().to_string())
+                        .join(format!("{}-key.pem", &pkg.name)),
+                )
+                .to_string_lossy()
+                .to_string();
 
                 self.renderer
                     .render(&Context {

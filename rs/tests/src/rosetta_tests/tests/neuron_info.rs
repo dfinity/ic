@@ -13,11 +13,11 @@ use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::{DissolveState, Followees};
-use ic_rosetta_api::models::Object;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{AddHotKey, NeuronInfo, PublicKeyOrPrincipal};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use rosetta_core::objects::ObjectMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -162,7 +162,7 @@ async fn test_neuron_info(
     .expect("Failed to retrieve neuron info");
 
     assert_eq!(1, res.operations.len());
-    let metadata: &Object = res
+    let metadata: &ObjectMap = res
         .operations
         .get(0)
         .unwrap()
@@ -271,7 +271,7 @@ async fn test_neuron_info_with_hotkey(
     .expect("Failed to retrieve neuron info with hotkey");
 
     assert_eq!(1, res.operations.len());
-    let metadata: &Object = res
+    let metadata: &ObjectMap = res
         .operations
         .get(0)
         .unwrap()

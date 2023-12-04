@@ -134,7 +134,11 @@ where
         send_queue_size: 10,
         ..Default::default()
     };
-    let sev_handshake = Arc::new(Sev::new(node_id, registry_and_data.registry.clone()));
+    let sev_handshake = Arc::new(Sev::new(
+        node_id,
+        registry_and_data.registry.clone(),
+        log.clone(),
+    ));
 
     let peer = create_transport(
         node_id,
@@ -261,7 +265,11 @@ impl TestPeerBuilder {
             send_queue_size: self.send_queue_size,
             ..Default::default()
         };
-        let sev_handshake = Arc::new(Sev::new(self.node_id, self.registry_data.registry.clone()));
+        let sev_handshake = Arc::new(Sev::new(
+            self.node_id,
+            self.registry_data.registry.clone(),
+            self.log.clone(),
+        ));
 
         let transport = create_transport(
             self.node_id,
@@ -414,7 +422,11 @@ pub fn start_connection_between_two_peers(
         send_queue_size,
         ..Default::default()
     };
-    let sev_handshake = Arc::new(Sev::new(node_1, registry_and_data.registry.clone()));
+    let sev_handshake = Arc::new(Sev::new(
+        node_1,
+        registry_and_data.registry.clone(),
+        logger.clone(),
+    ));
 
     let peer_a = create_transport(
         node_1,
@@ -438,7 +450,7 @@ pub fn start_connection_between_two_peers(
         send_queue_size,
         ..Default::default()
     };
-    let sev_handshake = Arc::new(Sev::new(node_2, registry_and_data.registry));
+    let sev_handshake = Arc::new(Sev::new(node_2, registry_and_data.registry, logger.clone()));
 
     let peer_b = create_transport(
         node_2,

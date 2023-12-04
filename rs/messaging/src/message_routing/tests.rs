@@ -14,7 +14,7 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
-use ic_registry_subnet_features::{EcdsaConfig, SevFeatureStatus};
+use ic_registry_subnet_features::EcdsaConfig;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities::{
     notification::{Notification, WaitResult},
@@ -85,7 +85,7 @@ fn message_routing_does_not_block() {
 
         let state_manager = Arc::new(state_manager);
         let metrics_registry = MetricsRegistry::new();
-        let metrics = Arc::new(MessageRoutingMetrics::new(&metrics_registry));
+        let metrics = MessageRoutingMetrics::new(&metrics_registry);
         let mr =
             MessageRoutingImpl::from_batch_processor(state_manager, mock_box, metrics, log.clone());
         // We need to submit one extra batch because the very first one
@@ -130,7 +130,7 @@ impl<'a> From<SubnetRecord<'a>> for SubnetRecordProto {
         SubnetRecordBuilder::new()
             .with_membership(record.membership)
             .with_subnet_type(record.subnet_type)
-            .with_features(record.features.into())
+            .with_features(record.features)
             .with_ecdsa_config(record.ecdsa_config)
             .with_max_number_of_canisters(record.max_number_of_canisters)
             .build()
@@ -482,11 +482,11 @@ fn make_batch_processor(
     log: ReplicaLogger,
 ) -> (
     BatchProcessorImpl,
-    Arc<MessageRoutingMetrics>,
+    MessageRoutingMetrics,
     Arc<FakeStateManager>,
     Arc<Mutex<RegistryExecutionSettings>>,
 ) {
-    let metrics = Arc::new(MessageRoutingMetrics::new(&MetricsRegistry::default()));
+    let metrics = MessageRoutingMetrics::new(&MetricsRegistry::default());
     let state_manager = Arc::new(FakeStateManager::default());
     let registry_settings = Arc::new(Mutex::new(RegistryExecutionSettings {
         max_number_of_canisters: 0,
@@ -549,7 +549,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             features: SubnetFeatures {
                 canister_sandboxing: true,
                 http_requests: true,
-                sev_status: Some(SevFeatureStatus::Disabled),
+                sev_enabled: false,
             },
             ecdsa_config: EcdsaConfig {
                 key_ids: vec![
@@ -1265,7 +1265,7 @@ fn process_batch_updates_subnet_metrics() {
             features: SubnetFeatures {
                 canister_sandboxing: true,
                 http_requests: true,
-                sev_status: Some(SevFeatureStatus::Disabled),
+                sev_enabled: false,
             },
             ecdsa_config: EcdsaConfig {
                 key_ids: vec![

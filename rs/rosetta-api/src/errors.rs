@@ -1,9 +1,7 @@
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
-use crate::{
-    convert,
-    models::{Error, Object},
-};
+use crate::{convert, models::Error};
+use rosetta_core::objects::ObjectMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -149,7 +147,7 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
         ),
         ApiError::ICError(e) => (740, "Internet Computer error", e.retriable, e.into()),
         ApiError::TransactionRejected(r, d) => (750, "Transaction rejected", *r, d.into()),
-        ApiError::TransactionExpired => (760, "Transaction expired", false, Object::default()),
+        ApiError::TransactionExpired => (760, "Transaction expired", false, ObjectMap::default()),
         ApiError::OperationsErrors(e, token_name) => {
             match TransactionOperationResults::from_transaction_results(e.clone(), token_name) {
                 Ok(o) => (770, "Operation failed", e.retriable(), o.into()),
@@ -157,7 +155,7 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
                     700,
                     "Internal server error",
                     false,
-                    Object::from(&Details::from(
+                    ObjectMap::from(&Details::from(
                         "Could not convert TransactionResults to TransactionOperationResults",
                     )),
                 ),
@@ -165,104 +163,105 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
         }
         ApiError::InvalidTipOfChain(d) => (715, "Invalid tip of the chain", false, d.into()),
     };
-    Error {
-        code,
+    Error(rosetta_core::objects::Error {
         message: msg.to_string(),
-        retriable,
         details: Some(details),
-    }
+        description: None,
+        retriable,
+        code,
+    })
 }
 
 /// Convert an Error to an ApiError.
 pub fn convert_to_api_error(err: Error, token_name: &str) -> ApiError {
     match err {
-        Error {
+        Error(rosetta_core::objects::Error {
             code: 700,
             retriable,
             details,
             ..
-        } => ApiError::InternalError(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::InternalError(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 701,
             retriable,
             details,
             ..
-        } => ApiError::InvalidRequest(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::InvalidRequest(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 702,
             retriable,
             details,
             ..
-        } => ApiError::NotAvailableOffline(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::NotAvailableOffline(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 710,
             retriable,
             details,
             ..
-        } => ApiError::InvalidNetworkId(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::InvalidNetworkId(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 711,
             retriable,
             details,
             ..
-        } => ApiError::InvalidAccountId(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::InvalidAccountId(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 712,
             retriable,
             details,
             ..
-        } => ApiError::InvalidBlockId(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::InvalidBlockId(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 713,
             retriable,
             details,
             ..
-        } => ApiError::InvalidPublicKey(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::InvalidPublicKey(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 714,
             retriable,
             details,
             ..
-        } => ApiError::InvalidTransactionId(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::InvalidTransactionId(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 720,
             retriable,
             details,
             ..
-        } => ApiError::MempoolTransactionMissing(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::MempoolTransactionMissing(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 721,
             retriable,
             details,
             ..
-        } => ApiError::BlockchainEmpty(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::BlockchainEmpty(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 730,
             retriable,
             details,
             ..
-        } => ApiError::InvalidTransaction(retriable, details.unwrap_or_default().into()),
-        Error {
+        }) => ApiError::InvalidTransaction(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error {
             code: 740,
             retriable,
             details,
             ..
-        } => match ICError::try_from(details).map(|mut e| {
+        }) => match ICError::try_from(details).map(|mut e| {
             e.retriable = retriable;
             ApiError::ICError(e)
         }) {
             Err(e) | Ok(e) => e,
         },
-        Error {
+        Error(rosetta_core::objects::Error {
             code: 750,
             retriable,
             details,
             ..
-        } => ApiError::TransactionRejected(retriable, details.unwrap_or_default().into()),
-        Error { code: 760, .. } => ApiError::TransactionExpired,
-        Error {
+        }) => ApiError::TransactionRejected(retriable, details.unwrap_or_default().into()),
+        Error(rosetta_core::objects::Error { code: 760, .. }) => ApiError::TransactionExpired,
+        Error(rosetta_core::objects::Error {
             code: 770, details, ..
-        } => match details.map(TransactionOperationResults::parse) {
+        }) => match details.map(TransactionOperationResults::parse) {
             Some(Ok(e)) => convert::transaction_operation_result_to_api_error(e, token_name),
             Some(Err(e)) => e,
             None => ApiError::internal_error("OperationsErrors missing details object"),
@@ -288,19 +287,19 @@ impl From<ICError> for ApiError {
     }
 }
 
-impl From<&ICError> for Object {
+impl From<&ICError> for ObjectMap {
     fn from(e: &ICError) -> Self {
         match serde_json::to_value(e) {
             Ok(Value::Object(o)) => o,
-            _ => Object::default(),
+            _ => ObjectMap::default(),
         }
     }
 }
 
-impl TryFrom<Option<Object>> for ICError {
+impl TryFrom<Option<ObjectMap>> for ICError {
     type Error = ApiError;
 
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse ICError from details JSON object: {}",
@@ -322,7 +321,7 @@ pub struct Details {
     /// Arbitrary fields that will be included in the details object.
     /// The entries will be flattened when serializing.
     #[serde(flatten)]
-    extra_fields: Object,
+    extra_fields: ObjectMap,
 }
 
 #[test]
@@ -347,7 +346,7 @@ impl From<&str> for Details {
     fn from(error_message: &str) -> Self {
         Self {
             error_message: Some(error_message.to_owned()),
-            extra_fields: Object::default(),
+            extra_fields: ObjectMap::default(),
         }
     }
 }
@@ -356,22 +355,22 @@ impl From<String> for Details {
     fn from(error_message: String) -> Self {
         Self {
             error_message: Some(error_message),
-            extra_fields: Object::default(),
+            extra_fields: ObjectMap::default(),
         }
     }
 }
 
-impl From<&Details> for Object {
+impl From<&Details> for ObjectMap {
     fn from(d: &Details) -> Self {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => o,
-            _ => Object::default(),
+            _ => ObjectMap::default(),
         }
     }
 }
 
-impl From<Object> for Details {
-    fn from(o: Object) -> Self {
+impl From<ObjectMap> for Details {
+    fn from(o: ObjectMap) -> Self {
         serde_json::from_value(serde_json::Value::Object(o))
             .ok()
             .unwrap_or_default()
@@ -382,8 +381,8 @@ impl From<Object> for Details {
 fn to_from_details_test() {
     let d = Details {
         error_message: Some("foo".to_owned()),
-        extra_fields: Object::default(),
+        extra_fields: ObjectMap::default(),
     };
-    let o: Object = (&d).into();
+    let o: ObjectMap = (&d).into();
     assert_eq!(d, o.into());
 }

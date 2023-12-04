@@ -25,7 +25,7 @@ mod tests;
 thread_local! {
     // pub static STATE: RefCell<Option<State>> = RefCell::default();
     pub static STATE: RefCell<Option<State>> = RefCell::new(Some(State {
-        ethereum_network: EthereumNetwork::Ethereum,
+        ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "".to_string(),
         ledger_id: Principal::anonymous(),
         ethereum_contract_address: None,
@@ -43,6 +43,7 @@ thread_local! {
         http_request_counter: 0,
         eth_balance:EthBalance::default(),
         first_scraped_block_number: 0_u128.into(),
+        skipped_blocks: BTreeSet::new(),
     }));
 }
 
@@ -74,6 +75,7 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, String>,
     pub eth_transactions: EthTransactions,
+    pub skipped_blocks: BTreeSet<BlockNumber>,
 
     /// Current balance of ETH held by minter.
     /// Computed based on audit events.
@@ -150,6 +152,10 @@ impl State {
         self.update_eth_balance_upon_deposit(event)
     }
 
+    pub fn has_events_to_mint(&self) -> bool {
+        !self.events_to_mint.is_empty()
+    }
+
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
         assert!(
             !self.events_to_mint.contains_key(&source),
@@ -220,30 +226,34 @@ impl State {
         receipt: &TransactionReceipt,
     ) {
         let tx_fee = receipt.effective_transaction_fee();
-        match receipt.status {
-            TransactionStatus::Success => {
-                let tx = self
-                    .eth_transactions
-                    .finalized_tx
-                    .get_alt(withdrawal_id)
-                    .expect("BUG: missing finalized transaction");
-                let debited_amount = tx
-                    .transaction()
-                    .amount
-                    .checked_add(tx_fee)
-                    .expect("BUG: debited amount always fits into U256");
-                let charged_tx_fee = tx.transaction_price().max_transaction_fee();
-                let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect("BUG: charged transaction fee MUST always be at least the effective transaction fee");
+        let tx = self
+            .eth_transactions
+            .finalized_tx
+            .get_alt(withdrawal_id)
+            .expect("BUG: missing finalized transaction");
+        let charged_tx_fee = tx.transaction_price().max_transaction_fee();
+        let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect(
+            "BUG: charged transaction fee MUST always be at least the effective transaction fee",
+        );
+        let debited_amount = match receipt.status {
+            TransactionStatus::Success => tx
+                .transaction()
+                .amount
+                .checked_add(tx_fee)
+                .expect("BUG: debited amount always fits into U256"),
+            TransactionStatus::Failure => tx_fee,
+        };
+        self.eth_balance.eth_balance_sub(debited_amount);
+        self.eth_balance.total_effective_tx_fees_add(tx_fee);
+        self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
+    }
 
-                self.eth_balance.eth_balance_sub(debited_amount);
-                self.eth_balance.total_effective_tx_fees_add(tx_fee);
-                self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
-            }
-            TransactionStatus::Failure => {
-                self.eth_balance.eth_balance_sub(tx_fee);
-                self.eth_balance.total_effective_tx_fees_add(tx_fee);
-            }
-        }
+    pub fn record_skipped_block(&mut self, block_number: BlockNumber) {
+        assert!(
+            self.skipped_blocks.insert(block_number),
+            "BUG: block {} was already skipped",
+            block_number
+        );
     }
 
     pub const fn ethereum_network(&self) -> EthereumNetwork {

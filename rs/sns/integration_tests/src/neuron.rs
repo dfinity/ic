@@ -387,7 +387,7 @@ fn test_claim_neuron_happy() {
             _ => panic!("Unexpected command response when claiming neuron"),
         };
         assert_eq!(
-            ErrorType::from_i32(error.error_type).unwrap(),
+            ErrorType::try_from(error.error_type).unwrap(),
             ErrorType::InsufficientFunds,
             "{:#?}",
             error,
@@ -1984,7 +1984,7 @@ fn test_neuron_add_non_grantable_permission_fails() {
         };
 
         assert_eq!(
-            ErrorType::from_i32(error.error_type).unwrap(),
+            ErrorType::try_from(error.error_type).unwrap(),
             ErrorType::AccessControlList
         );
 

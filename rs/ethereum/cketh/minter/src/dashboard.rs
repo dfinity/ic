@@ -13,7 +13,7 @@ use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, W
 use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Reimbursed};
 use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
 use std::cmp::Reverse;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 mod filters {
     pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
@@ -68,6 +68,7 @@ pub struct DashboardTemplate {
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
     pub reimbursed_transactions: Vec<Reimbursed>,
     pub eth_balance: EthBalance,
+    pub skipped_blocks: BTreeSet<BlockNumber>,
 }
 
 impl DashboardTemplate {
@@ -152,6 +153,7 @@ impl DashboardTemplate {
             finalized_transactions,
             reimbursed_transactions,
             eth_balance: state.eth_balance.clone(),
+            skipped_blocks: state.skipped_blocks.clone(),
         }
     }
 }
@@ -164,6 +166,12 @@ impl Template for DashboardTemplate {
         unimplemented!()
     }
     fn render_into(&self, _writer: &mut (impl std::fmt::Write + ?Sized)) -> askama::Result<()> {
+        unimplemented!()
+    }
+}
+
+impl std::fmt::Display for DashboardTemplate {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unimplemented!()
     }
 }

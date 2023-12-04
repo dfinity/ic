@@ -1,5 +1,6 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::Rng;
 
 #[test]
 fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
@@ -277,6 +278,27 @@ fn test_mul_2_is_correct() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
+fn test_pedersen_is_correct() -> ThresholdEcdsaResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let g = EccPoint::generator_g(curve_type);
+        let h = EccPoint::generator_h(curve_type);
+
+        for _iteration in 0..100 {
+            let x = EccScalar::random(curve_type, rng);
+            let y = EccScalar::random(curve_type, rng);
+
+            let computed_result = EccPoint::pedersen(&x, &y)?;
+            let expected_result = g.scalar_mul(&x)?.add_points(&h.scalar_mul(&y)?)?;
+            assert_eq!(computed_result, expected_result);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_mul_n_ct_pippenger_is_correct() -> ThresholdEcdsaResult<()> {
     let rng = &mut reproducible_rng();
     let mut random_point_and_scalar = |curve_type| -> ThresholdEcdsaResult<(EccPoint, EccScalar)> {
@@ -365,6 +387,30 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
 
                 assert_eq!(computed_result, expected_result);
             }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_mul2_table() -> ThresholdEcdsaResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve in EccCurveType::all() {
+        let g = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"g")?;
+        let h = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"h")?;
+
+        let tbl = EccPointMul2Table::new(g.clone(), h.clone())?;
+
+        for _ in 0..100 {
+            let x = EccScalar::random(curve, rng);
+            let y = EccScalar::random(curve, rng);
+
+            let refv = EccPoint::mul_2_points(&g, &x, &h, &y)?;
+
+            let tblv = tbl.mul2(&x, &y)?;
+            assert_eq!(refv, tblv);
         }
     }
 

@@ -1,9 +1,9 @@
 use ic_rosetta_api::models::{
-    Block, BlockRequest, BlockResponse, MetadataRequest, NetworkIdentifier, NetworkListResponse,
-    PartialBlockIdentifier,
+    Block, BlockRequest, BlockResponse, NetworkIdentifier, PartialBlockIdentifier,
 };
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::NetworkListResponse;
 use url::Url;
-
 pub struct RosettaClient {
     pub url: Url,
 }
@@ -19,7 +19,11 @@ impl RosettaClient {
             .await?
             .json::<NetworkListResponse>()
             .await?;
-        Ok(response.network_identifiers)
+        Ok(response
+            .network_identifiers
+            .into_iter()
+            .map(|ni| NetworkIdentifier(ni))
+            .collect::<Vec<NetworkIdentifier>>())
     }
 
     pub async fn block(
@@ -28,7 +32,7 @@ impl RosettaClient {
         index: u64,
     ) -> Result<Option<Block>, reqwest::Error> {
         let block_identifier = PartialBlockIdentifier {
-            index: Some(index as i64),
+            index: Some(index),
             hash: None,
         };
         let request = BlockRequest {

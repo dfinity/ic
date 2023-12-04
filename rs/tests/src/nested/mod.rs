@@ -29,7 +29,7 @@ pub fn config(env: TestEnv) {
     let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
     let farm = Farm::new(farm_url, logger.clone());
     let group_setup = GroupSetup::read_attribute(&env);
-    let group_name: String = group_setup.farm_group_name;
+    let group_name: String = group_setup.infra_group_name;
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();

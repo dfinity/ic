@@ -389,7 +389,7 @@ fn begin_swap_legacy(
 
         use sns_governance_pb::governance_error::ErrorType;
         assert_eq!(
-            ErrorType::from_i32(*error_type).unwrap(),
+            ErrorType::try_from(*error_type).unwrap(),
             ErrorType::PreconditionFailed,
             "{:#?}",
             err
@@ -433,7 +433,7 @@ fn begin_swap_legacy(
                 } = &error;
                 // Inspect the error.
                 assert_eq!(
-                    ErrorType::from_i32(*error_type).unwrap(),
+                    ErrorType::try_from(*error_type).unwrap(),
                     ErrorType::PreconditionFailed,
                     "{:#?}",
                     error
@@ -699,6 +699,7 @@ lazy_static! {
         auto_stake_maturity: None,
         not_for_profit: false,
         known_neuron_data: None,
+        neuron_type: None,
     };
 }
 
@@ -1326,7 +1327,7 @@ fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to
         } = &err;
         use sns_governance_pb::governance_error::ErrorType;
         assert_eq!(
-            ErrorType::from_i32(*error_type).unwrap(),
+            ErrorType::try_from(*error_type).unwrap(),
             ErrorType::PreconditionFailed,
             "{:#?}",
             err
@@ -1371,7 +1372,7 @@ fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to
             use sns_governance_pb::governance_error::ErrorType;
             // Inspect the error.
             assert_eq!(
-                ErrorType::from_i32(*error_type).unwrap(),
+                ErrorType::try_from(*error_type).unwrap(),
                 ErrorType::PreconditionFailed,
                 "{:#?}",
                 error
@@ -1443,7 +1444,7 @@ fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to
             CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
         assert_eq!(
             sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
-                .map(|mode| Mode::from_i32(mode).unwrap()),
+                .map(|mode| Mode::try_from(mode).unwrap()),
             Ok(Mode::Normal),
         );
 
@@ -2247,7 +2248,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
             CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
         assert_eq!(
             sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
-                .map(|mode| Mode::from_i32(mode).unwrap()),
+                .map(|mode| Mode::try_from(mode).unwrap()),
             Ok(Mode::Normal),
         );
 
@@ -2444,7 +2445,7 @@ fn swap_lifecycle_sad() {
         let sns_governance_canister_id =
             CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
         let mode = sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
-            .map(|mode| Mode::from_i32(mode).unwrap())
+            .map(|mode| Mode::try_from(mode).unwrap())
             .unwrap();
         assert_eq!(mode, Mode::PreInitializationSwap);
     }

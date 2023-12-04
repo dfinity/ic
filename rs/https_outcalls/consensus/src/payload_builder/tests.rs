@@ -9,7 +9,7 @@ use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload},
+    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
@@ -20,7 +20,7 @@ use ic_interfaces::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::{
     mock_time,
     state_manager::RefMockStateManager,
@@ -92,7 +92,12 @@ fn single_request_test() {
             assert_eq!(parsed_payload.responses[0].content, response);
 
             assert!(payload_builder
-                .validate_payload(Height::new(1), &payload, &[], &context)
+                .validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&context),
+                    &payload,
+                    &[],
+                )
                 .is_ok());
         });
 
@@ -226,9 +231,9 @@ fn multiple_payload_test() {
             payload_builder
                 .validate_payload(
                     Height::new(1),
+                    &test_proposal_context(&validation_context),
                     &payload,
                     &past_payloads,
-                    &validation_context,
                 )
                 .unwrap();
 
@@ -284,7 +289,7 @@ fn multiple_share_same_source_test() {
 
 /// Submit a group of requests (50% timeouts, 100% other), so that the total
 /// request count exceeds the capacity of a single payload.
-///         
+///
 /// Expect: Timeout requests are given priority, so they are included in the
 ///         payload. That means that 50% of the payload should consist of timeouts
 ///         while the rest is filled with the remaining requests.
@@ -475,7 +480,12 @@ fn max_responses() {
 
         //  Make sure the response is not contained in the payload
         payload_builder
-            .validate_payload(Height::new(1), &payload, &[], &validation_context)
+            .validate_payload(
+                Height::new(1),
+                &test_proposal_context(&validation_context),
+                &payload,
+                &[],
+            )
             .unwrap();
     })
 }
@@ -628,9 +638,9 @@ fn duplicate_validation() {
 
         let validation_result = payload_builder.validate_payload(
             Height::from(1),
+            &test_proposal_context(&default_validation_context()),
             &payload,
             &past_payloads,
-            &default_validation_context(),
         );
 
         match validation_result {
@@ -675,9 +685,9 @@ fn divergence_response_validation_test() {
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
+                &test_proposal_context(&default_validation_context()),
                 &payload,
                 &[],
-                &default_validation_context(),
             );
 
             assert!(validation_result.is_ok());
@@ -695,9 +705,9 @@ fn divergence_response_validation_test() {
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
+                &test_proposal_context(&default_validation_context()),
                 &payload,
                 &[],
-                &default_validation_context(),
             );
 
             match validation_result {
@@ -732,9 +742,9 @@ fn divergence_response_validation_test() {
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
+                &test_proposal_context(&default_validation_context()),
                 &payload,
                 &[],
-                &default_validation_context(),
             );
 
             match validation_result {
@@ -892,10 +902,14 @@ pub(crate) fn test_config_with_http_feature<T>(
         .collect::<Vec<_>>();
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
         let mut subnet_record = SubnetRecordBuilder::from(&committee).build();
-        subnet_record.features = Some(SubnetFeatures {
-            http_requests: https_feature_flag,
-            ..SubnetFeatures::default()
-        });
+
+        subnet_record.features = Some(
+            SubnetFeatures {
+                http_requests: https_feature_flag,
+                ..SubnetFeatures::default()
+            }
+            .into(),
+        );
 
         let Dependencies {
             crypto,
@@ -925,6 +939,14 @@ pub(crate) fn test_config_with_http_feature<T>(
 
         run(payload_builder, canister_http_pool)
     })
+}
+
+/// The [`ProposalContext`] used in the validation tests
+pub(crate) fn test_proposal_context(validation_context: &ValidationContext) -> ProposalContext<'_> {
+    ProposalContext {
+        proposer: node_test_id(0),
+        validation_context,
+    }
 }
 
 /// The default validation context used in the validation tests
@@ -960,6 +982,11 @@ where
         };
 
         let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
-        payload_builder.validate_payload(Height::from(1), &payload, &[], validation_context)
+        payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(validation_context),
+            &payload,
+            &[],
+        )
     })
 }

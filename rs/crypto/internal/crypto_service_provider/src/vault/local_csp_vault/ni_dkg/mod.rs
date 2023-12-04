@@ -1,3 +1,4 @@
+use crate::key_id::KeyIdInstantiationError;
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
@@ -81,7 +82,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
-        receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         maybe_resharing_secret_key_id: Option<KeyId>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
         debug!(self.logger; crypto.method_name => "create_dealing", crypto.dkg_epoch => epoch.get());
@@ -91,7 +92,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             dealer_index,
             threshold,
             epoch,
-            receiver_keys,
+            &receiver_keys,
             maybe_resharing_secret_key_id,
         );
         self.metrics.observe_duration_seconds(
@@ -393,7 +394,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
         let result = match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
-                let threshold_key_id = KeyId::from(&CspPublicCoefficients::from(&csp_transcript));
+                let threshold_key_id =
+                    KeyId::try_from(&CspPublicCoefficients::from(&csp_transcript)).map_err(
+                        |key_id_instantiation_error| match key_id_instantiation_error {
+                            KeyIdInstantiationError::InvalidArguments(internal_error) => {
+                                CspDkgLoadPrivateKeyError::KeyIdInstantiationError(internal_error)
+                            }
+                        },
+                    )?;
 
                 // Convert types
                 let transcript = specialise::groth20::transcript(csp_transcript)

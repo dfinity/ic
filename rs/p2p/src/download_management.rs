@@ -77,7 +77,6 @@ use crate::{
 use ic_interfaces_transport::TransportPayload;
 use ic_logger::{info, trace, warn};
 use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
-use ic_state_manager::state_sync::StateSyncArtifact;
 use ic_types::{
     artifact::{Advert, Artifact, ArtifactFilter, ArtifactId, ArtifactKind, ArtifactTag},
     artifact_kind::{
@@ -401,7 +400,7 @@ impl GossipImpl {
             }
             // This artifact is used only in tests.
             Artifact::FileTreeSync(_) => true,
-            Artifact::StateSync(msg) => advert_matches_artifact::<StateSyncArtifact>(msg, &advert),
+            Artifact::StateSync(_) => unimplemented!(),
         };
         if advert_matches_completed_artifact {
             match self
@@ -715,7 +714,7 @@ impl GossipImpl {
             .start_timer();
         let channel_id = self.transport_channel_mapper.map(&message);
         let message_label: &'static str = (&message).into();
-        let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
+        let message = TransportPayload(pb::GossipMessage::proxy_encode(message));
         match self.transport.send(&peer_id, channel_id, message) {
             Ok(()) => self
                 .metrics

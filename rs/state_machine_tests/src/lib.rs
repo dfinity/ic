@@ -1,3 +1,4 @@
+use candid::Decode;
 use core::sync::atomic::Ordering;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
@@ -16,7 +17,9 @@ use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{
+    self as ic00, CanisterIdRecord, CanisterStatusResultV2, InstallCodeArgs, Method, Payload,
+};
 pub use ic_ic00_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, ECDSAPublicKeyResponse,
     EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply, UpdateSettingsArgs,
@@ -91,7 +94,7 @@ use ic_types::crypto::{
     CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::messages::{CallbackId, Certificate, Response};
+use ic_types::messages::{CallbackId, Certificate, RejectContext, Response};
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::xnet::CertifiedStreamSlice;
@@ -118,11 +121,12 @@ use ic_xnet_payload_builder::{
     XNetSlicePool,
 };
 
+pub use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::Serialize;
 pub use slog::Level;
-use std::collections::{hash_map::DefaultHasher, HashMap};
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::stderr;
 use std::ops::RangeInclusive;
@@ -251,6 +255,7 @@ fn make_nodes_registry(
             p2p_flow_endpoints: vec![],
             hostos_version_id: None,
             chip_id: None,
+            public_ipv4_config: None,
         };
         registry_data_provider
             .add(
@@ -300,7 +305,7 @@ fn make_nodes_registry(
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         })
-        .with_features(features.into())
+        .with_features(features)
         .build();
 
     insert_initial_dkg_transcript(
@@ -438,14 +443,14 @@ impl IngressPoolSelect for PocketIngressPool {
 struct PocketXNetSlicePoolImpl {
     /// Association of subnet IDs to their corresponding `StateMachine`s
     /// from which the XNet messages are fetched.
-    subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     /// Subnet ID of the `StateMachine` containing the pool.
     own_subnet_id: SubnetId,
 }
 
 impl PocketXNetSlicePoolImpl {
     fn new(
-        subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+        subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
         own_subnet_id: SubnetId,
     ) -> Self {
         Self {
@@ -547,6 +552,7 @@ pub struct StateMachineBuilder {
     checkpoints_enabled: bool,
     subnet_type: SubnetType,
     subnet_size: usize,
+    node_id: NodeId,
     nns_subnet_id: SubnetId,
     subnet_id: SubnetId,
     /// The `subnet_list` should contain all subnet IDs with corresponding `SubnetRecord`s available in the registry
@@ -565,6 +571,7 @@ pub struct StateMachineBuilder {
 impl StateMachineBuilder {
     pub fn new() -> Self {
         let own_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+        let own_node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         Self {
             state_dir: TempDir::new().expect("failed to create a temporary directory"),
             nonce: 0,
@@ -574,6 +581,7 @@ impl StateMachineBuilder {
             subnet_type: SubnetType::System,
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
+            node_id: own_node_id,
             nns_subnet_id: own_subnet_id,
             subnet_id: own_subnet_id,
             subnet_list: None,
@@ -631,6 +639,10 @@ impl StateMachineBuilder {
             subnet_size,
             ..self
         }
+    }
+
+    pub fn with_node_id(self, node_id: NodeId) -> Self {
+        Self { node_id, ..self }
     }
 
     pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
@@ -763,10 +775,11 @@ impl StateMachineBuilder {
     /// in the provided association of subnet IDs and `StateMachine`s.
     pub fn build_with_subnets(
         self,
-        subnets: Arc<RwLock<HashMap<SubnetId, Arc<StateMachine>>>>,
+        subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     ) -> Arc<StateMachine> {
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let subnet_id = self.subnet_id;
+        let node_id = self.node_id;
         let sm = Arc::new(self.build());
 
         // Register this new `StateMachine` in the *shared* association
@@ -799,6 +812,7 @@ impl StateMachineBuilder {
         // which contains no `PayloadBuilderImpl` after creation.
         *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new_for_testing(
             subnet_id,
+            node_id,
             sm.registry_client.clone(),
             sm.ingress_manager.clone(),
             Arc::new(xnet_payload_builder),
@@ -2119,6 +2133,22 @@ impl StateMachine {
         )
     }
 
+    /// Calls the `canister_status` endpoint on the management canister.
+    pub fn canister_status(
+        &self,
+        canister_id: CanisterId,
+    ) -> Result<Result<CanisterStatusResultV2, String>, UserError> {
+        self.execute_ingress(
+            CanisterId::ic_00(),
+            "canister_status",
+            (CanisterIdRecord::from(canister_id)).encode(),
+        )
+        .map(|wasm_result| match wasm_result {
+            WasmResult::Reply(reply) => Ok(Decode!(&reply, CanisterStatusResultV2).unwrap()),
+            WasmResult::Reject(reject_msg) => Err(reject_msg),
+        })
+    }
+
     /// Deletes the canister with the specified ID.
     pub fn delete_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
         self.execute_ingress(
@@ -2568,6 +2598,22 @@ impl PayloadBuilder {
             originator_reply_callback: id,
             refund: Cycles::zero(),
             response_payload: MsgPayload::Data(payload.encode()),
+        });
+        self
+    }
+
+    pub fn http_response_failure(
+        mut self,
+        id: CallbackId,
+        code: RejectCode,
+        message: impl ToString,
+    ) -> Self {
+        self.consensus_responses.push(Response {
+            originator: CanisterId::ic_00(),
+            respondent: CanisterId::ic_00(),
+            originator_reply_callback: id,
+            refund: Cycles::zero(),
+            response_payload: MsgPayload::Reject(RejectContext::new(code, message)),
         });
         self
     }

@@ -49,21 +49,25 @@ fn spawn_transport(
     let node_addr: SocketAddr = (Ipv4Addr::LOCALHOST, 8000 + id as u16).into();
     let node_id = node_test_id(id);
     let tls = temp_crypto_component_with_tls_keys(&registry_handle, node_id);
-    let sev = Arc::new(Sev::new(node_id, registry_handle.registry_client.clone()));
+    let sev = Arc::new(Sev::new(
+        node_id,
+        registry_handle.registry_client.clone(),
+        log.clone(),
+    ));
     registry_handle.registry_client.reload();
     registry_handle.registry_client.update_to_latest_version();
 
-    let transport = Arc::new(QuicTransport::build(
+    let transport = Arc::new(QuicTransport::start(
         &log,
         &MetricsRegistry::default(),
-        rt,
+        &rt,
         tls,
         registry_handle.registry_client.clone(),
         sev,
         node_id,
         watch_rx,
         Either::<_, DummyUdpSocket>::Left(node_addr),
-        Some(Router::new().route("/", any(pong))),
+        Router::new().route("/", any(pong)),
     ));
     (transport, node_id, node_addr)
 }

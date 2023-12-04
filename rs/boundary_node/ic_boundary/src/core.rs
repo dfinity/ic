@@ -47,14 +47,15 @@ use crate::{
     management,
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
-        MetricParamsPersist, MetricsCache, MetricsRunner, WithMetrics, WithMetricsCheck,
-        WithMetricsPersist,
+        MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
+        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
     },
     nns::{Load, Loader},
     persist,
     rate_limiting::RateLimit,
+    retry::{retry_request, RetryParams},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
-    snapshot::{Runner as SnapshotRunner, SnapshotPersister},
+    snapshot::{SnapshotPersister, Snapshotter},
     tls_verify::TlsVerifier,
 };
 
@@ -79,7 +80,7 @@ const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
 pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
-const METRICS_CACHE_CAPACITY: usize = 30 * MB;
+const METRICS_CACHE_CAPACITY: usize = 15 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
 
@@ -271,6 +272,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                         .zstd(true)
                         .deflate(true),
                 )
+                .layer(middleware::from_fn(routes::pre_compression))
                 .set_x_request_id(MakeRequestUuid)
                 .layer(middleware::from_fn_with_state(
                     HttpMetricParams::new(&registry, "http_request_in"),
@@ -280,7 +282,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .layer(middleware::from_fn(management::btc_mw))
                 .layer(middleware::from_fn_with_state(
                     lookup.clone(),
-                    routes::lookup_node,
+                    routes::lookup_subnet,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    RetryParams {
+                        retry_count: cli.retry.retry_count as usize,
+                        retry_update_call: cli.retry.retry_update_call,
+                    },
+                    retry_request,
                 )),
         );
 
@@ -332,37 +341,45 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             cache: metrics_cache.clone(),
         });
 
-    let metrics_runner = WithThrottle(
-        MetricsRunner::new(
-            metrics_cache,
-            registry.clone(),
-            cache,
-            Arc::clone(&registry_snapshot),
+    let metrics_runner = WithMetrics(
+        WithThrottle(
+            MetricsRunner::new(
+                metrics_cache,
+                registry.clone(),
+                cache,
+                Arc::clone(&registry_snapshot),
+            ),
+            ThrottleParams::new(5 * SECOND),
         ),
-        ThrottleParams::new(10 * SECOND),
+        MetricParams::new(&registry, "run_metrics"),
     );
 
     // Snapshots
-    let mut snapshot_runner = SnapshotRunner::new(
-        Arc::clone(&registry_snapshot),
-        registry_client.clone(),
-        Duration::from_secs(cli.registry.min_version_age),
+    let snapshot_runner = WithMetricsSnapshot(
+        {
+            let mut snapshotter = Snapshotter::new(
+                Arc::clone(&registry_snapshot),
+                registry_client.clone(),
+                Duration::from_secs(cli.registry.min_version_age),
+            );
+
+            if let Some(v) = &cli.firewall.nftables_system_replicas_path {
+                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
+
+                let fw_generator = FirewallGenerator::new(
+                    v.clone(),
+                    cli.firewall.nftables_system_replicas_var.clone(),
+                );
+
+                let persister = SnapshotPersister::new(fw_generator, fw_reloader);
+                snapshotter.set_persister(persister);
+            }
+
+            snapshotter
+        },
+        MetricParamsSnapshot::new(&registry),
     );
 
-    if let Some(v) = &cli.firewall.nftables_system_replicas_path {
-        let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
-
-        let fw_generator =
-            FirewallGenerator::new(v.clone(), cli.firewall.nftables_system_replicas_var.clone());
-
-        let persister = SnapshotPersister::new(fw_generator, fw_reloader);
-        snapshot_runner.set_persister(persister);
-    }
-
-    let snapshot_runner = WithMetrics(
-        snapshot_runner,
-        MetricParams::new(&registry, "run_snapshot"),
-    );
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
 
     // Checks
@@ -371,13 +388,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         MetricParamsPersist::new(&registry),
     );
 
-    let checker = Checker::new(http_client);
-    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&registry));
-    let checker = WithRetryLimited(
-        checker,
-        cli.health.check_retries,
-        Duration::from_secs(cli.health.check_retry_interval),
+    let checker = Checker::new(
+        http_client,
+        Duration::from_secs(cli.listen.http_timeout_check),
     );
+    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&registry));
+    let checker = WithRetryLimited(checker, cli.health.check_retries, Duration::ZERO);
 
     let check_runner = CheckRunner::new(
         Arc::clone(&registry_snapshot),

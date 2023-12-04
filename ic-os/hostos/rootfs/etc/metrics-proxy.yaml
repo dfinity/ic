@@ -2,7 +2,7 @@ proxies:
   - listen_on:
       url: http://[::]:42372/metrics/hostos_node_exporter
     connect_to:
-      url: http://[::1]:9100/metrics
+      url: https://[::1]:9100/metrics
     # In case of conflict, the last matching rule
     # overrides any previous rules.
     # Full documentation at:

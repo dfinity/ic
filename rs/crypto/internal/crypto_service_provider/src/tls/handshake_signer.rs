@@ -25,7 +25,7 @@ impl TlsHandshakeCspVault for CspTlsHandshakeSignerImpl {
         unimplemented!("CspTlsHandshakeSigner on purpose supports only tls_sign()-operation")
     }
 
-    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+    fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
         self.csp_vault.tls_sign(message, key_id)
     }
 }

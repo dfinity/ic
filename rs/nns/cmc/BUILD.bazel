@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/governance",
     "//rs/nns/common",
     "//rs/nns/constants",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
