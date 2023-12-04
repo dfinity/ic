@@ -18,7 +18,7 @@ use tokio::{
 use tracing::trace;
 
 // The maximum wait time for a computation to finish synchronously.
-const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_millis(150);
+const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
 
 pub const STATE_LABEL_HASH_SIZE: usize = 32;
 
