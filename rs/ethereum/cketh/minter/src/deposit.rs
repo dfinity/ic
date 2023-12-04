@@ -94,7 +94,7 @@ async fn scrap_eth_logs_range_inclusive(
 ) -> Option<BlockNumber> {
     /// The maximum block spread is introduced by Cloudflare limits.
     /// https://developers.cloudflare.com/web3/ethereum-gateway/
-    const MAX_BLOCK_SPREAD: u16 = 800;
+    const MAX_BLOCK_SPREAD: u16 = 799;
     match from.cmp(&to) {
         Ordering::Less | Ordering::Equal => {
             let max_to = from
