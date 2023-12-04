@@ -50,7 +50,7 @@ pub struct StorageMetrics {
     write_bytes: IntCounterVec,
     /// Timings of how long it takes to write overlay files.
     write_duration: HistogramVec,
-    /// Number of overlays not written because the would have been empty.
+    /// Number of overlays not written because they would have been empty.
     empty_delta_writes: IntCounter,
 }
 
@@ -82,7 +82,7 @@ impl StorageMetrics {
 
         let empty_delta_writes = metrics_registry.int_counter(
             "storage_layer_empty_delta_writes",
-            "The number of PageMaps not that did not receive any deltas since the last write attempt."
+            "The number of PageMaps that did not receive any deltas since the last write attempt.",
         );
 
         Self {
