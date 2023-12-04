@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/canister_profiler",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/canister_log",
+    "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",

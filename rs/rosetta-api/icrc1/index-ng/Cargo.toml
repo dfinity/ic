@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
