@@ -326,6 +326,7 @@ mod csp_threshold_sign_error {
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {},
         MalformedSecretKey => {algorithm in arb_algorithm_id()},
+        KeyIdInstantiationError => (error in ".*"),
         TransientInternalError => {internal_error in ".*"}
     );
 }

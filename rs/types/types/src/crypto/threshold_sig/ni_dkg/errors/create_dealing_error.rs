@@ -1,7 +1,7 @@
 //! Errors related to dealing creation.
 use super::*;
 
-use crate::crypto::error::{InternalError, KeyNotFoundError};
+use crate::crypto::error::{InternalError, InvalidArgumentError, KeyNotFoundError};
 use crate::registry::RegistryClientError;
 
 /// Occurs if creating a dealing using `NiDkgAlgorithm::create_dealing` fails.
@@ -12,6 +12,7 @@ pub enum DkgCreateDealingError {
     Registry(RegistryClientError),
     MalformedFsEncryptionPublicKey(MalformedFsEncryptionPublicKeyError),
     ThresholdSigningKeyNotInSecretKeyStore(KeyNotFoundError),
+    ReshareKeyIdComputationError(InvalidArgumentError),
     TransientInternalError(InternalError),
     // Reminder: document error definition changes on `NiDkgAlgorithm::create_dealing`.
 }
@@ -33,6 +34,11 @@ impl fmt::Display for DkgCreateDealingError {
             }
             DkgCreateDealingError::TransientInternalError(error) => {
                 write!(f, "{}{}", prefix, error)
+            }
+            DkgCreateDealingError::ReshareKeyIdComputationError(InvalidArgumentError {
+                message,
+            }) => {
+                write!(f, "{}{}", prefix, message)
             }
         }
     }
