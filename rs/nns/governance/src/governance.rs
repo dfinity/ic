@@ -1549,6 +1549,37 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
     }
 }
 
+/// If the seed_accounts is None, then populate it with the `SEED_ROUND_ACCOUNTS` data
+fn set_seed_accounts(governance_proto: &mut GovernanceProto) {
+    if governance_proto.seed_accounts.is_none() {
+        let seed_round_accounts = SEED_ROUND_ACCOUNTS
+            .iter()
+            .map(|(account_id, _)| SeedAccount {
+                account_id: account_id.to_string(),
+                tag_start_timestamp_seconds: None,
+                tag_end_timestamp_seconds: None,
+                error_count: 0,
+                neuron_type: NeuronType::Seed as i32,
+            })
+            .collect::<Vec<_>>();
+
+        let ect_accounts: Vec<SeedAccount> = ECT_ACCOUNTS
+            .iter()
+            .map(|(account_id, _)| SeedAccount {
+                account_id: account_id.to_string(),
+                tag_start_timestamp_seconds: None,
+                tag_end_timestamp_seconds: None,
+                error_count: 0,
+                neuron_type: NeuronType::Ect as i32,
+            })
+            .collect::<Vec<_>>();
+
+        governance_proto.seed_accounts = Some(SeedAccounts {
+            accounts: [seed_round_accounts, ect_accounts].concat(),
+        })
+    }
+}
+
 impl Governance {
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
@@ -1581,34 +1612,7 @@ impl Governance {
             })
         }
         // Step 2: seed_accounts
-        // If the seed_accounts is None, then populate it with the `SEED_ROUND_ACCOUNTS` data
-        if governance_proto.seed_accounts.is_none() {
-            let seed_round_accounts = SEED_ROUND_ACCOUNTS
-                .iter()
-                .map(|(account_id, _)| SeedAccount {
-                    account_id: account_id.to_string(),
-                    tag_start_timestamp_seconds: None,
-                    tag_end_timestamp_seconds: None,
-                    error_count: 0,
-                    neuron_type: NeuronType::Seed as i32,
-                })
-                .collect::<Vec<_>>();
-
-            let ect_accounts: Vec<SeedAccount> = ECT_ACCOUNTS
-                .iter()
-                .map(|(account_id, _)| SeedAccount {
-                    account_id: account_id.to_string(),
-                    tag_start_timestamp_seconds: None,
-                    tag_end_timestamp_seconds: None,
-                    error_count: 0,
-                    neuron_type: NeuronType::Ect as i32,
-                })
-                .collect::<Vec<_>>();
-
-            governance_proto.seed_accounts = Some(SeedAccounts {
-                accounts: [seed_round_accounts, ect_accounts].concat(),
-            })
-        }
+        set_seed_accounts(&mut governance_proto);
 
         // Step 3: Break out Neurons from governance_proto. Neurons are managed separately by
         // NeuronStore. NeuronStore is in charge of Neurons, because some are stored in stable
@@ -1640,11 +1644,13 @@ impl Governance {
 
     /// Restores Governance after an upgrade from its persisted state.
     pub fn new_restored(
-        governance_proto: GovernanceProto,
+        mut governance_proto: GovernanceProto,
         env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
+        set_seed_accounts(&mut governance_proto);
+
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
