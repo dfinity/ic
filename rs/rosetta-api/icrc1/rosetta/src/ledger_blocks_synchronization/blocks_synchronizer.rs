@@ -1,14 +1,13 @@
 use crate::common::storage::{storage_client::StorageClient, types::RosettaBlock};
+use anyhow::bail;
 use candid::{Decode, Encode, Nat};
-use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
-use ic_icrc1::hash::Hash;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, fmt::Write, ops::RangeInclusive, sync::Arc};
-use LookupStatus::Found;
+use tracing::info;
 
 // The Range of indices to be synchronized.
 // Contains the hashes of the top and end of the index range, which is used to ensure the fetched block interval is valid.
@@ -121,7 +120,24 @@ pub async fn sync_from_the_tip(
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
 ) -> anyhow::Result<()> {
-    let (tip_block_index, tip_block_hash) = fetch_blockchain_tip_data(agent.clone()).await?;
+    let (tip_block_hash, tip_block_index) =
+        match agent.get_certified_chain_tip().await.map_err(|err| {
+            anyhow::Error::msg(format!(
+                "Could not fetch certified chain tip from ledger: {:?}",
+                err
+            ))
+        })? {
+            Some(tip) => tip,
+            None => {
+                info!("The ledger is empty, exiting sync!");
+                return Ok(());
+            }
+        };
+
+    let tip_block_index = match tip_block_index.0.to_u64() {
+        Some(n) => n,
+        None => bail!("could not convert last_block_index {tip_block_index} to u64"),
+    };
 
     // The starting point of the synchronization process is either 0 if the database is empty or the highest stored block index plus one.
     // The trailing parent hash is either `None` if the database is empty or the block hash of the block with the highest block index in storage.
@@ -391,61 +407,6 @@ async fn fetch_blocks_interval(
     result.sort_by(|a, b| a.index.partial_cmp(&b.index).unwrap());
 
     Ok(result)
-}
-
-/// Fetches the data certificate from the ledger and validates it.
-/// Returns the tip index and hash of the ledger.
-async fn fetch_blockchain_tip_data(agent: Arc<Icrc1Agent>) -> anyhow::Result<(u64, Hash)> {
-    // Fetch the data certificate from the icrc ledger
-    let data_certificate = agent.get_data_certificate().await.map_err(|err| {
-        anyhow::Error::msg(format!(
-            "Could not fetch data certificate from ledger: {:?}",
-            err
-        ))
-    })?;
-
-    // Extract the hash tree from the data certificate and deserialize it into a Tree object.
-    let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree)
-        .map_err(|err| anyhow::Error::msg(err.to_string()))?;
-
-    // Extract the last block index from the hash tree.
-    let last_block_index = match hash_tree.lookup(&[b"last_block_index"]) {
-        Found(x) => match x {
-            MixedHashTree::Leaf(l) => {
-                let mut bytes: [u8; 8] = [0u8; 8];
-                for (i, e) in l.iter().enumerate() {
-                    bytes[i] = *e;
-                }
-                Ok(u64::from_be_bytes(bytes))
-            }
-            _ => Err(anyhow::Error::msg(
-                "Last block index was found, but MixedHashTree is no a Leaf",
-            )),
-        },
-        _ => Err(anyhow::Error::msg(
-            "Last block index was not found in hash tree",
-        )),
-    }?;
-
-    // Extract the last block hash from the hash tree.
-    let last_block_hash = match hash_tree.lookup(&[b"tip_hash"]) {
-        Found(x) => match x {
-            MixedHashTree::Leaf(l) => {
-                let mut bytes: Hash = [0u8; 32];
-                for (i, e) in l.iter().enumerate() {
-                    bytes[i] = *e;
-                }
-                Ok(bytes)
-            }
-            _ => Err(anyhow::Error::msg(
-                "Last block hash was found, but MixedHashTree is no a Leaf",
-            )),
-        },
-        _ => Err(anyhow::Error::msg(
-            "Last block hash was not found in hash tree",
-        )),
-    }?;
-    Ok((last_block_index, last_block_hash))
 }
 
 pub mod blocks_verifier {

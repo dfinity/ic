@@ -244,7 +244,11 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
 
-        let (last_block_hash, last_block_index) = agent.get_certified_chain_tip().await.unwrap();
+        let (last_block_hash, last_block_index) = agent
+            .get_certified_chain_tip()
+            .await
+            .expect("failed to get certified tip")
+            .unwrap();
         assert_eq!(archived_blocks.blocks[1].hash(), last_block_hash);
         assert_eq!(Nat::from(1), last_block_index);
 
@@ -290,7 +294,11 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
         // Test get_blocks directly from the ledger.
-        let (last_block_hash, last_block_index) = agent.get_certified_chain_tip().await.unwrap();
+        let (last_block_hash, last_block_index) = agent
+            .get_certified_chain_tip()
+            .await
+            .expect("failed to get certified tip")
+            .unwrap();
         let blocks_request = GetBlocksRequest {
             start: Nat::from(2),
             length: Nat::from(1),
