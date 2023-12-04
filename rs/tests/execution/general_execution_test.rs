@@ -4,6 +4,12 @@ use anyhow::Result;
 
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::group::SystemTestSubGroup;
+use ic_tests::execution::api_tests::node_metrics_history_another_subnet_succeeds;
+use ic_tests::execution::api_tests::node_metrics_history_ingress_query_fails;
+use ic_tests::execution::api_tests::node_metrics_history_ingress_update_fails;
+use ic_tests::execution::api_tests::node_metrics_history_non_existing_subnet_fails;
+use ic_tests::execution::api_tests::node_metrics_history_query_fails;
+use ic_tests::execution::api_tests::node_metrics_history_update_succeeds;
 use ic_tests::execution::api_tests::test_controller;
 use ic_tests::execution::api_tests::test_cycles_burn;
 use ic_tests::execution::api_tests::test_raw_rand_api;
@@ -27,6 +33,12 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_raw_rand_api))
                 .add_test(systest!(test_controller))
                 .add_test(systest!(test_cycles_burn))
+                .add_test(systest!(node_metrics_history_update_succeeds))
+                .add_test(systest!(node_metrics_history_query_fails))
+                .add_test(systest!(node_metrics_history_another_subnet_succeeds))
+                .add_test(systest!(node_metrics_history_non_existing_subnet_fails))
+                .add_test(systest!(node_metrics_history_ingress_update_fails))
+                .add_test(systest!(node_metrics_history_ingress_query_fails))
                 .add_test(systest!(can_access_big_heap_and_big_stable_memory))
                 .add_test(systest!(can_access_big_stable_memory))
                 .add_test(systest!(can_handle_overflows_when_indexing_stable_memory))

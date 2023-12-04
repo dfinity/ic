@@ -5,8 +5,9 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use crate::driver::test_env_api::HasPublicApiUrl;
 use crate::util::*;
+use candid::Principal;
 use canister_test::PrincipalId;
-use ic_agent::agent::RejectCode;
+use ic_agent::{agent::RejectCode, AgentError};
 use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
@@ -142,6 +143,213 @@ pub fn test_cycles_burn(env: TestEnv) {
                 balance_initial - amount_to_burn,
                 get_balance(&canister_a.canister_id(), &agent).await
             );
+        }
+    })
+}
+
+pub fn node_metrics_history_update_succeeds(env: TestEnv) {
+    // Arrange.
+    let logger = env.logger();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    let subnet_id = app_node.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .update(
+                    wasm().call_simple(
+                        ic00::IC_00,
+                        Method::NodeMetricsHistory,
+                        call_args().other_side(
+                            ic00::NodeMetricsHistoryArgs {
+                                subnet_id,
+                                start_at_timestamp_nanos: 0,
+                            }
+                            .encode(),
+                        ),
+                    ),
+                )
+                .await;
+            // Assert.
+            assert!(result.is_ok());
+            assert!(!result.ok().unwrap().is_empty()); // Assert it has some non zero data.
+        }
+    })
+}
+
+pub fn node_metrics_history_query_fails(env: TestEnv) {
+    // Arrange.
+    let logger = env.logger();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    let subnet_id = app_node.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .query(
+                    wasm().call_simple(
+                        ic00::IC_00,
+                        Method::NodeMetricsHistory,
+                        call_args().other_side(
+                            ic00::NodeMetricsHistoryArgs {
+                                subnet_id,
+                                start_at_timestamp_nanos: 0,
+                            }
+                            .encode(),
+                        ),
+                    ),
+                )
+                .await;
+            // Assert.
+            assert_reject_msg(
+                result,
+                RejectCode::CanisterError,
+                "cannot be executed in non replicated query mode",
+            );
+        }
+    })
+}
+
+pub fn node_metrics_history_another_subnet_succeeds(env: TestEnv) {
+    // Arrange.
+    let logger = env.logger();
+    let app_node_1 = env.get_first_healthy_application_node_snapshot();
+    let agent_1 = app_node_1.build_default_agent();
+    // Create another subnet and use its id in the request.
+    let app_node_2 = env.get_first_healthy_application_node_snapshot();
+    let subnet_id = app_node_2.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent_1,
+                app_node_1.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .update(
+                    wasm().call_simple(
+                        ic00::IC_00,
+                        Method::NodeMetricsHistory,
+                        call_args().other_side(
+                            ic00::NodeMetricsHistoryArgs {
+                                subnet_id,
+                                start_at_timestamp_nanos: 0,
+                            }
+                            .encode(),
+                        ),
+                    ),
+                )
+                .await;
+            // Assert.
+            assert!(result.is_ok());
+            assert!(!result.ok().unwrap().is_empty()); // Assert it has some non zero data.
+        }
+    })
+}
+
+pub fn node_metrics_history_non_existing_subnet_fails(env: TestEnv) {
+    // Arrange.
+    let logger = env.logger();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    // Create non existing subnet id.
+    let subnet_id = PrincipalId::new_subnet_test_id(1);
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .update(
+                    wasm().call_simple(
+                        ic00::IC_00,
+                        Method::NodeMetricsHistory,
+                        call_args().other_side(
+                            ic00::NodeMetricsHistoryArgs {
+                                subnet_id,
+                                start_at_timestamp_nanos: 0,
+                            }
+                            .encode(),
+                        ),
+                    ),
+                )
+                .await;
+            // Assert.
+            assert_reject(result, RejectCode::CanisterReject);
+        }
+    })
+}
+
+pub fn node_metrics_history_ingress_update_fails(env: TestEnv) {
+    // Arrange.
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    let subnet_id = app_node.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            // Act.
+            let result = agent
+                .update(&Principal::management_canister(), "node_metrics_history")
+                .with_arg(
+                    ic00::NodeMetricsHistoryArgs {
+                        subnet_id,
+                        start_at_timestamp_nanos: 0,
+                    }
+                    .encode(),
+                )
+                .call_and_wait()
+                .await;
+            // Assert.
+            assert_reject_msg(
+                result,
+                RejectCode::CanisterReject,
+                "ic00 method node_metrics_history can be called only by a canister",
+            );
+        }
+    })
+}
+
+pub fn node_metrics_history_ingress_query_fails(env: TestEnv) {
+    // Arrange.
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    let subnet_id = app_node.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            // Act.
+            let result = agent
+                .query(&Principal::management_canister(), "node_metrics_history")
+                .with_arg(
+                    ic00::NodeMetricsHistoryArgs {
+                        subnet_id,
+                        start_at_timestamp_nanos: 0,
+                    }
+                    .encode(),
+                )
+                .call()
+                .await;
+            // Assert.
+            assert_eq!(result, Err(AgentError::CertificateNotAuthorized()));
         }
     })
 }
