@@ -727,6 +727,27 @@ async fn test_mempool() {
         local_replica::deploy_icrc_ledger_with_default_args(&replica_context).await;
     let ledger_id = Principal::from(icrc_ledger_canister_id);
 
+    // Create a testing agent and make one transfer.
+    // Empty ledger has no certified data and rosetta would crash on startup.
+    // TODO: remove this when the ICRC ledger is fixed to create certified data on init.
+    let ic_agent = local_replica::get_testing_agent(&replica_context).await;
+    let icrc_agent = Icrc1Agent {
+        agent: ic_agent,
+        ledger_canister_id: icrc_ledger_canister_id.into(),
+    };
+    icrc_agent
+        .transfer(TransferArg {
+            from_subaccount: TEST_ACCOUNT.subaccount,
+            to: *TEST_ACCOUNT_2,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(100_000_000_000u64),
+        })
+        .await
+        .expect("Failed to generate a new transfer operation")
+        .expect("Failed to mint");
+
     let rosetta_context = start_rosetta(
         &rosetta_bin(),
         RosettaOptions {
