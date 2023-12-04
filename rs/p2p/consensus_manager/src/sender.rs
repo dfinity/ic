@@ -10,7 +10,7 @@ use bytes::Bytes;
 use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent, consensus::ValidatedPoolReader,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind};
@@ -121,10 +121,15 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
             self.current_commit_id.inc_assign();
         }
+
+        error!(
+            self.log,
+            "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
+            Artifact::TAG
+        );
     }
 
     fn handle_purge_advert(&mut self, id: &Artifact::Id) {
-        // TODO: Add a warning if we get purge requests for unseen advert.
         if let Some((send_task, free_slot)) = self.active_adverts.remove(id) {
             self.metrics.send_view_consensus_purge_active_total.inc();
             send_task.abort();
