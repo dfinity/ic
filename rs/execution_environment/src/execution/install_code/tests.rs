@@ -9,8 +9,9 @@ use ic_types::{
 };
 
 use ic_ic00_types::{
-    CanisterChange, CanisterInstallMode, CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgs, Method, Payload, UploadChunkArgs, UploadChunkReply,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
+    CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, Method, Payload,
+    UploadChunkArgs, UploadChunkReply,
 };
 use ic_replicated_state::canister_state::NextExecution;
 use ic_test_utilities_execution_environment::{
@@ -1499,7 +1500,7 @@ fn install_chunked_defaults_to_using_target_as_store() {
 
     let canister_id = test.create_canister(CYCLES);
 
-    // Upload two chunks that make up the universal canister.
+    // Upload universal canister.
     let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let hash = UploadChunkReply::decode(&get_reply(
@@ -1537,6 +1538,74 @@ fn install_chunked_defaults_to_using_target_as_store() {
 
     let result = test.ingress(canister_id, "update", wasm);
     assert_matches!(result, Ok(WasmResult::Reply(_)));
+}
+
+#[test]
+fn install_chunked_recorded_in_history() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload universal canister.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Install the universal canister.
+    let _install_response = get_reply(
+        test.subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                canister_id,
+                None,
+                vec![hash],
+                wasm_module_hash.clone(),
+                vec![],
+            )
+            .encode(),
+        ),
+    );
+
+    // Check that the canister history records the install.
+    // Expect 2 changes, first is canister creation.
+    let state = test.canister_state(canister_id);
+    assert_eq!(
+        state
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        2
+    );
+    assert_eq!(
+        state
+            .system_state
+            .get_canister_history()
+            .get_changes(2)
+            .collect::<Vec<_>>()[1],
+        &std::sync::Arc::new(CanisterChange::new(
+            test.time().as_nanos_since_unix_epoch(),
+            1,
+            CanisterChangeOrigin::from_user(test.user_id().get()),
+            CanisterChangeDetails::code_deployment(
+                CanisterInstallMode::Install,
+                wasm_module_hash.try_into().unwrap()
+            ),
+        ))
+    )
 }
 
 #[test]
