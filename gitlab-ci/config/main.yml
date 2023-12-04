@@ -251,19 +251,6 @@ linux-openssl-static-binaries:
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//publish/binaries:upload"
 
-# VER-1818: bazelified system tests should not block pre-master pipelines, as they run on a new (WIP) test driver implementation.
-bazel-test-all-allow-to-fail:
-  extends:
-    - .bazel-test-all
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      when: manual
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
-  variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
-  allow_failure: true
-
 bazel-system-test-hourly:
   extends:
     - .bazel-test-all
