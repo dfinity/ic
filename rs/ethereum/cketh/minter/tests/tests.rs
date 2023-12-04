@@ -67,6 +67,8 @@ const RECEIVED_ETH_EVENT_TOPIC: &str =
     "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435";
 const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
+const MAX_ETH_LOGS_BLOCK_RANGE: u64 = 799;
+
 #[test]
 fn should_deposit_and_withdraw() {
     let cketh = CkEthSetup::new();
@@ -719,7 +721,7 @@ fn should_not_overlap_when_scrapping_logs() {
 
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(800_u64))
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
@@ -736,7 +738,7 @@ fn should_not_overlap_when_scrapping_logs() {
         .checked_add(BlockNumber::from(1_u64))
         .unwrap();
     let second_to_block = second_from_block
-        .checked_add(BlockNumber::from(800_u64))
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
@@ -766,7 +768,9 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .build()
         .expect_rpc_calls(&cketh);
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
-    let to_block = from_block.checked_add(BlockNumber::from(800_u64)).unwrap();
+    let to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": from_block,
@@ -936,8 +940,12 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
     assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
 
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
-    let to_block = from_block.checked_add(BlockNumber::from(800_u64)).unwrap();
-    let half_to_block = from_block.checked_add(BlockNumber::from(400_u64)).unwrap();
+    let to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .unwrap();
+    let half_to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE / 2))
+        .unwrap();
 
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
