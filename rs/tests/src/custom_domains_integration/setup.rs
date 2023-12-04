@@ -1,5 +1,6 @@
 use crate::{
     driver::{
+        asset_canister::{DeployAssetCanister, UploadAssetRequest},
         boundary_node::{
             BoundaryNode, BoundaryNodeCustomDomainsConfig, BoundaryNodeSnapshot, BoundaryNodeVm,
         },
@@ -20,7 +21,7 @@ use serde_json::json;
 use std::{io::Read, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, Context, Error};
-use candid::{CandidType, Deserialize, Encode, Principal};
+use candid::{Encode, Principal};
 use chacha20poly1305::{aead::OsRng as ChaChaOsRng, KeyInit, XChaCha20Poly1305};
 use ic_agent::{identity::Secp256k1Identity, Identity};
 use ic_interfaces_registry::RegistryValue;
@@ -38,19 +39,6 @@ use tokio::task::{self, JoinHandle};
 
 const CERTIFICATE_ORCHESTRATOR_WASM: &str =
     "rs/boundary_node/certificate_issuance/certificate_orchestrator/certificate_orchestrator.wasm";
-
-const ASSET_CANISTER_WASM: &str = "external/asset_canister/file/assetstorage.wasm.gz";
-
-// required for the file upload to the asset canister
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct StoreArg {
-    pub key: String,
-    pub content_type: String,
-    pub content_encoding: String,
-    pub content: Vec<u8>,
-    pub sha256: Option<Vec<u8>>,
-    pub aliased: Option<bool>,
-}
 
 pub(crate) const CLOUDFLARE_API_PYTHON_PATH: &str = "/config/cloudflare_api.py";
 pub(crate) const PEBBLE_CACHE_PYTHON_PATH: &str = "/config/pebble_cache.py";
@@ -893,59 +881,37 @@ pub async fn setup_asset_canister(
     domain_names: Vec<&str>,
     index_content: Option<&str>,
 ) -> Result<Principal, Error> {
-    // install an asset canister on an application subnet
-    let app_node = env.get_first_healthy_application_node_snapshot();
-
-    let asset_canister_id = task::spawn_blocking({
-        let app_node = app_node.clone();
-        move || app_node.create_and_install_canister_with_arg(ASSET_CANISTER_WASM, None)
-    })
-    .await
-    .context("failed to spawn task")?;
+    let asset_canister = env
+        .deploy_asset_canister()
+        .await
+        .expect("Could not install asset canister");
 
     // upload the `/.well-known/ic-domains` file
     let file_content = domain_names.join("\n").as_bytes().to_vec();
 
-    let agent = task::spawn_blocking({
-        let app_node = app_node.clone();
-        move || app_node.build_default_agent()
-    })
-    .await
-    .context("failed to spawn task")?;
-
-    let store_arg = StoreArg {
-        key: "/.well-known/ic-domains".to_string(),
-        content_type: "text/plain".to_string(),
-        content_encoding: "identity".to_string(),
-        content: file_content,
-        sha256: None,
-        aliased: None,
-    };
-    let _out = agent
-        .update(&asset_canister_id, "store")
-        .with_arg(Encode!(&store_arg).unwrap())
-        .call_and_wait()
-        .await
-        .context("failed to upload the .well-known/ic-domains file to the asset canister")?;
-
-    if let Some(index_content) = index_content {
-        let store_arg = StoreArg {
-            key: "/index.html".to_string(),
+    asset_canister
+        .upload_asset(&UploadAssetRequest {
+            key: "/.well-known/ic-domains".to_string(),
+            content: file_content,
             content_type: "text/plain".to_string(),
             content_encoding: "identity".to_string(),
-            content: index_content.as_bytes().to_vec(),
-            sha256: None,
-            aliased: None,
-        };
-        let _out = agent
-            .update(&asset_canister_id, "store")
-            .with_arg(Encode!(&store_arg).unwrap())
-            .call_and_wait()
-            .await
-            .context("failed to upload the index.html file to the asset canister")?;
+            sha_override: None,
+        })
+        .await?;
+
+    if let Some(index_content) = index_content {
+        asset_canister
+            .upload_asset(&UploadAssetRequest {
+                key: "/index.html".to_string(),
+                content: index_content.as_bytes().to_vec(),
+                content_type: "text/plain".to_string(),
+                content_encoding: "identity".to_string(),
+                sha_override: None,
+            })
+            .await?;
     }
 
-    Ok(asset_canister_id)
+    Ok(asset_canister.canister_id)
 }
 
 pub async fn setup_dns_records(

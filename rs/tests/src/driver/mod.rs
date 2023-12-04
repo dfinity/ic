@@ -1,5 +1,6 @@
 pub mod action_graph;
 pub mod api_boundary_node;
+pub mod asset_canister;
 pub mod bootstrap;
 pub mod boundary_node;
 pub mod config;

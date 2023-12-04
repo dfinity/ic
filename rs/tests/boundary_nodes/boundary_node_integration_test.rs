@@ -5,11 +5,12 @@ use anyhow::Result;
 use ic_tests::{
     boundary_nodes::{
         boundary_nodes_integration::{
-            canister_allowlist_test, canister_routing_test, canister_test, denylist_test,
-            direct_to_replica_options_test, direct_to_replica_rosetta_test, direct_to_replica_test,
-            http_canister_test, icx_proxy_test, nginx_valid_config_test, prefix_canister_id_test,
-            proxy_http_canister_test, reboot_test, redirect_http_to_https_test,
-            redirect_to_dashboard_test, redirect_to_non_raw_test, seo_test, sw_test,
+            asset_canister_test, canister_allowlist_test, canister_routing_test, canister_test,
+            denylist_test, direct_to_replica_options_test, direct_to_replica_rosetta_test,
+            direct_to_replica_test, http_canister_test, icx_proxy_test, nginx_valid_config_test,
+            prefix_canister_id_test, proxy_http_canister_test, reboot_test,
+            redirect_http_to_https_test, redirect_to_dashboard_test, redirect_to_non_raw_test,
+            seo_test, sw_test,
         },
         setup::{setup_ic_with_bn, BoundaryNodeType},
         {constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig},
@@ -32,6 +33,7 @@ fn main() -> Result<()> {
         .add_parallel(
             SystemTestSubGroup::new()
                 .add_test(systest!(canister_test))
+                .add_test(systest!(asset_canister_test))
                 .add_test(systest!(http_canister_test))
                 .add_test(systest!(prefix_canister_id_test))
                 .add_test(systest!(proxy_http_canister_test))
