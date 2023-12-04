@@ -686,6 +686,22 @@ http_file(
     url = "https://download.dfinity.systems/testdata/blocks.json.gz",
 )
 
+# Contains the first 800_000 headers of the Bitcoin testnet blockchain.
+http_file(
+    name = "bitcoin_adapter_testnet_headers",
+    downloaded_file_path = "testnet_headers.json.gz",
+    sha256 = "c01542d816d9631a7e59210aea29c1d46ed805b0bcbfd9e067d8d53a5e5919c8",
+    url = "https://download.dfinity.systems/testdata/testnet_headers.json.gz",
+)
+
+# Contains blocks 350_990 to 350_999 (inclusive) of the Bitcoin testnet blockchain.
+http_file(
+    name = "bitcoin_adapter_testnet_blocks",
+    downloaded_file_path = "testnet_blocks.json.gz",
+    sha256 = "ae57b5b58d8a1e89545c0caedeb114d0dd179e0c5fd4a44e43321b2cdbac74fb",
+    url = "https://download.dfinity.systems/testdata/testnet_blocks.json.gz",
+)
+
 # Internet Identity canister (test build)
 
 http_file(
