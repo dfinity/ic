@@ -34,9 +34,10 @@ use ic_ic00_types::{
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
     ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    Method as Ic00Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
+    SignWithECDSAArgs, StoredChunksArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    IC_00,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
@@ -1071,13 +1072,13 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok(Ic00Method::NodeMetricsHistory) => Some((
-                Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    "Node metrics history API is not yet implemented.",
-                )),
-                msg.take_cycles(),
-            )),
+            Ok(Ic00Method::NodeMetricsHistory) => {
+                let res = match NodeMetricsHistoryArgs::decode(payload) {
+                    Err(err) => Err(err),
+                    Ok(args) => self.node_metrics_history(&state, args),
+                };
+                Some((res, msg.take_cycles()))
+            }
 
             Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => Some((
                 Err(UserError::new(
@@ -1613,6 +1614,30 @@ impl ExecutionEnvironment {
             .stored_chunks(sender, canister)
             .map(|reply| reply.encode())
             .map_err(|err| err.into())
+    }
+
+    fn node_metrics_history(
+        &self,
+        state: &ReplicatedState,
+        args: NodeMetricsHistoryArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        if args.subnet_id != self.own_subnet_id.get() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Provided target subnet ID {} does not match current subnet ID {}.",
+                    args.subnet_id, self.own_subnet_id
+                ),
+            ));
+        }
+
+        let result = state
+            .metadata
+            .blockmaker_metrics_time_series
+            .node_metrics_history(Time::from_nanos_since_unix_epoch(
+                args.start_at_timestamp_nanos,
+            ));
+        Ok(Encode!(&result).unwrap())
     }
 
     // Executes an inter-canister response.
