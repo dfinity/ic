@@ -109,8 +109,23 @@ fn create_proxied_request<B>(
 }
 
 fn forward_uri<B>(proxy_url: Uri, req: &Request<B>) -> Result<Uri, anyhow::Error> {
-    let mut parts = proxy_url.into_parts();
-    parts.path_and_query = req.uri().path_and_query().cloned();
+    use hyper::http::uri::PathAndQuery;
+    use std::str::FromStr;
+
+    let mut parts = proxy_url.clone().into_parts();
+    let req_uri_path_and_query = req.uri().path_and_query().map(|p| p.to_owned());
+    parts.path_and_query = PathAndQuery::from_str(
+        format!(
+            "{}{}",
+            proxy_url.path().trim_end_matches('/'),
+            req_uri_path_and_query
+                .clone()
+                .map(|p| p.to_string())
+                .unwrap_or_default()
+        )
+        .as_str(),
+    )
+    .map_or(req_uri_path_and_query, |p| Some(p));
     Ok(Uri::from_parts(parts)?)
 }
 
