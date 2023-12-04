@@ -611,7 +611,11 @@ fn test_event_handler_drop() {
         listening_port: peer_port,
         ..Default::default()
     };
-    let sev_handshake = Arc::new(Sev::new(NODE_ID_1, registry_and_data.registry));
+    let sev_handshake = Arc::new(Sev::new(
+        NODE_ID_1,
+        registry_and_data.registry,
+        no_op_logger(),
+    ));
 
     let peer = create_transport(
         NODE_ID_1,

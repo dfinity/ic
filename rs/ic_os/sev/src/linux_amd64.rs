@@ -10,6 +10,8 @@ use crate::{ValidateAttestationError, ValidateAttestedStream};
 use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_registry::RegistryClient;
+use ic_logger::{info, ReplicaLogger};
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, node::NodeRegistry};
 use serde::{Deserialize, Serialize};
 use sev::certs::snp;
@@ -31,11 +33,16 @@ pub struct AttestationPackage {
 pub struct Sev {
     pub node_id: NodeId,
     pub registry: Arc<dyn RegistryClient>,
+    log: ReplicaLogger,
 }
 
 impl Sev {
-    pub fn new(node_id: NodeId, registry: Arc<dyn RegistryClient>) -> Self {
-        Self { node_id, registry }
+    pub fn new(node_id: NodeId, registry: Arc<dyn RegistryClient>, log: ReplicaLogger) -> Self {
+        Self {
+            node_id,
+            registry,
+            log,
+        }
     }
 }
 
@@ -50,8 +57,28 @@ where
         peer: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
-        // TODO: Replace this with `sev_enabled` feature check in subnet registry
-        if true {
+        // If sev_enabled is None or false in the subnet registry, just return and do not perform attestation.
+        let subnet_id = self
+            .registry
+            .get_subnet_id_from_node_id(self.node_id, registry_version)
+            .map_err(ValidateAttestationError::RegistryError)?
+            .ok_or(ValidateAttestationError::RegistryDataMissing {
+                node_id: self.node_id,
+                registry_version,
+                description: "unable to get our subnet_id".into(),
+            })?;
+
+        if !self
+            .registry
+            .get_features(subnet_id, registry_version)
+            .map_err(ValidateAttestationError::RegistryError)?
+            .unwrap_or_default()
+            .sev_enabled
+        {
+            info!(
+                self.log,
+                "SEV is not enabled for the subnet. No SEV attestation is performed."
+            );
             return Ok(stream);
         }
 
@@ -65,6 +92,7 @@ where
                 registry_version,
                 description: "transport_info missing".into(),
             })?;
+
         let node_operator_id = transport_info.node_operator_id;
         if node_operator_id.is_empty() {
             return Err(ValidateAttestationError::HandshakeError {
@@ -126,46 +154,46 @@ where
 
         // Write my attestation package to peer.
         let serialized =
-            serde_cbor::to_vec(&package).map_err(|_| ValidateAttestationError::HandshakeError {
-                description: "unable to serialize attestation report".into(),
+            serde_cbor::to_vec(&package).map_err(|e| ValidateAttestationError::HandshakeError {
+                description: format!("unable to serialize attestation report {:?}", e),
             })?;
         let len = serialized.len() as u32;
         let serialized_len = len.to_le_bytes();
-        stream.write_all(&serialized_len).await.map_err(|_| {
+        stream.write_all(&serialized_len).await.map_err(|e| {
             ValidateAttestationError::HandshakeError {
-                description: "unable to write attestation report len".into(),
+                description: format!("unable to write attestation report len {:?}", e),
             }
         })?;
-        stream.write_all(&serialized).await.map_err(|_| {
+        stream.write_all(&serialized).await.map_err(|e| {
             ValidateAttestationError::HandshakeError {
-                description: "unable to write attestation report".into(),
+                description: format!("unable to write attestation report {:?}", e),
             }
         })?;
 
         // Read peer attestation package.
         let mut serialized_len = vec![0u8; 4];
         read_into_buffer(&mut stream, &mut serialized_len).await?;
-        let len = u32::from_le_bytes(serialized_len.try_into().map_err(|_| {
+        let len = u32::from_le_bytes(serialized_len.try_into().map_err(|e| {
             ValidateAttestationError::HandshakeError {
-                description: "unable to convert serialized length".into(),
+                description: format!("unable to convert serialized length {:?}", e),
             }
         })?);
         let mut buffer: Vec<u8> = vec![0; len as usize];
         read_into_buffer(&mut stream, &mut buffer).await?;
         let peer_package: AttestationPackage =
-            serde_cbor::from_slice(buffer.as_slice()).map_err(|_| {
+            serde_cbor::from_slice(buffer.as_slice()).map_err(|e| {
                 ValidateAttestationError::HandshakeError {
-                    description: "unable to deserialize attestation".into(),
+                    description: format!("unable to deserialize attestation {:?}", e),
                 }
             })?;
-        let peer_ask = snp::Certificate::from_der(&peer_package.ask_der).map_err(|_| {
+        let peer_ask = snp::Certificate::from_der(&peer_package.ask_der).map_err(|e| {
             ValidateAttestationError::HandshakeError {
-                description: "bad peer ask certificate".into(),
+                description: format!("bad peer ask certificate {:?}", e),
             }
         })?;
-        let peer_vcek = snp::Certificate::from_der(&peer_package.vcek_der).map_err(|_| {
+        let peer_vcek = snp::Certificate::from_der(&peer_package.vcek_der).map_err(|e| {
             ValidateAttestationError::HandshakeError {
-                description: "bad peer vcek certificate".into(),
+                description: format!("bad peer vcek certificate {:?}", e),
             }
         })?;
         let ca_chain = snp::ca::Chain {
@@ -224,8 +252,8 @@ async fn read_into_buffer<T: AsyncRead + Unpin>(
 ) -> Result<(), ValidateAttestationError> {
     match reader.read_exact(buf).await {
         Ok(_) => Ok(()),
-        Err(_) => Err(ValidateAttestationError::HandshakeError {
-            description: "read error".to_string(),
+        Err(e) => Err(ValidateAttestationError::HandshakeError {
+            description: format!("read error {:?}", e),
         }),
     }
 }
