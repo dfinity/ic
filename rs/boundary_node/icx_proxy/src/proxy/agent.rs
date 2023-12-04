@@ -30,7 +30,6 @@ use ic_utils::{
 use tokio_util::task::LocalPoolHandle;
 use tracing::{enabled, error, info, instrument, trace, warn, Level};
 
-use crate::error::ErrorFactory;
 use crate::http;
 use crate::http::request::HttpRequest;
 use crate::http::response::{AgentResponseAny, HttpResponse};
@@ -40,6 +39,10 @@ use crate::{
     canister_id,
     proxy::{AppState, HandleError, HyperService, REQUEST_BODY_SIZE_LIMIT},
     validate::Validate,
+};
+use crate::{
+    error::ErrorFactory,
+    http::headers::{ACCEPT_ENCODING_HEADER_NAME, CACHE_HEADER_NAME},
 };
 
 // The maximum length of a body we should log as tracing.
@@ -344,10 +347,19 @@ async fn process_request_inner(
     }
 
     let canister = HttpRequestCanister::create(agent, canister_id);
-    let header_fields = http_request
-        .headers
-        .iter()
-        .map(|(name, value)| HeaderField(name.into(), value.into()));
+    let header_fields = http_request.headers.iter().map(|(name, value)| {
+        if name.eq_ignore_ascii_case(ACCEPT_ENCODING_HEADER_NAME) {
+            let mut encodings = value.split(',').map(|s| s.trim()).collect::<Vec<_>>();
+            if !encodings.iter().any(|s| s.eq_ignore_ascii_case("identity")) {
+                encodings.push("identity");
+            };
+
+            let value = encodings.join(", ");
+            return HeaderField(name.into(), value.into());
+        }
+
+        HeaderField(name.into(), value.into())
+    });
 
     let query_result = canister
         .http_request_custom(
@@ -384,25 +396,74 @@ async fn process_request_inner(
         agent_response
     };
 
-    let http_response = HttpResponse::from((agent, agent_response));
+    let http_response = HttpResponse::create(agent, &agent_response).await?;
     let mut response_builder =
         Response::builder().status(StatusCode::from_u16(http_response.status_code)?);
-    for (name, value) in &http_response.headers {
-        response_builder = response_builder.header(name, value);
-    }
 
     // At the moment verification is only performed if the response is not using a streaming
     // strategy. Performing verification for those requests would required to join all the chunks
     // and this could cause memory issues and possibly create DOS attack vectors.
     let should_validate = !http_response.has_streaming_body && !is_update_call;
-    if should_validate {
-        let validation = validator.validate(agent, &canister_id, &http_request, &http_response);
+    let validation_info = if should_validate {
+        let validation_result =
+            validator.validate(agent, &canister_id, &http_request, &http_response);
 
-        if let Err(e) = validation {
-            return Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(e.into())
-                .unwrap());
+        match validation_result {
+            Err(err) => {
+                return Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(err.into())
+                    .unwrap());
+            }
+            Ok(validation_info) => validation_info,
+        }
+    } else {
+        None
+    };
+
+    match validation_info {
+        // if there is no validation info, that means we've skipped verification,
+        // this should only happen for raw domains,
+        // return response as-is
+        None => {
+            for (name, value) in &http_response.headers {
+                response_builder = response_builder.header(name, value);
+            }
+        }
+        Some(validation_info) => {
+            if validation_info.verification_version < 2 {
+                // status codes are not certified in v1, reject known dangerous status codes
+                if http_response.status_code >= 300 && http_response.status_code < 400 {
+                    return Ok(Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body("Response verification v1 does not allow redirects".into())
+                        .unwrap());
+                }
+
+                // headers are also not certified in v1, filter known dangerous headers
+                for (name, value) in &http_response.headers {
+                    if !name.eq_ignore_ascii_case(CACHE_HEADER_NAME) {
+                        response_builder = response_builder.header(name, value);
+                    }
+                }
+            } else {
+                match validation_info.response {
+                    // if there is no response, the canister has decided to certifiably skip verification,
+                    // assume the developer knows what they're doing and return the response as-is
+                    None => {
+                        for (name, value) in &http_response.headers {
+                            response_builder = response_builder.header(name, value);
+                        }
+                    }
+                    // if there is a response, the canister has decided to certify some (but not necessarily all) headers,
+                    // return only the certified headers
+                    Some(certified_http_response) => {
+                        for (name, value) in &certified_http_response.headers {
+                            response_builder = response_builder.header(name, value);
+                        }
+                    }
+                }
+            }
         }
     }
 

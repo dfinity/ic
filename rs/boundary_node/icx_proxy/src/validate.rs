@@ -2,7 +2,9 @@ use crate::http::request::HttpRequest;
 use crate::http::response::HttpResponse;
 use candid::Principal;
 use ic_agent::Agent;
-use ic_response_verification::{verify_request_response_pair, MIN_VERIFICATION_VERSION};
+use ic_response_verification::{
+    types::VerificationInfo, verify_request_response_pair, MIN_VERIFICATION_VERSION,
+};
 use std::borrow::Cow;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -15,7 +17,7 @@ pub trait Validate: Sync + Send {
         canister_id: &Principal,
         request: &HttpRequest,
         response: &HttpResponse,
-    ) -> Result<(), Cow<'static, str>>;
+    ) -> Result<Option<VerificationInfo>, Cow<'static, str>>;
 }
 
 #[derive(Clone)]
@@ -34,9 +36,9 @@ impl Validate for Validator {
         canister_id: &Principal,
         request: &HttpRequest,
         response: &HttpResponse,
-    ) -> Result<(), Cow<'static, str>> {
+    ) -> Result<Option<VerificationInfo>, Cow<'static, str>> {
         if cfg!(feature = "skip_body_verification") {
-            return Ok(());
+            return Ok(None);
         }
 
         match (
@@ -46,10 +48,10 @@ impl Validate for Validator {
             // TODO: Remove this (FOLLOW-483)
             // Canisters don't have to provide certified variables
             // This should change in the future, grandfathering in current implementations
-            (false, false) => Ok(()),
+            (false, false) => Ok(None),
             (_, _) => {
                 let ic_public_key = agent.read_root_key();
-                verify_request_response_pair(
+                let verification_info = verify_request_response_pair(
                     request.into(),
                     response.into(),
                     canister_id.as_slice(),
@@ -59,7 +61,7 @@ impl Validate for Validator {
                     MIN_VERIFICATION_VERSION,
                 )
                 .map_err(|_| "Body does not pass verification")?;
-                Ok(())
+                Ok(Some(verification_info))
             }
         }
     }
@@ -113,6 +115,6 @@ mod tests {
             },
         );
 
-        assert_eq!(out, Ok(()));
+        assert!(matches!(out, Ok(None)));
     }
 }

@@ -21,6 +21,7 @@ use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH};
 use http_body::Body as HttpBody;
 use hyper::{self, StatusCode};
 use ic_agent::Agent;
+use ic_response_verification::types::VerificationInfo;
 use opentelemetry::{
     metrics::{Counter, Histogram, Meter, MeterProvider as _},
     sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream},
@@ -76,7 +77,7 @@ impl<T: Validate> Validate for WithMetrics<T> {
         canister_id: &Principal,
         request: &HttpRequest,
         response: &HttpResponse,
-    ) -> Result<(), Cow<'static, str>> {
+    ) -> Result<Option<VerificationInfo>, Cow<'static, str>> {
         let out = self.0.validate(agent, canister_id, request, response);
 
         let mut status = if out.is_ok() { "ok" } else { "fail" };
