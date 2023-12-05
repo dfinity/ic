@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New endpoint `/api.json` that serves an OpenAPI documentation of the PocketIC server
 
+### Changed
+- Canisters are created with 100T cycles by default when using the provisional management canister API.
+
 
 
 ## 2.0.1 - 2023-11-23
