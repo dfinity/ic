@@ -41,7 +41,7 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \
     --rc="${RC:-"False"}" \
-    ${BAZEL_EXTRA_ARGS} \
+    ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
     2>&1 \
     | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
