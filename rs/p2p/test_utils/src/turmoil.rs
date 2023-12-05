@@ -391,7 +391,7 @@ pub fn waiter_fut(
 }
 
 #[allow(clippy::type_complexity)]
-fn start_test_processor(
+pub fn start_test_processor(
     pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> (

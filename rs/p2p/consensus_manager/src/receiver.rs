@@ -14,7 +14,7 @@ use axum::{
 use bytes::Bytes;
 use crossbeam_channel::Sender as CrossbeamSender;
 use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
-use ic_logger::ReplicaLogger;
+use ic_logger::{error, ReplicaLogger};
 use ic_peer_manager::SubnetTopology;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
@@ -54,7 +54,7 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
         .route(&format!("/{}/rpc", endpoint), any(rpc_handler))
         .with_state(pool)
         .route(&format!("/{}/update", endpoint), any(update_handler))
-        .with_state(update_tx);
+        .with_state((log, update_tx));
 
     (router, update_rx)
 }
@@ -82,7 +82,7 @@ async fn rpc_handler<Artifact: ArtifactKind>(
 }
 
 async fn update_handler<Artifact: ArtifactKind>(
-    State(sender): State<ReceivedAdvertSender<Artifact>>,
+    State((log, sender)): State<(ReplicaLogger, ReceivedAdvertSender<Artifact>)>,
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
@@ -90,10 +90,12 @@ async fn update_handler<Artifact: ArtifactKind>(
     let update: AdvertUpdate<Artifact> =
         pb::AdvertUpdate::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    sender
-        .send((update, peer, conn_id))
-        .await
-        .expect("Channel should not be closed");
+    if sender.send((update, peer, conn_id)).await.is_err() {
+        error!(
+            log,
+            "Failed to send advert update from handler to event loop"
+        )
+    }
 
     Ok(())
 }
@@ -236,6 +238,7 @@ where
                     match result {
                         Ok((receiver, id, attr)) => {
                             self.handle_artifact_processor_joined(receiver, id, attr);
+
                         }
                         Err(err) => {
                             // If the task panics we propagate the panic. But we allow tasks to be canceled.
@@ -255,16 +258,16 @@ where
                 self.artifact_processor_tasks.len(),
                 "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
             );
-            debug_assert_eq!(
-                self.artifact_processor_tasks.len(),
-                HashSet::<Artifact::Id>::from_iter(
-                    self.slot_table
-                        .iter()
-                        .flat_map(|(k, v)| v.iter())
-                        .map(|(_, s)| s.id.clone())
-                )
-                .len(),
-                "Number of download tasks differs from slot entries with distinct artifact IDs."
+            debug_assert!(
+                self.artifact_processor_tasks.len()
+                    >= HashSet::<Artifact::Id>::from_iter(
+                        self.slot_table
+                            .iter()
+                            .flat_map(|(k, v)| v.iter())
+                            .map(|(_, s)| s.id.clone())
+                    )
+                    .len(),
+                "Number of download tasks should always be the same or exceed the number of distinct ids stored."
             );
             debug_assert!(
                 self.active_downloads
@@ -311,6 +314,13 @@ where
         } else {
             self.active_downloads.remove(&id);
         }
+        debug_assert!(
+            self.slot_table
+                .iter()
+                .flat_map(|(k, v)| v.iter())
+                .all(|(k, v)| self.active_downloads.contains_key(&v.id)),
+            "Every entry in the slot table should have an active download task."
+        );
     }
 
     pub(crate) fn handle_advert_receive(

@@ -1,8 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
-    "//rs/p2p/quic_transport:__subpackages__",
-    "//rs/p2p/state_sync_manager:__subpackages__",
+    "//rs/p2p:__subpackages__",
 ])
 
 DEPENDENCIES = [
