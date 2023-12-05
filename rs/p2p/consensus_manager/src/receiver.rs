@@ -188,8 +188,6 @@ where
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
-
-        // Adverts received from peers
         adverts_received: Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
@@ -221,7 +219,7 @@ where
     }
 
     /// Event loop that processes advert updates and artifact downloads.
-    /// The eventloop preserves the following invariant:
+    /// The event loop preserves the following invariant:
     ///  - The number of download tasks is equal to the total number of distinct slot entries.
     async fn start_event_loop(mut self) {
         let mut priority_fn_interval = time::interval(PRIORITY_FUNCTION_UPDATE_INTERVAL);
@@ -361,7 +359,6 @@ where
             .entry(slot_number)
         {
             Entry::Occupied(mut slot_entry_mut) => {
-                // TODO: What if same advert update is sent twice? (Seen this in a test)
                 if slot_entry_mut.get().should_be_replaced(&new_slot_entry) {
                     self.metrics.slot_table_overwrite_total.inc();
                     let to_remove = slot_entry_mut.insert(new_slot_entry).id;
@@ -413,16 +410,24 @@ where
         }
 
         if let Some(to_remove) = to_remove {
-            // TODO: this should always be a Some.
-            // Sender should not be dropped before all peers have overwritten/removed the slot.
-            let sender = self
-                .active_downloads
-                .get_mut(&to_remove)
-                .expect("Sender should always be present for slots in use");
-            self.metrics.slot_table_removals_total.inc();
-            sender.send_if_modified(|h| h.remove(peer_id));
+            match self.active_downloads.get_mut(&to_remove) {
+                Some(sender) => {
+                    sender.send_if_modified(|h| h.remove(peer_id));
+                    self.metrics.slot_table_removals_total.inc();
+                }
+                None => {
+                    error!(
+                        self.log,
+                        "Slot table contains an artifact ID that is not present in the `active_downloads`. This should never happen."
+                    );
+                    if cfg!(debug_assertions) {
+                        panic!("Invariant violated");
+                    }
+                }
+            };
         }
     }
+
     /// Downloads a given artifact.
     ///
     /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
@@ -639,17 +644,12 @@ struct SlotEntry<T> {
 }
 
 impl<T> SlotEntry<T> {
-    // TODO: Revisit this. We should never reach the error case since we don't transmit twice
-    // for same connid/commitid so it would only happen in the malicious case.
     fn should_be_replaced(&self, other: &SlotEntry<T>) -> bool {
         if other.conn_id != self.conn_id {
             return other.conn_id > self.conn_id;
         }
         // connection ids are the same
-        if other.commit_id != self.commit_id {
-            return other.commit_id > self.commit_id;
-        }
-        false
+        other.commit_id > self.commit_id
     }
 }
 
