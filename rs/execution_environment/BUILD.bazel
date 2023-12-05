@@ -104,7 +104,7 @@ rust_library(
     compile_data = glob(["tests/test-data/**"]),
     crate_name = "ic_execution_environment",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -172,7 +172,7 @@ rust_library(
     srcs = glob(["benches/lib/src/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BENCH_DEPENDENCIES,
 )
 

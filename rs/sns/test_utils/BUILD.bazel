@@ -71,7 +71,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_sns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -82,7 +82,7 @@ rust_library(
     crate_features = ["test"],
     crate_name = "ic_sns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 

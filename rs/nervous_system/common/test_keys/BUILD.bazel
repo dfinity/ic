@@ -6,7 +6,7 @@ rust_library(
     name = "test_keys",
     srcs = glob(["src/**"]),
     crate_name = "ic_nervous_system_common_test_keys",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "//rs/canister_client/sender",
         "//rs/types/base_types",

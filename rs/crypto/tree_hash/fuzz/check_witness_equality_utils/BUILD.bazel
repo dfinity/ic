@@ -16,7 +16,7 @@ rust_library(
     name = "check_witness_equality_utils",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_tree_hash_fuzz_check_witness_equality_utils",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

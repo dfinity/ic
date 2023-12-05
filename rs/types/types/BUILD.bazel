@@ -63,7 +63,7 @@ rust_library(
         "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
         "//conditions:default": [],
     }),
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
         "//conditions:default": ["@crate_index//:chrono"],

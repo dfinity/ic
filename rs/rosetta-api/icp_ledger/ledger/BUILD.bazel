@@ -20,7 +20,7 @@ rust_library(
     rustc_env = {
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz)",
     },
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
