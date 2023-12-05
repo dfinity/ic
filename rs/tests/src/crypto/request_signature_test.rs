@@ -9,10 +9,12 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
     Identity, Signature,
 };
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use ic_universal_canister::wasm;
+use rand::{CryptoRng, Rng};
 use slog::{debug, info};
 use std::time::{Duration, SystemTime};
 
@@ -20,6 +22,7 @@ pub fn request_signature_test(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
+    let rng = &mut reproducible_rng();
     block_on({
         async move {
             let node_url = node.get_public_url();
@@ -52,7 +55,7 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_valid_request_succeeds(
                 node_url.as_str(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -74,7 +77,7 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_with_empty_signature_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -96,7 +99,7 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -109,7 +112,7 @@ pub fn request_signature_test(env: TestEnv) {
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
                 random_ed25519_identity(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -132,8 +135,8 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -144,7 +147,7 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -157,7 +160,7 @@ pub fn request_signature_test(env: TestEnv) {
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
                 random_ed25519_identity(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -180,8 +183,8 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -189,8 +192,8 @@ pub fn request_signature_test(env: TestEnv) {
     });
 }
 
-pub fn random_ecdsa_identity() -> Secp256k1Identity {
-    Secp256k1Identity::from_private_key(k256::SecretKey::random(&mut rand::thread_rng()))
+pub fn random_ecdsa_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
+    Secp256k1Identity::from_private_key(k256::SecretKey::random(rng))
 }
 
 // Test sending a query/update from the anonymous user that returns
