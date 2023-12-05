@@ -17,7 +17,7 @@ def sanitize_external_crates(sanitizers_enabled):
         "bincode": FUZZING_ANNOTATION,
     }
 
-def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, sanitizers_enabled):
+def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
         "ic_bls12_381": [crate.annotation(
             rustc_flags = [
@@ -33,6 +33,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
         "ic-wasm": [crate.annotation(
             gen_binaries = True,
         )],
+        # OpenSSL is still an indirect dependency of some tests that require ssh2.
+        # It shouldn't be used by any main binaries however.
         "openssl-sys": [crate.annotation(
             build_script_data = [
                 "@openssl//:gen_dir",
@@ -46,7 +48,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             },
             data = ["@openssl"],
             deps = ["@openssl"],
-        )] if static_openssl or sanitizers_enabled else [],
+        )] if sanitizers_enabled else [],
         "librocksdb-sys": [crate.annotation(
             build_script_env = {
                 # Bazel executors assign only one core when executing
