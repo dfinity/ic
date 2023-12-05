@@ -36,7 +36,7 @@ impl RosettaClient {
             hash: None,
         };
         let request = BlockRequest {
-            network_identifier,
+            network_identifier: network_identifier.into(),
             block_identifier,
         };
         let client = reqwest::Client::new();

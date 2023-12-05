@@ -1,6 +1,7 @@
 use super::*;
 use crate::models::amount::signed_amount;
-use crate::models::operation::{OperationIdentifier, OperationType};
+use crate::models::operation::OperationType;
+use crate::models::OperationIdentifier;
 use crate::request_types::Stake;
 use crate::DEFAULT_TOKEN_SYMBOL;
 use icp_ledger::AccountIdentifier;
@@ -8,10 +9,10 @@ use icp_ledger::Operation as LedgerOperation;
 
 struct OperationBuilder(Operation);
 impl OperationBuilder {
-    fn new(idx: i64, _type: OperationType) -> Self {
+    fn new(idx: u64, _type: OperationType) -> Self {
         Self(Operation {
             operation_identifier: OperationIdentifier::new(idx),
-            _type,
+            _type: _type.to_string(),
             status: None,
             account: None,
             amount: None,

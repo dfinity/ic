@@ -5,6 +5,7 @@ use rosetta_core::objects::ObjectMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
+use std::num::TryFromIntError;
 
 use ic_ledger_canister_blocks_synchronizer::blocks::BlockStoreError;
 
@@ -125,6 +126,24 @@ impl From<ic_ledger_canister_blocks_synchronizer::errors::Error> for ApiError {
     }
 }
 
+impl From<strum::ParseError> for ApiError {
+    fn from(value: strum::ParseError) -> Self {
+        ApiError::InternalError(
+            false,
+            Details::from(format!("Failed to parse string: {:?}", value)),
+        )
+    }
+}
+
+impl From<TryFromIntError> for ApiError {
+    fn from(value: TryFromIntError) -> Self {
+        ApiError::InternalError(
+            false,
+            Details::from(format!("Failed conversion: {:?}", value)),
+        )
+    }
+}
+
 pub fn convert_to_error(api_err: &ApiError) -> Error {
     let (code, msg, retriable, details) = match api_err {
         ApiError::InternalError(r, d) => (700, "Internal server error", *r, d.into()),
@@ -163,7 +182,7 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
         }
         ApiError::InvalidTipOfChain(d) => (715, "Invalid tip of the chain", false, d.into()),
     };
-    Error(rosetta_core::objects::Error {
+    Error(rosetta_core::miscellaneous::Error {
         message: msg.to_string(),
         details: Some(details),
         description: None,
@@ -175,73 +194,73 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
 /// Convert an Error to an ApiError.
 pub fn convert_to_api_error(err: Error, token_name: &str) -> ApiError {
     match err {
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 700,
             retriable,
             details,
             ..
         }) => ApiError::InternalError(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 701,
             retriable,
             details,
             ..
         }) => ApiError::InvalidRequest(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 702,
             retriable,
             details,
             ..
         }) => ApiError::NotAvailableOffline(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 710,
             retriable,
             details,
             ..
         }) => ApiError::InvalidNetworkId(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 711,
             retriable,
             details,
             ..
         }) => ApiError::InvalidAccountId(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 712,
             retriable,
             details,
             ..
         }) => ApiError::InvalidBlockId(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 713,
             retriable,
             details,
             ..
         }) => ApiError::InvalidPublicKey(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 714,
             retriable,
             details,
             ..
         }) => ApiError::InvalidTransactionId(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 720,
             retriable,
             details,
             ..
         }) => ApiError::MempoolTransactionMissing(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 721,
             retriable,
             details,
             ..
         }) => ApiError::BlockchainEmpty(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 730,
             retriable,
             details,
             ..
         }) => ApiError::InvalidTransaction(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 740,
             retriable,
             details,
@@ -252,14 +271,14 @@ pub fn convert_to_api_error(err: Error, token_name: &str) -> ApiError {
         }) {
             Err(e) | Ok(e) => e,
         },
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error {
             code: 750,
             retriable,
             details,
             ..
         }) => ApiError::TransactionRejected(retriable, details.unwrap_or_default().into()),
-        Error(rosetta_core::objects::Error { code: 760, .. }) => ApiError::TransactionExpired,
-        Error(rosetta_core::objects::Error {
+        Error(rosetta_core::miscellaneous::Error { code: 760, .. }) => ApiError::TransactionExpired,
+        Error(rosetta_core::miscellaneous::Error {
             code: 770, details, ..
         }) => match details.map(TransactionOperationResults::parse) {
             Some(Ok(e)) => convert::transaction_operation_result_to_api_error(e, token_name),

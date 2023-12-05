@@ -22,9 +22,9 @@ impl RosettaRequestHandler {
                 &envelope_pairs[0].update,
             )
         } else if envelopes.iter().all(|(r, _)| r.is_neuron_management()) {
-            Ok(TransactionIdentifier {
-                hash: transaction_id::NEURON_MANAGEMENT_PSEUDO_HASH.to_owned(),
-            })
+            Ok(TransactionIdentifier::from(
+                transaction_id::NEURON_MANAGEMENT_PSEUDO_HASH.to_owned(),
+            ))
         } else {
             Err(ApiError::invalid_request(
                 "There is no hash for this transaction",
@@ -32,7 +32,7 @@ impl RosettaRequestHandler {
         }?;
 
         Ok(ConstructionHashResponse {
-            transaction_identifier,
+            transaction_identifier: transaction_identifier.into(),
             metadata: Map::new(),
         })
     }

@@ -183,7 +183,7 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
     assert_eq!(block.transactions.len(), 1);
 
     let t = block.transactions.first().unwrap();
-    assert_eq!(t.transaction_identifier, tid);
+    assert_eq!(t.transaction_identifier, tid.into());
 
     check_balance(
         client,
@@ -349,7 +349,7 @@ async fn test_multiple_transfers(
     assert_eq!(block.transactions.len(), 1);
 
     let t = block.transactions.first().unwrap();
-    assert_eq!(t.transaction_identifier, tid);
+    assert_eq!(t.transaction_identifier, tid.into());
 
     check_balance(
         ros,
