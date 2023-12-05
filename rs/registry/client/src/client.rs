@@ -129,7 +129,17 @@ impl RegistryClientImpl {
     pub fn try_polling_latest_version(&self, retries: usize) -> Result<(), RegistryClientError> {
         let mut last_version = self.get_latest_version();
         for _ in 0..retries {
-            self.poll_once()?;
+            match self.poll_once() {
+                Ok(()) => {}
+                Err(RegistryClientError::DataProviderQueryFailed {
+                    source: RegistryDataProviderError::Transfer { source },
+                    ..
+                }) if source.contains("Request timed out") => {
+                    eprintln!("Request timed out, retrying.");
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
             let new_version = self.get_latest_version();
             if new_version == last_version {
                 return Ok(());
