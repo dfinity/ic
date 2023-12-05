@@ -5,7 +5,7 @@ use ic_nns_governance::pb::v1::Proposal;
 use ic_rosetta_api::convert::to_model_account_identifier;
 
 use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
-use ic_rosetta_api::models::operation::Operation;
+use ic_rosetta_api::models::Operation;
 use ic_rosetta_api::models::{
     AccountBalanceMetadata, AccountBalanceRequest, AccountBalanceResponse, AccountType,
     BalanceAccountType, Block, BlockRequest, BlockResponse, CallRequest, CallResponse,
@@ -431,7 +431,7 @@ impl RosettaApiClient {
             hash: None,
         };
         let req = BlockRequest::new(
-            ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
+            ic_rosetta_api::models::NetworkIdentifier(self.network_id()).into(),
             block_id,
         );
 

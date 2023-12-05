@@ -1,5 +1,6 @@
 use std::{convert::TryFrom, str::FromStr};
 
+use crate::{convert, errors::ApiError, request_types::RequestType};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_hash_of::HashOf;
 use ic_types::{
@@ -9,29 +10,15 @@ use ic_types::{
 use icp_ledger::{SendArgs, Transaction};
 use serde::{Deserialize, Serialize};
 
-use crate::{convert, errors::ApiError, request_types::RequestType};
-
 pub const NEURON_MANAGEMENT_PSEUDO_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
 
-/// Neuron management commands have no transaction identifier.
-/// Since Rosetta requires a transaction identifier,
-/// `None` is serialized to a transaction identifier with the hash
-/// "Neuron management commands have no transaction identifier".
-///
-/// The transaction_identifier uniquely identifies a transaction in a particular
-/// network and block or in the mempool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct TransactionIdentifier {
-    /// Any transactions that are attributable only to a block (ex: a block
-    /// event) should use the hash of the block as the identifier.
-    pub hash: String,
-}
+pub struct TransactionIdentifier(pub crate::models::TransactionIdentifier);
 
 impl TransactionIdentifier {
     pub fn is_transfer(&self) -> bool {
-        self.hash != NEURON_MANAGEMENT_PSEUDO_HASH
+        self.0.hash != NEURON_MANAGEMENT_PSEUDO_HASH
     }
 
     /// This could be `TryFrom<&HttpRequestEnvelope<HttpCallContent>>`,
@@ -80,9 +67,9 @@ impl TransactionIdentifier {
             | RequestType::NeuronInfo { .. }
             | RequestType::Follow { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID
-                Ok(TransactionIdentifier {
-                    hash: NEURON_MANAGEMENT_PSEUDO_HASH.to_string(),
-                })
+                Ok(TransactionIdentifier::from(
+                    NEURON_MANAGEMENT_PSEUDO_HASH.to_string(),
+                ))
             }
         }
     }
@@ -94,11 +81,29 @@ impl From<&Transaction> for TransactionIdentifier {
     }
 }
 
+impl From<String> for TransactionIdentifier {
+    fn from(hash: String) -> Self {
+        TransactionIdentifier(crate::models::TransactionIdentifier { hash })
+    }
+}
+
 impl From<&HashOf<Transaction>> for TransactionIdentifier {
     fn from(hash: &HashOf<Transaction>) -> Self {
-        TransactionIdentifier {
+        TransactionIdentifier(crate::models::TransactionIdentifier {
             hash: (format!("{}", hash)),
-        }
+        })
+    }
+}
+
+impl From<TransactionIdentifier> for crate::models::TransactionIdentifier {
+    fn from(value: TransactionIdentifier) -> Self {
+        value.0
+    }
+}
+
+impl From<crate::models::TransactionIdentifier> for TransactionIdentifier {
+    fn from(value: crate::models::TransactionIdentifier) -> Self {
+        TransactionIdentifier(value)
     }
 }
 
@@ -106,6 +111,6 @@ impl TryFrom<&TransactionIdentifier> for HashOf<Transaction> {
     type Error = String;
 
     fn try_from(tid: &TransactionIdentifier) -> Result<Self, Self::Error> {
-        HashOf::from_str(&tid.hash)
+        HashOf::from_str(&tid.0.hash)
     }
 }

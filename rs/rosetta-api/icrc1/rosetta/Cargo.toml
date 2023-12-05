@@ -49,6 +49,8 @@ tracing-subscriber = { version = "0.3.16", features = ["json"] }
 indicatif = "0.17.3"
 ic-rosetta-api = { path = "../../" }
 rosetta-core = {path = "../../rosetta_core"}
+strum_macros = { workspace = true }
+strum = { workspace = true }
 
 [lib]
 path = "src/lib.rs"

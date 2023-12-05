@@ -93,7 +93,7 @@ async fn test_follow(ros: &RosettaApiClient, _ledger: &LedgerClient, neuron_info
                 .operations
                 .first()
                 .expect("Expected one follow operation."),
-            ic_rosetta_api::models::operation::Operation {
+            ic_rosetta_api::models::Operation {
                 _type: _expected_type,
                 ..
             }
@@ -184,7 +184,7 @@ async fn test_follow_with_hotkey(
                 .operations
                 .first()
                 .expect("Expected one follow operation."),
-            ic_rosetta_api::models::operation::Operation {
+            ic_rosetta_api::models::Operation {
                 _type: _expected_type,
                 ..
             }

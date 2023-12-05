@@ -1,14 +1,21 @@
+pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_rosetta_api::convert::{
     from_hex, from_model_account_identifier, operations_to_requests, principal_id_from_public_key,
     to_hex, to_model_account_identifier,
 };
+use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
+use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
     ConstructionPayloadsResponse, CurveType, PublicKey, RosettaSupportedKeyPair, Signature,
     SignatureType,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
+use ic_rosetta_api::request::request_result::RequestResult;
+use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
+use ic_rosetta_api::request::transaction_results::TransactionResults;
+use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo, RegisterVote,
     RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
@@ -16,25 +23,15 @@ use ic_rosetta_api::request_types::{
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{messages::Blob, time, PrincipalId};
-
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
-
-pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use log::debug;
 use rand::{seq::SliceRandom, thread_rng};
+use rosetta_api_serv::RosettaApiHandle;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 pub mod rosetta_api_serv;
-
-use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
-use ic_rosetta_api::models::operation::OperationType;
-use ic_rosetta_api::request::request_result::RequestResult;
-use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
-use ic_rosetta_api::request::transaction_results::TransactionResults;
-use ic_rosetta_api::request::Request;
-use rosetta_api_serv::RosettaApiHandle;
-use std::path::Path;
 
 pub fn to_public_key<T: RosettaSupportedKeyPair>(keypair: &T) -> PublicKey {
     PublicKey {
@@ -89,7 +86,7 @@ where
         // first ask for the fee
         let mut fee_found = false;
         for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
-            if o._type == OperationType::Fee {
+            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
                 fee_found = true;
             } else {
                 dry_run_ops.push(o.clone());
@@ -174,7 +171,7 @@ where
 
     if accept_suggested_fee {
         for o in &mut all_ops {
-            if o._type == OperationType::Fee {
+            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
                 o.amount = Some(signed_amount(-(fee_icpts.get_e8s() as i128), token_name));
             }
         }
@@ -379,10 +376,14 @@ where
             {
                 assert_eq!(
                     submit_res.transaction_identifier,
-                    transaction_identifier.clone().unwrap()
+                    transaction_identifier.clone().unwrap().into()
                 );
             }
-            Ok((submit_res.transaction_identifier, results, charged_fee))
+            Ok((
+                submit_res.transaction_identifier.into(),
+                results,
+                charged_fee,
+            ))
         }
         Err(e) => Err(e),
     }
@@ -416,7 +417,7 @@ where
     .await
     {
         Ok((submit_res, charged_fee)) => Ok((
-            submit_res.transaction_identifier,
+            submit_res.transaction_identifier.into(),
             submit_res.metadata,
             charged_fee,
         )),

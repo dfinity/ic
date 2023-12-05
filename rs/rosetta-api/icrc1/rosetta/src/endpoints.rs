@@ -1,26 +1,19 @@
-use std::sync::Arc;
-use std::time::Duration;
-
 use axum::{extract::State, http::StatusCode, response::Result, Json};
+use ic_icrc_rosetta::common::types::BlockResponseBuilder;
 use ic_icrc_rosetta::{
-    common::types::{
-        BlockRequest, BlockResponse, BlockTransactionRequest, BlockTransactionResponse, Error,
-    },
+    common::types::{BlockTransactionRequest, BlockTransactionResponse, Error},
     AppState,
 };
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::models::MempoolResponse;
-use rosetta_core::identifiers::BlockIdentifier;
-use rosetta_core::identifiers::NetworkIdentifier;
-use rosetta_core::objects::Currency;
-use rosetta_core::request_types::MetadataRequest;
-use rosetta_core::request_types::NetworkRequest;
-use rosetta_core::response_types::Allow;
-use rosetta_core::response_types::NetworkListResponse;
-use rosetta_core::response_types::NetworkOptionsResponse;
-use rosetta_core::response_types::NetworkStatusResponse;
-use rosetta_core::response_types::Version;
+use rosetta_core::identifiers::*;
+use rosetta_core::miscellaneous::*;
+use rosetta_core::objects::*;
+use rosetta_core::request_types::*;
+use rosetta_core::response_types::*;
 use serde_bytes::ByteBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
 const ROSETTA_VERSION: &str = "1.4.13";
 const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -176,7 +169,7 @@ pub async fn block(
         ..Default::default()
     };
 
-    let response = BlockResponse::builder()
+    let response = BlockResponseBuilder::default()
         .with_rosetta_block(rosetta_block)
         .with_currency(currency)
         .build()

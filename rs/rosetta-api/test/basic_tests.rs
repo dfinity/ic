@@ -6,7 +6,8 @@ use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
 use ic_rosetta_api::ledger_client::LedgerAccess;
-use ic_rosetta_api::models::amount::{tokens_to_amount, Amount};
+use ic_rosetta_api::models::amount::tokens_to_amount;
+use ic_rosetta_api::models::Amount;
 use ic_rosetta_api::models::{
     AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
     BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
@@ -157,9 +158,7 @@ async fn smoke_test() {
 
     let msg = MempoolTransactionRequest::new(
         req_handler.network_id(),
-        TransactionIdentifier {
-            hash: "hello there".to_string(),
-        },
+        TransactionIdentifier::from("hello there".to_string()).into(),
     );
     let res = req_handler.mempool_transaction(msg).await;
     assert_eq!(
@@ -257,7 +256,7 @@ async fn blocks_test() {
         index: Some(h.try_into().unwrap()),
         hash: None,
     };
-    let msg = BlockRequest::new(req_handler.network_id(), block_id);
+    let msg = BlockRequest::new(req_handler.network_id().into(), block_id);
     let resp = req_handler.block(msg).await.unwrap();
 
     let block = resp.block.unwrap();
@@ -271,7 +270,7 @@ async fn blocks_test() {
         index: None,
         hash: Some(from_hash(&scribe.blockchain[h].hash)),
     };
-    let msg = BlockRequest::new(req_handler.network_id(), block_id);
+    let msg = BlockRequest::new(req_handler.network_id().into(), block_id);
     let resp = req_handler.block(msg).await.unwrap();
     let block = resp.block.unwrap();
 
@@ -362,7 +361,7 @@ async fn blocks_test() {
             index: Some(block.index),
             hash: None,
         };
-        let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
+        let msg = BlockRequest::new(req_handler.network_id().into(), partial_block_id);
         let resp = req_handler.block(msg).await.unwrap();
         let transactions = vec![ic_rosetta_api::convert::block_to_transaction(
             &block,
