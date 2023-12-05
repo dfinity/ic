@@ -139,7 +139,7 @@ Installing the canister:
 
 To test the proposals with a testnet that uses the same canister IDs as in the proposals we need:
 * dynamic testnet with a boundary node
-* 36 application subnets with one node each to allow the canisters to be created with the required IDs (see this [thread](https://dfinity.slack.com/archives/C018WHN6R2L/p1701417177185049)).
+* 36 application subnets with one node each. This ensures that a high subnet index like the one of the fiduciary subnet is part of the topology.
 
 ### Spin up the dynamic testnet
 
