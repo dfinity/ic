@@ -28,10 +28,12 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/p2p/memory_transport",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
     "@crate_index//:mockall",
+    "@crate_index//:tokio-util",
     "@crate_index//:turmoil",
 ]
 

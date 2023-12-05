@@ -30,8 +30,10 @@ slog = { version = "2.5.2", features = [
 tokio = { workspace = true }
 
 [dev-dependencies]
+ic-memory-transport = { path = "../memory_transport" }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = "0.11.4"
+tokio-util = { version = "0.7.4", features = ["codec", "time"] }
 turmoil = "0.5"
