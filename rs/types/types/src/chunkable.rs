@@ -28,7 +28,7 @@ pub enum ArtifactErrorCode {
 
 /// The chunk type.
 pub type ChunkId = Id<ArtifactChunk, u32>;
-pub(crate) const CHUNKID_UNIT_CHUNK: u32 = 0;
+pub const CHUNKID_UNIT_CHUNK: u32 = 0;
 
 /// The data contained in an artifact chunk.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
