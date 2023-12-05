@@ -123,7 +123,6 @@ filegroup(
 
 upload_artifacts(
     name = "upload",
-    allow_openssl_static = True,
     inputs = [":binaries"],
     remote_subdir = "binaries/" + select({
         "@platforms//cpu:x86_64": "x86_64",
