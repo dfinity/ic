@@ -81,6 +81,32 @@ Installing the canister:
     --summary-file ./minter_proposal.md
 ```
 
+Submitting an upgrade proposal:
+
+```shell
+didc encode -d ../minter/cketh_minter.did -t '(MinterArg)' '(variant {UpgradeArg = record {} })' | xxd -r -p > minter_arg.bin
+```
+
+```shell
+bazel build //rs/registry/admin:ic-admin
+
+../../../../bazel-bin/rs/registry/admin/ic-admin \
+    --use-hsm \
+    --key-id $KEY_ID \
+    --slot 0 \
+    --pin $HSM_PIN \
+    --nns-url "https://ic0.app" \
+    propose-to-change-nns-canister \
+    --proposer $NEURON_ID \
+    --canister-id sv3dd-oaaaa-aaaar-qacoa-cai \
+    --mode upgrade \
+    --wasm-module-path ./ic-cketh-minter.wasm.gz \
+    --wasm-module-sha256 $WASM_SHA256 \
+    --arg minter_arg.bin \
+    --summary-file ./minter_upgrade_yyyy_mm_dd.md
+```
+
+
 ## Installing the [index](https://dashboard.internetcomputer.org/canister/s3zol-vqaaa-aaaar-qacpa-cai)
 
 
