@@ -34,12 +34,7 @@ use ic_sns_wasm::{
     sns_wasm::SnsWasmCanister,
 };
 use ic_types::{CanisterId, Cycles};
-use maplit::btreemap;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, HashMap},
-    convert::TryInto,
-};
+use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -48,28 +43,6 @@ pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 
 thread_local! {
     static SNS_WASM: RefCell<SnsWasmCanister<CanisterStableMemory>> = RefCell::new(SnsWasmCanister::new());
-    /// Map of ProposalId -> index in deployed_sns_list
-    static PAST_PROPOSAL_TO_DEPLOYED_SNS: BTreeMap<u64, u64> = btreemap! {
-        93_763 => 0,
-        109_811 => 1,
-        122_343 => 2,
-        122_749 => 3,
-        123_252 => 4,
-        123_409 => 5,
-        123_592 => 6,
-        123_772 => 7,
-        123_794 => 8,
-        123_925 => 9,
-        124_033 => 10,
-        124_292 => 11,
-        124_258 => 12,
-        124_264 => 13,
-        124_483 => 14,
-        124_514 => 15,
-        124_808 => 16,
-        126_081 => 17,
-        126_119 => 18,
-    };
 }
 
 // TODO possibly determine how to make a single static that is thread-safe?
@@ -348,16 +321,6 @@ fn canister_post_upgrade() {
     println!("{}Executing post upgrade", LOG_PREFIX);
 
     SNS_WASM.with(|c| c.replace(SnsWasmCanister::<CanisterStableMemory>::from_stable_memory()));
-
-    // Custom upgrade hook to populate the `nns_proposal_to_deployed_sns` data structure
-    // on next upgrade
-    // TODO: Remove this after next SNS-WASM canister update.
-    SNS_WASM.with(|c| {
-        if c.borrow().nns_proposal_to_deployed_sns.is_empty() {
-            c.borrow_mut().nns_proposal_to_deployed_sns =
-                PAST_PROPOSAL_TO_DEPLOYED_SNS.with(|p| p.clone());
-        }
-    });
 
     println!("{}Completed post upgrade", LOG_PREFIX);
 }
