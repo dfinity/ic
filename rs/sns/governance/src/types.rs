@@ -23,7 +23,7 @@ use crate::{
             proposal::Action,
             ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
             DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-            GovernanceError, ManageNeuronResponse, Motion, NervousSystemFunction,
+            GovernanceError, ManageNeuronResponse, MintSnsTokens, Motion, NervousSystemFunction,
             NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
             NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
@@ -101,6 +101,9 @@ pub mod native_action_ids {
 
     /// DeregisterDappCanisters Action.
     pub const DEREGISTER_DAPP_CANISTERS: u64 = 11;
+
+    /// MintSnsTokens
+    pub const MINT_SNS_TOKENS: u64 = 12;
 }
 
 impl governance::Mode {
@@ -375,15 +378,23 @@ impl NervousSystemParameters {
     /// that is required for the proposal to be adopted. For example, if this field
     /// is 300bp, then the proposal can only be adopted if the number of "yes
     /// votes" is greater than or equal to 3% of the total voting power.
-    pub const MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER: Percentage =
+    pub const DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER: Percentage =
         Percentage::from_basis_points(300); // 3%
+
+    /// Same as DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER, but for "critical" proposals
+    pub const CRITICAL_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER: Percentage =
+        Percentage::from_basis_points(2_000); // 20%
 
     /// The proportion of "yes votes" as basis points of the exercised voting power
     /// that is required for the proposal to be adopted. For example, if this field
     /// is 5000bp, then the proposal can only be adopted if the number of "yes
     /// votes" is greater than or equal to 50% of the exercised voting power.
-    pub const MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER: Percentage =
+    pub const DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER: Percentage =
         Percentage::from_basis_points(5_000); // 50%
+
+    /// Same as DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER, but for "critical" proposals
+    pub const CRITICAL_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER: Percentage =
+        Percentage::from_basis_points(6_700); // 67%
 
     pub fn with_default_values() -> Self {
         Self {
@@ -1075,6 +1086,14 @@ impl From<Action> for NervousSystemFunction {
                 ),
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
+            Action::MintSnsTokens(_) => NervousSystemFunction {
+                id: native_action_ids::MINT_SNS_TOKENS,
+                name: "Mint SNS Tokens".to_string(),
+                description: Some(
+                    "Proposal to mint SNS tokens to a specified recipient.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
         }
     }
 }
@@ -1441,6 +1460,30 @@ impl Action {
             action => action.clone(),
         }
     }
+
+    pub fn minimum_yes_proportion_of_total(&self) -> ic_nervous_system_proto::pb::v1::Percentage {
+        match self {
+            Action::DeregisterDappCanisters(_)
+            | Action::TransferSnsTreasuryFunds(_)
+            | Action::MintSnsTokens(_) => {
+                NervousSystemParameters::CRITICAL_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+            }
+            _ => NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
+        }
+    }
+
+    pub fn minimum_yes_proportion_of_exercised(
+        &self,
+    ) -> ic_nervous_system_proto::pb::v1::Percentage {
+        match self {
+            Action::DeregisterDappCanisters(_)
+            | Action::TransferSnsTreasuryFunds(_)
+            | Action::MintSnsTokens(_) => {
+                NervousSystemParameters::CRITICAL_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+            }
+            _ => NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
+        }
+    }
 }
 
 impl UpgradeSnsControlledCanister {
@@ -1534,6 +1577,7 @@ impl From<&Action> for u64 {
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
+            Action::MintSnsTokens(_) => native_action_ids::MINT_SNS_TOKENS,
         }
     }
 }
@@ -2017,6 +2061,12 @@ impl From<RegisterDappCanisters> for Action {
 impl From<DeregisterDappCanisters> for Action {
     fn from(deregister_dapp_canisters: DeregisterDappCanisters) -> Action {
         Action::DeregisterDappCanisters(deregister_dapp_canisters)
+    }
+}
+
+impl From<MintSnsTokens> for Action {
+    fn from(mint_sns_tokens: MintSnsTokens) -> Action {
+        Action::MintSnsTokens(mint_sns_tokens)
     }
 }
 

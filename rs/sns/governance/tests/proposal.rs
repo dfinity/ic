@@ -78,10 +78,10 @@ mod early_decision {
             };
             let specified_proposal = ProposalData {
                 minimum_yes_proportion_of_total: Some(
-                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
+                    NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
                 ),
                 minimum_yes_proportion_of_exercised: Some(
-                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
+                    NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
                 ),
                 ..base_proposal.clone()
             };
