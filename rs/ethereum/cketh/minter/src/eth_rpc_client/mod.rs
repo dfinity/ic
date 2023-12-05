@@ -54,8 +54,8 @@ impl RpcTransport for DefaultTransport {
         unimplemented!()
     }
 
-    fn resolve_api(provider: &RpcNodeProvider) -> Result<RpcApi, ProviderError> {
-        Ok(provider.api())
+    fn resolve_api(_provider: &RpcNodeProvider) -> Result<RpcApi, ProviderError> {
+        unimplemented!()
     }
 
     async fn http_request(

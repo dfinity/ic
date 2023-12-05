@@ -10,6 +10,7 @@ pub(crate) const MAINNET_PROVIDERS: &[RpcNodeProvider] = &[
 
 pub(crate) const SEPOLIA_PROVIDERS: &[RpcNodeProvider] = &[
     RpcNodeProvider::Sepolia(SepoliaProvider::Ankr),
+    RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
     RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
 ];
 
@@ -25,53 +26,17 @@ pub enum RpcNodeProvider {
     Sepolia(SepoliaProvider),
 }
 
-impl RpcNodeProvider {
-    pub fn api(&self) -> RpcApi {
-        let url = match self {
-            Self::Ethereum(provider) => provider.ethereum_mainnet_endpoint_url(),
-            Self::Sepolia(provider) => provider.ethereum_sepolia_endpoint_url(),
-        }
-        .to_string();
-        RpcApi {
-            url,
-            headers: vec![],
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
 pub enum EthereumProvider {
-    //https://www.ankr.com/rpc/
     Ankr,
-    // https://publicnode.com/
+    BlockPi,
     PublicNode,
-    // https://developers.cloudflare.com/web3/ethereum-gateway/
     Cloudflare,
-}
-
-impl EthereumProvider {
-    fn ethereum_mainnet_endpoint_url(&self) -> &str {
-        match self {
-            EthereumProvider::Ankr => "https://rpc.ankr.com/eth",
-            EthereumProvider::PublicNode => "https://ethereum.publicnode.com",
-            EthereumProvider::Cloudflare => "https://cloudflare-eth.com",
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
 pub enum SepoliaProvider {
-    //https://www.ankr.com/rpc/
     Ankr,
-    // https://publicnode.com/
+    BlockPi,
     PublicNode,
-}
-
-impl SepoliaProvider {
-    fn ethereum_sepolia_endpoint_url(&self) -> &str {
-        match self {
-            SepoliaProvider::Ankr => "https://rpc.ankr.com/eth_sepolia",
-            SepoliaProvider::PublicNode => "https://ethereum-sepolia.publicnode.com",
-        }
-    }
 }
