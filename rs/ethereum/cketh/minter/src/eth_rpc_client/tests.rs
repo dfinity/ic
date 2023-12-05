@@ -1,5 +1,5 @@
 mod eth_rpc_client {
-    use crate::eth_rpc_client::providers::{EthMainnetProvider, RpcNodeProvider, EthSepoliaProvider};
+    use crate::eth_rpc_client::providers::{EthMainnetService, RpcNodeProvider, EthSepoliaService};
     use crate::eth_rpc_client::EthRpcClient;
     use crate::lifecycle::EthereumNetwork;
 
@@ -12,8 +12,8 @@ mod eth_rpc_client {
         assert_eq!(
             providers,
             &[
-                RpcNodeProvider::EthSepolia(EthSepoliaProvider::Ankr),
-                RpcNodeProvider::EthSepolia(EthSepoliaProvider::PublicNode)
+                RpcNodeProvider::EthSepolia(EthSepoliaService::Ankr),
+                RpcNodeProvider::EthSepolia(EthSepoliaService::PublicNode)
             ]
         );
     }
@@ -27,20 +27,20 @@ mod eth_rpc_client {
         assert_eq!(
             providers,
             &[
-                RpcNodeProvider::EthMainnet(EthMainnetProvider::Ankr),
-                RpcNodeProvider::EthMainnet(EthMainnetProvider::PublicNode),
-                RpcNodeProvider::EthMainnet(EthMainnetProvider::Cloudflare)
+                RpcNodeProvider::EthMainnet(EthMainnetService::Ankr),
+                RpcNodeProvider::EthMainnet(EthMainnetService::PublicNode),
+                RpcNodeProvider::EthMainnet(EthMainnetService::Cloudflare)
             ]
         );
     }
 }
 
 mod multi_call_results {
-    use crate::eth_rpc_client::providers::{EthMainnetProvider, RpcNodeProvider};
+    use crate::eth_rpc_client::providers::{EthMainnetService, RpcNodeProvider};
 
-    const ANKR: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetProvider::Ankr);
-    const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetProvider::PublicNode);
-    const CLOUDFLARE: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetProvider::Cloudflare);
+    const ANKR: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetService::Ankr);
+    const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetService::PublicNode);
+    const CLOUDFLARE: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetService::Cloudflare);
 
     mod reduce_with_equality {
         use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};

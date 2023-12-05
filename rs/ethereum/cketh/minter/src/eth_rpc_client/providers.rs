@@ -3,15 +3,15 @@ use ic_cdk::api::management_canister::http_request::HttpHeader;
 use serde::Deserialize;
 
 pub(crate) const MAINNET_PROVIDERS: &[RpcNodeProvider] = &[
-    RpcNodeProvider::EthMainnet(EthMainnetProvider::Ankr),
-    RpcNodeProvider::EthMainnet(EthMainnetProvider::PublicNode),
-    RpcNodeProvider::EthMainnet(EthMainnetProvider::Cloudflare),
+    RpcNodeProvider::EthMainnet(EthMainnetService::Ankr),
+    RpcNodeProvider::EthMainnet(EthMainnetService::PublicNode),
+    RpcNodeProvider::EthMainnet(EthMainnetService::Cloudflare),
 ];
 
 pub(crate) const SEPOLIA_PROVIDERS: &[RpcNodeProvider] = &[
-    RpcNodeProvider::EthSepolia(EthSepoliaProvider::Ankr),
-    RpcNodeProvider::EthSepolia(EthSepoliaProvider::BlockPi),
-    RpcNodeProvider::EthSepolia(EthSepoliaProvider::PublicNode),
+    RpcNodeProvider::EthSepolia(EthSepoliaService::Ankr),
+    RpcNodeProvider::EthSepolia(EthSepoliaService::BlockPi),
+    RpcNodeProvider::EthSepolia(EthSepoliaService::PublicNode),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
@@ -22,12 +22,12 @@ pub struct RpcApi {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
 pub enum RpcNodeProvider {
-    EthMainnet(EthMainnetProvider),
-    EthSepolia(EthSepoliaProvider),
+    EthMainnet(EthMainnetService),
+    EthSepolia(EthSepoliaService),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
-pub enum EthMainnetProvider {
+pub enum EthMainnetService {
     Ankr,
     BlockPi,
     PublicNode,
@@ -35,7 +35,7 @@ pub enum EthMainnetProvider {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
-pub enum EthSepoliaProvider {
+pub enum EthSepoliaService {
     Ankr,
     BlockPi,
     PublicNode,
