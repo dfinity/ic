@@ -175,7 +175,7 @@ Additional withdrawals could be made as long as the allowance from step 1 was no
 ====
 [source,shell]
 ----
-dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000 })"
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000 : nat })"
 ----
 ====
 
@@ -183,7 +183,7 @@ dfx canister --network ic call ledger icrc2_approve "(record { spender = record 
 ====
 [source,shell]
 ----
-dfx canister --network ic call minter withdraw_eth "(record {amount = 150_000_000_000_000_000; recipient = \"0xAB586458E47f3e9D350e476fB7E294a57825A3f4\"})"
+dfx canister --network ic call minter withdraw_eth "(record {amount = 150_000_000_000_000_000 : nat; recipient = \"0xAB586458E47f3e9D350e476fB7E294a57825A3f4\"})"
 ----
 ====
 
