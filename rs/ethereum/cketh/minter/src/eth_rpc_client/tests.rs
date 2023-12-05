@@ -1,5 +1,5 @@
 mod eth_rpc_client {
-    use crate::eth_rpc_client::providers::{EthMainnetService, RpcNodeProvider, EthSepoliaService};
+    use crate::eth_rpc_client::providers::{EthMainnetService, RpcService, EthSepoliaService};
     use crate::eth_rpc_client::EthRpcClient;
     use crate::lifecycle::EthereumNetwork;
 
@@ -12,8 +12,8 @@ mod eth_rpc_client {
         assert_eq!(
             providers,
             &[
-                RpcNodeProvider::EthSepolia(EthSepoliaService::Ankr),
-                RpcNodeProvider::EthSepolia(EthSepoliaService::PublicNode)
+                RpcService::EthSepolia(EthSepoliaService::Ankr),
+                RpcService::EthSepolia(EthSepoliaService::PublicNode)
             ]
         );
     }
@@ -27,20 +27,20 @@ mod eth_rpc_client {
         assert_eq!(
             providers,
             &[
-                RpcNodeProvider::EthMainnet(EthMainnetService::Ankr),
-                RpcNodeProvider::EthMainnet(EthMainnetService::PublicNode),
-                RpcNodeProvider::EthMainnet(EthMainnetService::Cloudflare)
+                RpcService::EthMainnet(EthMainnetService::Ankr),
+                RpcService::EthMainnet(EthMainnetService::PublicNode),
+                RpcService::EthMainnet(EthMainnetService::Cloudflare)
             ]
         );
     }
 }
 
 mod multi_call_results {
-    use crate::eth_rpc_client::providers::{EthMainnetService, RpcNodeProvider};
+    use crate::eth_rpc_client::providers::{EthMainnetService, RpcService};
 
-    const ANKR: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetService::Ankr);
-    const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetService::PublicNode);
-    const CLOUDFLARE: RpcNodeProvider = RpcNodeProvider::EthMainnet(EthMainnetService::Cloudflare);
+    const ANKR: RpcService = RpcService::EthMainnet(EthMainnetService::Ankr);
+    const PUBLIC_NODE: RpcService = RpcService::EthMainnet(EthMainnetService::PublicNode);
+    const CLOUDFLARE: RpcService = RpcService::EthMainnet(EthMainnetService::Cloudflare);
 
     mod reduce_with_equality {
         use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};

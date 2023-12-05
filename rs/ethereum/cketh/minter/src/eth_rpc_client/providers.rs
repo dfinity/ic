@@ -2,16 +2,16 @@ use candid::CandidType;
 use ic_cdk::api::management_canister::http_request::HttpHeader;
 use serde::Deserialize;
 
-pub(crate) const MAINNET_PROVIDERS: &[RpcNodeProvider] = &[
-    RpcNodeProvider::EthMainnet(EthMainnetService::Ankr),
-    RpcNodeProvider::EthMainnet(EthMainnetService::PublicNode),
-    RpcNodeProvider::EthMainnet(EthMainnetService::Cloudflare),
+pub(crate) const MAINNET_PROVIDERS: &[RpcService] = &[
+    RpcService::EthMainnet(EthMainnetService::Ankr),
+    RpcService::EthMainnet(EthMainnetService::PublicNode),
+    RpcService::EthMainnet(EthMainnetService::Cloudflare),
 ];
 
-pub(crate) const SEPOLIA_PROVIDERS: &[RpcNodeProvider] = &[
-    RpcNodeProvider::EthSepolia(EthSepoliaService::Ankr),
-    RpcNodeProvider::EthSepolia(EthSepoliaService::BlockPi),
-    RpcNodeProvider::EthSepolia(EthSepoliaService::PublicNode),
+pub(crate) const SEPOLIA_PROVIDERS: &[RpcService] = &[
+    RpcService::EthSepolia(EthSepoliaService::Ankr),
+    RpcService::EthSepolia(EthSepoliaService::BlockPi),
+    RpcService::EthSepolia(EthSepoliaService::PublicNode),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
@@ -21,7 +21,7 @@ pub struct RpcApi {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
-pub enum RpcNodeProvider {
+pub enum RpcService {
     EthMainnet(EthMainnetService),
     EthSepolia(EthSepoliaService),
 }

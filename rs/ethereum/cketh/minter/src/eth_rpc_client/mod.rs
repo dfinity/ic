@@ -3,7 +3,7 @@ use crate::eth_rpc::{
     Hash, HttpOutcallError, HttpResponsePayload, JsonRpcError, LogEntry, ProviderError,
     ResponseSizeEstimate, RpcError, SendRawTransactionResult,
 };
-use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
+use crate::eth_rpc_client::providers::{RpcService, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
@@ -34,10 +34,10 @@ mod tests;
 pub trait RpcTransport: Debug {
     fn get_subnet_size() -> u32;
 
-    fn resolve_api(provider: &RpcNodeProvider) -> Result<RpcApi, ProviderError>;
+    fn resolve_api(provider: &RpcService) -> Result<RpcApi, ProviderError>;
 
     async fn http_request(
-        provider: &RpcNodeProvider,
+        provider: &RpcService,
         request: CanisterHttpRequestArgument,
         cycles: u128,
     ) -> CallResult<HttpResponse>;
@@ -54,12 +54,12 @@ impl RpcTransport for DefaultTransport {
         unimplemented!()
     }
 
-    fn resolve_api(_provider: &RpcNodeProvider) -> Result<RpcApi, ProviderError> {
+    fn resolve_api(_provider: &RpcService) -> Result<RpcApi, ProviderError> {
         unimplemented!()
     }
 
     async fn http_request(
-        _provider: &RpcNodeProvider,
+        _provider: &RpcService,
         _request: CanisterHttpRequestArgument,
         _cycles: u128,
     ) -> CallResult<HttpResponse> {
@@ -70,12 +70,12 @@ impl RpcTransport for DefaultTransport {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EthRpcClient<T: RpcTransport> {
     chain: EthereumNetwork,
-    providers: Option<Vec<RpcNodeProvider>>,
+    providers: Option<Vec<RpcService>>,
     phantom: PhantomData<T>,
 }
 
 impl<T: RpcTransport> EthRpcClient<T> {
-    pub const fn new(chain: EthereumNetwork, providers: Option<Vec<RpcNodeProvider>>) -> Self {
+    pub const fn new(chain: EthereumNetwork, providers: Option<Vec<RpcService>>) -> Self {
         Self {
             chain,
             providers,
@@ -87,7 +87,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
         Self::new(state.ethereum_network(), None)
     }
 
-    fn providers(&self) -> &[RpcNodeProvider] {
+    fn providers(&self) -> &[RpcService] {
         match self.providers {
             Some(ref providers) => providers,
             None => match self.chain {
@@ -270,11 +270,11 @@ impl<T: RpcTransport> EthRpcClient<T> {
 /// Guaranteed to be non-empty.
 #[derive(Debug, Clone, PartialEq, Eq, CandidType)]
 pub struct MultiCallResults<T> {
-    pub results: BTreeMap<RpcNodeProvider, Result<T, RpcError>>,
+    pub results: BTreeMap<RpcService, Result<T, RpcError>>,
 }
 
 impl<T> MultiCallResults<T> {
-    fn from_non_empty_iter<I: IntoIterator<Item = (RpcNodeProvider, Result<T, RpcError>)>>(
+    fn from_non_empty_iter<I: IntoIterator<Item = (RpcService, Result<T, RpcError>)>>(
         iter: I,
     ) -> Self {
         let results = BTreeMap::from_iter(iter);
@@ -290,9 +290,9 @@ impl<T: PartialEq> MultiCallResults<T> {
     /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
     /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
     /// * MultiCallError::InconsistentResults if there are different errors.
-    fn all_ok(self) -> Result<BTreeMap<RpcNodeProvider, T>, MultiCallError<T>> {
+    fn all_ok(self) -> Result<BTreeMap<RpcService, T>, MultiCallError<T>> {
         let mut results = BTreeMap::new();
-        let mut first_error: Option<(RpcNodeProvider, Result<T, RpcError>)> = None;
+        let mut first_error: Option<(RpcService, Result<T, RpcError>)> = None;
         for (provider, result) in self.results.into_iter() {
             match result {
                 Ok(value) => {
@@ -399,7 +399,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
         self,
         extractor: F,
     ) -> Result<T, MultiCallError<T>> {
-        let mut votes_by_key: BTreeMap<K, BTreeMap<RpcNodeProvider, T>> = BTreeMap::new();
+        let mut votes_by_key: BTreeMap<K, BTreeMap<RpcService, T>> = BTreeMap::new();
         for (provider, result) in self.all_ok()?.into_iter() {
             let key = extractor(&result);
             match votes_by_key.remove(&key) {
@@ -431,7 +431,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
             }
         }
 
-        let mut tally: Vec<(K, BTreeMap<RpcNodeProvider, T>)> = Vec::from_iter(votes_by_key);
+        let mut tally: Vec<(K, BTreeMap<RpcService, T>)> = Vec::from_iter(votes_by_key);
         tally.sort_unstable_by(|(_left_key, left_ballot), (_right_key, right_ballot)| {
             left_ballot.len().cmp(&right_ballot.len())
         });

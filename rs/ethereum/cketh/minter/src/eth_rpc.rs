@@ -4,7 +4,7 @@
 use crate::address::Address;
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::CandidBlockTag;
-use crate::eth_rpc_client::providers::RpcNodeProvider;
+use crate::eth_rpc_client::providers::RpcService;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::RpcTransport;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
@@ -700,7 +700,7 @@ impl HttpResponsePayload for TransactionCount {}
 
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
 pub async fn call<T, I, O>(
-    provider: &RpcNodeProvider,
+    provider: &RpcService,
     method: impl Into<String>,
     params: I,
     mut response_size_estimate: ResponseSizeEstimate,
