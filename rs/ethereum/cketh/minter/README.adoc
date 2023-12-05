@@ -117,7 +117,7 @@ Call the link:https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627d
 Once your transaction has been mined on Ethereum, the minter should pick it up and mint the corresponding amount of ckETH **after roughly 20 minutes**, so don't panic if the following command currently returns 0.
 [source,shell]
 ----
-dfx canister --network ic call ledger icrc1_balance_of 'record {owner = principal "'"$(dfx identity get-principal)"'" }'
+dfx canister --network ic call ledger icrc1_balance_of '(record {owner = principal "'"$(dfx identity get-principal)"'" })'
 ----
 ====
 
