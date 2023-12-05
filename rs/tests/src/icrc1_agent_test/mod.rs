@@ -4,8 +4,9 @@ use crate::util::{agent_with_identity, random_ed25519_identity};
 use assert_matches::assert_matches;
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
+use dfn_candid::CandidOne;
 use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
-use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument};
+use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument, UpgradeArgs};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
@@ -16,6 +17,7 @@ use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
 };
+use on_wire::IntoWire;
 
 use crate::{
     driver::{
@@ -52,6 +54,40 @@ pub fn test(env: TestEnv) {
         let user1 = PrincipalId::try_from(nns_agent.get_principal().unwrap().as_ref()).unwrap();
         let user2 = PrincipalId::new_user_test_id(102);
         let user3 = PrincipalId::new_user_test_id(270);
+
+        let mut empty_ledger = nns_runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Unable to create canister");
+
+        let empty_ledger_agent = Icrc1Agent {
+            agent: assert_create_agent(nns_node.get_public_url().as_str()).await,
+            ledger_canister_id: Principal::try_from_slice(empty_ledger.canister_id().as_ref())
+                .unwrap(),
+        };
+        install_icrc1_ledger(
+            &env,
+            &mut empty_ledger,
+            &LedgerArgument::Init(InitArgsBuilder::for_tests().build()),
+        )
+        .await;
+
+        let empty_tip = empty_ledger_agent
+            .get_certified_chain_tip()
+            .await
+            .expect("failed to get certified tip");
+        assert_eq!(empty_tip, None);
+
+        empty_ledger
+            .upgrade_to_self_binary(CandidOne(UpgradeArgs::default()).into_bytes().unwrap())
+            .await
+            .unwrap();
+
+        let empty_tip = empty_ledger_agent
+            .get_certified_chain_tip()
+            .await
+            .expect("failed to get certified tip");
+        assert_eq!(empty_tip, None);
 
         let mut ledger = nns_runtime
             .create_canister_max_cycles_with_retries()
@@ -304,6 +340,19 @@ pub fn test(env: TestEnv) {
             length: Nat::from(1),
         };
         let blocks_response = agent.get_blocks(blocks_request).await.unwrap();
+        assert_eq!(last_block_hash, blocks_response.blocks[0].hash());
+        assert_eq!(last_block_index, 2);
+
+        ledger
+            .upgrade_to_self_binary(CandidOne(UpgradeArgs::default()).into_bytes().unwrap())
+            .await
+            .unwrap();
+
+        let (last_block_hash, last_block_index) = agent
+            .get_certified_chain_tip()
+            .await
+            .expect("failed to get certified tip")
+            .unwrap();
         assert_eq!(last_block_hash, blocks_response.blocks[0].hash());
         assert_eq!(last_block_index, 2);
 
