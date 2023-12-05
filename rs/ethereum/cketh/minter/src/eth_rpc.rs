@@ -757,29 +757,13 @@ where
         let base_cycles = 400_000_000u128 + 100_000u128 * (2 * effective_size_estimate as u128);
 
         const BASE_SUBNET_SIZE: u128 = 13;
-        // const SUBNET_SIZE: u128 = 34;
         let subnet_size = T::get_subnet_size() as u128;
         let cycles = base_cycles * subnet_size / BASE_SUBNET_SIZE;
 
-        let cycles_available = ic_cdk::api::call::msg_cycles_available128();
-        if cycles_available < cycles {
-            return Err(ProviderError::TooFewCycles {
-                expected: cycles,
-                received: cycles_available,
-            }
-            .into());
-        }
-        ic_cdk::api::call::msg_cycles_accept128(cycles);
-
-        // let response: HttpResponse = match call_with_payment128(
-        //     Principal::management_canister(),
-        //     "http_request",
-        //     (request,),
-        //     cycles,
-        // )
-        let response: HttpResponse = match T::http_request(provider, request, cycles).await {
-            Ok(response) => response,
-            Err((code, message)) if is_response_too_large(&code, &message) => {
+        let response = match T::http_request(provider, request, cycles).await {
+            Err(RpcError::HttpOutcallError(HttpOutcallError::IcError { code, message }))
+                if is_response_too_large(&code, &message) =>
+            {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
                     return Err(HttpOutcallError::IcError { code, message }.into());
@@ -789,7 +773,7 @@ where
                 retries += 1;
                 continue;
             }
-            Err((code, message)) => return Err(HttpOutcallError::IcError { code, message }.into()),
+            result => result?,
         };
 
         log!(

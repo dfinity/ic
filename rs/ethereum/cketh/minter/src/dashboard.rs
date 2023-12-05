@@ -16,6 +16,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod filters {
+    #[allow(dead_code)]
     pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
         let input = timestamp.to_string();
         let ts: i128 = input
