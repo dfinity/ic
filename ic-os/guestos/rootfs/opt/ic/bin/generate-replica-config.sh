@@ -76,6 +76,8 @@ function read_network_variables() {
             "ipv6_gateway") ipv6_gateway="${value}" ;;
             "name_servers") name_servers="${value}" ;;
             "ipv4_name_servers") ipv4_name_servers="${value}" ;;
+            "ipv4_address") ipv4_address="${value}" ;;
+            "ipv4_gateway") ipv4_gateway="${value}" ;;
         esac
     done <"$1"
 }
@@ -200,6 +202,8 @@ fi
 INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
 IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
+IPV4_ADDRESS="${ipv4_address:-}"
+IPV4_GATEWAY="${ipv4_gateway:-}"
 NNS_URL="${nns_url:-http://[::1]:8080}"
 NODE_INDEX="${node_index:-0}"
 # Default value is 24h
@@ -233,6 +237,8 @@ if [ "${hostname}" == "" ]; then
 fi
 
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
+    -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
+    -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
     -e "s@{{ nns_url }}@${NNS_URL}@" \
     -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \

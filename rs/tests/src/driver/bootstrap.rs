@@ -2,7 +2,7 @@ use crate::driver::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
     farm::{Farm, FarmResult, FileId},
-    ic::{InternetComputer, Node},
+    ic::{InternetComputer, Ipv4Config, Node},
     nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
@@ -232,9 +232,17 @@ pub fn setup_and_start_vms(
         let t_env = env.clone();
         let ic_name = ic.name();
         let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behaviour.clone());
         join_handles.push(thread::spawn(move || {
-            create_config_disk_image(&ic_name, &node, malicious_behaviour, &t_env, &group_name)?;
+            create_config_disk_image(
+                &ic_name,
+                &node,
+                malicious_behaviour,
+                ipv4_config,
+                &t_env,
+                &group_name,
+            )?;
             let image_id = upload_config_disk_image(&group_name, &node, &t_farm)?;
             // delete uncompressed file
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
@@ -331,6 +339,7 @@ pub fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
     malicious_behavior: Option<MaliciousBehaviour>,
+    ipv4_config: Option<Ipv4Config>,
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<()> {
@@ -369,6 +378,23 @@ pub fn create_config_disk_image(
         );
         cmd.arg("--malicious_behavior")
             .arg(serde_json::to_string(&malicious_behavior)?);
+    }
+
+    if let Some(ipv4_config) = ipv4_config {
+        info!(
+            test_env.logger(),
+            "Node with id={} is IPv4-enabled: IP address {:?}/{:?}, IP gateway {:?}",
+            node.node_id,
+            ipv4_config.ip_addr,
+            ipv4_config.prefix_length,
+            ipv4_config.gateway_ip_addr
+        );
+        cmd.arg("--ipv4_address").arg(format!(
+            "{:?}/{:?}",
+            ipv4_config.ip_addr, ipv4_config.prefix_length
+        ));
+        cmd.arg("--ipv4_gateway")
+            .arg(ipv4_config.gateway_ip_addr.to_string());
     }
 
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);

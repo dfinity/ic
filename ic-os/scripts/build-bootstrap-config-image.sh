@@ -28,15 +28,22 @@ options may be specified:
     Default IPv6 gateway.
 
   --ipv6_name_servers servers
-    ipv6 DNS servers to use. Can be multiple servers separated by space (make 
+    ipv6 DNS servers to use. Can be multiple servers separated by space (make
     sure to quote the argument string so it appears as a single argument to the
-    script, e.g. --ipv6_name_servers "2606:4700:4700::1111 
+    script, e.g. --ipv6_name_servers "2606:4700:4700::1111
     2606:4700:4700::1001").
 
   --ipv4_name_servers servers
-    ipv4 DNS servers to use. Can be multiple servers separated by space (make 
+    ipv4 DNS servers to use. Can be multiple servers separated by space (make
     sure to quote the argument string so it appears as a single argument to the
     script, e.g. --ipv4_name_servers "1.1.1.1 1.0.0.1").
+
+  --ipv4_address a.b.c.d/n
+    (optional) The IPv4 address to assign. Must include prefix length (e.g.
+    18.208.190.35/28).
+
+  --ipv4_gateway a:b::c
+    (optional) Default IPv4 gateway (e.g. 18.208.190.33).
 
   --hostname name
     Name to assign to the host. Will be used in logging.
@@ -154,6 +161,12 @@ function build_ic_bootstrap_tar() {
             --ipv4_name_servers)
                 IPV4_NAME_SERVERS="$2"
                 ;;
+            --ipv4_address)
+                IPV4_ADDRESS="$2"
+                ;;
+            --ipv4_gateway)
+                IPV4_GATEWAY="$2"
+                ;;
             --hostname)
                 HOSTNAME="$2"
                 ;;
@@ -227,6 +240,8 @@ ${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
 name_servers=$IPV6_NAME_SERVERS
 ipv4_name_servers=$IPV4_NAME_SERVERS
 hostname=$HOSTNAME
+${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
+${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
 EOF
     if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
         echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"
