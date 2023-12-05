@@ -39,14 +39,14 @@ use crate::common::rest::{
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    CandidType, Principal,
+    CandidType, Nat, Principal,
 };
 use common::rest::{
     RawEffectivePrincipal, RawSubnetId, RawVerifyCanisterSigArg, SubnetConfigSet, SubnetId,
     Topology,
 };
 use ic_cdk::api::management_canister::{
-    main::{CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument},
+    main::{CanisterInstallMode, InstallCodeArgument},
     provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
 };
 use reqwest::Url;
@@ -418,7 +418,11 @@ impl PocketIc {
             RawEffectivePrincipal::None,
             Principal::anonymous(),
             "provisional_create_canister_with_cycles",
-            (CreateCanisterArgument { settings: None },),
+            (ProvisionalCreateCanisterArgument {
+                settings: None,
+                amount: Some(0_u64.into()),
+                specified_id: None,
+            },),
         )
         .map(|(x,)| x)
         .unwrap();
@@ -438,7 +442,11 @@ impl PocketIc {
             RawEffectivePrincipal::None,
             sender.unwrap_or(Principal::anonymous()),
             "provisional_create_canister_with_cycles",
-            (CreateCanisterArgument { settings },),
+            (ProvisionalCreateCanisterArgument {
+                settings,
+                amount: Some(0_u64.into()),
+                specified_id: None,
+            },),
         )
         .map(|(x,)| x)
         .unwrap();
@@ -468,6 +476,7 @@ impl PocketIc {
             (ProvisionalCreateCanisterArgument {
                 settings,
                 specified_id: Some(canister_id),
+                amount: Some(0_u64.into()),
             },),
         )
         .map(|(x,)| x);
@@ -493,7 +502,11 @@ impl PocketIc {
             RawEffectivePrincipal::SubnetId(subnet_id.as_slice().to_vec()),
             sender.unwrap_or(Principal::anonymous()),
             "provisional_create_canister_with_cycles",
-            (CreateCanisterArgument { settings },),
+            (ProvisionalCreateCanisterArgument {
+                settings,
+                amount: Some(0_u64.into()),
+                specified_id: None,
+            },),
         )
         .map(|(x,)| x)
         .unwrap();
@@ -918,6 +931,7 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
 struct ProvisionalCreateCanisterArgument {
     pub settings: Option<CanisterSettings>,
     pub specified_id: Option<Principal>,
+    pub amount: Option<Nat>,
 }
 
 /// Error type for [`TryFrom<u64>`].

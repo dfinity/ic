@@ -15,7 +15,7 @@ use ic_state_machine_tests::{
     StateMachineConfig, Time,
 };
 use ic_test_utilities::types::ids::subnet_test_id;
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, RawAddCycles, RawCanisterCall, RawEffectivePrincipal,
@@ -104,10 +104,7 @@ impl PocketIc {
         } in subnet_config_info
         {
             let subnet_config = SubnetConfig::new(conv_type(subnet_kind));
-            let hypervisor_config = execution_environment::Config {
-                default_provisional_cycles_balance: Cycles::new(0),
-                ..Default::default()
-            };
+            let hypervisor_config = execution_environment::Config::default();
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
             let subnet_size = subnet_size(subnet_kind);
             StateMachineBuilder::new()
