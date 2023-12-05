@@ -620,3 +620,7 @@ path = "boundary_nodes/mainnet_boundary_node_performance_test.rs"
 [[bin]]
 name = "ic-systest-nested-registration"
 path = "nested/registration.rs"
+
+[[bin]]
+name = "ic-systest-ipv4-integration"
+path = "node/ipv4_integration_test.rs"

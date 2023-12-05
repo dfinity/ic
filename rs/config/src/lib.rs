@@ -15,6 +15,7 @@ pub mod execution_environment;
 pub mod firewall;
 pub mod flag_status;
 pub mod http_handler;
+pub mod ipv4_config;
 pub mod logger;
 pub mod message_routing;
 pub mod metrics;

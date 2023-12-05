@@ -509,8 +509,15 @@ mod tests {
     #[should_panic(
         expected = "Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway"
     )]
-    fn should_panic_if_ipv4_config_is_incomplete() {
+    fn should_panic_if_ipv4_config_is_empty() {
         make_valid_node_ivp4_config_or_panic(Vec::new());
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway"
+    )]
+    fn should_panic_if_ipv4_config_is_incomplete() {
         make_valid_node_ivp4_config_or_panic(vec!["204.153.51.58/24".to_string()]);
     }
 

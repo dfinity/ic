@@ -16,6 +16,7 @@ pub mod execution;
 pub mod generic_workload_engine;
 pub mod icrc1_agent_test;
 pub mod ii_delegation_test;
+pub mod ipv4_tests;
 pub mod ledger_tests;
 pub mod mainnet_tests;
 pub mod message_routing;
