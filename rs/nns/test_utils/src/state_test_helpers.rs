@@ -27,7 +27,8 @@ use ic_nns_constants::{
     memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID,
     LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
@@ -46,6 +47,7 @@ use ic_nns_governance::pb::v1::{
     MostRecentMonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
     RewardNodeProviders, Vote,
 };
+use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_sns_governance::{
     pb::v1::{
         self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
@@ -481,6 +483,33 @@ pub fn setup_nns_governance_with_correct_canister_id(
         .unwrap();
 }
 
+pub fn setup_nns_root_with_correct_canister_id(
+    machine: &StateMachine,
+    init_payload: RootCanisterInitPayload,
+) {
+    let root_canister_id = create_canister_id_at_position(
+        machine,
+        ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation_of(ROOT_CANISTER_ID))
+                .with_controllers(vec![LIFELINE_CANISTER_ID.get()])
+                .build(),
+        ),
+    );
+
+    assert_eq!(root_canister_id, ROOT_CANISTER_ID);
+
+    machine
+        .install_wasm_in_mode(
+            root_canister_id,
+            CanisterInstallMode::Install,
+            build_root_wasm().bytes(),
+            Encode!(&init_payload).unwrap(),
+        )
+        .unwrap();
+}
+
 /// Creates empty canisters up until the correct SNS-WASM id, then installs SNS-WASMs with payload
 /// This allows creating a few canisters before calling this.
 pub fn setup_nns_sns_wasms_with_correct_canister_id(
@@ -539,18 +568,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
     );
     assert_eq!(ledger_canister_id, LEDGER_CANISTER_ID);
 
-    let root_canister_id = create_canister(
-        machine,
-        build_root_wasm(),
-        Some(Encode!(&init_payloads.root).unwrap()),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(ROOT_CANISTER_ID))
-                .with_controllers(vec![LIFELINE_CANISTER_ID.get()])
-                .build(),
-        ),
-    );
-    assert_eq!(root_canister_id, ROOT_CANISTER_ID);
+    setup_nns_root_with_correct_canister_id(machine, init_payloads.root);
 
     let cmc_canister_id = create_canister(
         machine,
