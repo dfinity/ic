@@ -1,8 +1,9 @@
 use crate::common::EXPECTED_SNS_CREATION_FEE;
 use candid::{Decode, Encode, Nat};
+use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode};
 use ic_icrc1_ledger::LedgerArgument;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
@@ -61,6 +62,164 @@ fn upgrade_ledger_sns_canister_via_sns_wasms_legacy() {
 #[test]
 fn upgrade_governance_sns_canister_via_sns_wasms_legacy() {
     run_upgrade_test_legacy(SnsCanisterType::Governance);
+}
+
+#[test]
+fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
+    let canister_type = SnsCanisterType::Root;
+    let wallet_canister_id = CanisterId::from_u64(11);
+
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let machine = StateMachineBuilder::new().with_current_time().build();
+
+    let nns_init_payload = NnsInitPayloadsBuilder::new()
+        .with_initial_invariant_compliant_mutations()
+        .with_test_neurons()
+        .with_sns_dedicated_subnets(machine.get_subnet_ids())
+        .with_sns_wasm_allowed_principals(vec![wallet_canister_id.into()])
+        .build();
+
+    setup_nns_canisters(&machine, nns_init_payload);
+
+    // Enough cycles for one SNS deploy.
+    let wallet_canister = state_test_helpers::set_up_universal_canister(
+        &machine,
+        Some(Cycles::new(EXPECTED_SNS_CREATION_FEE)),
+    );
+
+    let wasm_map = sns_wasm::add_real_wasms_to_sns_wasms(&machine);
+
+    // Replace root with unstoppable sns-root
+    let unstoppable_canister_wasm =
+        Project::cargo_bin_maybe_from_env("unstoppable-sns-root-canister", &[]).bytes();
+    let unstoppable_sns_wasm = SnsWasm {
+        wasm: unstoppable_canister_wasm,
+        canister_type: SnsCanisterType::Root.into(),
+    };
+    sns_wasm::add_wasm_via_proposal(&machine, unstoppable_sns_wasm.clone());
+
+    // To get an SNS neuron, we airdrop our new tokens to this user.
+    let user = PrincipalId::new_user_test_id(0);
+
+    let payload = SnsInitPayload {
+        transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
+        token_name: Some("An SNS Token".to_string()),
+        token_symbol: Some("AST".to_string()),
+        proposal_reject_cost_e8s: Some(E8S_PER_TOKEN),
+        neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN),
+        fallback_controller_principal_ids: vec![user.to_string()],
+        initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
+            FractionalDeveloperVotingPower {
+                developer_distribution: Some(DeveloperDistribution {
+                    developer_neurons: Default::default(),
+                }),
+                treasury_distribution: Some(TreasuryDistribution {
+                    total_e8s: 500_000_000,
+                }),
+                swap_distribution: Some(SwapDistribution {
+                    total_e8s: 10_000_000_000,
+                    initial_swap_amount_e8s: 10_000_000_000,
+                }),
+                airdrop_distribution: Some(AirdropDistribution {
+                    airdrop_neurons: vec![NeuronDistribution {
+                        controller: Some(user),
+                        stake_e8s: 2_000_000_000_000,
+                        memo: 0,
+                        dissolve_delay_seconds: 15780000, // 6 months
+                        vesting_period_seconds: None,
+                    }],
+                }),
+            },
+        )),
+        ..SnsInitPayload::with_valid_legacy_values_for_testing()
+    };
+
+    // Will be used to make proposals and such. Fortunately, this guy has lots
+    // of money -> he'll be able to push proposals though.
+    let airdrop_sns_neuron_id = sns_governance_pb::NeuronId {
+        id: compute_neuron_staking_subaccount(user, /* memo */ 0)
+            .0
+            .to_vec(),
+    };
+
+    let response = sns_wasm::deploy_new_sns(
+        &machine,
+        wallet_canister,
+        SNS_WASM_CANISTER_ID,
+        payload,
+        EXPECTED_SNS_CREATION_FEE,
+    );
+
+    assert_eq!(response.error, None);
+
+    let SnsCanisterIds {
+        root,
+        ledger: _,
+        governance,
+        swap: _,
+        index: _,
+    } = response.canisters.unwrap();
+
+    let root = CanisterId::unchecked_from_principal(root.unwrap());
+    let governance = CanisterId::unchecked_from_principal(governance.unwrap());
+
+    let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
+
+    let sns_wasm_to_add = create_modified_wasm(wasm_map.get(&canister_type).unwrap(), None);
+    let new_wasm_hash = sns_wasm_to_add.sha256_hash();
+
+    assert_ne!(new_wasm_hash, original_hash);
+
+    sns_wasm::add_wasm_via_proposal(&machine, sns_wasm_to_add);
+
+    // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
+    state_test_helpers::sns_make_proposal(
+        &machine,
+        governance,
+        user,
+        airdrop_sns_neuron_id,
+        Proposal {
+            title: "Upgrade Canister.".into(),
+            action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    machine.advance_time(Duration::from_secs(1));
+    machine.tick();
+    machine.tick();
+    machine.tick();
+
+    let get_root_status = || -> CanisterStatusResultV2 {
+        update_with_sender(
+            &machine,
+            CanisterId::ic_00(),
+            "canister_status",
+            candid_one,
+            CanisterIdRecord::from(root),
+            governance.get(),
+        )
+        .unwrap()
+    };
+
+    assert_eq!(get_root_status().status, CanisterStatusType::Stopping);
+
+    machine.advance_time(Duration::from_secs(60));
+    machine.tick();
+
+    assert_eq!(get_root_status().status, CanisterStatusType::Stopping);
+
+    machine.advance_time(Duration::from_secs(241));
+    machine.tick();
+    machine.tick();
+    machine.tick();
+
+    assert_eq!(get_root_status().status, CanisterStatusType::Running);
+    assert_eq!(
+        get_root_status().module_hash.unwrap(),
+        unstoppable_sns_wasm.sha256_hash()
+    );
 }
 
 fn run_upgrade_test_legacy(canister_type: SnsCanisterType) {
