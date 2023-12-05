@@ -13,7 +13,7 @@ use ic_types::{
         Advert, ArtifactKind, ArtifactPriorityFn, ArtifactTag, Priority,
         UnvalidatedArtifactMutation,
     },
-    chunkable::{Chunkable, ChunkableArtifact},
+    chunkable::ChunkableArtifact,
     p2p, NodeId,
 };
 use std::collections::HashMap;
@@ -163,20 +163,6 @@ impl ArtifactManager for ArtifactManagerImpl {
             Some(client) => client.get_priority_function(tag),
         }
     }
-
-    /// The method returns the chunk tracker for an advert with the given ID.
-    ///
-    /// See `ArtifactClient::get_chunk_tracker` for more details
-    fn get_chunk_tracker(
-        &self,
-        artifact_id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
-        let tag: ArtifactTag = artifact_id.into();
-
-        self.clients
-            .get(&tag)
-            .and_then(|client| client.get_chunk_tracker(artifact_id))
-    }
 }
 
 /// In order to let the artifact manager manage artifact clients, which can be
@@ -216,12 +202,6 @@ pub trait ArtifactManagerBackend: Send + Sync {
 
     /// The method returns a priority function for a given artifact tag.
     fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn;
-
-    /// The method returns a chunk tracker for a given artifact ID.
-    fn get_chunk_tracker(
-        &self,
-        id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>>;
 }
 
 /// Trait implementation for `ArtifactManagerBackend`.
@@ -317,17 +297,6 @@ where
                     Priority::Fetch
                 },
             )
-        }
-    }
-
-    /// The method returns the artifact chunk tracker.
-    fn get_chunk_tracker(
-        &self,
-        artifact_id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
-        match artifact_id.try_into() {
-            Ok(artifact_id) => Some(self.pool_reader.as_ref().get_chunk_tracker(artifact_id)),
-            Err(_) => None,
         }
     }
 }

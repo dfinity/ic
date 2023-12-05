@@ -83,7 +83,9 @@ use ic_types::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
     },
-    chunkable::{ArtifactErrorCode, ChunkId},
+    chunkable::ArtifactChunkData,
+    chunkable::ChunkId,
+    chunkable::CHUNKID_UNIT_CHUNK,
     crypto::CryptoHash,
     p2p::GossipAdvert,
     NodeId, RegistryVersion,
@@ -260,30 +262,12 @@ impl GossipImpl {
         let artifact_tracker = artifact_tracker.unwrap();
 
         // Feed the chunk to the tracker.
-        let completed_artifact = match artifact_tracker
-            .chunkable
-            .add_chunk(gossip_chunk.artifact_chunk.unwrap())
-        {
-            // Artifact assembly is complete.
-            Ok(artifact) => Some(artifact),
-            Err(ArtifactErrorCode::ChunksMoreNeeded) => None,
-            Err(ArtifactErrorCode::ChunkVerificationFailed) => {
-                trace!(
-                    self.log,
-                    "Chunk verification failed for artifact{:?} chunk {:?} from peer {:?}",
-                    gossip_chunk.request.artifact_id,
-                    gossip_chunk.request.chunk_id,
-                    &peer_id
-                );
-                self.metrics.chunks_verification_failed.inc();
-                None
+        let completed_artifact = match gossip_chunk.artifact_chunk.unwrap().artifact_chunk_data {
+            ArtifactChunkData::UnitChunkData(artifact) => artifact,
+            _ => {
+                return;
             }
         };
-
-        // Return if the artifact is complete.
-        if completed_artifact.is_none() {
-            return;
-        }
 
         // Record metrics.
         self.metrics.artifacts_received.inc();
@@ -291,8 +275,6 @@ impl GossipImpl {
         self.metrics
             .artifact_download_time
             .observe(artifact_tracker.get_duration_sec());
-
-        let completed_artifact = completed_artifact.unwrap();
 
         // Check whether the artifact matches the advertised integrity hash.
         let advert = match self.prioritizer.get_advert_from_peer(
@@ -827,20 +809,20 @@ impl GossipImpl {
             let advert_tracker = advert_tracker.deref_mut();
 
             // Try to begin a download for the artifact and collect its chunk requests.
-            if let Some(artifact_tracker) = artifacts_under_construction.schedule_download(
+            if artifacts_under_construction.schedule_download(
                 peer_id,
                 advert_tracker.advert(),
                 &self.gossip_config,
                 current_peers.len() as u32,
-                self.artifact_manager.as_ref(),
             ) {
                 // Collect gossip requests that can be initiated for this artifact.
                 // The function get_chunk_request() returns requests for chunks that satisfy
                 // chunk download constraints. These requests are collected and download
                 // attempts are recorded.
-                let new_chunk_requests = artifact_tracker
-                    .chunkable
-                    .chunks_to_download()
+                let v: Vec<ChunkId> = vec![ChunkId::from(CHUNKID_UNIT_CHUNK)];
+                let chunks_to_download = Box::new(v.into_iter());
+
+                let new_chunk_requests = chunks_to_download
                     .filter_map(|id: ChunkId| {
                         self.get_chunk_request(&current_peers, peer_id, advert_tracker, id)
                             .map(|req| {
@@ -1022,9 +1004,10 @@ pub mod tests {
         consensus::{fake::*, make_genesis},
         p2p::*,
         thread_transport::*,
-        types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
+        types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_types::chunkable::ArtifactErrorCode;
     use ic_types::consensus::dkg::{DealingContent, DkgMessageId, Message as DkgMessage};
     use ic_types::crypto::{
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -1052,10 +1035,7 @@ pub mod tests {
 
     /// The test artifact manager.
     #[derive(Default)]
-    pub(crate) struct TestArtifactManager {
-        /// The number of chunks.
-        pub num_chunks: u32,
-    }
+    pub(crate) struct TestArtifactManager {}
 
     /// The test artifact.
     struct TestArtifact {
@@ -1139,18 +1119,6 @@ pub mod tests {
         fn get_priority_function(&self, _: artifact::ArtifactTag) -> ArtifactPriorityFn {
             Box::new(priority_fn_fetch_now_all)
         }
-
-        /// The method returns a new TestArtifact instance.
-        fn get_chunk_tracker(
-            &self,
-            _id: &artifact::ArtifactId,
-        ) -> Option<Box<dyn Chunkable + Send + Sync>> {
-            let chunks = vec![];
-            Some(Box::new(TestArtifact {
-                num_chunks: self.num_chunks,
-                chunks,
-            }))
-        }
     }
 
     /// The function returns a new
@@ -1173,7 +1141,7 @@ pub mod tests {
         rt_handle: tokio::runtime::Handle,
     ) -> GossipImpl {
         let log: ReplicaLogger = logger.root.clone().into();
-        let artifact_manager = TestArtifactManager { num_chunks: 1 };
+        let artifact_manager = TestArtifactManager {};
 
         // Set up transport.
         let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
@@ -1555,52 +1523,6 @@ pub mod tests {
                     .get_tracker(&CryptoHash(Vec::from(counter.to_be_bytes())))
                     .is_some());
             }
-        }
-    }
-
-    /// The function tests the downloading of an artifact in multiple chunks in
-    /// parallel from multiple peers.
-    #[tokio::test]
-    async fn download_manager_multi_chunked_artifacts_are_linearly_striped() {
-        // There are 3 peers in total. 2 peers advertise an artifact with 40 chunks.
-        // Each peer has 20 download slots available for transport.
-        let num_peers = 3;
-        let logger = p2p_test_setup_logger();
-        let mut gossip = new_test_gossip(num_peers, &logger, tokio::runtime::Handle::current());
-        let request_queue_size = gossip.gossip_config.max_artifact_streams_per_peer;
-        gossip.artifact_manager = Arc::new(TestArtifactManager {
-            num_chunks: request_queue_size * num_peers,
-        });
-
-        // Each peer should download the node_id'th range of chunks, i.e.,
-        //  Node 1 downloads the chunks 0-19.
-        //  Node 2 downloads the chunks 20-39.
-        let test_assert_compute_work_is_striped =
-            |gossip: &GossipImpl, node_id: NodeId, compute_work_count: u64| {
-                let chunks_to_be_downloaded = gossip.download_next_compute_work(node_id).unwrap();
-                assert_eq!(chunks_to_be_downloaded.len() as u64, compute_work_count);
-                for (i, chunk_req) in chunks_to_be_downloaded.iter().enumerate() {
-                    assert_eq!(
-                        chunk_req.artifact_id,
-                        ArtifactId::FileTreeSync(0.to_string())
-                    );
-                    let chunk_num =
-                        ((node_id_to_u64(node_id) - 1) * request_queue_size as u64) + i as u64;
-                    assert_eq!(chunk_req.chunk_id, ChunkId::from(chunk_num as u32));
-                }
-            };
-
-        // Advertise the artifact from all peers.
-        for i in 1..num_peers {
-            test_add_adverts(&gossip, 0..1, node_test_id(i as u64))
-        }
-
-        for i in 1..num_peers {
-            test_assert_compute_work_is_striped(
-                &gossip,
-                node_test_id(i as u64),
-                request_queue_size as u64,
-            );
         }
     }
 

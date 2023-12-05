@@ -88,18 +88,6 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
     /// Return the priority function used by this client.
     #[allow(clippy::type_complexity)]
     fn get_priority_function(&self) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
-
-    /// Get Chunk tracker for an advert.  Download/Chunk trackers for
-    /// Semi-structured/multi-chunk artifacts need to be operated by
-    /// pool clients.  Clients own the tracking logic, this callback
-    /// is for them to setup chunk iterator context etc. For example
-    /// This call may be used by an artifact with on-disk chunks to
-    /// setup the directory and iterator logic before gossip starts
-    /// calling into the iterator.
-    fn get_chunk_tracker(
-        &self,
-        artifact_id: &Artifact::Id,
-    ) -> Box<dyn chunkable::Chunkable + Send + Sync>;
 }
 
 /// An abstraction of processing changes for each artifact client.
@@ -184,26 +172,6 @@ pub trait ArtifactManager: Send + Sync {
         &self,
         filter: &artifact::ArtifactFilter,
     ) -> Vec<p2p::GossipAdvert>;
-
-    /// Return a Chunk tracker for the given artifact id.
-    ///
-    /// When Gossip decides to download an artifact it requests the corresponding
-    /// chunk tracker for that particular artifact id via the
-    /// `get_chunk_tracker` method.
-    ///
-    /// Each Gossip client is given the flexibility to chunk and serialize their
-    /// artifacts via the `Chunkable` and `ChunkableArtifact` traits.
-    /// One of the many reasons for this flexibility is that artifacts don't necessary
-    /// fit into memory.
-    ///
-    /// The purpose of this function is to allow clients to inject their
-    /// custom `Chunkable` implementation into the Gossip protocol.
-    ///
-    /// See `ArtifactClient::get_chunk_tracker` for more details
-    fn get_chunk_tracker(
-        &self,
-        artifact_id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn chunkable::Chunkable + Send + Sync>>;
 
     /// Return the priority function for a specific client that is identified by
     /// the given artifact tag.
