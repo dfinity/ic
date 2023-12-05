@@ -7,10 +7,10 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6.12"
-backoff = "0.3.0"
+backoff = { workspace = true }
 bytes = { workspace = true }
 crossbeam-channel = "0.5.5"
-futures ={ workspace = true }
+futures = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-interfaces = { path = "../../interfaces" }

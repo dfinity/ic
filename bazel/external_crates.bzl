@@ -164,7 +164,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "backoff": crate.spec(
-                version = "^0.3.0",
+                version = "^0.4.0",
             ),
             "base32": crate.spec(
                 version = "^0.4.0",

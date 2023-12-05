@@ -423,6 +423,7 @@ arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 async-recursion = "1.0.5"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
+backoff = "0.4"
 base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "83b9ae07d0624db04675a71ae4179c4a17e99f77" }
@@ -432,7 +433,9 @@ candid = { version = "0.9.10", features = ["parser"] }
 chrono = { version = "0.4.19", features = ["serde"] }
 ciborium = "0.2.1"
 clap = { version = "3.2.25", features = ["derive"] }
-cloudflare = { version = "0.9.1", default_features = false, features = ["rustls-tls"] }
+cloudflare = { version = "0.9.1", default_features = false, features = [
+  "rustls-tls",
+] }
 ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.28"
 futures = "0.3.28"
@@ -470,7 +473,9 @@ ping = "0.5.0"
 pkcs8 = "0.10.2"
 pretty_assertions = "1.4.0"
 prometheus = { version = "0.13.3", features = ["process"] }
-prometheus-http-query = { version = "0.6.6", default_features = false, features = ["rustls-tls-webpki-roots"] }
+prometheus-http-query = { version = "0.6.6", default_features = false, features = [
+  "rustls-tls-webpki-roots",
+] }
 prost = "0.12.3"
 prost-build = "0.12.3"
 reqwest = { version = "0.11.22", default-features = false, features = [

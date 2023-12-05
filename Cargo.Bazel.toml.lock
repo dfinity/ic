@@ -804,17 +804,6 @@ dependencies = [
 
 [[package]]
 name = "backoff"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fe17f59a06fe8b87a6fc8bf53bb70b3aba76d7685f432487a68cd5552853625"
-dependencies = [
- "getrandom 0.2.10",
- "instant",
- "rand 0.8.5",
-]
-
-[[package]]
-name = "backoff"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b62ddb9cb1ec0a098ad4bbf9344d0713fa193ae1a80af55febcff2627b6a00c1"
@@ -2615,7 +2604,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-server",
- "backoff 0.3.0",
+ "backoff",
  "base32",
  "base64 0.13.1",
  "bech32 0.9.1",
@@ -4383,7 +4372,7 @@ version = "0.30.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "263d5c7b295ba69eac0692e6f6b35a01ca323889d10612c0f8c8fd223b0bfec5"
 dependencies = [
- "backoff 0.4.0",
+ "backoff",
  "cached 0.46.1",
  "candid",
  "ed25519-consensus",

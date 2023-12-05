@@ -1,5 +1,5 @@
 {
-  "checksum": "ba6a22571b194b9121d97f12c68ca05e3914b51df51760f1a5b7413a2ab46e4a",
+  "checksum": "f58eea1acc92f2908b72b16bc2d21c7ea7a4a61172b91326f3d5b044f35d15fa",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3913,59 +3913,6 @@
         "version": "0.5.1"
       },
       "license": "MIT"
-    },
-    "backoff 0.3.0": {
-      "name": "backoff",
-      "version": "0.3.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/backoff/0.3.0/download",
-          "sha256": "9fe17f59a06fe8b87a6fc8bf53bb70b3aba76d7685f432487a68cd5552853625"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "backoff",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "backoff",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "getrandom 0.2.10",
-              "target": "getrandom"
-            },
-            {
-              "id": "instant 0.1.12",
-              "target": "instant"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.0"
-      },
-      "license": "MIT/Apache-2.0"
     },
     "backoff 0.4.0": {
       "name": "backoff",
@@ -13467,7 +13414,7 @@
               "target": "axum_server"
             },
             {
-              "id": "backoff 0.3.0",
+              "id": "backoff 0.4.0",
               "target": "backoff"
             },
             {

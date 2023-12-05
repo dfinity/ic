@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-backoff = "0.3.0"
+backoff = { workspace = true }
 ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
 ic-canister-client-sender = { path = "./sender" }
 ic-canonical-state = { path = "../canonical_state" }
