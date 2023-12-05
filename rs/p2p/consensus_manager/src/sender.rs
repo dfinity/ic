@@ -5,7 +5,7 @@ use std::{
 };
 
 use axum::http::Request;
-use backoff::backoff::Backoff;
+use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent, consensus::ValidatedPoolReader,
@@ -29,33 +29,12 @@ use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, SlotNumber
 /// in size are pushed.
 const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
 
-//TODO(NET-1539): Move all these bounds to the ArtifactKind trait directly.
-// pub trait Send + Sync + Hash +'static: Send + Sync  + Hash + 'static {}
-
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
-// The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
-// See VER-1060 for details.
-const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(10);
-// The multiplier is chosen such that the sum of all intervals is about 100
-// seconds: `sum ~= (1.1^25 - 1) / (1.1 - 1) ~= 98`.
-const BACKOFF_INTERVAL_MULTIPLIER: f64 = 1.1;
-const MAX_ELAPSED_TIME: Duration = Duration::from_secs(60 * 5); // 5 minutes
+const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(60);
+const BACKOFF_MULTIPLIER: f64 = 2.0;
 
 // Used to log warnings if the slot table grows beyond the threshold.
 const SLOT_TABLE_THRESHOLD: u64 = 30_000;
-
-pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
-    backoff::ExponentialBackoff {
-        initial_interval: MIN_BACKOFF_INTERVAL,
-        current_interval: MIN_BACKOFF_INTERVAL,
-        randomization_factor: 0.1,
-        multiplier: BACKOFF_INTERVAL_MULTIPLIER,
-        start_time: std::time::Instant::now(),
-        max_interval: MAX_BACKOFF_INTERVAL,
-        max_elapsed_time: Some(MAX_ELAPSED_TIME),
-        clock: backoff::SystemClock::default(),
-    }
-}
 
 pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     log: ReplicaLogger,
@@ -63,7 +42,6 @@ pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     rt_handle: Handle,
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     transport: Arc<dyn Transport>,
-
     adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
     slot_manager: SlotManager,
     current_commit_id: CommitId,
@@ -266,7 +244,12 @@ async fn send_advert_to_peer(
     peer: NodeId,
     uri_prefix: &str,
 ) {
-    let mut backoff = get_backoff_policy();
+    let mut backoff = ExponentialBackoffBuilder::new()
+        .with_initial_interval(MIN_BACKOFF_INTERVAL)
+        .with_max_interval(MAX_BACKOFF_INTERVAL)
+        .with_multiplier(BACKOFF_MULTIPLIER)
+        .with_max_elapsed_time(None)
+        .build();
 
     loop {
         let request = Request::builder()
@@ -278,7 +261,7 @@ async fn send_advert_to_peer(
             return;
         }
 
-        let backoff_duration = backoff.next_backoff().unwrap_or(MAX_ELAPSED_TIME);
+        let backoff_duration = backoff.next_backoff().unwrap_or(MAX_BACKOFF_INTERVAL);
         time::sleep(backoff_duration).await;
     }
 }
