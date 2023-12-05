@@ -249,11 +249,10 @@ fn create_summary_payload_helper(
         );
     }
 
-    let is_new_key_transcript = current_key_transcript
-        .map(ecdsa::UnmaskedTranscriptWithAttributes::transcript_id)
-        != created_key_transcript
-            .as_ref()
-            .map(ecdsa::UnmaskedTranscriptWithAttributes::transcript_id);
+    let is_new_key_transcript = created_key_transcript.as_ref().is_some_and(|transcript| {
+        Some(transcript.transcript_id())
+            != current_key_transcript.map(ecdsa::UnmaskedTranscriptWithAttributes::transcript_id)
+    });
 
     // Check for membership change, start next key creation only when both of the following are
     // satisfied:
@@ -1039,11 +1038,13 @@ mod tests {
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
     use crate::ecdsa::payload_builder::quadruples::test_utils::create_available_quadruple;
+    use crate::ecdsa::payload_builder::quadruples::test_utils::create_new_quadruple_in_creation;
     use crate::ecdsa::test_utils::*;
     use crate::ecdsa::utils::block_chain_reader;
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
+    use ic_crypto_test_utils_canister_threshold_sigs::generate_tecdsa_protocol_inputs;
     use ic_crypto_test_utils_canister_threshold_sigs::node::Nodes;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -1051,9 +1052,11 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::consensus::fake::{Fake, FakeContentSigner};
+    use ic_test_utilities::types::ids::user_test_id;
     use ic_test_utilities::{
         mock_time,
         types::ids::{node_test_id, subnet_test_id},
@@ -1062,14 +1065,17 @@ mod tests {
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::ecdsa::EcdsaPayload;
+    use ic_types::consensus::ecdsa::ReshareOfUnmaskedParams;
     use ic_types::consensus::ecdsa::TranscriptRef;
     use ic_types::consensus::ecdsa::UnmaskedTranscript;
     use ic_types::consensus::ecdsa::UnmaskedTranscriptWithAttributes;
     use ic_types::consensus::{
         BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
     };
+    use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
+    use ic_types::Randomness;
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
     use std::convert::TryInto;
@@ -2621,6 +2627,251 @@ mod tests {
             .unwrap();
 
             assert_eq!(expected, payload_3.key_transcript);
+        })
+    }
+
+    #[test]
+    fn test_incomplete_reshare_doesnt_purge_quadruples() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut rng = reproducible_rng();
+            let Dependencies {
+                registry,
+                registry_data_provider,
+                ..
+            } = dependencies(pool_config, 1);
+            let subnet_id = subnet_test_id(1);
+            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+            let mut block_reader = TestEcdsaBlockReader::new();
+
+            // Create a key transcript
+            let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
+            let (dealers, receivers) = env.choose_dealers_and_receivers(
+                &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                &mut rng,
+            );
+
+            let key_transcript = generate_key_transcript(
+                &env,
+                &dealers,
+                &receivers,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                &mut rng,
+            );
+            let key_transcript_ref =
+                ecdsa::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
+            let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+                key_transcript.to_attributes(),
+                key_transcript_ref,
+            );
+            block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
+
+            // Membership changes between the registry versions
+            let subnet_record1 = SubnetRecordBuilder::from(&[node_test_id(0)])
+                .with_dkg_interval_length(9)
+                .build();
+            add_subnet_record(
+                &registry_data_provider,
+                current_key_transcript.registry_version().get(),
+                subnet_id,
+                subnet_record1,
+            );
+            let subnet_record2 = SubnetRecordBuilder::from(&[node_test_id(0), node_test_id(1)])
+                .with_dkg_interval_length(9)
+                .build();
+            add_subnet_record(
+                &registry_data_provider,
+                current_key_transcript.registry_version().get() + 1,
+                subnet_id,
+                subnet_record2,
+            );
+            registry.update_to_latest_version();
+
+            // We only have the current transcript initially
+            let key_transcripts = ecdsa::EcdsaKeyTranscript {
+                current: Some(current_key_transcript.clone()),
+                next_in_creation: ecdsa::KeyTranscriptCreation::Created(
+                    current_key_transcript.unmasked_transcript(),
+                ),
+                key_id: key_id.clone(),
+            };
+
+            let mut payload_0 =
+                make_bootstrap_summary(subnet_id, key_id.clone(), Height::from(0)).unwrap();
+            payload_0.key_transcript = key_transcripts;
+
+            // Add some quadruples and xnet reshares
+            let derivation_path = ExtendedDerivationPath {
+                caller: user_test_id(1).get(),
+                derivation_path: vec![],
+            };
+            let sig_inputs = generate_tecdsa_protocol_inputs(
+                &env,
+                &dealers,
+                &receivers,
+                &key_transcript,
+                &[0; 32],
+                Randomness::from([0; 32]),
+                &derivation_path,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                &mut rng,
+            );
+            let test_inputs = TestSigInputs::from(&sig_inputs);
+            payload_0.available_quadruples.insert(
+                payload_0.uid_generator.next_quadruple_id(),
+                test_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
+            );
+            for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
+                block_reader.add_transcript(transcript_ref, transcript);
+            }
+            create_new_quadruple_in_creation(
+                &env.nodes.ids::<Vec<_>>(),
+                env.newest_registry_version,
+                &mut payload_0.uid_generator,
+                &mut payload_0.quadruples_in_creation,
+            );
+            payload_0.ongoing_xnet_reshares.insert(
+                create_reshare_request(1, 1),
+                ReshareOfUnmaskedParams::new(
+                    key_transcript.transcript_id,
+                    BTreeSet::new(),
+                    RegistryVersion::from(0),
+                    &current_key_transcript.to_attributes(),
+                    key_transcript_ref,
+                ),
+            );
+            let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
+
+            // A new summary payload should be created successfully, with next_in_creation
+            // set to Begin (membership changed).
+            let payload_1 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(1),
+                RegistryVersion::from(0),
+                current_key_transcript.registry_version().increment(),
+                &payload_0,
+                Some(&metrics),
+                &no_op_logger(),
+            )
+            .unwrap()
+            .unwrap();
+
+            // As membership changed between the registry versions, next_in_creation should be set to begin
+            assert_eq!(
+                payload_1.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Begin
+            );
+            // Critical error counter should be set to 0
+            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 0);
+            // Quadruples and xnet reshares should still be unchanged:
+            assert_eq!(
+                payload_0.available_quadruples.len(),
+                payload_1.available_quadruples.len()
+            );
+            assert_eq!(
+                payload_0.quadruples_in_creation.len(),
+                payload_1.quadruples_in_creation.len()
+            );
+            assert_eq!(
+                payload_0.ongoing_xnet_reshares.len(),
+                payload_1.ongoing_xnet_reshares.len()
+            );
+
+            // Simulate unsuccessful creation of the next key transcript
+            for (id, transcript) in payload_1.idkg_transcripts.clone() {
+                block_reader.add_transcript(TranscriptRef::new(Height::from(1), id), transcript)
+            }
+
+            let payload_2 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(1),
+                RegistryVersion::from(0),
+                current_key_transcript.registry_version().increment(),
+                &payload_1,
+                Some(&metrics),
+                &no_op_logger(),
+            )
+            .unwrap()
+            .unwrap();
+
+            // next_in_creation should still be set to begin
+            assert_eq!(
+                payload_2.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Begin
+            );
+            // Current key transcript should sill be the same
+            assert_eq!(
+                payload_2
+                    .key_transcript
+                    .current
+                    .clone()
+                    .unwrap()
+                    .transcript_id(),
+                current_key_transcript.transcript_id(),
+            );
+            // Critical error counter should be set to 1
+            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
+            // Quadruples and xnet reshares should still be unchanged:
+            assert_eq!(
+                payload_2.available_quadruples.len(),
+                payload_1.available_quadruples.len()
+            );
+            assert_eq!(
+                payload_2.quadruples_in_creation.len(),
+                payload_1.quadruples_in_creation.len()
+            );
+            assert_eq!(
+                payload_2.ongoing_xnet_reshares.len(),
+                payload_1.ongoing_xnet_reshares.len()
+            );
+
+            let (transcript, transcript_ref, next_key_transcript) =
+                create_key_transcript_and_refs(&mut rng, Height::from(1));
+            block_reader.add_transcript(*transcript_ref.as_ref(), transcript);
+            for (id, transcript) in payload_2.idkg_transcripts.clone() {
+                block_reader.add_transcript(TranscriptRef::new(Height::from(2), id), transcript)
+            }
+
+            // Simulate successful key trancript creation
+            let mut key_transcript = payload_2.key_transcript.clone();
+            key_transcript.next_in_creation = ecdsa::KeyTranscriptCreation::Created(transcript_ref);
+            let mut payload_3 = payload_2.clone();
+            payload_3.key_transcript = key_transcript.clone();
+
+            let payload_4 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(2),
+                RegistryVersion::from(0),
+                next_key_transcript.registry_version(),
+                &payload_3,
+                Some(&metrics),
+                &no_op_logger(),
+            )
+            .unwrap()
+            .unwrap();
+
+            // Current key transcript should be the new one
+            assert_eq!(
+                payload_4.key_transcript.current.unwrap().transcript_id(),
+                next_key_transcript.transcript_id(),
+            );
+            assert_matches!(
+                payload_4.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Created(_)
+            );
+
+            // Critical error counter should still be set to 1
+            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
+
+            // Now, quadruples and xnet reshares should be purged
+            assert!(payload_4.available_quadruples.is_empty());
+            assert!(payload_4.quadruples_in_creation.is_empty());
+            assert!(payload_4.ongoing_xnet_reshares.is_empty());
         })
     }
 
