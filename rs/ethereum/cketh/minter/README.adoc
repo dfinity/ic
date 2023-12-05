@@ -1,118 +1,189 @@
-= The ckSepoliaEth Minter Canister +
+= The ckETH Minter Canister +
 
-A demonstration of the interactions described in this file is available link:https://www.youtube.com/watch?v=y_2im2V66k0[here].
+The ckETH minter canister converts ETH to ckETH and back, where ckETH is a token issued on the Internet Computer that is backed 1:1 by ETH.
+The minter works with a link:../../../rosetta-api/icrc1/README.md[Ledger Canister], handling the ckETH token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
 
-WARNING: Please make sure to locate yourself in the right folder, if you want to interact with **ckSepoliaEth** locate yourself at: ``ic/rs/ethereum/cketh/testnet``
+TIP: A demonstration of the interactions described in this file is available link:https://www.youtube.com/watch?v=y_2im2V66k0[here].
 
-==== What is Sepolia Testnet?
+== Testing with Sepolia
 
-link:https://moralis.io/sepolia-testnet-guide-what-is-the-sepolia-testnet/[Sepolia] is one of Ethereum's testnets.
+Another instance of the minter and of the ledger are deployed that target specifically the link:https://moralis.io/sepolia-testnet-guide-what-is-the-sepolia-testnet/[Sepolia] Ethereum testnet.
+This allows you to test the minter without having to use real ETH.
+You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet] to obtain some Sepolia ETH and start testing the ckSepoliaETH minter!
 
-==== How do I get Seplia ETH?
+WARNING: Please make sure to locate yourself at ``ic/rs/ethereum/cketh/testnet`` if you want to interact with **ckSepoliaEth**.
 
-You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet].
+== Quick Links
 
-==== Feedback
-We would greatly appreciate any feedback you may have. Please feel free to reach out by leaving a comment in this link:https://forum.dfinity.org/t/cketh-a-canister-issued-ether-twin-token-on-the-ic/22819/1[forum post].
+|===
+|Ethereum Chain |Helper smart contract |Minter dashboard|Ledger
 
-== Deposit: SepoliaETH to ckSepoliaETH
-```
+|link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-1.json[Ethereum Mainnet]
+|link:https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627dCC175[0x7574eB42cA208A4f6960ECCAfDF186D627dCC175]
+|link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[ckETH minter]
+|link:https://dashboard.internetcomputer.org/canister/ss2fx-dyaaa-aaaar-qacoq-cai[ckETH ledger]
+
+|link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-11155111.json[Ethereum Testnet Sepolia]
+|link:https://sepolia.etherscan.io/address/0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34[0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34]
+|link:https://jzenf-aiaaa-aaaar-qaa7q-cai.raw.icp0.io/dashboard[ckSepoliaETH minter]
+|link:https://dashboard.internetcomputer.org/canister/apia6-jaaaa-aaaar-qabma-cai[ckSepoliaETH ledger]
+|===
+
+== Feedback
+
+We would greatly appreciate any feedback you may have.
+Please feel free to reach out by leaving a comment in this link:https://forum.dfinity.org/t/cketh-a-canister-issued-ether-twin-token-on-the-ic/22819/1[forum post].
+
+== Deposit: ETH to ckETH
+
+----
  ┌────┐               ┌───────────────┐             ┌──────┐
  │User│               │Helper Contract│             │Minter│
  └─┬──┘               └───────┬───────┘             └──┬───┘
-   │                          │                        │    
-   │deposit(amount, principal)│                        │    
-   │─────────────────────────>│                        │    
-   │                          │                        │    
-   │                          │       get_events       │    
-   │                          │<───────────────────────│    
-   │                          │                        │    
-   │                          │Events(amout, principal)│    
-   │                          │───────────────────────>│    
-   │                          │                        │    
-   │              mint(amout, principal)               │    
-   │<──────────────────────────────────────────────────│    
+   │                          │                        │
+   │deposit(amount, principal)│                        │
+   │─────────────────────────>│                        │
+   │                          │                        │
+   │                          │       get_events       │
+   │                          │<───────────────────────│
+   │                          │                        │
+   │                          │Events(amout, principal)│
+   │                          │───────────────────────>│
+   │                          │                        │
+   │              mint(amout, principal)               │
+   │<──────────────────────────────────────────────────│
  ┌─┴──┐               ┌───────┴───────┐             ┌──┴───┐
  │User│               │Helper Contract│             │Minter│
  └────┘               └───────────────┘             └──────┘
-```
-Converting SepoliaETH into ckSepoliaETH requires a call to a smart contract on the Sepolia Ethereum testnet and passing your principal as argument, in the form of a `bytes32` array.
-The simplest way to convert your principal to the smart contract argument is to use the link:https://jzenf-aiaaa-aaaar-qaa7q-cai.raw.icp0.io/dashboard[minter dashboard].
+----
+
+Converting ETH into ckETH requires a call to a smart contract on Ethereum and passing your IC principal as argument, in the form of a `bytes32` array.
+
+[TIP]
+.Retrieve your IC principal
+====
+To know your principal, you can run
+
+[source,shell]
+----
+dfx identity get-principal
+----
+====
+
+[WARNING]
+.Address of the helper smart contract
+====
+The address of the helper smart contract may change in the future when the minter is upgraded.
+Please verify the address of the helper contract **before** any important transfer by querying the minter as follows
+
+[source,shell]
+----
+dfx canister --network ic call minter smart_contract_address
+----
+====
+
+The simplest way to convert your IC principal to the smart contract argument is to use the link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[minter dashboard].
 Another way is to use the `principal-to-hex` utility.
 
-```shell
+[TIP]
+.Convert your IC principal to a `bytes32` array
+====
+With `Cargo`
+
+[source,shell]
+----
 cargo run --bin cketh-principal-to-hex $(dfx identity get-principal)
-```
+----
 
-```shell
+With `Bazel`
+
+[source,shell]
+----
 bazel run //rs/ethereum/cketh/minter:principal_to_hex -- $(dfx identity get-principal)
-```
+----
+====
 
-Call the link:https://sepolia.etherscan.io/address/0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34#writeContract[minter helper contract] `deposit` function with your principal encoded and the amount as parameters.
+Call the link:https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627dCC175#writeContract[minter helper contract] `deposit` function with your principal encoded and the amount as parameters.
 
-WARNING: It's critical that the encoded IC principal is correct otherwise the funds will be lost.
+[WARNING]
+====
+* It's critical that the encoded IC principal is correct otherwise the funds will be lost.
+* The helper smart contracts for Ethereum and for Sepolia have different addresses (refer to the above table).
+====
 
-Current sepolia helper contract address: `0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34`.
-
-You can check your ckSepliaEth balance using:
-```shell
+[TIP]
+.Check your ckETH balance
+====
+Once your transaction has been mined on Ethereum, the minter should pick it up and mint the corresponding amount of ckETH **after roughly 20 minutes**, so don't panic if the following command currently returns 0.
+[source,shell]
+----
 dfx canister --network ic call ledger icrc1_balance_of 'record {owner = principal "'"$(dfx identity get-principal)"'" }'
-```
+----
+====
 
+== Withdrawal: ckETH to ETH
 
-== Withdrawal: ckSepoliaETH to SepoliaETH
-
-```
+----
  ┌────┐                       ┌──────┐        ┌──────┐                                           ┌────────────────┐
  │User│                       │Ledger│        │Minter│                                           │Ethereum Network│
  └─┬──┘                       └──┬───┘        └──┬───┘                                           └───────┬────────┘
-   │                             │               │                                                       │         
-   │icrc2_approve(minter, amount)│               │                                                       │         
-   │────────────────────────────>│               │                                                       │         
-   │                             │               │                                                       │         
-   │withdraw_eth(destination_eth_address, amount)│                                                       │         
-   │────────────────────────────────────────────>│                                                       │         
-   │                             │               │                                                       │         
-   │                             │               │eth_sendRawTransaction(destination_eth_address, amount)│         
-   │                             │               │──────────────────────────────────────────────────────>│         
+   │                             │               │                                                       │
+   │icrc2_approve(minter, amount)│               │                                                       │
+   │────────────────────────────>│               │                                                       │
+   │                             │               │                                                       │
+   │withdraw_eth(destination_eth_address, amount)│                                                       │
+   │────────────────────────────────────────────>│                                                       │
+   │                             │               │                                                       │
+   │                             │               │eth_sendRawTransaction(destination_eth_address, amount)│
+   │                             │               │──────────────────────────────────────────────────────>│
  ┌─┴──┐                       ┌──┴───┐        ┌──┴───┐                                           ┌───────┴────────┐
  │User│                       │Ledger│        │Minter│                                           │Ethereum Network│
  └────┘                       └──────┘        └──────┘                                           └────────────────┘
-```
+----
 
-The first time a user wants to withdraw some ckSepoliaETH, two steps are needed:
+[TIP]
+.Conversion ETH <--> Wei
+====
+The amounts described below use the smallest denomination of ETH called **wei**, where
+`1 ETH = 1_000_000_000_000_000_000 WEI` (Ethereum uses 18 decimals).
+You can use link:https://eth-converter.com/[this converter] to convert ETH to wei.
+====
+
+The first time a user wants to withdraw some ckETH, two steps are needed:
 
 1. Approve the minter's principal on the ledger for the desired amount.
-2. Call the minter to make a withdrawal for the desired amount. 
++
+[source,shell]
+----
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = LARGE_AMOUNT_WEI })"
+----
+2. Call the minter to make a withdrawal for the desired amount.
++
+[source,shell]
+----
+dfx canister --network ic call minter withdraw_eth '(SMALL_AMOUNT_WEI, "YOUR_ETH_ADDRESS")'
+----
 
-Note that the transaction will be made at the cost of the beneficiary meaning that the resulting received amount
-will be less than the specified withdrawal amount. 
-
-WARNING: The amount described below are expressed in *WEI*, you can use link:https://eth-converter.com/[this converter] to convert ETH to WEI.
-
+Note that the transaction will be made at the cost of the beneficiary meaning that the resulting received amount will be less than the specified withdrawal amount.
 The exact fee deducted depends on the dynamic Ethereum transaction fees used at the time the transaction was created.
 Additional withdrawals could be made as long as the allowance from step 1 was not exhausted or did not time out.
 
-=== Approving the Minter
 
-```shell
-dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = LARGE_AMOUNT_WEI })"
-```
+=== Example of a withdrawal
 
-Example: If you want to approve the minter to spend 1 ETH (1_000_000_000_000_000_000 Wei)
-```shell
+.Approve the minter to spend 1 ETH (`1_000_000_000_000_000_000` wei)
+====
+[source,shell]
+----
 dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000 })"
-```
+----
+====
 
-=== Withdrawing
-
-The specified amount for the withdrawal must not be greater than the approved amount.
-
-```shell
-dfx canister --network ic call minter withdraw_eth '(SMALL_AMOUNT_WEI, "YOUR_ETH_ADDRESS")'
-```
-
-Example: if you want to withdraw 0.15 ETH (150_000_000_000_000_000 Wei) to 0xAB586458E47f3e9D350e476fB7E294a57825A3f4:
-```shell
+.Withdraw 0.15 ETH (`150_000_000_000_000_000` wei) to `0xAB586458E47f3e9D350e476fB7E294a57825A3f4`
+====
+[source,shell]
+----
 dfx canister --network ic call minter withdraw_eth "(record {amount = 150_000_000_000_000_000; recipient = \"0xAB586458E47f3e9D350e476fB7E294a57825A3f4\"})"
-```
+----
+====
+

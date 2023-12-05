@@ -134,3 +134,151 @@ Installing the canister:
     --arg index_arg.bin \
     --summary-file ./index_proposal.md
 ```
+
+## Test the proposals on a testnet
+
+To test the proposals with a testnet that uses the same canister IDs as in the proposals we need:
+* dynamic testnet with a boundary node
+* 36 application subnets with one node each to allow the canisters to be created with the required IDs (see this [thread](https://dfinity.slack.com/archives/C018WHN6R2L/p1701417177185049)).
+
+### Spin up the dynamic testnet
+
+The simplest is to tweak the setup from [small_api_boundary](https://sourcegraph.com/github.com/dfinity/ic@ee5f7514e37d138e0ff6e69ef5d0d10706a23f67/-/blob/rs/tests/testing_verification/testnets/small_api_boundary.rs?L65)
+```rust
+pub fn setup(env: TestEnv) {
+    PrometheusVm::default()
+        .start(&env)
+        .expect("Failed to start prometheus VM");
+    let mut ic = InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
+    for _ in 0..36 {
+        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
+    }
+    ic.with_unassigned_nodes(1)
+        .setup_and_start(&env)
+        .expect("Failed to setup IC under test");
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCanisterWasmStrategy::TakeBuiltFromSources,
+        NnsCustomizations::default(),
+    );
+    // Deploy a boundary node with a boundary-api-guestos image.
+    ApiBoundaryNode::new(String::from(API_BOUNDARY_NODE_NAME))
+        .allocate_vm(&env)
+        .expect("Allocation of ApiBoundaryNode failed.")
+        .for_ic(&env, "")
+        .use_real_certs_and_dns()
+        .start(&env)
+        .expect("failed to setup ApiBoundaryNode VM");
+    let api_boundary_node = env
+        .get_deployed_api_boundary_node(API_BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    env.sync_with_prometheus();
+    // Await for API boundary node to report healthy.
+    api_boundary_node
+        .await_status_is_healthy()
+        .expect("Boundary node did not come up healthy.");
+}
+```
+
+and then spin up the dynamic testnet with a generous lifetime
+```shell
+./gitlab-ci/tools/docker-run
+ict testnet create small_api_boundary --lifetime-mins=880 --output-dir=./small_api_boundary -- --test_tmpdir=./small_api_boundary
+```
+
+Once the testnet is up and running, extract the external url of the boundary node from the logs, which should have the following format `https://ic<x>.farm.dfinity.systems`. In the following we will use `https://ic1.farm.dfinity.systems`.
+
+### Create the canisters
+
+For each canister:
+1. Creates an empty canister with the required ID.
+2. Reset the controller of the created canister to the NNS root (`r7inp-6aaaa-aaaaa-aaabq-cai`). This is needed because we will install the wasm via proposals controlled by the NNS governance canister.
+
+For the ledger canister:
+```shell
+dfx --provisional-create-canister-effective-canister-id ss2fx-dyaaa-aaaar-qacoq-cai  canister --network "https://ic1.farm.dfinity.systems" create ledger --specified-id ss2fx-dyaaa-aaaar-qacoq-cai
+
+dfx --identity default canister --network testnet update-settings --set-controller r7inp-6aaaa-aaaaa-aaabq-cai ledger
+````
+
+For the index canister:
+```shell
+dfx --provisional-create-canister-effective-canister-id s3zol-vqaaa-aaaar-qacpa-cai  canister --network "https://ic1.farm.dfinity.systems" create index --specified-id s3zol-vqaaa-aaaar-qacpa-cai
+
+dfx --identity default canister --network testnet update-settings --set-controller r7inp-6aaaa-aaaaa-aaabq-cai index
+```
+
+For the minter canister:
+```shell
+dfx --provisional-create-canister-effective-canister-id sv3dd-oaaaa-aaaar-qacoa-cai  canister --network "https://ic1.farm.dfinity.systems" create minter --specified-id sv3dd-oaaaa-aaaar-qacoa-cai
+dfx --identity default canister --network testnet update-settings --set-controller r7inp-6aaaa-aaaaa-aaabq-cai minter
+```
+
+You can check that the controller has been reset with:
+```shell
+dfx --identity default canister --network testnet info minter
+
+Controllers: r7inp-6aaaa-aaaaa-aaabq-cai
+Module None
+```
+
+### Submit the proposals
+
+To submit proposals we need a neuron. All dynamic testnet come up with a pre-loaded bunch of neurons, we will use [`TEST_NEURON_1_ID`](https://sourcegraph.com/github.com/dfinity/ic@3f9f6b24d0bd25fee09e85ab32d68ec5825affc2/-/blob/rs/nns/test_utils/src/ids.rs?L8) which has value `449479075714955186` and whose keypair is defined [here](https://sourcegraph.com/github.com/dfinity/ic@3f9f6b24d0bd25fee09e85ab32d68ec5825affc2/-/blob/rs/nervous_system/common/test_keys/src/lib.rs?L14). Store the secret key in a new file  `./TEST_NEURON_1.pem`:
+```
+-----BEGIN PRIVATE KEY-----
+MFMCAQEwBQYDK2VwBCIEIHS9H6NEjE5Leh3oMjTXcESspk8fgapoDI/xCBZV
+fnKNoSMDIQD2HfCf/GkgYxwyFO2lbjCEcHa1yNj1HO8kGMftgRS8lA==
+-----END PRIVATE KEY-----
+```
+
+For the ledger
+```shell
+ ic-admin --nns-url "https://ic1.farm.dfinity.systems" --secret-key-pem ./TEST_NEURON_1.pem propose-to-change-nns-canister --proposer 449479075714955186 --canister-id ss2fx-dyaaa-aaaar-qacoq-cai --mode install --wasm-module-path ic-icrc1-ledger-u256.wasm.gz --wasm-module-sha256 3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0 --arg ledger_arg.bin --summary-file ledger_proposal.md
+```
+
+For the index canister
+```shell
+ic-admin --nns-url "https://ic1.farm.dfinity.systems" --secret-key-pem ./TEST_NEURON_1.pem propose-to-change-nns-canister --proposer 449479075714955186 --canister-id s3zol-vqaaa-aaaar-qacpa-cai --mode install --wasm-module-path ic-icrc1-index-ng-u256.wasm.gz --wasm-module-sha256 3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614 --arg index_arg2.bin --summary-file index_proposal.md
+```
+
+For the minter
+```shell
+ic-admin --nns-url "https://ic1.farm.dfinity.systems" --secret-key-pem ./TEST_NEURON_1.pem propose-to-change-nns-canister --proposer 449479075714955186 --canister-id sv3dd-oaaaa-aaaar-qacoa-cai --mode install --wasm-module-path ic-cketh-minter.wasm.gz --wasm-module-sha256 e0167373ddd503c06a93faa2dac2d8da8118894a2552fc811186e31d5c49f27e --arg minter_arg.bin --summary-file minter_proposal.md
+```
+
+As soon as each proposal is submitted, it will be executed since `TEST_NEURON_1_ID` has the majority of the voting power.
+Once executed, the canisters should be up and running and could for example be called directly by `dfx`.
+It's also a good idea to check the Kibana logs to make sure that the canisters were installed as expected.
+In particular, any error in the init args will be reported in the Kibana logs, similar to the following:
+```
+Finished executing install_code message on canister CanisterId(s3zol-vqaaa-aaaar-qacpa-cai) after 0.594825038 with error: Hypervisor(CanisterId(s3zol-vqaaa-aaaar-qacpa-cai), CalledTrap("Index initialization must take in input an InitArg argument")), instructions consumed 2583657505
+```
+
+### Bonus: Activate tECDSA and HTTP outcalls
+
+From the Kibana logs, find out on which subnet the minter was installed. In the following commands we use `kji32-q2q2c-iclry-dfqpa-jqoku-g7ib3-fceyl-mgulh-szuz7-e7ajs-eqe`.
+
+```shell
+ ic-admin --nns-url  "https://ic1.farm.dfinity.systems" --secret-key-pem ./TEST_NEURON_1.pem propose-to-update-subnet --proposer 449479075714955186 --features "http_requests" --subnet kji32-q2q2c-iclry-dfqpa-jqoku-g7ib3-fceyl-mgulh-szuz7-e7ajs-eqe --summary "Enable the HTTPS outcalls feature"
+```
+
+If this works, then the minter should be able to retrieve the current transaction fees:
+```shell
+dfx --identity default canister --network "https://ic1.farm.dfinity.systems" call minter eip_1559_transaction_price
+```
+
+```shell
+ ic-admin --nns-url "https://ic1.farm.dfinity.systems" --secret-key-pem ./TEST_NEURON_1.pem propose-to-update-subnet --proposer 449479075714955186 --ecdsa-keys-to-generate Secp256k1:key_1 --subnet kji32-q2q2c-iclry-dfqpa-jqoku-g7ib3-fceyl-mgulh-szuz7-e7ajs-eqe --summary "Generate ECDSA key"
+```
+
+```shell
+ic-admin --nns-url "https://ic1.farm.dfinity.systems" --secret-key-pem ./TEST_NEURON_1.pem propose-to-update-subnet --proposer 449479075714955186 --ecdsa-key-signing-enable Secp256k1:key_1 --subnet kji32-q2q2c-iclry-dfqpa-jqoku-g7ib3-fceyl-mgulh-szuz7-e7ajs-eqe --summary "Enable ECDSA key signing"
+```
+
+After a while it should be possible to retrieve the minter's address on Ethereum (which is derived from the minter tECDSA public key):
+```shell
+dfx --identity default canister --network "https://ic1.farm.dfinity.systems" call minter minter_address
+```
