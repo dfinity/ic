@@ -178,7 +178,7 @@ rust_library(
     name = "sha",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_sha",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = ["//rs/crypto/internal/crypto_lib/sha2"],
 )
 

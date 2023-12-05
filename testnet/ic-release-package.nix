@@ -7,7 +7,7 @@ let
   # We take the version of the replica to be the version of the whole package.
   # inherit (builtins.parseDrvName replica.name) version;
   # TODO: use the above after embedding the replica version in its name
-  version = "0.8.0";
+  version = "0.9.0";
 in
 pkgs.runCommandNoCC "ic-release-package-${version}"
 {

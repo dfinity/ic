@@ -36,7 +36,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_node_key_validation",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

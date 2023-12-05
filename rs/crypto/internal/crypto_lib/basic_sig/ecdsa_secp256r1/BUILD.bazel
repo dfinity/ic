@@ -45,7 +45,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_ecdsa_secp256r1",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

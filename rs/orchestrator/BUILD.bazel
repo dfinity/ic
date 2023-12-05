@@ -13,7 +13,7 @@ rust_library(
         "@crate_index//:async-trait",
         "@crate_index//:strum_macros",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "//rs/async_utils",
         "//rs/canister_client",
