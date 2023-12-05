@@ -89,6 +89,7 @@ fn init(args: LedgerArgument) {
             panic!("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
         }
     }
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 }
 
 #[pre_upgrade]
