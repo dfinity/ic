@@ -14,8 +14,9 @@ use ic_nns_test_utils::{
 use ic_sns_governance::{
     governance::TREASURY_SUBACCOUNT_NONCE,
     pb::v1::{
-        proposal::Action, transfer_sns_treasury_funds::TransferFrom, NervousSystemParameters,
-        NeuronPermissionList, NeuronPermissionType, Proposal, TransferSnsTreasuryFunds,
+        proposal::Action, transfer_sns_treasury_funds::TransferFrom, MintSnsTokens,
+        NervousSystemParameters, NeuronPermissionList, NeuronPermissionType, Proposal,
+        TransferSnsTreasuryFunds,
     },
     types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
 };
@@ -220,4 +221,140 @@ fn nns_ledger_balance(state_machine: &StateMachine, account: Account) -> Tokens 
         Tokens
     )
     .unwrap()
+}
+
+#[test]
+fn sns_can_mint_funds_via_proposals() {
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let state_machine = StateMachine::new();
+
+    let user = PrincipalId::new_user_test_id(1000);
+    let user_account = Account {
+        owner: user.0,
+        subaccount: None,
+    };
+    let user_account_identifier = icrc1_account_to_icp_accountidentifier(user_account);
+
+    let first_sns_canister_id = 11;
+    let governance = CanisterId::from(first_sns_canister_id + 1);
+
+    let sns_treasury_account_nns = Account {
+        owner: governance.get().0,
+        subaccount: None,
+    };
+
+    let sns_treasury_account_sns = Account {
+        owner: governance.get().0,
+        subaccount: Some(
+            compute_distribution_subaccount(governance.get(), TREASURY_SUBACCOUNT_NONCE).0,
+        ),
+    };
+
+    let sns_treasury_account_nns_identifier =
+        icrc1_account_to_icp_accountidentifier(sns_treasury_account_nns);
+
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_accounts(vec![
+            (user_account_identifier, Tokens::new(10000, 0).unwrap()),
+            (
+                sns_treasury_account_nns_identifier,
+                Tokens::new(10000, 0).unwrap(),
+            ),
+        ])
+        .with_test_neurons()
+        .build();
+
+    let system_params = NervousSystemParameters {
+        neuron_claimer_permissions: Some(NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        }),
+        ..NervousSystemParameters::with_default_values()
+    };
+
+    let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+        .with_ledger_account(sns_treasury_account_sns, Tokens::new(10000, 0).unwrap())
+        // User needs majority of tokens to pass proposals
+        .with_ledger_account(user_account, Tokens::new(10001, 0).unwrap())
+        .with_nervous_system_parameters(system_params)
+        .build();
+
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+    let sns_canisters = setup_sns_canisters(&state_machine, sns_init_payload);
+
+    // Ensure we lined up canisters correctly or the transfers won't work.
+    assert_eq!(sns_canisters.governance_canister_id, governance);
+
+    let user_sns_balance = icrc1_balance(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        user_account,
+    );
+    assert_eq!(user_sns_balance, Tokens::new(10001, 0).unwrap());
+
+    let sns_sns_balance = icrc1_balance(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        sns_treasury_account_sns,
+    );
+
+    assert_eq!(sns_sns_balance, Tokens::new(10000, 0).unwrap());
+
+    let neuron_nonce = 0;
+    sns_stake_neuron(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        sns_canisters.ledger_canister_id,
+        user,
+        Tokens::new(10001, 0)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
+            .unwrap(),
+        neuron_nonce,
+    );
+    // User claims neuron
+    let neuron = sns_claim_staked_neuron(
+        &state_machine,
+        governance,
+        user,
+        neuron_nonce,
+        Some(100_000_000),
+    );
+
+    // User proposes to mint himself SNS tokens
+    let transfer_token_proposal_id = sns_make_proposal(
+        &state_machine,
+        governance,
+        user,
+        neuron,
+        Proposal {
+            title: "Mint SNS tokens".to_string(),
+            summary: "Mint tokens to user".to_string(),
+            url: "".to_string(),
+            action: Some(Action::MintSnsTokens(MintSnsTokens {
+                amount_e8s: Some(10000 * E8S_PER_TOKEN),
+                memo: None,
+                to_principal: Some(user),
+                to_subaccount: None,
+            })),
+        },
+    )
+    .unwrap();
+
+    sns_wait_for_proposal_execution(&state_machine, governance, transfer_token_proposal_id);
+
+    // Show that our treasuries are not affected, and our user has expected funds
+    let user_sns_balance = icrc1_balance(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        user_account,
+    );
+    assert_eq!(user_sns_balance, Tokens::new(10000, 0).unwrap());
+
+    let sns_sns_balance = icrc1_balance(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+        sns_treasury_account_sns,
+    );
+
+    assert_eq!(sns_sns_balance, Tokens::new(10000, 0).unwrap());
 }

@@ -394,6 +394,25 @@ pub mod transfer_sns_treasury_funds {
         }
     }
 }
+/// A proposal to mint SNS tokens to (optionally a Subaccount of) the
+/// target principal.
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MintSnsTokens {
+    /// The amount to transfer, in e8s.
+    #[prost(uint64, optional, tag = "1")]
+    pub amount_e8s: ::core::option::Option<u64>,
+    /// An optional memo to use for the transfer.
+    #[prost(uint64, optional, tag = "2")]
+    pub memo: ::core::option::Option<u64>,
+    /// The principal to transfer the funds to.
+    #[prost(message, optional, tag = "3")]
+    pub to_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// An (optional) Subaccount of the principal to transfer the funds to.
+    #[prost(message, optional, tag = "4")]
+    pub to_subaccount: ::core::option::Option<Subaccount>,
+}
 /// A proposal function to change the values of SNS metadata.
 /// Fields with None values will remain unchanged.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -474,7 +493,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -565,6 +584,11 @@ pub mod proposal {
         /// Id = 11.
         #[prost(message, tag = "15")]
         DeregisterDappCanisters(super::DeregisterDappCanisters),
+        /// Mint SNS tokens to an account.
+        ///
+        /// Id = 12.
+        #[prost(message, tag = "16")]
+        MintSnsTokens(super::MintSnsTokens),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
