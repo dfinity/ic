@@ -20,7 +20,6 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = "0.8.5"
-serde = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",

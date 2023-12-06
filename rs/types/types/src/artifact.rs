@@ -15,7 +15,7 @@
 //! defined in the chunkable module.
 use crate::{
     canister_http::CanisterHttpResponseShare,
-    chunkable::{ArtifactChunk, ChunkId, ChunkableArtifact},
+    chunkable::{Chunk, ChunkId},
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
         dkg::DkgMessageId,
@@ -572,8 +572,8 @@ pub struct StateSyncMessage {
     pub state_sync_file_group: Arc<crate::state_sync::FileGroupChunks>,
 }
 
-impl ChunkableArtifact for StateSyncMessage {
-    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+impl StateSyncMessage {
+    pub fn get_chunk(&self, chunk_id: ChunkId) -> Option<Chunk> {
         #[cfg(not(target_family = "unix"))]
         {
             let _keep_clippy_quiet = chunk_id;
@@ -582,7 +582,6 @@ impl ChunkableArtifact for StateSyncMessage {
 
         #[cfg(target_family = "unix")]
         {
-            use crate::chunkable::ArtifactChunkData;
             use crate::state_sync::{
                 encode_manifest, encode_meta_manifest, state_sync_chunk_type, StateSyncChunk,
                 DEFAULT_CHUNK_SIZE,
@@ -638,10 +637,7 @@ impl ChunkableArtifact for StateSyncMessage {
                 }
             }
 
-            Some(ArtifactChunk {
-                chunk_id,
-                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(payload),
-            })
+            Some(payload.into())
         }
     }
 }
