@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use clap::{Parser, ValueEnum};
-use endpoints::{block, health, network_list, network_options, network_status};
+use endpoints::block;
 use http::Request;
 use ic_agent::{
     agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
@@ -14,6 +14,7 @@ use ic_agent::{
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
+    data_api::endpoints::*,
     ledger_blocks_synchronization::blocks_synchronizer::start_synching_blocks,
     AppState, Metadata,
 };

@@ -1,4 +1,5 @@
 use super::storage::types::RosettaBlock;
+use super::utils::utils::icrc1_account_to_rosetta_accountidentifier;
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use candid::Deserialize;
@@ -106,19 +107,6 @@ pub enum OperationType {
     Transfer,
     Approve,
     Fee,
-}
-
-pub fn icrc1_account_to_rosetta_accountidentifier(
-    account: &icrc_ledger_types::icrc1::account::Account,
-) -> AccountIdentifier {
-    AccountIdentifier {
-        address: account.owner.to_string(),
-        sub_account: account.subaccount.map(|s| SubAccountIdentifier {
-            address: hex::encode(s),
-            metadata: None,
-        }),
-        metadata: None,
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -391,24 +379,6 @@ impl BlockResponseBuilder {
 fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> {
     let millis = Duration::from_nanos(timestamp_nanos).as_millis();
     u64::try_from(millis).context("Failed to convert timestamp to milliseconds")
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct BlockTransactionRequest {
-    pub block_identifier: BlockIdentifier,
-    pub transaction_identifier: TransactionIdentifier,
-    pub network_identifier: NetworkIdentifier,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct BlockTransactionResponse {
-    pub transaction: Transaction,
-}
-
-impl BlockTransactionResponse {
-    pub fn builder() -> BlockTransactionResponseBuilder {
-        BlockTransactionResponseBuilder::new()
-    }
 }
 
 #[derive(Default)]
@@ -703,7 +673,7 @@ mod test {
             block in prop::option::of(blocks_strategy(arb_small_amount())),
             currency in prop::option::of(currency_strategy()),
         ) {
-            let mut builder = BlockTransactionResponse::builder();
+            let mut builder = BlockTransactionResponseBuilder::default();
             if let Some(block) = &block {
                 builder = builder.with_transaction(block.transaction.clone());
                 if let Some(effective_fee) = block.effective_fee {

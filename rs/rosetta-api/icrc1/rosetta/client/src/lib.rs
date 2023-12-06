@@ -1,4 +1,3 @@
-use ic_icrc_rosetta::common::types::{BlockTransactionRequest, BlockTransactionResponse};
 use ic_rosetta_api::models::MempoolResponse;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
