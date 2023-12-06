@@ -1167,6 +1167,9 @@ impl ProposalData {
     /// Returns true if the proposal meets the conditions to be accepted, also called "adopted".
     /// The result is only meaningful if a decision on the proposal's result can be made, i.e.,
     /// either there is a majority of yes-votes or the proposal's deadline has passed.
+    ///
+    /// If this function changes, the GIX team should be notified, since they maintain a
+    /// TypeScript version of it
     pub fn is_accepted(&self) -> bool {
         let minimum_yes_proportion_of_exercised = self.minimum_yes_proportion_of_exercised();
         let minimum_yes_proportion_of_total = self.minimum_yes_proportion_of_total();
