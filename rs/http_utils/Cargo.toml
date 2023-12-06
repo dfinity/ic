@@ -11,9 +11,8 @@ flate2 = "1.0.20"
 hex = "0.4.2"
 http = "0.2.1"
 tokio = { workspace = true }
-hyper = { version = "0.14.18", features = ["full"] }
-hyper-rustls = "0.24.0"
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-logger = { path = "../monitoring/logger" }
+reqwest = { workspace = true }
 slog = "2.5.2"
 tar = "0.4.38"
