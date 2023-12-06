@@ -11,23 +11,25 @@ Another instance of the minter and of the ledger are deployed that target specif
 This allows you to test the minter without having to use real ETH.
 You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet] to obtain some Sepolia ETH and start testing the ckSepoliaETH minter!
 
-WARNING: Please make sure to locate yourself at ``ic/rs/ethereum/cketh/testnet`` if you want to interact with **ckSepoliaEth**.
-
 == Quick Links
 
 |===
-|Ethereum Chain |Helper smart contract |Minter dashboard|Ledger
+|Ethereum Chain |Helper smart contract |Minter dashboard|Ledger|`dfx` commands in
 
 |link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-1.json[Ethereum Mainnet]
 |link:https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627dCC175[0x7574eB42cA208A4f6960ECCAfDF186D627dCC175]
 |link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[ckETH minter]
 |link:https://dashboard.internetcomputer.org/canister/ss2fx-dyaaa-aaaar-qacoq-cai[ckETH ledger]
+| `ic/rs/ethereum/cketh/mainnet`
 
 |link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-11155111.json[Ethereum Testnet Sepolia]
 |link:https://sepolia.etherscan.io/address/0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34[0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34]
 |link:https://jzenf-aiaaa-aaaar-qaa7q-cai.raw.icp0.io/dashboard[ckSepoliaETH minter]
 |link:https://dashboard.internetcomputer.org/canister/apia6-jaaaa-aaaar-qabma-cai[ckSepoliaETH ledger]
+| `ic/rs/ethereum/cketh/testnet`
 |===
+
+TIP: To interact with the minter or ledger as exemplified below with `dfx`, make sure to locate yourself in the correct directory as listed in the table above.
 
 == Feedback
 
@@ -115,6 +117,7 @@ Call the link:https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627d
 .Check your ckETH balance
 ====
 Once your transaction has been mined on Ethereum, the minter should pick it up and mint the corresponding amount of ckETH **after roughly 20 minutes**, so don't panic if the following command currently returns 0.
+
 [source,shell]
 ----
 dfx canister --network ic call ledger icrc1_balance_of 'record {owner = principal "'"$(dfx identity get-principal)"'" }'
@@ -164,10 +167,9 @@ dfx canister --network ic call ledger icrc2_approve "(record { spender = record 
 dfx canister --network ic call minter withdraw_eth '(SMALL_AMOUNT_WEI, "YOUR_ETH_ADDRESS")'
 ----
 
-Note that the transaction will be made at the cost of the beneficiary meaning that the resulting received amount will be less than the specified withdrawal amount.
-The exact fee deducted depends on the dynamic Ethereum transaction fees used at the time the transaction was created.
 Additional withdrawals could be made as long as the allowance from step 1 was not exhausted or did not time out.
 
+After calling `withdraw_eth`, the minter will usually send a transaction to the Ethereum network within 6 minutes. Additional delays may occasionally occur due to reasons such as congestion on the Ethereum network or some Ethereum JSON-RPC providers being offline.
 
 === Example of a withdrawal
 
@@ -187,3 +189,90 @@ dfx canister --network ic call minter withdraw_eth "(record {amount = 150_000_00
 ----
 ====
 
+=== Cost of a withdrawal
+
+Note that the transaction will be made at the cost of the beneficiary meaning that the resulting received amount will be less than the specified withdrawal amount.
+The exact fee deducted depends on the dynamic Ethereum transaction fees used at the time the transaction was created.
+
+In more detail, assume that a user calls `withdraw_eth` (after having approved the minter) to withdraw `withdraw_amount` (e.g. 1ckETH) to some address.
+Then the minter is going to do the following
+
+. Burn `withdraw_amount` on the ckETH ledger for the IC principal (the caller of `withdraw_eth`).
+. Estimate the maximum current cost of a transaction on Ethereum, say `max_tx_fee_estimate`. This `max_tx_fee_estimate` is expected to be large enough to be valid for the few next blocks.
+. Issue an Ethereum transaction (via threshold ECDSA) with the value `withdraw_amount - max_tx_fee_estimate`. This requires of course that `withdraw_amount >= max_tx_fee_estimate` and that's why we currently have a conservative minimum value for withdrawals of `30_000_000_000_000_000` wei. This ensures that the minter can always send the transaction to Ethereum if one or several resubmissions are needed if the Ethereum network is congested and fees are increasing rapidly (each resubmission requires an increase of at least 10% of the transaction fee).
+. When the transaction is mined, the destination of the transaction will receive `withdraw_amount - max_tx_fee_estimate`. Since on Ethereum transactions are paid by the sender, the minter’s account will be charged with
++
+----
+(withdraw_amount - max_tx_fee_estimate) + actual_tx_fee == withdrawal_amount - (max_tx_fee_estimate - actual_tx_fee),
+----
+where `actual_tx_fee` represents the actual transaction fee (can be retrieved from the transaction receipt) and by construction `max_tx_fee_estimate - actual_tx_fee > 0`.
+
+[TIP]
+.Effective transaction fees vs unspent transaction fees
+====
+The minter dashboard displays in the metadata table the following fees
+
+. `Total effective transaction fees`: the sum of all `actual_tx_fee` for all withdrawals.
+. `Total unspent transaction fees`: the sum of all `max_tx_fee_estimate - actual_tx_fee` for all withdrawals. This represents an overestimate of the actual transaction fees that were charged to the user but in retrospect not needed to mine the sent transaction.
+====
+
+.Transaction https://etherscan.io/tx/0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39[0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39]
+====
+To make things more concrete, we break down the cost of a concrete withdrawal (ledger burn index `2`) that resulted in the Ethereum transaction https://etherscan.io/tx/0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39[0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39]:
+
+. Initial withdrawal amount: `withdraw_amount:= 39_998_000_000_000_000` wei
+. Gas limit: `21_000`
+. Max fee per gas: `0x14369c3348 == 86_815_552_328` wei
+. Maximum estimated transaction fees: `max_tx_fee_estimate:= 21_000 * 86_815_552_328 == 1_823_126_598_888_000` wei
+. Amount received at destination: `39_998_000_000_000_000 - max_tx_fee_estimate == 38_174_873_401_112_000`
+. Effective gas price: `0x9f8c76bc8 == 42_828_524_488` wei
+. Actual transaction fee: `actual_tx_fee:= 21_000 * 42_828_524_488 == 899_399_014_248_000` wei
+. Unspent transaction fee: `max_tx_fee_estimate - actual_tx_fee == 923_727_584_640_000` wei
+. Amount charged at minter's address `withdrawal_amount - (max_tx_fee_estimate - actual_tx_fee) == 39_074_272_415_360_000` wei
+====
+
+== Cost of all ckETH Transactions
+
+
+
+|===
+|Operation |Canister |Cost |Example
+
+|Deposit ETH -> ckETH
+| Minter
+|Variable, depends on the Ethereum transaction fees.
+|Transaction https://etherscan.io/tx/0xa1e108e8d1502fd99a8b3128fe2075830bb17fc22d35ea07f8383a28dc93034a[0xa1e10...] needed `33_288` gas and cost roughly `0.0021` ETH
+
+|Withdrawal ckETH -> ETH
+
+(Minimum amount `0.03` ckETH)
+| Minter
+|Variable, depends on the Ethereum transaction fees.
+|Transaction https://etherscan.io/tx/0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39[0x5ab62...] detailed above needed `21_000` gas and cost roughly `0.0018` ETH
+
+a|Transfer ckETH -> ckETH
+
+. `icrc1_transfer`
+. `icrc2_transfer_from`
+| Ledger
+| Fix `0.000002` ckETH.
+
+Set by `transfer_fee` decided in proposal https://dashboard.internetcomputer.org/proposal/126309[126309].
+| Transfer with https://dashboard.internetcomputer.org/ethereum/transaction/12[ledger index 12]
+
+a| Approval
+
+. `icrc2_approve`
+| Ledger
+| Fix `0.000002` ckETH.
+
+Set by `transfer_fee` decided in proposal https://dashboard.internetcomputer.org/proposal/126309[126309].
+| Approval with https://dashboard.internetcomputer.org/ethereum/transaction/3[ledger index 3]
+|===
+
+== History of Proposals
+
+. https://dashboard.internetcomputer.org/proposal/126171[126171]: install minter canister
+. https://dashboard.internetcomputer.org/proposal/126173[126173]: install index canister
+. https://dashboard.internetcomputer.org/proposal/126309[126309]: install ledger canister
+. https://dashboard.internetcomputer.org/proposal/126314[126314]: upgrade minter canister
