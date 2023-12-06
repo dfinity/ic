@@ -28,6 +28,7 @@ use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
+use ic_types_test_utils::ids::SUBNET_1;
 use quinn::{
     self,
     udp::{EcnCodepoint, Transmit},
@@ -284,6 +285,7 @@ pub fn add_transport_to_sim<F>(
     let sev_handshake = sev.unwrap_or_else(|| {
         Arc::new(Sev::new(
             peer,
+            SUBNET_1,
             registry_handler.registry_client.clone(),
             log.clone(),
         ))

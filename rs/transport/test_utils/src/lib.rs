@@ -1,5 +1,5 @@
 use futures::future::BoxFuture;
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{NodeId, RegistryVersion, SubnetId};
 use ic_config::transport::TransportConfig;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -28,6 +28,7 @@ pub const NODE_ID_1: NodeId = NODE_1;
 pub const NODE_ID_2: NodeId = NODE_2;
 pub const NODE_ID_3: NodeId = NODE_3;
 pub const NODE_ID_4: NodeId = NODE_4;
+pub const SUBNET_ID_1: SubnetId = SUBNET_1;
 
 pub const TRANSPORT_CHANNEL_ID: usize = 0;
 
@@ -76,7 +77,7 @@ impl RegistryAndDataProvider {
     pub fn new() -> Self {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let subnet_list_record = SubnetListRecord {
-            subnets: vec![SUBNET_1.get().to_vec()],
+            subnets: vec![SUBNET_ID_1.get().to_vec()],
         };
         data_provider
             .add(
@@ -94,7 +95,7 @@ impl RegistryAndDataProvider {
         ];
         data_provider
             .add(
-                &make_subnet_record_key(SUBNET_1),
+                &make_subnet_record_key(SUBNET_ID_1),
                 REG_V1,
                 Some(subnet_record),
             )
@@ -136,6 +137,7 @@ where
     };
     let sev_handshake = Arc::new(Sev::new(
         node_id,
+        SUBNET_ID_1,
         registry_and_data.registry.clone(),
         log.clone(),
     ));
@@ -267,6 +269,7 @@ impl TestPeerBuilder {
         };
         let sev_handshake = Arc::new(Sev::new(
             self.node_id,
+            SUBNET_ID_1,
             self.registry_data.registry.clone(),
             self.log.clone(),
         ));
@@ -424,6 +427,7 @@ pub fn start_connection_between_two_peers(
     };
     let sev_handshake = Arc::new(Sev::new(
         node_1,
+        SUBNET_ID_1,
         registry_and_data.registry.clone(),
         logger.clone(),
     ));
@@ -450,7 +454,12 @@ pub fn start_connection_between_two_peers(
         send_queue_size,
         ..Default::default()
     };
-    let sev_handshake = Arc::new(Sev::new(node_2, registry_and_data.registry, logger.clone()));
+    let sev_handshake = Arc::new(Sev::new(
+        node_2,
+        SUBNET_ID_1,
+        registry_and_data.registry,
+        logger.clone(),
+    ));
 
     let peer_b = create_transport(
         node_2,

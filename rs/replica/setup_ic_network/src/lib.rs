@@ -357,7 +357,12 @@ pub fn setup_consensus_and_p2p(
         metrics_registry,
     );
     p2p_router = Some(state_sync_router.merge(p2p_router.unwrap_or_default()));
-    let sev_handshake = Arc::new(Sev::new(node_id, registry_client.clone(), log.clone()));
+    let sev_handshake = Arc::new(Sev::new(
+        node_id,
+        subnet_id,
+        registry_client.clone(),
+        log.clone(),
+    ));
 
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(

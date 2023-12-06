@@ -9324,6 +9324,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
+ "ic-types-test-utils",
  "mockall",
  "quinn",
  "serde",
