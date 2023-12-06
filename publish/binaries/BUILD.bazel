@@ -145,3 +145,19 @@ upload_artifacts(
     target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//testnet/tools:__pkg__"],
 )
+
+BINS_TO_TEST = [
+    ":ic-starter",
+    ":replica",
+]
+
+sh_test(
+    name = "binary-libraries-test",
+    size = "small",
+    srcs = ["binary-libraries-test.sh"],
+    args = ["$(rootpath " + b + ")" for b in BINS_TO_TEST],
+    data = BINS_TO_TEST,
+    tags = [
+        "test_macos",
+    ],
+)

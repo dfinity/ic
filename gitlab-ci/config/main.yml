@@ -514,48 +514,6 @@ python-gitlab-ci-tests:
       cd gitlab-ci/src
       pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
 
-check-bins-linux:
-  extends:
-    - .build-k8s
-    - .rules-master-pipeline-no-merge-train
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-  image:
-    # 21.04
-    name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
-  before_script: /bin/true
-  after_script: /bin/true
-  variables:
-    ARTIFACT_PREFIX: binaries/x86_64-linux
-  script:
-    - |
-      set -exuo pipefail
-
-      apt-get update && apt-get install --yes --no-install-recommends curl ca-certificates
-
-      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/replica.gz" | gunzip > /tmp/replica
-      chmod +x /tmp/replica
-      ldd /tmp/replica
-
-      if ldd /tmp/replica | grep -q libssl; then
-          echo "OpenSSL seems to be dynamically linked!" >&2
-          exit 1
-      fi
-
-      /tmp/replica --print-sample-config --replica-version 1 >/dev/null
-
-      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/ic-starter.gz" | gunzip > /tmp/ic-starter
-      chmod +x /tmp/ic-starter
-      ldd /tmp/ic-starter
-
-      if ldd /tmp/ic-starter | grep -q libssl; then
-          echo "OpenSSL seems to be dynamically linked!" >&2
-          exit 1
-      fi
-
-      /tmp/ic-starter --version
-
 cargo-clippy-linux:
   needs: [] # don't wait on other jobs
   extends:
