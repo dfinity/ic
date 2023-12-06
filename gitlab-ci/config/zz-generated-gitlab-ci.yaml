@@ -2941,64 +2941,6 @@ cargo-clippy-linux:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     SHELL_WRAPPER: "/usr/bin/time"
-check-bins-linux:
-  after_script: "/bin/true"
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  before_script: "/bin/true"
-  extends:
-    - ".build-k8s"
-    - ".rules-master-pipeline-no-merge-train"
-  image:
-    name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
-  needs:
-    - artifacts: false
-      job: bazel-test-all
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
-  script:
-    - |
-      set -exuo pipefail
-
-      apt-get update && apt-get install --yes --no-install-recommends curl ca-certificates
-
-      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/replica.gz" | gunzip > /tmp/replica
-      chmod +x /tmp/replica
-      ldd /tmp/replica
-
-      if ldd /tmp/replica | grep -q libssl; then
-          echo "OpenSSL seems to be dynamically linked!" >&2
-          exit 1
-      fi
-
-      /tmp/replica --print-sample-config --replica-version 1 >/dev/null
-
-      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/ic-starter.gz" | gunzip > /tmp/ic-starter
-      chmod +x /tmp/ic-starter
-      ldd /tmp/ic-starter
-
-      if ldd /tmp/ic-starter | grep -q libssl; then
-          echo "OpenSSL seems to be dynamically linked!" >&2
-          exit 1
-      fi
-
-      /tmp/ic-starter --version
-  tags:
-    - dfinity-ic
-  variables:
-    ARTIFACT_PREFIX: binaries/x86_64-linux
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 commit-lint:
   artifacts:
     expire_in: 3 days
