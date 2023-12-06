@@ -2754,11 +2754,9 @@ dependencies = [
  "metrics-proxy",
  "minicbor",
  "minicbor-derive",
- "mio 0.7.14",
  "mockall",
  "moka",
  "nix 0.24.3",
- "nonblock",
  "notify",
  "num",
  "num-bigint 0.4.4",
@@ -2815,7 +2813,6 @@ dependencies = [
  "rcgen",
  "regex",
  "reqwest",
- "retain_mut",
  "rgb",
  "ring",
  "ripemd",
@@ -2866,8 +2863,8 @@ dependencies = [
  "socket2 0.5.4",
  "ssh2",
  "static_assertions 0.3.4",
- "strum 0.24.1",
- "strum_macros 0.24.3",
+ "strum 0.25.0",
+ "strum_macros 0.25.3",
  "stubborn-io",
  "substring",
  "subtle",
@@ -6037,15 +6034,6 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
-]
-
-[[package]]
-name = "nonblock"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "796141c8358fc4ce8cbe66b71b57c52eb510ee13289695e43db6843d6f202173"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -9426,9 +9414,6 @@ name = "strum"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
-dependencies = [
- "strum_macros 0.24.3",
-]
 
 [[package]]
 name = "strum"
