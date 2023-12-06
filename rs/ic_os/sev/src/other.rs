@@ -1,6 +1,6 @@
 use crate::{SnpError, ValidateAttestationError, ValidateAttestedStream};
 use async_trait::async_trait;
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{NodeId, RegistryVersion, SubnetId};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use std::sync::Arc;
@@ -11,7 +11,12 @@ pub struct Sev {
 }
 
 impl Sev {
-    pub fn new(_node_id: NodeId, _registry: Arc<dyn RegistryClient>, log: ReplicaLogger) -> Self {
+    pub fn new(
+        _node_id: NodeId,
+        _subnet_id: SubnetId,
+        _registry: Arc<dyn RegistryClient>,
+        log: ReplicaLogger,
+    ) -> Self {
         Sev { log }
     }
 }

@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/types/base_types",
     "//rs/types/types",
+    "//rs/types/types_test_utils",
     "@crate_index//:axum",
     "@crate_index//:bytes",
     "@crate_index//:crossbeam-channel",

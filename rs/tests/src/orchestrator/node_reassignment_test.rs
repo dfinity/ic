@@ -44,7 +44,7 @@ use crate::{
 };
 
 const DKG_INTERVAL: u64 = 14;
-const NNS_SUBNET_SIZE: usize = 5;
+const NNS_SUBNET_SIZE: usize = 4;
 const APP_SUBNET_SIZE: usize = 1;
 
 pub fn config(env: TestEnv) {
@@ -223,12 +223,12 @@ pub fn test(env: TestEnv) {
 
     // From here on, test the change_subnet_membership command
     // After the previous test, the subnets are:
-    // NNS: [node3, node4, <extra-nns-node>]
+    // NNS: [node3, node4]
     // APP: [node1, node2, <original-app-subnet-nodes>]
     //
     // Let's move node1 and node2 back into the NNS subnet, and node3, node4 into the APP subnet
     // So that we get:
-    // NNS: [node1, node2, <extra-nns-node>]
+    // NNS: [node1, node2]
     // APP: [node3, node4, <original-app-subnet-nodes>]
     node1.await_status_is_healthy().unwrap();
     node2.await_status_is_healthy().unwrap();
