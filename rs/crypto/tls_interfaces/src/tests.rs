@@ -3,13 +3,15 @@
 mod tls_public_key_cert {
     use crate::{TlsPublicKeyCert, TlsPublicKeyCertCreationError};
     use assert_matches::assert_matches;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
     use x509_parser::certificate::X509Certificate;
     use x509_parser::prelude::FromDer;
 
     #[test]
     fn should_create_certificate_from_valid_der() {
-        let cert_der = generate_ed25519_cert().cert_der();
+        let rng = &mut reproducible_rng();
+        let cert_der = generate_ed25519_cert(rng).cert_der();
 
         let cert = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
 
@@ -18,7 +20,8 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_return_proto_with_correct_der() {
-        let cert_der = generate_ed25519_cert().cert_der();
+        let rng = &mut reproducible_rng();
+        let cert_der = generate_ed25519_cert(rng).cert_der();
 
         let cert = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
 
@@ -27,7 +30,8 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_equal_with_same_der() {
-        let cert_der = generate_ed25519_cert().cert_der();
+        let rng = &mut reproducible_rng();
+        let cert_der = generate_ed25519_cert(rng).cert_der();
 
         let cert1 = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
         let cert2 = TlsPublicKeyCert::new_from_der(cert_der).unwrap();
@@ -38,10 +42,11 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_not_equal_to_other() {
-        let cert_der1 = generate_ed25519_cert().cert_der();
+        let rng = &mut reproducible_rng();
+        let cert_der1 = generate_ed25519_cert(rng).cert_der();
         let cert1 = TlsPublicKeyCert::new_from_der(cert_der1).unwrap();
 
-        let cert_der2 = generate_ed25519_cert().cert_der();
+        let cert_der2 = generate_ed25519_cert(rng).cert_der();
         let cert2 = TlsPublicKeyCert::new_from_der(cert_der2).unwrap();
 
         assert_ne!(cert1, cert2);
@@ -71,7 +76,8 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_deserialize_from_serialized() {
-        let cert = TlsPublicKeyCert::new_from_der(generate_ed25519_cert().cert_der()).unwrap();
+        let rng = &mut reproducible_rng();
+        let cert = TlsPublicKeyCert::new_from_der(generate_ed25519_cert(rng).cert_der()).unwrap();
 
         let serialized = json5::to_string(&cert).unwrap();
 
@@ -122,8 +128,9 @@ mod tls_public_key_cert {
         // rather than TlsPublicKeyCert.
         // Also, config uses JSON5.
         use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+        let rng = &mut reproducible_rng();
 
-        let cert = TlsPublicKeyCert::new_from_der(generate_ed25519_cert().cert_der()).unwrap();
+        let cert = TlsPublicKeyCert::new_from_der(generate_ed25519_cert(rng).cert_der()).unwrap();
 
         let proto_cert = X509PublicKeyCert {
             certificate_der: cert.as_der().clone(),

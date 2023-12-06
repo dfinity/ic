@@ -43,6 +43,7 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     crate = ":tls_interfaces",
     deps = [
+        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/test_utils/tls",
         "@crate_index//:assert_matches",
         "@crate_index//:json5",

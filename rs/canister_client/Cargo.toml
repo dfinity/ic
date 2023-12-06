@@ -33,9 +33,10 @@ url = "2.1.1"
 
 [dev-dependencies]
 hex = "0.4.2"
-ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-certification-test-utils = { path = "../certification/test-utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
+ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-validator = { path = "../validator" }
 rand = "0.8"
