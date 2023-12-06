@@ -3,7 +3,7 @@ use crate::{
         ConsensusManagerMetrics, DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED,
         DOWNLOAD_TASK_RESULT_COMPLETED, DOWNLOAD_TASK_RESULT_DROP,
     },
-    AdvertUpdate, CommitId, SlotNumber, Update,
+    uri_prefix, AdvertUpdate, CommitId, SlotNumber, Update,
 };
 use axum::{
     extract::State,
@@ -49,11 +49,16 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
     pool: ValidatedPoolReaderRef<Artifact>,
 ) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>) {
     let (update_tx, update_rx) = tokio::sync::mpsc::channel(100);
-    let endpoint: &'static str = Artifact::TAG.into();
     let router = Router::new()
-        .route(&format!("/{}/rpc", endpoint), any(rpc_handler))
+        .route(
+            &format!("/{}/rpc", uri_prefix::<Artifact>()),
+            any(rpc_handler),
+        )
         .with_state(pool)
-        .route(&format!("/{}/update", endpoint), any(update_handler))
+        .route(
+            &format!("/{}/update", uri_prefix::<Artifact>()),
+            any(update_handler),
+        )
         .with_state((log, update_tx));
 
     (router, update_rx)
@@ -518,7 +523,7 @@ where
                 } {
                     let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
                     let request = Request::builder()
-                        .uri(format!("/{}/rpc", Artifact::TAG.to_string().to_lowercase()))
+                        .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
                         .body(bytes)
                         .unwrap();
 
