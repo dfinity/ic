@@ -7,10 +7,8 @@ use ic_icrc1_tokens_u64::U64;
 use ic_icrc_rosetta::{
     common::{
         storage::types::RosettaBlock,
-        types::{
-            icrc1_account_to_rosetta_accountidentifier, ApproveMetadata, BlockTransactionResponse,
-            OperationType,
-        },
+        types::{ApproveMetadata, OperationType},
+        utils::utils::icrc1_account_to_rosetta_accountidentifier,
     },
     Metadata,
 };

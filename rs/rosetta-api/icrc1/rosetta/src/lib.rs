@@ -4,9 +4,8 @@ use ic_base_types::CanisterId;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use num_traits::ToPrimitive;
 use std::{collections::HashMap, sync::Arc};
-
 pub mod common;
-
+pub mod data_api;
 pub mod ledger_blocks_synchronization;
 
 pub struct AppState {

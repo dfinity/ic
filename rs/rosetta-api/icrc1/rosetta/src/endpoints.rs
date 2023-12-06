@@ -1,109 +1,14 @@
-use axum::{extract::State, http::StatusCode, response::Result, Json};
-use ic_icrc_rosetta::common::types::BlockResponseBuilder;
-use ic_icrc_rosetta::{
-    common::types::{BlockTransactionRequest, BlockTransactionResponse, Error},
-    AppState,
-};
+use axum::{extract::State, response::Result, Json};
+use ic_icrc_rosetta::common::types::{BlockResponseBuilder, BlockTransactionResponseBuilder};
+use ic_icrc_rosetta::common::utils::utils::verify_network_id;
+use ic_icrc_rosetta::{common::types::Error, AppState};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::models::MempoolResponse;
-use rosetta_core::identifiers::*;
-use rosetta_core::miscellaneous::*;
 use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
-use std::time::Duration;
-
-const ROSETTA_VERSION: &str = "1.4.13";
-const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
-const DEFAULT_BLOCKCHAIN: &str = "Internet Computer";
-
-fn verify_network_id(network_identifier: &NetworkIdentifier, state: &AppState) -> Result<()> {
-    let expected =
-        &NetworkIdentifier::new(DEFAULT_BLOCKCHAIN.to_owned(), state.ledger_id.to_string());
-
-    if network_identifier != expected {
-        return Err(Error::invalid_network_id(expected).into());
-    }
-    Ok(())
-}
-
-pub async fn health() -> (StatusCode, Json<()>) {
-    (StatusCode::OK, Json(()))
-}
-
-pub async fn network_list(
-    State(state): State<Arc<AppState>>,
-    _request: Json<MetadataRequest>,
-) -> Json<NetworkListResponse> {
-    Json(NetworkListResponse {
-        network_identifiers: vec![NetworkIdentifier::new(
-            DEFAULT_BLOCKCHAIN.to_owned(),
-            state.ledger_id.to_string(),
-        )],
-    })
-}
-
-pub async fn network_options(
-    State(state): State<Arc<AppState>>,
-    request: Json<NetworkRequest>,
-) -> Result<Json<NetworkOptionsResponse>> {
-    verify_network_id(&request.network_identifier, &state)?;
-    Ok(Json(NetworkOptionsResponse {
-        version: Version {
-            rosetta_version: ROSETTA_VERSION.to_string(),
-            node_version: NODE_VERSION.to_string(),
-            middleware_version: None,
-            metadata: None,
-        },
-        allow: Allow {
-            operation_statuses: vec![],
-            operation_types: vec![],
-            errors: vec![Error::invalid_network_id(&NetworkIdentifier::new(
-                DEFAULT_BLOCKCHAIN.to_owned(),
-                state.ledger_id.to_string(),
-            ))
-            .into()],
-            historical_balance_lookup: true,
-            timestamp_start_index: None,
-            call_methods: vec![],
-            balance_exemptions: vec![],
-            mempool_coins: false,
-            block_hash_case: None,
-            transaction_hash_case: None,
-        },
-    }))
-}
-
-pub async fn network_status(
-    State(state): State<Arc<AppState>>,
-    request: Json<NetworkRequest>,
-) -> Result<Json<NetworkStatusResponse>> {
-    verify_network_id(&request.network_identifier, &state)?;
-
-    let current_block = state
-        .storage
-        .get_block_with_highest_block_idx()
-        .map_err(|e| Error::unable_to_find_block(format!("Error retrieving current block: {}", e)))?
-        .ok_or_else(|| Error::unable_to_find_block("Current block not found".into()))?;
-
-    let genesis_block = state
-        .storage
-        .get_block_at_idx(0)
-        .map_err(|e| Error::unable_to_find_block(format!("Error retrieving genesis block: {}", e)))?
-        .ok_or_else(|| Error::unable_to_find_block("Genesis block not found".into()))?;
-    let genesis_block_identifier = BlockIdentifier::from(&genesis_block);
-
-    Ok(Json(NetworkStatusResponse {
-        current_block_identifier: BlockIdentifier::from(&current_block),
-        current_block_timestamp: Duration::from_nanos(current_block.timestamp).as_millis() as u64,
-        genesis_block_identifier: genesis_block_identifier.clone(),
-        oldest_block_identifier: Some(genesis_block_identifier),
-        sync_status: None,
-        peers: vec![],
-    }))
-}
 
 pub async fn block(
     State(state): State<Arc<AppState>>,
@@ -215,7 +120,7 @@ pub async fn block_transaction(
         .get_effective_fee()
         .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
 
-    let mut builder = BlockTransactionResponse::builder()
+    let mut builder = BlockTransactionResponseBuilder::default()
         .with_transaction(transaction)
         .with_currency(currency);
 

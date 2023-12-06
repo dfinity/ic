@@ -289,7 +289,7 @@ async fn blocks_test() {
         hash: from_hash(&scribe.blockchain[h].hash),
     };
     let msg = BlockTransactionRequest::new(
-        req_handler.network_id(),
+        req_handler.network_id().into(),
         block_id.clone(),
         trans.transaction_identifier.clone(),
     );
@@ -375,7 +375,7 @@ async fn blocks_test() {
             hash: from_hash(&block.hash),
         };
         let msg = BlockTransactionRequest::new(
-            req_handler.network_id(),
+            req_handler.network_id().into(),
             block_id.clone(),
             transaction.transaction_identifier.clone(),
         );

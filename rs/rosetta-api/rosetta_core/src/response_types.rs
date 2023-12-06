@@ -124,3 +124,17 @@ impl BlockResponse {
         }
     }
 }
+
+/// A BlockTransactionResponse contains information about a block transaction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct BlockTransactionResponse {
+    /// Transactions contain an array of Operations that are attributable to the same TransactionIdentifier.
+    pub transaction: Transaction,
+}
+
+impl BlockTransactionResponse {
+    pub fn new(transaction: Transaction) -> BlockTransactionResponse {
+        BlockTransactionResponse { transaction }
+    }
+}

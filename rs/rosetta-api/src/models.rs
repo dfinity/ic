@@ -113,49 +113,6 @@ impl AccountBalanceResponse {
     }
 }
 
-/// A BlockTransactionRequest is used to fetch a Transaction included in a block
-/// that is not returned in a BlockResponse.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct BlockTransactionRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "block_identifier")]
-    pub block_identifier: BlockIdentifier,
-
-    #[serde(rename = "transaction_identifier")]
-    pub transaction_identifier: TransactionIdentifier,
-}
-
-impl BlockTransactionRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        block_identifier: BlockIdentifier,
-        transaction_identifier: TransactionIdentifier,
-    ) -> BlockTransactionRequest {
-        BlockTransactionRequest {
-            network_identifier,
-            block_identifier,
-            transaction_identifier,
-        }
-    }
-}
-
-/// A BlockTransactionResponse contains information about a block transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct BlockTransactionResponse {
-    #[serde(rename = "transaction")]
-    pub transaction: Transaction,
-}
-
-impl BlockTransactionResponse {
-    pub fn new(transaction: Transaction) -> BlockTransactionResponse {
-        BlockTransactionResponse { transaction }
-    }
-}
-
 /// CallRequest is the input to the `/call`
 /// endpoint. It contains the method name the user wants to call and some parameters specific for the method call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
