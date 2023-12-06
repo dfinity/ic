@@ -39,7 +39,7 @@ use ic_types::batch::{
 };
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
-    chunkable::{ChunkId, ChunkableArtifact},
+    chunkable::ChunkId,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,

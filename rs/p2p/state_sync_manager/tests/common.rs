@@ -16,7 +16,7 @@ use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_types::{
     artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
-    chunkable::{ArtifactChunk, ArtifactChunkData, ArtifactErrorCode, ChunkId, Chunkable},
+    chunkable::{ArtifactChunk, ArtifactChunkData, ArtifactErrorCode, Chunk, ChunkId, Chunkable},
     crypto::CryptoHash,
     state_sync::{Manifest, MetaManifest, StateSyncVersion},
     CryptoHashOfState, Height, NodeId, PrincipalId,
@@ -215,24 +215,16 @@ impl StateSyncClient for FakeStateSync {
         }
     }
 
-    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         if self.disconnected.load(Ordering::SeqCst) || id != &self.global_state.artifact_id() {
             return None;
         }
 
         if is_manifest_chunk(chunk_id) {
-            return Some(ArtifactChunk {
-                chunk_id,
-                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(vec![0; 100]),
-            });
+            return Some(vec![0; 100].into());
         }
 
-        self.global_state
-            .chunk(chunk_id)
-            .map(|chunk| ArtifactChunk {
-                chunk_id,
-                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(chunk),
-            })
+        self.global_state.chunk(chunk_id).map(|c| c.into())
     }
 
     fn deliver_state_sync(&self, msg: StateSyncMessage) {
@@ -405,7 +397,7 @@ impl StateSyncClient for SharableMockStateSync {
         self.should_cancel_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().should_cancel(id)
     }
-    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         self.chunk_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunk(id, chunk_id)
     }
@@ -480,11 +472,4 @@ pub fn create_node(
     );
 
     (state_sync, jh)
-}
-
-pub fn empty_artifact_chunk(chunk_id: ChunkId) -> ArtifactChunk {
-    ArtifactChunk {
-        chunk_id,
-        artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(Vec::new()),
-    }
 }
