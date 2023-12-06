@@ -502,8 +502,8 @@ slog = { version = "2.7.0", features = [
   "release_max_level_debug",
   "release_max_level_trace",
 ] }
-strum = { version = "0.24.1", features = ["derive"] }
-strum_macros = "0.24.1"
+strum = { version = "0.25.0", features = ["derive"] }
+strum_macros = "0.25.3"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.32.0", features = ["full"] }

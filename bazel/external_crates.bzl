@@ -685,14 +685,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "minicbor-derive": crate.spec(
                 version = "^0.13.0",
             ),
-            "mio": crate.spec(
-                version = "^0.7",
-                features = [
-                    "os-ext",
-                    "os-poll",
-                    "pipe",
-                ],
-            ),
             "mockall": crate.spec(
                 version = "^0.11.4",
             ),
@@ -704,9 +696,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "nix": crate.spec(
                 version = "^0.24.3",
-            ),
-            "nonblock": crate.spec(
-                version = "^0.1.0",
             ),
             "notify": crate.spec(
                 version = "^4.0.12",
@@ -932,9 +921,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "stream",
                 ],
             ),
-            "retain_mut": crate.spec(
-                version = "^0.1",
-            ),
             "ring": crate.spec(
                 version = "^0.16.11",
                 features = [
@@ -1125,13 +1111,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.4",
             ),
             "strum": crate.spec(
-                version = "^0.24.1",
+                version = "^0.25.0",
                 features = [
                     "derive",
                 ],
             ),
             "strum_macros": crate.spec(
-                version = "^0.24.1",
+                version = "^0.25.3",
             ),
             "stubborn-io": crate.spec(
                 version = "^0.3.2",

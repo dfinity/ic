@@ -1,5 +1,5 @@
 {
-  "checksum": "f60df8a55e7e772f848aa635632be305a48a92e0d529f6ce95ffd20f7355fc5d",
+  "checksum": "00a51c1c5a2d273993922df89d64cd0d285564e4533eb46f86538b86f7a75cf5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13946,10 +13946,6 @@
               "target": "minicbor"
             },
             {
-              "id": "mio 0.7.14",
-              "target": "mio"
-            },
-            {
               "id": "mockall 0.11.4",
               "target": "mockall"
             },
@@ -13960,10 +13956,6 @@
             {
               "id": "nix 0.24.3",
               "target": "nix"
-            },
-            {
-              "id": "nonblock 0.1.0",
-              "target": "nonblock"
             },
             {
               "id": "notify 4.0.17",
@@ -14176,10 +14168,6 @@
               "target": "reqwest"
             },
             {
-              "id": "retain_mut 0.1.9",
-              "target": "retain_mut"
-            },
-            {
               "id": "rgb 0.8.37",
               "target": "rgb"
             },
@@ -14365,7 +14353,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "strum 0.24.1",
+              "id": "strum 0.25.0",
               "target": "strum"
             },
             {
@@ -14705,7 +14693,7 @@
               "target": "slog_derive"
             },
             {
-              "id": "strum_macros 0.24.3",
+              "id": "strum_macros 0.25.3",
               "target": "strum_macros"
             },
             {
@@ -29796,7 +29784,6 @@
             "os-ext",
             "os-poll",
             "os-util",
-            "pipe",
             "uds"
           ],
           "selects": {}
@@ -30804,45 +30791,6 @@
         },
         "edition": "2018",
         "version": "7.1.3"
-      },
-      "license": "MIT"
-    },
-    "nonblock 0.1.0": {
-      "name": "nonblock",
-      "version": "0.1.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/nonblock/0.1.0/download",
-          "sha256": "796141c8358fc4ce8cbe66b71b57c52eb510ee13289695e43db6843d6f202173"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "nonblock",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "nonblock",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.149",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.0"
       },
       "license": "MIT"
     },
@@ -48825,22 +48773,11 @@
         "crate_features": {
           "common": [
             "default",
-            "derive",
-            "std",
-            "strum_macros"
+            "std"
           ],
           "selects": {}
         },
         "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "strum_macros 0.24.3",
-              "target": "strum_macros"
-            }
-          ],
-          "selects": {}
-        },
         "version": "0.24.1"
       },
       "license": "MIT"
