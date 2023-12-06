@@ -2,6 +2,8 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::artifact::ArtifactKind;
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntCounterVec, IntGauge};
 
+use crate::uri_prefix;
+
 pub(crate) const PEER_LABEL: &str = "peer_id";
 pub(crate) const DOWNLOAD_TASK_RESULT_LABEL: &str = "result";
 pub(crate) const DOWNLOAD_TASK_RESULT_COMPLETED: &str = "completed";
@@ -47,7 +49,7 @@ pub(crate) struct ConsensusManagerMetrics {
 
 impl ConsensusManagerMetrics {
     pub fn new<Artifact: ArtifactKind>(metrics_registry: &MetricsRegistry) -> Self {
-        let prefix = Artifact::TAG.to_string();
+        let prefix = uri_prefix::<Artifact>();
         let const_labels_string = labels! {"client".to_string() => prefix.clone()};
         let const_labels = labels! {"client" => prefix.as_str()};
         Self {

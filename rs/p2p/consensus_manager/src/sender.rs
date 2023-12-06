@@ -23,7 +23,9 @@ use tokio::{
     time,
 };
 
-use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, SlotNumber, Update};
+use crate::{
+    metrics::ConsensusManagerMetrics, uri_prefix, AdvertUpdate, CommitId, SlotNumber, Update,
+};
 
 /// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
 /// in size are pushed.
@@ -103,7 +105,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         error!(
             self.log,
             "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
-            Artifact::TAG
+            uri_prefix::<Artifact>()
         );
     }
 
@@ -212,7 +214,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
                         if !is_initiated {
                             metrics.send_view_send_to_peer_total.inc();
-                            let task = send_advert_to_peer(transport.clone(), body.clone(), peer, Artifact::TAG.into());
+                            let task = send_advert_to_peer(transport.clone(), body.clone(), peer, uri_prefix::<Artifact>());
                             in_progress_transmissions.spawn_on(task, &rt_handle);
                             initiated_transmissions.insert(peer, connection_id);
                         }
@@ -242,7 +244,7 @@ async fn send_advert_to_peer(
     transport: Arc<dyn Transport>,
     message: Bytes,
     peer: NodeId,
-    uri_prefix: &str,
+    uri_prefix: String,
 ) {
     let mut backoff = ExponentialBackoffBuilder::new()
         .with_initial_interval(MIN_BACKOFF_INTERVAL)
