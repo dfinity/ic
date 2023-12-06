@@ -536,9 +536,3 @@ pub fn encode_metrics(
 
     Ok(())
 }
-
-/// Whether we should store inactive neurons in stable memory, i.e. stop storing their secondary
-/// copies in heap memory.
-fn should_store_inactive_neurons_only_in_stable_memory() -> bool {
-    true
-}
