@@ -11,7 +11,7 @@ ic-adapter-metrics-service = { path = "../adapter_metrics_service" }
 ic-async-utils = { path = "../../async_utils" }
 prometheus = { workspace = true }
 protobuf = "2.27.1"
-slog = "2.7.0"
+slog = { workspace = true }
 slog-async = "2.7.0"
 tokio = { workspace = true }
 tonic = { workspace = true }

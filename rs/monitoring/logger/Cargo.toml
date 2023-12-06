@@ -12,7 +12,7 @@ ic-config = { path = "../../config" }
 ic-context-logger = { path = "../context_logger" }
 ic-protobuf = { path = "../../protobuf" }
 serde = { workspace = true }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-json = { version = "2.3", features = ["nested-values"] }
 slog-scope = "4.1.2"

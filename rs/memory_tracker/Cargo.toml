@@ -17,10 +17,7 @@ ic-sys = { path = "../sys" }
 ic-utils = { path = "../utils" }
 libc = "0.2.91"
 nix = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 lazy_static = "1.4.0"
 
 [features]

@@ -16,7 +16,7 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 serde = { workspace = true }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 thiserror = "1.0.37"
 tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"

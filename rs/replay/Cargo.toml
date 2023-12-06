@@ -47,7 +47,7 @@ icp-ledger = { path = "../rosetta-api/icp_ledger" }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-slog = "2.5.2"
+slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 tempfile = "3.1.0"
 tokio = { workspace = true }

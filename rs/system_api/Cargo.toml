@@ -30,10 +30,7 @@ ic-utils = { path = "../utils" }
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.0.0"
