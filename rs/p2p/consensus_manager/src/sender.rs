@@ -79,7 +79,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         transport: Arc<dyn Transport>,
         adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
     ) {
-        let slot_manager = SlotManager::new(log.clone(), metrics.clone());
+        let slot_manager = SlotManager::new(log.clone(), metrics.clone(), Artifact::TAG.into());
 
         let manager = Self {
             log,
@@ -133,7 +133,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         if let Some((send_task, free_slot)) = self.active_adverts.remove(id) {
             self.metrics.send_view_consensus_purge_active_total.inc();
             send_task.abort();
-            self.slot_manager.give_slot(free_slot);
+            self.slot_manager.return_slot(free_slot);
         } else {
             self.metrics.send_view_consensus_dup_purge_total.inc();
         }
@@ -145,7 +145,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
 
-            let slot = self.slot_manager.take_free_slot();
+            let slot = self.slot_manager.slot();
 
             let send_future = Self::send_advert_to_all_peers(
                 self.rt_handle.clone(),
@@ -288,24 +288,30 @@ struct SlotManager {
     free_slots: Vec<SlotNumber>,
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
+    service_name: &'static str,
 }
 
 impl SlotManager {
-    fn new(log: ReplicaLogger, metrics: ConsensusManagerMetrics) -> Self {
+    fn new(
+        log: ReplicaLogger,
+        metrics: ConsensusManagerMetrics,
+        service_name: &'static str,
+    ) -> Self {
         Self {
             next_free_slot: 0.into(),
             free_slots: vec![],
             log,
             metrics,
+            service_name,
         }
     }
 
-    fn give_slot(&mut self, slot: SlotNumber) {
+    fn return_slot(&mut self, slot: SlotNumber) {
         self.free_slots.push(slot);
         self.metrics.slot_manager_used_slots.dec();
     }
 
-    fn take_free_slot(&mut self) -> SlotNumber {
+    fn slot(&mut self) -> SlotNumber {
         self.metrics.slot_manager_used_slots.inc();
         match self.free_slots.pop() {
             Some(slot) => slot,
@@ -313,7 +319,9 @@ impl SlotManager {
                 if self.next_free_slot.get() > SLOT_TABLE_THRESHOLD {
                     warn!(
                         self.log,
-                        "Slot table threshold exceeded. Slots in use = {}.", self.next_free_slot
+                        "Slot table threshold exceeded for service {}. Slots in use = {}.",
+                        self.service_name,
+                        self.next_free_slot
                     );
                 }
 
@@ -718,17 +726,18 @@ mod tests {
         let mut sm = SlotManager::new(
             no_op_logger(),
             ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+            "test",
         );
 
         // Take more than SLOT_TABLE_THRESHOLD number of slots
         for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
-            assert_eq!(sm.take_free_slot().get(), i);
+            assert_eq!(sm.slot().get(), i);
         }
         // Give back all the slots.
         for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
-            sm.give_slot(SlotNumber::from(i));
+            sm.return_slot(SlotNumber::from(i));
         }
         // Check that we get the slot that was returned last
-        assert_eq!(sm.take_free_slot().get(), SLOT_TABLE_THRESHOLD * 5 - 1);
+        assert_eq!(sm.slot().get(), SLOT_TABLE_THRESHOLD * 5 - 1);
     }
 }
