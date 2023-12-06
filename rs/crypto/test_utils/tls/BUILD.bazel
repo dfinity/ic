@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "@crate_index//:pkcs8",
+    "@crate_index//:rand",
     "@crate_index//:signature",
     "@crate_index//:time",
     "@crate_index//:tokio",

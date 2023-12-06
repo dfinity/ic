@@ -17,6 +17,7 @@ ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
 pkcs8 = { workspace = true }
+rand = "0.8"
 signature = { workspace = true }
 time = "0.3.20"
 tokio = { workspace = true }
