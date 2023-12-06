@@ -242,7 +242,7 @@ fn write_overlays_and_verify_with_tempdir(instructions: Vec<Instruction>, tempdi
     }
 }
 
-/// Apply a list of `Instruction` to a new temporary directory and check correctness of the sequence.
+/// Apply a list of `Instruction` to a new temporary directory and check correctness of the sequence
 /// after every step.
 fn write_overlays_and_verify(instructions: Vec<Instruction>) {
     let tempdir = tempdir().unwrap();

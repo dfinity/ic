@@ -100,6 +100,9 @@ pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
+/// Write an overlay file this many rounds before each checkpoint.
+const NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY: u64 = 50;
+
 /// Labels for manifest metrics
 const LABEL_TYPE: &str = "type";
 const LABEL_VALUE_HASHED: &str = "hashed";
@@ -3025,14 +3028,39 @@ impl StateManager for StateManagerImpl {
                 checkpointed_state
             }
             CertificationScope::Metadata => {
-                if self.lsmt_storage == FlagStatus::Enabled {
-                    // TODO (IC-1306): Implement LSMT strategy for when to flush page maps
-                    unimplemented!();
-                } else if self.tip_channel.is_empty() {
-                    self.flush_page_maps(&mut state, height);
-                } else {
-                    self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
+                match self.lsmt_storage {
+                    FlagStatus::Enabled => {
+                        let is_nns =
+                            self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
+                        // We want to balance writing too many overlay files with having too many unflushed pages at
+                        // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
+                        // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
+                        // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
+                        //
+                        // For the NNS we simply fall back to only writing overlay files during checkpointing.
+                        //
+                        // TODO (MR-527): Use information about the actual next checkpoint, instead of hardcoding possibly
+                        // inaccurate information.
+                        //
+                        // Note that for correctness we only require that we write overlays at deterministic heights, which
+                        // is also satisfied if the subnet configuration changes and the checkpoints are no longer produced
+                        // every 500 heights.
+                        if !is_nns
+                            && height.get() % 500
+                                == 500 - NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+                        {
+                            self.flush_page_maps(&mut state, height);
+                        }
+                    }
+                    FlagStatus::Disabled => {
+                        if self.tip_channel.is_empty() {
+                            self.flush_page_maps(&mut state, height);
+                        } else {
+                            self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
+                        }
+                    }
                 }
+
                 {
                     let _timer = self
                         .metrics
