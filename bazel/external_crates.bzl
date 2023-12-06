@@ -1079,7 +1079,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.2",
             ),
             "slog": crate.spec(
-                version = "^2.5.2",
+                version = "^2.7.0",
                 features = [
                     "max_level_trace",
                     "nested-values",

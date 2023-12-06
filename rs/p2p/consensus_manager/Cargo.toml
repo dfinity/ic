@@ -23,10 +23,7 @@ ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 rand = "0.8.5"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]

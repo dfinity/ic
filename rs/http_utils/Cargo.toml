@@ -14,5 +14,5 @@ tokio = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-logger = { path = "../monitoring/logger" }
 reqwest = { workspace = true }
-slog = "2.5.2"
+slog = { workspace = true }
 tar = "0.4.38"

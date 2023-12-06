@@ -22,10 +22,7 @@ ic-types = { path = "../types/types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 tempfile = "3.1.0"
 url = "2.1.1"
 

@@ -22,7 +22,7 @@ ic-types = { path = "../../types/types" }
 url = { version = "2.1.1", features = ["serde"] }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
-slog = { version = "2.5.2", features = ["release_max_level_trace"] }
+slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 

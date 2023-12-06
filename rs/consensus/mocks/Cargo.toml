@@ -23,4 +23,4 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-types = { path = "../../types/types" }
 mockall = { workspace = true }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }

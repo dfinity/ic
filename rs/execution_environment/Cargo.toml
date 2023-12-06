@@ -52,10 +52,7 @@ scoped_threadpool = "0.1.*"
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_bytes = { workspace = true }
-slog = { version = "2.5.2", features = [
-	"nested-values",
-	"release_max_level_debug",
-] }
+slog = { workspace = true }
 strum = { workspace = true }
 threadpool = "1.8.1"
 tokio = { workspace = true }

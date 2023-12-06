@@ -36,10 +36,7 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 mockall = "0.11.4"
 quinn = { version = "0.10.2", features = ["ring"] }
 serde = "1.0.99"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 tempfile = "3.0"
 tokio = { workspace = true }
 turmoil = "0.5"

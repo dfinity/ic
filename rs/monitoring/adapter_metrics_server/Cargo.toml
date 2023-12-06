@@ -11,6 +11,6 @@ ic-logger = { path = "../logger" }
 ic-metrics = { path = "../metrics" }
 prometheus = { workspace = true }
 protobuf = "2.27.1"
-slog = "2.7.0"
+slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }

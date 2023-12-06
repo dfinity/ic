@@ -143,7 +143,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
-slog = { version = "2.5.2", features = ["release_max_level_trace"] }
+slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", rev = "f842906afaa2443206b8365d51950ed3ef85c940"}

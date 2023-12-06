@@ -60,11 +60,7 @@ rand = "0.8.4"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "max_level_trace",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 slog-term = "2.6.0"
 tempfile = "3.1.0"
 tokio = { workspace = true }

@@ -49,10 +49,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 simple_asn1 = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 stubborn-io = "0.3.2"
 strum = { workspace = true }
 strum_macros = { workspace = true }
