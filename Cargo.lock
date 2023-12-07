@@ -7999,6 +7999,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
+ "ic-agent",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canister-profiler",
@@ -8096,6 +8097,9 @@ name = "ic-icrc1-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ed25519-consensus",
+ "ic-agent",
+ "ic-canister-client-sender",
  "ic-icrc1",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -8103,6 +8107,8 @@ dependencies = [
  "num-traits",
  "proptest",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "ring",
  "serde_bytes",
 ]
 

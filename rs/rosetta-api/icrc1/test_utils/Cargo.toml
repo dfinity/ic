@@ -16,3 +16,8 @@ proptest = "1.0"
 rand = "0.8"
 serde_bytes = { workspace = true }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
+rand_chacha = "0.3"
+ed25519-consensus = "2.0.1"
+ic-canister-client-sender = { path = "../../../canister_client/sender" }
+ic-agent = { workspace = true }
+ring = { version = "0.16.11", features = ["std"] }
