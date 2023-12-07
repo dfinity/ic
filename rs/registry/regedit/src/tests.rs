@@ -132,7 +132,6 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         NodeConfiguration {
             xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
             public_api: SocketAddr::from_str("0.0.0.0:8080").unwrap(),
-            p2p_addr: SocketAddr::from_str("0.0.0.0:0").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: None,

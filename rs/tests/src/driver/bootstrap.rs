@@ -480,11 +480,9 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     let ipv6_addr = IpAddr::V6(node.ipv6.expect("missing ip_addr"));
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
-    let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());
     NodeConfiguration {
         xnet_api,
         public_api,
-        p2p_addr,
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),

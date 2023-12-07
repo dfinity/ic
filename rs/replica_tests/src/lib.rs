@@ -212,7 +212,6 @@ pub fn get_ic_config() -> IcConfig {
         NodeConfiguration {
             xnet_api: SocketAddr::from_str("0.0.0.1:0").expect("can't fail"),
             public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
-            p2p_addr: SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
             chip_id: None,

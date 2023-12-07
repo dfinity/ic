@@ -86,7 +86,7 @@ def ic_prep(subnets, version, root_subnet=0):
     for subnet in subnets:
         for ipv6 in subnet:
             nodes.append("--node")
-            nodes.append("idx:%d,subnet_idx:%d,p2p_addr:\"[%s]:4100\",xnet_api:\"[%s]:2497\",public_api:\"[%s]:8080\"" % (node_index, subnet_index, ipv6, ipv6, ipv6))
+            nodes.append("idx:%d,subnet_idx:%d,xnet_api:\"[%s]:2497\",public_api:\"[%s]:8080\"" % (node_index, subnet_index, ipv6, ipv6))
             if subnet_index == root_subnet:
                 nns_ips.append(ipv6)
             node_subnet_index.append(subnet_index)

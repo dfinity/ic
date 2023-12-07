@@ -58,7 +58,6 @@ fn node_is_created_on_receiving_the_request() {
         let node_record = get_node_record(&registry, node_id).await;
         // Check if some fields are present
         assert!(node_record.is_some());
-        assert_eq!(node_record.unwrap().p2p_flow_endpoints.len(), 1);
 
         // Check that other fields are present
         let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await.unwrap();

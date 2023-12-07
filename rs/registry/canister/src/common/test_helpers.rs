@@ -1,9 +1,7 @@
 use crate::mutations::common::encode_or_panic;
 use crate::mutations::do_create_subnet::CreateSubnetPayload;
 use crate::mutations::node_management::common::make_add_node_registry_mutations;
-use crate::mutations::node_management::do_add_node::{
-    connection_endpoint_from_string, flow_endpoint_from_string,
-};
+use crate::mutations::node_management::do_add_node::connection_endpoint_from_string;
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_test_utils::registry::{invariant_compliant_mutation, new_node_keys_and_node_id};
@@ -100,10 +98,6 @@ pub fn prepare_registry_with_nodes(
                 http: Some(connection_endpoint_from_string(&format!(
                     "128.0.{effective_id}.1:4321"
                 ))),
-                p2p_flow_endpoints: [&format!("123,128.0.{effective_id}.1:10000")]
-                    .iter()
-                    .map(|x| flow_endpoint_from_string(x))
-                    .collect(),
                 node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
                 ..Default::default()
             };
