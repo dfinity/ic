@@ -47,7 +47,6 @@ pub(crate) fn generate_config(
         .map(|v| NodeConfiguration {
             xnet_api: SocketAddr::new(v, 2497),
             public_api: SocketAddr::new(v, 8080),
-            p2p_addr: SocketAddr::new(v, 4100),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: Vec::new().into(),
@@ -68,7 +67,6 @@ pub(crate) fn generate_config(
         .map(|v| NodeConfiguration {
             xnet_api: SocketAddr::new(v, 2497),
             public_api: SocketAddr::new(v, 8080),
-            p2p_addr: SocketAddr::new(v, 4100),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: Vec::new().into(),

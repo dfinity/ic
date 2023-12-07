@@ -12,7 +12,7 @@ cargo run -p ic-prep --bin ic-prep -- \
   --replica_version 0.1.0 \
   --replica-download-url ... \
   --orchestrator-download-url ... \
-  --node 'idx:1,subnet_idx:1,xnet_api:"1.2.3.4:81",public_api:"1.2.3.4:82",p2p_addr:"1.2.3.4:80"'
+  --node 'idx:1,subnet_idx:1,xnet_api:"1.2.3.4:81",public_api:"1.2.3.4:82"'
   --node ...
 ----
 
@@ -33,8 +33,6 @@ The fields are:
 
 - `public_api` - an endpoint on which the node will serve the public API.
 
-- `p2p_addr` - the base endpoint on which the node will serve P2P
-
 - `xnet_api` - an endpoint on which the node will handle XNet messages
 
 - `chip_id` - an optional value to register as the node's chip id.
@@ -50,6 +48,6 @@ with their connection endpoints on the same ports but different IP addresses
 ----
 ic-admin
   ...
-  --node 'idx:1,subnet_idx:1,xnet_api:"1.2.3.4:81",public_api:"1.2.3.4:82",p2p_addr:"1.2.3.4:80"'
-  --node 'idx:2,subnet_idx:1,xnet_api:"4.3.2.1:81",public_api:"4.3.2.1:82",p2p_addr:"1.2.3.4:80"''
+  --node 'idx:1,subnet_idx:1,xnet_api:"1.2.3.4:81",public_api:"1.2.3.4:82"'
+  --node 'idx:2,subnet_idx:1,xnet_api:"4.3.2.1:81",public_api:"4.3.2.1:82"'
 ----

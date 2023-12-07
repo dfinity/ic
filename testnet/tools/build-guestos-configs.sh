@@ -217,7 +217,7 @@ function generate_prep_material() {
 
         if [[ "${subnet_type}" == "root_subnet" ]]; then
             NODES_NNS+=("--node")
-            NODES_NNS+=("idx:${node_idx},subnet_idx:${subnet_idx},p2p_addr:\"[${ipv6_address}]:4100\",xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
+            NODES_NNS+=("idx:${node_idx},subnet_idx:${subnet_idx},xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
             OLD_NODES_NNS+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
         elif [[ "${subnet_type}" == "app_subnet" ]]; then
             if [[ "${subnet_idx}" == "x" ]]; then
@@ -226,7 +226,7 @@ function generate_prep_material() {
                 subnet_idx=""
             fi
             NODES_APP+=("--node")
-            NODES_APP+=("idx:${node_idx},subnet_idx:${subnet_idx},p2p_addr:\"[${ipv6_address}]:4100\",xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
+            NODES_APP+=("idx:${node_idx},subnet_idx:${subnet_idx},xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
             OLD_NODES_APP+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
         fi
     done

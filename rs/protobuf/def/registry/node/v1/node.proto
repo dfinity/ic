@@ -16,14 +16,6 @@ message ConnectionEndpoint {
   reserved 4;
 }
 
-message FlowEndpoint {
-  reserved 1;
-  reserved "flow_tag";
-
-  // The IP/port for this flow.
-  ConnectionEndpoint endpoint = 2;
-}
-
 message IPv4InterfaceConfig {
   string ip_addr = 1;
   repeated string gateway_ip_addr = 2;
@@ -46,18 +38,14 @@ message NodeRecord {
   // The endpoint where this node receives http requests.
   ConnectionEndpoint http = 6;
 
-  reserved 7;
-  reserved "transport_tls_certificate";
-
-  // The P2P flow end points.
-  repeated FlowEndpoint p2p_flow_endpoints = 8;
-
-  reserved 9, 10, 11, 12, 13, 14;
+  reserved 7, 8, 9, 10, 11, 12, 13, 14;
   reserved "dcop_principal_id";
+  reserved "p2p_flow_endpoints";
   reserved "prometheus_metrics_http";
   reserved "public_api";
   reserved "private_api";
   reserved "prometheus_metrics";
+  reserved "transport_tls_certificate";
   reserved "xnet_api";
 
   // The id of the node operator that added this node.

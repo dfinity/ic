@@ -41,24 +41,6 @@ pub(crate) fn check_endpoint_invariants(
     for (node_id, node_record) in node_records {
         let error_prefix = format!("{common_error_prefix} (checking failed for node {node_id})");
 
-        // P2P endpoints
-        //    * For each of the flow endpoints that belong to one node, the identifier
-        //      must be distinct (a node may have multiple flow endpoints). That is, the
-        //      address-port-pair of different flow endpoints of the same node can be
-        //      the same, but the flow identifier must be different.
-        for endpoint in node_record.p2p_flow_endpoints {
-            let connection_endpoint = match endpoint.endpoint {
-                None => {
-                    return Err(InvariantCheckError {
-                        msg: format!("{error_prefix}: No connection endpoint specified"),
-                        source: None,
-                    })
-                }
-                Some(ep) => ep,
-            };
-            validate_endpoint(&connection_endpoint, false, strict)?;
-        }
-
         // The Boolean indicates whether an unspecified address should be tolerated
         let mut endpoints_to_check = Vec::<(ConnectionEndpoint, bool)>::new();
 
@@ -332,7 +314,7 @@ mod tests {
     use super::*;
     use ic_base_types::{NodeId, PrincipalId};
     use ic_nns_common::registry::encode_or_panic;
-    use ic_protobuf::registry::node::v1::{FlowEndpoint, NodeRecord};
+    use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_registry_keys::make_node_record_key;
 
     #[test]
@@ -409,12 +391,6 @@ mod tests {
             make_node_record_key(node_id).into_bytes(),
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                p2p_flow_endpoints: vec![FlowEndpoint {
-                    endpoint: Some(ConnectionEndpoint {
-                        ip_addr: "200.1.1.1".to_string(),
-                        port: 8080,
-                    }),
-                }],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
@@ -438,12 +414,6 @@ mod tests {
             key.clone(),
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                p2p_flow_endpoints: vec![FlowEndpoint {
-                    endpoint: Some(ConnectionEndpoint {
-                        ip_addr: "200.1.1.3".to_string(),
-                        port: 8080,
-                    }),
-                }],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
@@ -470,12 +440,6 @@ mod tests {
             key,
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                p2p_flow_endpoints: vec![FlowEndpoint {
-                    endpoint: Some(ConnectionEndpoint {
-                        ip_addr: "200.1.1.3".to_string(),
-                        port: 8080,
-                    }),
-                }],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9000,

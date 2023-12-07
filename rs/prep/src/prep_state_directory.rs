@@ -126,7 +126,6 @@ mod tests {
             NodeConfiguration {
                 xnet_api: SocketAddr::from_str("1.2.3.4:8080").unwrap(),
                 public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
-                p2p_addr: SocketAddr::from_str("1.2.3.4:1234").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: None,

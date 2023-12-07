@@ -93,7 +93,6 @@ fn main() -> Result<()> {
             NodeConfiguration {
                 xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
                 public_api: config.http_listen_addr,
-                p2p_addr: SocketAddr::from_str("0.0.0.0:0").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: None,

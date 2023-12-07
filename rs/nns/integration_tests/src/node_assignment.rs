@@ -133,12 +133,6 @@ fn test_add_and_remove_nodes_from_registry() {
             "node_record : {:?}",
             node_record
         );
-        assert_eq!(
-            node_record.p2p_flow_endpoints.len(),
-            1,
-            "node_record.p2p_flow_endpoints : {:?}",
-            node_record.p2p_flow_endpoints
-        );
 
         let proposal_payload = RemoveNodesPayload {
             node_ids: vec![node_id],

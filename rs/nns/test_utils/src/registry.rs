@@ -54,7 +54,7 @@ use registry_canister::mutations::{
     common::decode_registry_value,
     node_management::{
         common::make_add_node_registry_mutations,
-        do_add_node::{connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload},
+        do_add_node::{connection_endpoint_from_string, AddNodePayload},
     },
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -710,10 +710,6 @@ fn generate_node_keys_and_add_node_record_and_key_mutations(
                 http: Some(connection_endpoint_from_string(&format!(
                     "{ip_addr_prefix}4321"
                 ))),
-                p2p_flow_endpoints: [&format!("123,{ip_addr_prefix}10000")]
-                    .iter()
-                    .map(|x| flow_endpoint_from_string(x))
-                    .collect(),
                 node_operator_id: PrincipalId::new_user_test_id(999).to_vec(),
                 ..Default::default()
             };
