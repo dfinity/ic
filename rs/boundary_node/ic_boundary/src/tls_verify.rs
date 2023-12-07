@@ -1,6 +1,9 @@
 use std::{sync::Arc, time::SystemTime};
 
 use arc_swap::ArcSwapOption;
+use ic_crypto_utils_tls::{
+    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
+};
 use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     Certificate, CertificateError, Error as RustlsError, ServerName,
@@ -25,17 +28,32 @@ impl TlsVerifier {
 // Implement the certificate verifier which ensures that the certificate
 // that was provided by node during TLS handshake matches its public key from the registry
 // This trait is used by Rustls in reqwest under the hood
-// We don't really check CommonName since the resolver makes sure we connect to the right IP
 impl ServerCertVerifier for TlsVerifier {
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
-        _intermediates: &[Certificate],
+        intermediates: &[Certificate],
         server_name: &ServerName,
         _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, RustlsError> {
+        if !intermediates.is_empty() {
+            return Err(RustlsError::General(format!(
+                "The peer must send exactly one self signed certificate, but it sent {} certificates.",
+                intermediates.len() + 1
+            )));
+        }
+
+        // Check if the CommonName in the certificate can be parsed into a Principal
+        let end_entity_cert = tls_pubkey_cert_from_rustls_certs(std::slice::from_ref(end_entity))?;
+        let node_id = node_id_from_cert_subject_common_name(&end_entity_cert).map_err(|e| {
+            RustlsError::General(format!(
+                "The presented certificate subject CN could not be parsed as node ID: {:?}",
+                e
+            ))
+        })?;
+
         // Load a routing table if we have one
         let rs = self
             .rs
@@ -46,6 +64,13 @@ impl ServerCertVerifier for TlsVerifier {
         let node = match server_name {
             // Currently support only DnsName
             ServerName::DnsName(v) => {
+                // Check if certificate CommonName matches the DNS name
+                if node_id.to_string() != v.as_ref() {
+                    return Err(RustlsError::InvalidCertificate(
+                        CertificateError::NotValidForName,
+                    ));
+                }
+
                 match rs.nodes.get(v.as_ref()) {
                     // If the requested node is not in the routing table
                     None => {
