@@ -18,7 +18,8 @@ use crate::{
         get_neurons_fund_audit_info_response,
         governance::{
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
+            seed_accounts::SeedAccount,
+            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand, SeedAccounts,
         },
         governance_error::ErrorType,
         manage_neuron,
@@ -42,7 +43,7 @@ use crate::{
         KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
         ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
         MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
-        NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        NeuronState, NeuronType, NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, OpenSnsTokenSwap,
         Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
@@ -62,13 +63,11 @@ use dfn_core::println;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, SECONDS_PER_DAY,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
-use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -78,6 +77,7 @@ use ic_nns_constants::{
     IS_MATCHED_FUNDING_ENABLED, IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED, LIFELINE_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -174,7 +174,7 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 220_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 280_000;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
@@ -380,6 +380,18 @@ impl ManageNeuron {
             (None, None) => Ok(None),
             (None, Some(id)) => Ok(Some(id.clone())),
             (Some(nid), None) => Ok(Some(NeuronIdOrSubaccount::NeuronId(*nid))),
+        }
+    }
+}
+
+impl Command {
+    fn allowed_when_resources_are_low(&self) -> bool {
+        match self {
+            // Only making proposals and registering votes are needed to pass proposals.
+            // Therefore we should disallow others when resources are low.
+            Command::RegisterVote(_) => true,
+            Command::MakeProposal(_) => true,
+            _ => false,
         }
     }
 }
@@ -1438,6 +1450,9 @@ pub struct Governance {
 
     /// For validating neuron related data.
     neuron_data_validator: NeuronDataValidator,
+
+    /// Scope guard for minting node provider rewards.
+    minting_node_provider_rewards: bool,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1534,6 +1549,37 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
     }
 }
 
+/// If the seed_accounts is None, then populate it with the `SEED_ROUND_ACCOUNTS` data
+fn set_seed_accounts(governance_proto: &mut GovernanceProto) {
+    if governance_proto.seed_accounts.is_none() {
+        let seed_round_accounts = SEED_ROUND_ACCOUNTS
+            .iter()
+            .map(|(account_id, _)| SeedAccount {
+                account_id: account_id.to_string(),
+                tag_start_timestamp_seconds: None,
+                tag_end_timestamp_seconds: None,
+                error_count: 0,
+                neuron_type: NeuronType::Seed as i32,
+            })
+            .collect::<Vec<_>>();
+
+        let ect_accounts: Vec<SeedAccount> = ECT_ACCOUNTS
+            .iter()
+            .map(|(account_id, _)| SeedAccount {
+                account_id: account_id.to_string(),
+                tag_start_timestamp_seconds: None,
+                tag_end_timestamp_seconds: None,
+                error_count: 0,
+                neuron_type: NeuronType::Ect as i32,
+            })
+            .collect::<Vec<_>>();
+
+        governance_proto.seed_accounts = Some(SeedAccounts {
+            accounts: [seed_round_accounts, ect_accounts].concat(),
+        })
+    }
+}
+
 impl Governance {
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
@@ -1565,8 +1611,10 @@ impl Governance {
                 latest_round_available_e8s_equivalent: Some(0),
             })
         }
+        // Step 2: seed_accounts
+        set_seed_accounts(&mut governance_proto);
 
-        // Step 2: Break out Neurons from governance_proto. Neurons are managed separately by
+        // Step 3: Break out Neurons from governance_proto. Neurons are managed separately by
         // NeuronStore. NeuronStore is in charge of Neurons, because some are stored in stable
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
@@ -1590,16 +1638,19 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
+            minting_node_provider_rewards: false,
         }
     }
 
     /// Restores Governance after an upgrade from its persisted state.
     pub fn new_restored(
-        governance_proto: GovernanceProto,
+        mut governance_proto: GovernanceProto,
         env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
+        set_seed_accounts(&mut governance_proto);
+
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
@@ -1613,6 +1664,7 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
+            minting_node_provider_rewards: false,
         }
     }
 
@@ -2458,6 +2510,7 @@ impl Governance {
                 .joined_community_fund_timestamp_seconds,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            neuron_type: parent_neuron.neuron_type,
         };
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
@@ -2733,6 +2786,7 @@ impl Governance {
             // considered part of the community fund.
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
+            neuron_type: None,
         };
 
         // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
@@ -2863,7 +2917,7 @@ impl Governance {
     /// equal to that amount, minus the transfer fee.
     ///
     /// The child neuron doesn't inherit any of the properties of the parent
-    /// neuron, except its following.
+    /// neuron, except its following and whether it's a genesis neuron.
     ///
     /// On success returns the newly created neuron's id.
     ///
@@ -3046,6 +3100,7 @@ impl Governance {
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            neuron_type: None,
         };
 
         self.add_neuron(child_nid.id, child_neuron.clone())?;
@@ -3905,6 +3960,7 @@ impl Governance {
                     joined_community_fund_timestamp_seconds: None,
                     known_neuron_data: None,
                     spawn_at_timestamp_seconds: None,
+                    neuron_type: None,
                 };
                 self.add_neuron(nid.id, neuron)
             }
@@ -4048,13 +4104,28 @@ impl Governance {
 
     /// Mint and transfer monthly node provider rewards
     async fn mint_monthly_node_provider_rewards(&mut self) -> Result<(), GovernanceError> {
+        if self.minting_node_provider_rewards {
+            // There is an ongoing attempt to mint node provider rewards. Do nothing.
+            return Ok(());
+        }
+
+        // Acquire the lock before doing anything meaningful.
+        self.minting_node_provider_rewards = true;
+
         let rewards = self.get_monthly_node_provider_rewards().await?.rewards;
         let _ = self.reward_node_providers(rewards.clone()).await;
         self.update_most_recent_monthly_node_provider_rewards(rewards);
 
-        let _unused_canister_status_response =
-            ic_nervous_system_clients::canister_status::canister_status::<DfnRuntime>(
-                CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
+        // Release the lock before commiting the result.
+        self.minting_node_provider_rewards = false;
+
+        // Commit the minting status by making a canister call.
+        let _unused_canister_status_response = self
+            .env
+            .call_canister_method(
+                GOVERNANCE_CANISTER_ID,
+                "get_build_metadata",
+                Encode!().unwrap_or_default(),
             )
             .await;
 
@@ -6148,6 +6219,7 @@ impl Governance {
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            neuron_type: None,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -6288,6 +6360,14 @@ impl Governance {
         caller: &PrincipalId,
         mgmt: &ManageNeuron,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
+        if !mgmt
+            .command
+            .as_ref()
+            .map(|command| command.allowed_when_resources_are_low())
+            .unwrap_or_default()
+        {
+            self.check_heap_can_grow()?;
+        }
         // We run claim or refresh before we check whether a neuron exists because it
         // may not in the case of the neuron being claimed
         if let Some(Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
@@ -6479,6 +6559,8 @@ impl Governance {
         // Try to update maturity modulation (once per day).
         } else if self.should_update_maturity_modulation() {
             self.update_maturity_modulation().await;
+        } else if self.can_tag_seed_neurons() {
+            self.tag_seed_neurons().await;
         // Try to spawn neurons (potentially multiple times per day).
         } else if self.can_spawn_neurons() {
             self.spawn_neurons().await;
@@ -7746,7 +7828,8 @@ impl Governance {
         let mut rewards = RewardNodeProviders::default();
 
         // Maps node providers to their rewards in XDR
-        let xdr_permyriad_rewards = self.get_node_providers_monthly_xdr_rewards().await?;
+        let xdr_permyriad_rewards: NodeProvidersMonthlyXdrRewards =
+            self.get_node_providers_monthly_xdr_rewards().await?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
         let avg_xdr_permyriad_per_icp = self
@@ -7922,6 +8005,20 @@ impl Governance {
                     neuron.minted_stake_e8s();
             }
 
+            if neuron.is_seed_neuron() {
+                metrics.seed_neuron_count += 1;
+                metrics.total_staked_e8s_seed += neuron.minted_stake_e8s();
+                metrics.total_staked_maturity_e8s_equivalent_seed +=
+                    neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+            }
+
+            if neuron.is_ect_neuron() {
+                metrics.ect_neuron_count += 1;
+                metrics.total_staked_e8s_ect += neuron.minted_stake_e8s();
+                metrics.total_staked_maturity_e8s_equivalent_ect +=
+                    neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+            }
+
             let bucket = dissolve_delay_seconds / (6 * ONE_MONTH_SECONDS);
             match neuron.state(now) {
                 NeuronState::Unspecified => (),
@@ -7933,58 +8030,85 @@ impl Governance {
                 NeuronState::Dissolving => {
                     {
                         // Neurons with minted stake count metrics
-                        let e8s_entry = metrics
-                            .dissolving_neurons_e8s_buckets
-                            .entry(bucket)
-                            .or_insert(0.0);
-                        *e8s_entry += neuron.minted_stake_e8s() as f64;
-
-                        let count_entry = metrics
-                            .dissolving_neurons_count_buckets
-                            .entry(bucket)
-                            .or_insert(0);
-                        *count_entry += 1;
+                        increment_e8s_bucket(
+                            &mut metrics.dissolving_neurons_e8s_buckets,
+                            bucket,
+                            neuron.minted_stake_e8s(),
+                        );
+                        increment_count_bucket(
+                            &mut metrics.dissolving_neurons_count_buckets,
+                            bucket,
+                        );
 
                         metrics.dissolving_neurons_count += 1;
                     }
                     {
                         // Staked maturity metrics
                         let increment = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+                        increment_e8s_bucket(
+                            &mut metrics.dissolving_neurons_staked_maturity_e8s_equivalent_buckets,
+                            bucket,
+                            increment,
+                        );
                         metrics.dissolving_neurons_staked_maturity_e8s_equivalent_sum += increment;
-                        let e8s_entry = metrics
-                            .dissolving_neurons_staked_maturity_e8s_equivalent_buckets
-                            .entry(bucket)
-                            .or_insert(0.0);
-                        *e8s_entry += increment as f64;
+                    }
+                    {
+                        if neuron.is_seed_neuron() {
+                            increment_e8s_bucket(
+                                &mut metrics.dissolving_neurons_e8s_buckets_seed,
+                                bucket,
+                                neuron.minted_stake_e8s(),
+                            );
+                        } else if neuron.is_ect_neuron() {
+                            increment_e8s_bucket(
+                                &mut metrics.dissolving_neurons_e8s_buckets_ect,
+                                bucket,
+                                neuron.minted_stake_e8s(),
+                            );
+                        }
                     }
                 }
                 NeuronState::NotDissolving => {
                     {
                         // Neurons with minted stake count metrics
-                        let e8s_entry = metrics
-                            .not_dissolving_neurons_e8s_buckets
-                            .entry(bucket)
-                            .or_insert(0.0);
-                        *e8s_entry += neuron.minted_stake_e8s() as f64;
+                        increment_e8s_bucket(
+                            &mut metrics.not_dissolving_neurons_e8s_buckets,
+                            bucket,
+                            neuron.minted_stake_e8s(),
+                        );
 
-                        let count_entry = metrics
-                            .not_dissolving_neurons_count_buckets
-                            .entry(bucket)
-                            .or_insert(0);
-                        *count_entry += 1;
-
+                        increment_count_bucket(
+                            &mut metrics.not_dissolving_neurons_count_buckets,
+                            bucket,
+                        );
                         metrics.not_dissolving_neurons_count += 1;
                     }
                     {
                         // Staked maturity metrics
                         let increment = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+                        increment_e8s_bucket(
+                            &mut metrics
+                                .not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets,
+                            bucket,
+                            increment,
+                        );
                         metrics.not_dissolving_neurons_staked_maturity_e8s_equivalent_sum +=
                             increment;
-                        let e8s_entry = metrics
-                            .not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets
-                            .entry(bucket)
-                            .or_insert(0.0);
-                        *e8s_entry += increment as f64;
+                    }
+                    {
+                        if neuron.is_seed_neuron() {
+                            increment_e8s_bucket(
+                                &mut metrics.not_dissolving_neurons_e8s_buckets_seed,
+                                bucket,
+                                neuron.minted_stake_e8s(),
+                            );
+                        } else if neuron.is_ect_neuron() {
+                            increment_e8s_bucket(
+                                &mut metrics.not_dissolving_neurons_e8s_buckets_ect,
+                                bucket,
+                                neuron.minted_stake_e8s(),
+                            );
+                        }
                     }
                 }
             }
@@ -9161,4 +9285,14 @@ impl FromStr for BitcoinNetwork {
 pub struct BitcoinSetConfigProposal {
     pub network: BitcoinNetwork,
     pub payload: Vec<u8>,
+}
+
+fn increment_e8s_bucket(buckets: &mut HashMap<u64, f64>, bucket: u64, increment: u64) {
+    let e8s_entry = buckets.entry(bucket).or_insert(0.0);
+    *e8s_entry += increment as f64;
+}
+
+fn increment_count_bucket(buckets: &mut HashMap<u64, u64>, bucket: u64) {
+    let count_entry = buckets.entry(bucket).or_insert(0);
+    *count_entry += 1;
 }

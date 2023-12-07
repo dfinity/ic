@@ -15,7 +15,7 @@ rust_canister(
         "LEDGER_ARCHIVE_DID_PATH": "$(execpath //rs/rosetta-api/icp_ledger:ledger_archive.did)",
     },
     service_file = "//rs/rosetta-api/icp_ledger:ledger_archive.did",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "//rs/nns/constants",
         "//rs/rosetta-api/icp_ledger",

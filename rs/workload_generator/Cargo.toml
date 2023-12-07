@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-backoff = "0.3.0"
+backoff = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
@@ -31,10 +31,7 @@ prometheus = { workspace = true }
 rand = "0.8.4"
 serde = { workspace = true }
 serde_json = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 slog-scope = "4.1.2"
 slog-term = "2.6.0"
 tokio = { workspace = true }

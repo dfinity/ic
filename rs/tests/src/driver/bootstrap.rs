@@ -2,7 +2,7 @@ use crate::driver::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
     farm::{Farm, FarmResult, FileId},
-    ic::{InternetComputer, Node},
+    ic::{InternetComputer, Ipv4Config, Node},
     nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
@@ -128,7 +128,7 @@ pub fn init_ic(
             SubnetConfig::new(
                 subnet_index,
                 nodes,
-                Some(initial_replica.replica_version.clone()),
+                initial_replica.replica_version.clone(),
                 subnet.max_ingress_bytes_per_message,
                 subnet.max_ingress_messages_per_block,
                 subnet.max_block_payload_size,
@@ -182,7 +182,7 @@ pub fn init_ic(
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
-        Some(initial_replica.replica_version),
+        initial_replica.replica_version,
         // To maintain backwards compatibility, pass true here.
         // False is used only when nodes need to be deployed without
         // them joining any subnet initially
@@ -232,9 +232,17 @@ pub fn setup_and_start_vms(
         let t_env = env.clone();
         let ic_name = ic.name();
         let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behaviour.clone());
         join_handles.push(thread::spawn(move || {
-            create_config_disk_image(&ic_name, &node, malicious_behaviour, &t_env, &group_name)?;
+            create_config_disk_image(
+                &ic_name,
+                &node,
+                malicious_behaviour,
+                ipv4_config,
+                &t_env,
+                &group_name,
+            )?;
             let image_id = upload_config_disk_image(&group_name, &node, &t_farm)?;
             // delete uncompressed file
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
@@ -331,6 +339,7 @@ pub fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
     malicious_behavior: Option<MaliciousBehaviour>,
+    ipv4_config: Option<Ipv4Config>,
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<()> {
@@ -369,6 +378,23 @@ pub fn create_config_disk_image(
         );
         cmd.arg("--malicious_behavior")
             .arg(serde_json::to_string(&malicious_behavior)?);
+    }
+
+    if let Some(ipv4_config) = ipv4_config {
+        info!(
+            test_env.logger(),
+            "Node with id={} is IPv4-enabled: IP address {:?}/{:?}, IP gateway {:?}",
+            node.node_id,
+            ipv4_config.ip_addr,
+            ipv4_config.prefix_length,
+            ipv4_config.gateway_ip_addr
+        );
+        cmd.arg("--ipv4_address").arg(format!(
+            "{:?}/{:?}",
+            ipv4_config.ip_addr, ipv4_config.prefix_length
+        ));
+        cmd.arg("--ipv4_gateway")
+            .arg(ipv4_config.gateway_ip_addr.to_string());
     }
 
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
@@ -454,11 +480,9 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     let ipv6_addr = IpAddr::V6(node.ipv6.expect("missing ip_addr"));
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
-    let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());
     NodeConfiguration {
         xnet_api,
         public_api,
-        p2p_addr,
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),

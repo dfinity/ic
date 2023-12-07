@@ -132,10 +132,11 @@ CONFIG="$(cat ${INPUT})"
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
     (.name_servers | join(" ")),
+    (.ipv4_name_servers | join(" ")),
     (.elasticsearch_hosts | join(" ")),
     (.elasticsearch_tags | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS IPV4_NAME_SERVERS ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
@@ -216,7 +217,7 @@ function generate_prep_material() {
 
         if [[ "${subnet_type}" == "root_subnet" ]]; then
             NODES_NNS+=("--node")
-            NODES_NNS+=("idx:${node_idx},subnet_idx:${subnet_idx},p2p_addr:\"[${ipv6_address}]:4100\",xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
+            NODES_NNS+=("idx:${node_idx},subnet_idx:${subnet_idx},xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
             OLD_NODES_NNS+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
         elif [[ "${subnet_type}" == "app_subnet" ]]; then
             if [[ "${subnet_idx}" == "x" ]]; then
@@ -225,7 +226,7 @@ function generate_prep_material() {
                 subnet_idx=""
             fi
             NODES_APP+=("--node")
-            NODES_APP+=("idx:${node_idx},subnet_idx:${subnet_idx},p2p_addr:\"[${ipv6_address}]:4100\",xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
+            NODES_APP+=("idx:${node_idx},subnet_idx:${subnet_idx},xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
             OLD_NODES_APP+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
         fi
     done
@@ -325,8 +326,9 @@ function build_bootstrap_images() {
             ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
             "--nns_url" "${NNS_URL}" \
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
+            "--ipv6_name_servers" "${NAME_SERVERS}" \
+            "--ipv4_name_servers" "${IPV4_NAME_SERVERS}" \
             "--hostname" "${hostname}" \
-            "--name_servers" "${NAME_SERVERS}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \
             ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \
             ${ELASTICSEARCH_TAGS:+"--elasticsearch_tags"} ${ELASTICSEARCH_TAGS:+"${ELASTICSEARCH_TAGS}"} \

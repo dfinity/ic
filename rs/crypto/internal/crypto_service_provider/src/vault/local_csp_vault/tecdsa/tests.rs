@@ -2,7 +2,7 @@ mod ecdsa_sign_share {
     use crate::key_id::KeyId;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::types::CspSecretKey;
-    use crate::vault::api::ThresholdEcdsaSignerCspVault;
+    use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVault};
     use crate::LocalCspVault;
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -18,7 +18,6 @@ mod ecdsa_sign_share {
     use proptest::prelude::any;
     use proptest::proptest;
     use proptest::strategy::Strategy;
-    use serde_bytes::ByteBuf;
     use std::collections::HashSet;
 
     #[test]
@@ -456,27 +455,11 @@ mod ecdsa_sign_share {
                 self.derivation_path.clone(),
                 self.hashed_message.clone(),
                 self.nonce,
-                ByteBuf::from(self.key.serialize().expect("should serialize successfully")),
-                ByteBuf::from(
-                    self.kappa_unmasked
-                        .serialize()
-                        .expect("should serialize successfully"),
-                ),
-                ByteBuf::from(
-                    self.lambda_masked
-                        .serialize()
-                        .expect("should serialize successfully"),
-                ),
-                ByteBuf::from(
-                    self.kappa_times_lambda
-                        .serialize()
-                        .expect("should serialize successfully"),
-                ),
-                ByteBuf::from(
-                    self.key_times_lambda
-                        .serialize()
-                        .expect("should serialize successfully"),
-                ),
+                transcript_to_bytes(&self.key),
+                transcript_to_bytes(&self.kappa_unmasked),
+                transcript_to_bytes(&self.lambda_masked),
+                transcript_to_bytes(&self.kappa_times_lambda),
+                transcript_to_bytes(&self.key_times_lambda),
                 self.algorithm_id,
             )
         }
@@ -636,5 +619,13 @@ mod ecdsa_sign_share {
             CommitmentOpeningBytes::Pedersen(bytes, _) => bytes,
         };
         CommitmentOpeningBytes::Simple(scalar_bytes.clone())
+    }
+
+    fn transcript_to_bytes(transcript: &IDkgTranscriptInternal) -> IDkgTranscriptInternalBytes {
+        IDkgTranscriptInternalBytes::from(
+            transcript
+                .serialize()
+                .expect("should serialize successfully"),
+        )
     }
 }

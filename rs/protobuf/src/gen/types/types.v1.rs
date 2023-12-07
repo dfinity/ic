@@ -1394,7 +1394,7 @@ pub mod ecdsa_message_attribute {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactId {
-    #[prost(oneof = "artifact_id::Kind", tags = "1, 2, 3, 11, 10, 6, 7, 9")]
+    #[prost(oneof = "artifact_id::Kind", tags = "1, 2, 3, 11, 10, 6, 7")]
     pub kind: ::core::option::Option<artifact_id::Kind>,
 }
 /// Nested message and enum types in `ArtifactId`.
@@ -1417,8 +1417,6 @@ pub mod artifact_id {
         Ecdsa(super::EcdsaArtifactId),
         #[prost(string, tag = "7")]
         FileTreeSync(::prost::alloc::string::String),
-        #[prost(message, tag = "9")]
-        StateSync(super::super::super::p2p::v1::StateSyncId),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -1596,8 +1594,6 @@ pub struct ArtifactFilter {
     pub consensus_filter: ::core::option::Option<ConsensusMessageFilter>,
     #[prost(message, optional, tag = "7")]
     pub certification_message_filter: ::core::option::Option<CertificationMessageFilter>,
-    #[prost(message, optional, tag = "8")]
-    pub state_sync_filter: ::core::option::Option<StateSyncFilter>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1610,13 +1606,6 @@ pub struct ConsensusMessageFilter {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationMessageFilter {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StateSyncFilter {
     #[prost(uint64, tag = "1")]
     pub height: u64,
 }

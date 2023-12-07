@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/rosetta-api",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
     "//rs/types/types",
     "@crate_index//:base64",
     "@crate_index//:hex",
@@ -36,7 +37,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_rosetta_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

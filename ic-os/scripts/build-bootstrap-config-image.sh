@@ -27,13 +27,26 @@ options may be specified:
   --ipv6_gateway a:b::c
     Default IPv6 gateway.
 
+  --ipv6_name_servers servers
+    ipv6 DNS servers to use. Can be multiple servers separated by space (make
+    sure to quote the argument string so it appears as a single argument to the
+    script, e.g. --ipv6_name_servers "2606:4700:4700::1111
+    2606:4700:4700::1001").
+
+  --ipv4_name_servers servers
+    ipv4 DNS servers to use. Can be multiple servers separated by space (make
+    sure to quote the argument string so it appears as a single argument to the
+    script, e.g. --ipv4_name_servers "1.1.1.1 1.0.0.1").
+
+  --ipv4_address a.b.c.d/n
+    (optional) The IPv4 address to assign. Must include prefix length (e.g.
+    18.208.190.35/28).
+
+  --ipv4_gateway a:b::c
+    (optional) Default IPv4 gateway (e.g. 18.208.190.33).
+
   --hostname name
     Name to assign to the host. Will be used in logging.
-
-  --name_servers servers
-    DNS servers to use. Can be multiple servers separated by space (make sure
-    to quote the argument string so it appears as a single argument to the
-    script, e.g. --name_servers "8.8.8.8 1.1.1.1").
 
   --ic_crypto path
     Injected crypto state. Should point to a directory containing material
@@ -120,7 +133,7 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY NAME_SERVERS HOSTNAME
+    local IPV6_ADDRESS IPV6_GATEWAY IPV6_NAME_SERVERS IPV4_NAME_SERVERS HOSTNAME
     local IC_CRYPTO IC_REGISTRY_LOCAL_STORE
     local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
@@ -142,11 +155,20 @@ function build_ic_bootstrap_tar() {
             --ipv6_gateway)
                 IPV6_GATEWAY="$2"
                 ;;
+            --ipv6_name_servers)
+                IPV6_NAME_SERVERS="$2"
+                ;;
+            --ipv4_name_servers)
+                IPV4_NAME_SERVERS="$2"
+                ;;
+            --ipv4_address)
+                IPV4_ADDRESS="$2"
+                ;;
+            --ipv4_gateway)
+                IPV4_GATEWAY="$2"
+                ;;
             --hostname)
                 HOSTNAME="$2"
-                ;;
-            --name_servers)
-                NAME_SERVERS="$2"
                 ;;
             --ic_crypto)
                 IC_CRYPTO="$2"
@@ -215,8 +237,11 @@ function build_ic_bootstrap_tar() {
     cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
 ${IPV6_ADDRESS:+ipv6_address=$IPV6_ADDRESS}
 ${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
-name_servers=$NAME_SERVERS
+name_servers=$IPV6_NAME_SERVERS
+ipv4_name_servers=$IPV4_NAME_SERVERS
 hostname=$HOSTNAME
+${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
+${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
 EOF
     if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
         echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"

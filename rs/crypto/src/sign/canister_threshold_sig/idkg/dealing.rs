@@ -7,7 +7,7 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
 };
 use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::{CspIDkgProtocol, CspSigner};
-use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
+use ic_crypto_internal_csp::vault::api::{IDkgCreateDealingVaultError, IDkgDealingInternalBytes};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     IDkgDealingInternal, IDkgTranscriptOperationInternal,
 };
@@ -125,7 +125,7 @@ pub fn verify_dealing_private<C: CspIDkgProtocol>(
 
     csp_client.idkg_verify_dealing_private(
         params.algorithm_id(),
-        signed_dealing.idkg_dealing().dealing_to_bytebuf(),
+        IDkgDealingInternalBytes::from(signed_dealing.idkg_dealing().dealing_to_bytes()),
         dealer_index,
         self_receiver_index,
         self_mega_pubkey,

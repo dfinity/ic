@@ -200,7 +200,7 @@ impl SubnetConfig {
     pub fn new(
         subnet_index: SubnetIndex,
         membership: BTreeMap<NodeIndex, NodeConfiguration>,
-        replica_version_id: Option<ReplicaVersion>,
+        replica_version_id: ReplicaVersion,
         max_ingress_bytes_per_message: Option<u64>,
         max_ingress_messages_per_block: Option<u64>,
         max_block_payload_size: Option<u64>,
@@ -227,7 +227,7 @@ impl SubnetConfig {
         Self {
             subnet_index,
             membership,
-            replica_version_id: replica_version_id.unwrap_or_default(),
+            replica_version_id,
             max_ingress_bytes_per_message: max_ingress_bytes_per_message
                 .unwrap_or(config.max_ingress_bytes_per_message),
             max_ingress_messages_per_block: max_ingress_messages_per_block

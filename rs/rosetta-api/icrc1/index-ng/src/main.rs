@@ -37,6 +37,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::io::Read;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::Range;
 use std::time::Duration;
@@ -283,11 +284,43 @@ fn init(index_arg: Option<IndexArg>) {
     set_build_index_timer(Duration::from_secs(0));
 }
 
+// The part of the legacy index (//rs/rosetta-api/icrc1/index) state
+// that reads the ledger_id. This struct is used to deserialize
+// the state of the legacy index during post_upgrade in case
+// the upgrade is from the legacy index to the index-ng.
+#[derive(Serialize, Deserialize, Debug)]
+struct LegacyIndexState {
+    pub ledger_id: ic_base_types::CanisterId,
+}
+
+const MAX_LEGACY_STATE_BYTES: u64 = 100_000_000;
+
 #[post_upgrade]
 fn post_upgrade(index_arg: Option<IndexArg>) {
+    // Attempts to read the ledger_id using the legacy index
+    // storage scheme. This trick allows SNSes to update the legacy
+    // index to index-ng.
+    if let Ok(old_state) = ciborium::de::from_reader::<LegacyIndexState, _>(
+        ic_cdk::api::stable::StableReader::default().take(MAX_LEGACY_STATE_BYTES),
+    ) {
+        log!(
+            P1,
+            "Found the state of the old index. ledger-id: {}",
+            old_state.ledger_id
+        );
+        mutate_state(|state| {
+            state.ledger_id = old_state.ledger_id.into();
+        })
+    }
+
     match index_arg {
         Some(IndexArg::Upgrade(arg)) => {
             if let Some(ledger_id) = arg.ledger_id {
+                log!(
+                    P1,
+                    "Found ledger_id in the upgrade arguments. ledger-id: {}",
+                    ledger_id
+                );
                 mutate_state(|state| {
                     state.ledger_id = ledger_id;
                 });

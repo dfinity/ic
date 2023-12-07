@@ -256,6 +256,7 @@ members = [
   "rs/replica_tests",
   "rs/replicated_state",
   "rs/rosetta-api",
+  "rs/rosetta-api/rosetta_core",
   "rs/rosetta-api/icp_ledger",
   "rs/rosetta-api/icp_ledger/archive",
   "rs/rosetta-api/icp_ledger/ledger",
@@ -422,6 +423,7 @@ arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 async-recursion = "1.0.5"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
+backoff = "0.4"
 base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "83b9ae07d0624db04675a71ae4179c4a17e99f77" }
@@ -431,7 +433,9 @@ candid = { version = "0.9.10", features = ["parser"] }
 chrono = { version = "0.4.19", features = ["serde"] }
 ciborium = "0.2.1"
 clap = { version = "3.2.25", features = ["derive"] }
-cloudflare = { version = "0.9.1", default_features = false, features = ["rustls-tls"] }
+cloudflare = { version = "0.9.1", default_features = false, features = [
+  "rustls-tls",
+] }
 ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.28"
 futures = "0.3.28"
@@ -446,7 +450,7 @@ ic-stable-structures = "0.5.4"
 ic-utils = { version = "0.30.2", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c" }
 indexmap = "2.1.0"
-itertools = "0.10.5"
+itertools = "0.12.0"
 k256 = { version = "0.13.2", default_features = false, features = [
   "arithmetic",
   "ecdsa",
@@ -469,9 +473,12 @@ ping = "0.5.0"
 pkcs8 = "0.10.2"
 pretty_assertions = "1.4.0"
 prometheus = { version = "0.13.3", features = ["process"] }
-prometheus-http-query = { version = "0.6.6", default_features = false, features = ["rustls-tls-webpki-roots"] }
+prometheus-http-query = { version = "0.6.6", default_features = false, features = [
+  "rustls-tls-webpki-roots",
+] }
 prost = "0.12.3"
 prost-build = "0.12.3"
+rcgen = { version = "0.11.1", features = ["zeroize"] }
 reqwest = { version = "0.11.22", default-features = false, features = [
   "blocking",
   "json",
@@ -485,13 +492,18 @@ serde_bytes_repr = "0.1.5"
 serde_cbor = "0.11.2"
 serde_derive = "1.0"
 serde_json = { version = "1.0.107", features = ["std"] }
-serde_millis = "0.1"
-serde_with = "1.6.2"
+serde_with = "1.14.0"
 serde_yaml = "0.8.24"
 signature = "2.1.0"
 simple_asn1 = "0.6.2"
-strum = { version = "0.24.1", features = ["derive"] }
-strum_macros = "0.24.1"
+slog = { version = "2.7.0", features = [
+  "max_level_trace",
+  "nested-values",
+  "release_max_level_debug",
+  "release_max_level_trace",
+] }
+strum = { version = "0.25.0", features = ["derive"] }
+strum_macros = "0.25.3"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.32.0", features = ["full"] }

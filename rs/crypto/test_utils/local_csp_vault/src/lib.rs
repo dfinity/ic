@@ -11,7 +11,9 @@ use ic_crypto_internal_csp::vault::api::CspSecretKeyStoreContainsError;
 use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
 use ic_crypto_internal_csp::vault::api::CspTlsSignError;
 use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
+use ic_crypto_internal_csp::vault::api::IDkgDealingInternalBytes;
 use ic_crypto_internal_csp::vault::api::IDkgProtocolCspVault;
+use ic_crypto_internal_csp::vault::api::IDkgTranscriptInternalBytes;
 use ic_crypto_internal_csp::vault::api::MultiSignatureCspVault;
 use ic_crypto_internal_csp::vault::api::NiDkgCspVault;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
@@ -27,8 +29,7 @@ use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptInternalBytes, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -44,7 +45,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
+    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
     ExtendedDerivationPath,
 };
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};

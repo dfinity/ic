@@ -19,6 +19,20 @@ use ic_protobuf::types::v1 as pb;
 use phantom_newtype::Id;
 use std::convert::TryFrom;
 
+pub struct Chunk(Vec<u8>);
+
+impl From<Chunk> for Vec<u8> {
+    fn from(chunk: Chunk) -> Vec<u8> {
+        chunk.0
+    }
+}
+
+impl From<Vec<u8>> for Chunk {
+    fn from(chunk: Vec<u8>) -> Chunk {
+        Chunk(chunk)
+    }
+}
+
 /// Error codes returned by the `Chunkable` interface.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ArtifactErrorCode {
@@ -28,7 +42,7 @@ pub enum ArtifactErrorCode {
 
 /// The chunk type.
 pub type ChunkId = Id<ArtifactChunk, u32>;
-pub(crate) const CHUNKID_UNIT_CHUNK: u32 = 0;
+pub const CHUNKID_UNIT_CHUNK: u32 = 0;
 
 /// The data contained in an artifact chunk.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

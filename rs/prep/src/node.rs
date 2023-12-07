@@ -14,10 +14,7 @@ use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{
-        ConnectionEndpoint as pbConnectionEndpoint, FlowEndpoint as pbFlowEndpoint,
-        NodeRecord as pbNodeRecord,
-    },
+    node::v1::{ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord},
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -228,9 +225,6 @@ pub struct NodeConfiguration {
     /// Endpoints where the replica serves the public API interface
     pub public_api: SocketAddr,
 
-    /// The initial endpoint that P2P uses.
-    pub p2p_addr: SocketAddr,
-
     /// The principal id of the node operator that operates this node.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_operator_principal_id: Option<PrincipalId>,
@@ -254,32 +248,21 @@ pub struct NodeConfiguration {
 
 impl From<NodeConfiguration> for pbNodeRecord {
     fn from(node_configuration: NodeConfiguration) -> Self {
-        let mut pb_node_record = pbNodeRecord::default();
-
-        // p2p
-        let p2p_base_endpoint = pbConnectionEndpoint {
-            ip_addr: node_configuration.p2p_addr.ip().to_string(),
-            port: node_configuration.p2p_addr.port() as u32,
-        };
-        pb_node_record.p2p_flow_endpoints = vec![pbFlowEndpoint {
-            endpoint: Some(p2p_base_endpoint),
-        }];
-        pb_node_record.http = Some(pbConnectionEndpoint {
-            ip_addr: node_configuration.public_api.ip().to_string(),
-            port: node_configuration.public_api.port() as u32,
-        });
-        pb_node_record.xnet = Some(pbConnectionEndpoint {
-            ip_addr: node_configuration.xnet_api.ip().to_string(),
-            port: node_configuration.xnet_api.port() as u32,
-        });
-
-        // node provider principal id
-        pb_node_record.node_operator_id = node_configuration
-            .node_operator_principal_id
-            .map(|id| id.to_vec())
-            .unwrap_or_default();
-
-        pb_node_record
+        pbNodeRecord {
+            http: Some(pbConnectionEndpoint {
+                ip_addr: node_configuration.public_api.ip().to_string(),
+                port: node_configuration.public_api.port() as u32,
+            }),
+            xnet: Some(pbConnectionEndpoint {
+                ip_addr: node_configuration.xnet_api.ip().to_string(),
+                port: node_configuration.xnet_api.port() as u32,
+            }),
+            node_operator_id: node_configuration
+                .node_operator_principal_id
+                .map(|id| id.to_vec())
+                .unwrap_or_default(),
+            ..Default::default()
+        }
     }
 }
 
@@ -392,7 +375,6 @@ mod node_configuration {
         let node_configuration = NodeConfiguration {
             xnet_api: SocketAddr::from_str("1.2.3.4:8080").unwrap(),
             public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
-            p2p_addr: SocketAddr::from_str("1.2.3.4:1234").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: None,
@@ -402,12 +384,6 @@ mod node_configuration {
 
         let want = pbNodeRecord {
             node_operator_id: vec![],
-            p2p_flow_endpoints: vec![pbFlowEndpoint {
-                endpoint: Some(pbConnectionEndpoint {
-                    ip_addr: "1.2.3.4".to_string(),
-                    port: 1234,
-                }),
-            }],
             http: Some(pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 8081,
@@ -418,6 +394,7 @@ mod node_configuration {
             }),
             hostos_version_id: None,
             chip_id: None,
+            public_ipv4_config: None,
         };
 
         assert_eq!(got, want);

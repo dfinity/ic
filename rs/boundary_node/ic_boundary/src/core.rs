@@ -22,6 +22,7 @@ use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::CanisterId;
 use prometheus::Registry;
+use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
@@ -47,15 +48,15 @@ use crate::{
     management,
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
-        MetricParamsPersist, MetricsCache, MetricsRunner, WithMetrics, WithMetricsCheck,
-        WithMetricsPersist,
+        MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
+        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
     },
     nns::{Load, Loader},
     persist,
     rate_limiting::RateLimit,
     retry::{retry_request, RetryParams},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
-    snapshot::{Runner as SnapshotRunner, SnapshotPersister},
+    snapshot::{SnapshotPersister, Snapshotter},
     tls_verify::TlsVerifier,
 };
 
@@ -80,7 +81,7 @@ const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
 pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
-const METRICS_CACHE_CAPACITY: usize = 30 * MB;
+const METRICS_CACHE_CAPACITY: usize = 15 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
 
@@ -104,7 +105,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // TLS Configuration
     let rustls_config = rustls::ClientConfig::builder()
-        .with_safe_default_cipher_suites()
+        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .context("unable to build Rustls config")?
@@ -341,37 +342,45 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             cache: metrics_cache.clone(),
         });
 
-    let metrics_runner = WithThrottle(
-        MetricsRunner::new(
-            metrics_cache,
-            registry.clone(),
-            cache,
-            Arc::clone(&registry_snapshot),
+    let metrics_runner = WithMetrics(
+        WithThrottle(
+            MetricsRunner::new(
+                metrics_cache,
+                registry.clone(),
+                cache,
+                Arc::clone(&registry_snapshot),
+            ),
+            ThrottleParams::new(5 * SECOND),
         ),
-        ThrottleParams::new(10 * SECOND),
+        MetricParams::new(&registry, "run_metrics"),
     );
 
     // Snapshots
-    let mut snapshot_runner = SnapshotRunner::new(
-        Arc::clone(&registry_snapshot),
-        registry_client.clone(),
-        Duration::from_secs(cli.registry.min_version_age),
+    let snapshot_runner = WithMetricsSnapshot(
+        {
+            let mut snapshotter = Snapshotter::new(
+                Arc::clone(&registry_snapshot),
+                registry_client.clone(),
+                Duration::from_secs(cli.registry.min_version_age),
+            );
+
+            if let Some(v) = &cli.firewall.nftables_system_replicas_path {
+                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
+
+                let fw_generator = FirewallGenerator::new(
+                    v.clone(),
+                    cli.firewall.nftables_system_replicas_var.clone(),
+                );
+
+                let persister = SnapshotPersister::new(fw_generator, fw_reloader);
+                snapshotter.set_persister(persister);
+            }
+
+            snapshotter
+        },
+        MetricParamsSnapshot::new(&registry),
     );
 
-    if let Some(v) = &cli.firewall.nftables_system_replicas_path {
-        let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
-
-        let fw_generator =
-            FirewallGenerator::new(v.clone(), cli.firewall.nftables_system_replicas_var.clone());
-
-        let persister = SnapshotPersister::new(fw_generator, fw_reloader);
-        snapshot_runner.set_persister(persister);
-    }
-
-    let snapshot_runner = WithMetrics(
-        snapshot_runner,
-        MetricParams::new(&registry, "run_snapshot"),
-    );
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
 
     // Checks

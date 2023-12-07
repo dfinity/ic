@@ -120,7 +120,10 @@
 //! without need for a quorum of voting power to participate, and it
 //! can also always decide upon proposals in a timely manner.
 
+use crate::governance::{Governance, TimeWarp};
+use crate::pb::v1::governance::GovernanceCachedMetrics;
 use mockall::automock;
+use std::{collections::HashMap, io};
 
 mod audit_event;
 mod garbage_collection;
@@ -145,12 +148,9 @@ pub mod neurons_fund;
 pub mod pb;
 pub mod proposals;
 mod reward;
+pub mod seed_accounts;
 pub mod storage;
 mod subaccount_index;
-
-use std::{collections::HashMap, io};
-
-use crate::governance::{Governance, TimeWarp};
 
 #[automock]
 trait Clock {
@@ -320,16 +320,6 @@ pub fn encode_metrics(
             .total_available_e8s_equivalent as f64,
         "Total number of available rewards in e8s in the latest reward event (including rollovers).",
     )?;
-    w.encode_gauge(
-        "governance_total_locked_e8s",
-        governance
-            .heap_data
-            .metrics
-            .as_ref()
-            .map(|m| m.total_locked_e8s)
-            .unwrap_or(0) as f64,
-        "Total number of e8s locked in non-dissolved neurons..",
-    )?;
 
     let total_voting_power = match governance
         .heap_data
@@ -385,40 +375,90 @@ pub fn encode_metrics(
         "Total number of entries in the known neuron index",
     )?;
 
+    w.encode_gauge(
+        "governance_stable_memory_neuron_count",
+        governance.neuron_store.stable_neuron_store_len() as f64,
+        "The number of neurons in stable memory.",
+    )?;
+
     if let Some(metrics) = &governance.heap_data.metrics {
+        let GovernanceCachedMetrics {
+            timestamp_seconds: _,
+            total_supply_icp,
+            dissolving_neurons_count: _,
+            dissolving_neurons_e8s_buckets,
+            dissolving_neurons_count_buckets,
+            not_dissolving_neurons_count: _,
+            not_dissolving_neurons_e8s_buckets,
+            not_dissolving_neurons_count_buckets,
+            dissolved_neurons_count,
+            dissolved_neurons_e8s,
+            garbage_collectable_neurons_count,
+            neurons_with_invalid_stake_count,
+            total_staked_e8s,
+            neurons_with_less_than_6_months_dissolve_delay_count,
+            neurons_with_less_than_6_months_dissolve_delay_e8s,
+            community_fund_total_staked_e8s,
+            community_fund_total_maturity_e8s_equivalent,
+            neurons_fund_total_active_neurons,
+            total_locked_e8s,
+            total_maturity_e8s_equivalent,
+            total_staked_maturity_e8s_equivalent,
+            dissolving_neurons_staked_maturity_e8s_equivalent_buckets,
+            dissolving_neurons_staked_maturity_e8s_equivalent_sum: _,
+            not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets,
+            not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: _,
+            seed_neuron_count,
+            ect_neuron_count,
+            total_staked_e8s_seed,
+            total_staked_e8s_ect,
+            total_staked_maturity_e8s_equivalent_seed,
+            total_staked_maturity_e8s_equivalent_ect,
+            dissolving_neurons_e8s_buckets_seed,
+            dissolving_neurons_e8s_buckets_ect,
+            not_dissolving_neurons_e8s_buckets_seed,
+            not_dissolving_neurons_e8s_buckets_ect,
+        } = metrics;
+
+        w.encode_gauge(
+            "governance_total_locked_e8s",
+            *total_locked_e8s as f64,
+            "Total number of e8s locked in non-dissolved neurons..",
+        )?;
+
         w.encode_gauge(
             "governance_total_supply_icp",
-            metrics.total_supply_icp as f64,
+            *total_supply_icp as f64,
             "Total number of minted ICP, at the time the metrics were last calculated, as reported by the ledger canister.",
         )?;
 
         w.encode_gauge(
             "governance_total_staked_e8s",
-            metrics.total_staked_e8s as f64,
+            *total_staked_e8s as f64,
             "Total number of e8s that are staked.",
         )?;
 
         w.encode_gauge(
             "governance_dissolved_neurons_count",
-            metrics.dissolved_neurons_count as f64,
+            *dissolved_neurons_count as f64,
             "Total number of neurons in the \"dissolved\" state.",
         )?;
 
         w.encode_gauge(
             "governance_dissolved_neurons_e8s",
-            metrics.dissolved_neurons_e8s as f64,
+            *dissolved_neurons_e8s as f64,
             "Total e8s held in neurons that are in the \"dissolved\" state.",
         )?;
 
         w.encode_gauge(
             "governance_garbage_collectable_neurons_count",
-            metrics.garbage_collectable_neurons_count as f64,
+            *garbage_collectable_neurons_count as f64,
             "Total number of neurons that can be garbage collected.",
         )?;
 
         w.encode_gauge(
             "governance_neurons_with_invalid_stake_count",
-            metrics.neurons_with_invalid_stake_count as f64,
+            *neurons_with_invalid_stake_count as f64,
             "Total number of neurons having an invalid stake, e.g. less than the minimum allowed stake.",
         )?;
 
@@ -428,7 +468,7 @@ pub fn encode_metrics(
                 "Total e8s held in dissolving neurons, grouped by dissolve delay",
             )
             .unwrap(),
-            &metrics.dissolving_neurons_e8s_buckets,
+            dissolving_neurons_e8s_buckets,
         );
 
         encode_dissolve_delay_buckets(
@@ -437,7 +477,7 @@ pub fn encode_metrics(
                 "Total number of dissolving neurons, grouped by dissolve delay",
             )
             .unwrap(),
-            &metrics.dissolving_neurons_count_buckets,
+            dissolving_neurons_count_buckets,
         );
 
         encode_dissolve_delay_buckets(
@@ -446,7 +486,7 @@ pub fn encode_metrics(
                 "Total e8s held in not dissolving neurons, grouped by dissolve delay",
             )
             .unwrap(),
-            &metrics.not_dissolving_neurons_e8s_buckets,
+            not_dissolving_neurons_e8s_buckets,
         );
 
         encode_dissolve_delay_buckets(
@@ -455,50 +495,122 @@ pub fn encode_metrics(
                 "Total number of not dissolving neurons, grouped by dissolve delay",
             )
             .unwrap(),
-            &metrics.not_dissolving_neurons_count_buckets,
+            not_dissolving_neurons_count_buckets,
         );
 
         w.encode_gauge(
             "governance_neurons_with_less_than_6_months_dissolve_delay_count",
-            metrics.neurons_with_less_than_6_months_dissolve_delay_count as f64,
+            *neurons_with_less_than_6_months_dissolve_delay_count as f64,
             "Total number of neurons having a dissolve delay less than 6 months.",
         )?;
 
         w.encode_gauge(
             "governance_neurons_with_less_than_6_months_dissolve_delay_e8s",
-            metrics.neurons_with_less_than_6_months_dissolve_delay_e8s as f64,
+            *neurons_with_less_than_6_months_dissolve_delay_e8s as f64,
             "Total e8s held in neurons that have a dissolve delay less than 6 months.",
         )?;
 
         w.encode_gauge(
             "governance_community_fund_total_staked_e8s",
-            metrics.community_fund_total_staked_e8s as f64,
+            *community_fund_total_staked_e8s as f64,
             "The amount of Neurons' stake committed to the Internet Computer's Neurons' Fund",
         )?;
 
         w.encode_gauge(
             "governance_community_fund_total_maturity_e8s_equivalent",
-            metrics.community_fund_total_maturity_e8s_equivalent as f64,
+            *community_fund_total_maturity_e8s_equivalent as f64,
             "The amount of Neurons' maturity committed to the Internet Computer's Neurons' Fund",
         )?;
 
         w.encode_gauge(
             "governance_neurons_fund_total_active_neurons",
-            metrics.neurons_fund_total_active_neurons as f64,
+            *neurons_fund_total_active_neurons as f64,
             "The number of active Neurons that have joined the Internet Computer's Neurons' Fund",
         )?;
 
         w.encode_gauge(
             "governance_total_maturity_e8s_equivalent",
-            metrics.total_maturity_e8s_equivalent as f64,
+            *total_maturity_e8s_equivalent as f64,
             "The total amount of Neurons' maturity",
         )?;
 
         w.encode_gauge(
             "governance_total_staked_maturity_e8s_equivalent",
-            metrics.total_staked_maturity_e8s_equivalent as f64,
+            *total_staked_maturity_e8s_equivalent as f64,
             "The total amount of Neurons' staked maturity",
         )?;
+
+        w.encode_gauge(
+            "governance_seed_neuron_count",
+            *seed_neuron_count as f64,
+            "The count of Seed Neurons",
+        )?;
+
+        w.encode_gauge(
+            "governance_ect_neuron_count",
+            *ect_neuron_count as f64,
+            "The count of ECT Neurons",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_staked_e8s_seed",
+            *total_staked_e8s_seed as f64,
+            "Total number of e8s that are staked in Seed Neurons.",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_staked_e8s_ect",
+            *total_staked_e8s_ect as f64,
+            "Total number of e8s that are staked in ECT Neurons.",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_staked_maturity_e8s_equivalent_seed",
+            *total_staked_maturity_e8s_equivalent_seed as f64,
+            "The total amount of Neurons' staked maturity in Seed Neurons",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_staked_maturity_e8s_equivalent_ect",
+            *total_staked_maturity_e8s_equivalent_ect as f64,
+            "The total amount of Neurons' staked maturity in ECT Neurons",
+        )?;
+
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                "governance_dissolving_neurons_e8s_seed",
+                "Total e8s held in dissolving Seed neurons, grouped by dissolve delay",
+            )
+            .unwrap(),
+            dissolving_neurons_e8s_buckets_seed,
+        );
+
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                "governance_not_dissolving_neurons_e8s_seed",
+                "Total e8s held in not dissolving Seed neurons, grouped by dissolve delay",
+            )
+            .unwrap(),
+            not_dissolving_neurons_e8s_buckets_seed,
+        );
+
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                "governance_dissolving_neurons_e8s_ect",
+                "Total e8s held in dissolving ECT neurons, grouped by dissolve delay",
+            )
+            .unwrap(),
+            dissolving_neurons_e8s_buckets_ect,
+        );
+
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                "governance_not_dissolving_neurons_e8s_ect",
+                "Total e8s held in not dissolving ECT neurons, grouped by dissolve delay",
+            )
+            .unwrap(),
+            not_dissolving_neurons_e8s_buckets_ect,
+        );
 
         encode_dissolve_delay_buckets(
             w
@@ -507,7 +619,7 @@ pub fn encode_metrics(
                     "Total staked maturity e8s equivalent held in dissolving neurons, grouped by neuron dissolve delay",
                 )
                 .unwrap(),
-            &metrics.dissolving_neurons_staked_maturity_e8s_equivalent_buckets
+            dissolving_neurons_staked_maturity_e8s_equivalent_buckets
         );
 
         encode_dissolve_delay_buckets(
@@ -517,15 +629,9 @@ pub fn encode_metrics(
                     "Total staked maturity e8s equivalent held in not dissolving neurons, grouped by neuron dissolve delay",
                 )
                 .unwrap(),
-            &metrics.not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets
+            not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets
         );
     }
-
-    w.encode_gauge(
-        "governance_stable_memory_neuron_count",
-        governance.neuron_store.stable_neuron_store_len() as f64,
-        "The number of neurons in stable memory.",
-    )?;
 
     Ok(())
 }

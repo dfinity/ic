@@ -67,6 +67,8 @@ const RECEIVED_ETH_EVENT_TOPIC: &str =
     "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435";
 const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
+const MAX_ETH_LOGS_BLOCK_RANGE: u64 = 799;
+
 #[test]
 fn should_deposit_and_withdraw() {
     let cketh = CkEthSetup::new();
@@ -405,6 +407,7 @@ fn should_reimburse() {
         .expect_withdrawal_request_accepted();
 
     let withdrawal_id = cketh.withdrawal_id().clone();
+    let (tx, _sig) = default_signed_eip_1559_transaction();
     let cketh = cketh
         .wait_and_validate_withdrawal(
             ProcessWithdrawalParams::default().with_mock_eth_get_transaction_receipt(move |mock| {
@@ -437,14 +440,21 @@ fn should_reimburse() {
     cketh.env.advance_time(PROCESS_REIMBURSEMENT);
     cketh.env.tick();
 
-    let gas_cost = Nat::from(21_000_u64 * EFFECTIVE_GAS_PRICE);
+    let cost_of_failed_transaction = withdrawal_amount
+        .0
+        .to_u128()
+        .unwrap()
+        .checked_sub(tx.value.unwrap().as_u128())
+        .unwrap();
+    assert_eq!(cost_of_failed_transaction, 693_077_873_418_000);
+
     let balance_after_withdrawal = cketh.balance_of(caller);
     assert_eq!(
         balance_after_withdrawal,
-        balance_before_withdrawal.clone() - gas_cost.clone()
+        balance_before_withdrawal.clone() - cost_of_failed_transaction
     );
 
-    let reimbursed_amount = balance_before_withdrawal.clone() - gas_cost.clone();
+    let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
     let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1);
     let failed_tx_hash =
         "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
@@ -463,7 +473,7 @@ fn should_reimburse() {
     cketh
         .call_ledger_get_transaction(reimbursed_in_block)
         .expect_mint(Mint {
-            amount: reimbursed_amount,
+            amount: reimbursed_amount.clone(),
             to: Account {
                 owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
                 subaccount: None,
@@ -514,7 +524,7 @@ fn should_reimburse() {
             }},
         EventPayload::ReimbursedEthWithdrawal {
             transaction_hash: Some("0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()),
-            reimbursed_amount: balance_before_withdrawal - gas_cost,
+            reimbursed_amount,
             withdrawal_id: withdrawal_id.clone(),
             reimbursed_in_block: withdrawal_id + 1,
         },
@@ -711,7 +721,7 @@ fn should_not_overlap_when_scrapping_logs() {
 
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(800_u64))
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
@@ -728,7 +738,7 @@ fn should_not_overlap_when_scrapping_logs() {
         .checked_add(BlockNumber::from(1_u64))
         .unwrap();
     let second_to_block = second_from_block
-        .checked_add(BlockNumber::from(800_u64))
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
@@ -758,7 +768,9 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .build()
         .expect_rpc_calls(&cketh);
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
-    let to_block = from_block.checked_add(BlockNumber::from(800_u64)).unwrap();
+    let to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": from_block,
@@ -928,8 +940,12 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
     assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
 
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
-    let to_block = from_block.checked_add(BlockNumber::from(800_u64)).unwrap();
-    let half_to_block = from_block.checked_add(BlockNumber::from(400_u64)).unwrap();
+    let to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .unwrap();
+    let half_to_block = from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE / 2))
+        .unwrap();
 
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))

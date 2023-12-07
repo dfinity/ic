@@ -721,6 +721,7 @@ pub fn test(env: TestEnv) {
         let arg = candid::encode_one(Some(cycles_minting_canister::CyclesCanisterInitPayload {
             ledger_canister_id: Some(LEDGER_CANISTER_ID),
             governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
+            cycles_ledger_canister_id: None,
             exchange_rate_canister: None,
             minting_account_id: None,
             last_purged_notification: None,
@@ -772,6 +773,7 @@ pub fn test(env: TestEnv) {
         let arg = candid::encode_one(Some(cycles_minting_canister::CyclesCanisterInitPayload {
             ledger_canister_id: Some(LEDGER_CANISTER_ID),
             governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
+            cycles_ledger_canister_id: None,
             exchange_rate_canister: None,
             minting_account_id: None,
             last_purged_notification: None,

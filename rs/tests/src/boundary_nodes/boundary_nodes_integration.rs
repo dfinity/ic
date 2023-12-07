@@ -18,6 +18,7 @@ end::catalog[] */
 
 use crate::{
     driver::{
+        asset_canister::{DeployAssetCanister, UploadAssetRequest},
         boundary_node::BoundaryNodeVm,
         test_env::TestEnv,
         test_env_api::{
@@ -25,7 +26,7 @@ use crate::{
             RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    util::{assert_create_agent, block_on},
+    util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
 
 use crate::boundary_nodes::{
@@ -35,7 +36,7 @@ use crate::boundary_nodes::{
         set_counters_on_counter_canisters,
     },
 };
-use std::{net::SocketAddrV6, time::Duration};
+use std::{iter, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
@@ -75,8 +76,15 @@ async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Pr
         .await
         .expect("Could not create http_counter canister");
 
-    // wait for canister to finish installing
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    info!(&logger, "Waiting for canisters to finish installing...");
+    retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+        match agent_observes_canister_module(&agent, &canister_id).await {
+            true => Ok(()),
+            false => panic!("Canister module not available yet"),
+        }
+    })
+    .await
+    .unwrap();
 
     info!(&logger, "created canister {canister_id}");
 
@@ -132,9 +140,15 @@ pub fn canister_test(env: TestEnv) {
 
         info!(&logger, "created canister={canister_id}");
 
-        // Wait for the canisters to finish installing
-        // TODO: maybe this should be status calls?
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        info!(&logger, "Waiting for canisters to finish installing...");
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match agent_observes_canister_module(&agent, &canister_id).await {
+                true => Ok(()),
+                false => panic!("Canister module not available yet"),
+            }
+        })
+        .await
+        .unwrap();
 
         info!(&logger, "Creating BN agent...");
         let agent = retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
@@ -153,6 +167,369 @@ pub fn canister_test(env: TestEnv) {
         .unwrap();
 
         assert_eq!(read_result, [0; 4]);
+    });
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes asset canister test
+
+Goal:: Install and query an asset canister
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+
+Success:: The canister installs successfully and HTTP calls against it
+return the expected responses
+
+Coverage:: asset Canisters behave as expected
+
+end::catalog[] */
+
+pub fn asset_canister_test(env: TestEnv) {
+    let logger = env.logger();
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    rt.block_on(async move {
+        info!(&logger, "Deploying asset canister...");
+        let asset_canister = env
+            .deploy_asset_canister()
+            .await
+            .expect("Could not install asset canister");
+
+
+        let http_client_builder = reqwest::ClientBuilder::new();
+        let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
+            (
+                http_client_builder,
+                format!("{0}.{playnet}", asset_canister.canister_id),
+            )
+        } else {
+            let host = format!("{0}.ic0.app", asset_canister.canister_id);
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+            let client_builder = http_client_builder
+                .danger_accept_invalid_certs(true)
+                .resolve(&host, bn_addr);
+            (client_builder, host)
+        };
+        let http_client = client_builder.build().unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            info!(&logger, "Requesting a small asset with the correct hash succeeds and is verified without streaming");
+
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+
+            info!(&logger, "Uploading hello world asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/hello-world.txt".to_string(),
+                    content: hello_world.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
+            info!(&logger, "Requesting hello world asset...");
+            let res = http_client
+                .get(format!("https://{host}/hello-world.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res != hello_world {
+                bail!("hello world response did not match uploaded content")
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            info!(&logger, "Requesting a small, gzipped asset with the correct hash succeeds and is verified without streaming");
+
+            let hello_world_gzip = vec![
+                31, 139, 8, 0, 0, 0, 0, 0, 0, 3, 243, 72, 205, 201, 201, 87, 8, 207, 47, 202, 73,
+                81, 4, 0, 163, 28, 41, 28, 12, 0, 0, 0,
+            ];
+
+            info!(&logger, "Uploading gzipped hello world asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/hello-world-gzipped.txt".to_string(),
+                    content: hello_world_gzip.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "gzip".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
+            info!(&logger, "Requesting gzipped hello world asset...");
+            let res = http_client
+                .get(format!("https://{host}/hello-world-gzipped.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res != hello_world_gzip {
+                bail!("gzipped hello world response did not match uploaded content")
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            info!(&logger, "Requesting a 4mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified");
+
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 4 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
+
+            info!(&logger, "Uploading 4mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/4mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
+            info!(&logger, "Requesting 4mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/4mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res != req_body {
+                bail!("4mb response did not match uploaded content")
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            info!(&logger, "Requesting a 6mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified");
+
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 6 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
+
+            info!(&logger, "Uploading 6mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/6mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
+            info!(&logger, "Requesting 6mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/6mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res != req_body {
+                bail!("6mb response did not match uploaded content")
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            info!(&logger, "Requesting an 8mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified");
+
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 8 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
+
+            info!(&logger, "Uploading 8mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/8mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
+            info!(&logger, "Requesting 8mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/8mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res != req_body {
+                bail!("8mb response did not match uploaded content")
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            info!(&logger, "Requesting a 10mb asset with the correct hash succeeds but the asset is larger than the limit that we can safely verify while streaming so it is not verified");
+
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 10 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
+
+            info!(&logger, "Uploading 10mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/10mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
+            info!(&logger, "Requesting 10mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/10mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res != req_body {
+                bail!("10mb response did not match uploaded content")
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            info!(&logger, "Requesting a 4mb asset with the incorrect hash fails because the asset is within the limit that we can safely verify while streaming");
+
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 4 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
+
+            info!(&logger, "Uploading invalid 4mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/invalid-4mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: Some(vec![0; 32]),
+                })
+                .await?;
+
+            info!(&logger, "Requesting invalid 4mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/invalid-4mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "Body does not pass verification" {
+                bail!("invalid 4mb asset did not fail verification")
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            info!(&logger, "Requesting a 10mb asset with an invalid hash succeeds because the asset is larger than what we can safely verify while streaming");
+
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 10 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
+
+            info!(&logger, "Uploading invalid 10mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/invalid-10mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: Some(vec![0; 32]),
+                })
+                .await?;
+
+            info!(&logger, "Requesting invalid 10mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/invalid-10mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res != req_body {
+                bail!("invalid 10mb response did not match uploaded content")
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
     });
 }
 
@@ -367,9 +744,15 @@ pub fn prefix_canister_id_test(env: TestEnv) {
 
         info!(&logger, "created kv_store canister={canister_id}");
 
-        // Wait for the canisters to finish installing
-        // TODO: maybe this should be status calls?
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        info!(&logger, "Waiting for canisters to finish installing...");
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match agent_observes_canister_module(&agent, &canister_id).await {
+                true => Ok(()),
+                false => panic!("Canister module not available yet"),
+            }
+        })
+        .await
+        .unwrap();
 
         let client_builder = reqwest::ClientBuilder::new();
         let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
@@ -711,8 +1094,15 @@ pub fn denylist_test(env: TestEnv) {
             .await
             .expect("Could not create http_counter canister");
 
-        // wait for canister to finish installing
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        info!(&logger, "Waiting for canisters to finish installing...");
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match agent_observes_canister_module(&agent, &canister_id).await {
+                true => Ok(()),
+                false => panic!("Canister module not available yet"),
+            }
+        })
+        .await
+        .unwrap();
 
         info!(&logger, "created canister={canister_id}");
 
@@ -798,8 +1188,15 @@ pub fn canister_allowlist_test(env: TestEnv) {
             .await
             .expect("Could not create http_counter canister");
 
-        // wait for canister to finish installing
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        info!(&logger, "Waiting for canisters to finish installing...");
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match agent_observes_canister_module(&agent, &canister_id).await {
+                true => Ok(()),
+                false => panic!("Canister module not available yet"),
+            }
+        })
+        .await
+        .unwrap();
 
         info!(&logger, "created canister={canister_id}");
 
@@ -1254,7 +1651,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
 }
 
 pub fn sw_test(env: TestEnv) {
-    let logger = env.logger();
+    let logger_orig = env.logger();
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -1264,13 +1661,7 @@ pub fn sw_test(env: TestEnv) {
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
-    let canister_id = rt
-        .block_on(install_canister(
-            env.clone(),
-            logger.clone(),
-            "rs/tests/test_canisters/http_counter/http_counter.wasm",
-        ))
-        .unwrap();
+    let asset_canister_orig = rt.block_on(env.deploy_asset_canister()).unwrap();
 
     let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
@@ -1278,9 +1669,10 @@ pub fn sw_test(env: TestEnv) {
     } else {
         let host = "ic0.app";
         let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
-        let client_builder = client_builder
-            .danger_accept_invalid_certs(true)
-            .resolve(&format!("{canister_id}.{host}"), bn_addr.into());
+        let client_builder = client_builder.danger_accept_invalid_certs(true).resolve(
+            &format!("{0}.{host}", asset_canister_orig.canister_id),
+            bn_addr.into(),
+        );
         (client_builder, host.to_string())
     };
     let client = client_builder.build().unwrap();
@@ -1288,14 +1680,28 @@ pub fn sw_test(env: TestEnv) {
     let futs = FuturesUnordered::new();
 
     let host = host_orig.clone();
+    let logger = logger_orig.clone();
+    let asset_canister = asset_canister_orig.clone();
     futs.push(rt.spawn({
         let client = client.clone();
         let name = "get index.html with sw.js include from root path";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            info!(&logger, "Uploading hello world response...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/".to_string(),
+                    content: hello_world.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
             let res = client
-                .get(format!("https://{canister_id}.{host}/"))
+                .get(format!("https://{0}.{host}/", asset_canister.canister_id))
                 .send()
                 .await?;
 
@@ -1306,14 +1712,30 @@ pub fn sw_test(env: TestEnv) {
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            let body_valid = body.contains("Internet Computer Loading")
-                && body.contains(r#"<script defer src="/install-script.js">"#);
-            if !body_valid {
-                bail!("{name} failed: expected Service Worker loading page but got {body}")
+            if !body.contains("Hello World!") {
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
+            let hello_world_js = vec![
+                99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 34, 72, 101, 108, 108,
+                111, 32, 87, 111, 114, 108, 100, 33, 34, 41,
+            ];
+            info!(&logger, "Uploading hello world JS response...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/foo.js".to_string(),
+                    content: hello_world_js.clone(),
+                    content_type: "application/javascript".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
             let res = client
-                .get(format!("https://{canister_id}.{host}/foo.js"))
+                .get(format!(
+                    "https://{0}.{host}/foo.js",
+                    asset_canister.canister_id
+                ))
                 .send()
                 .await?;
 
@@ -1324,10 +1746,8 @@ pub fn sw_test(env: TestEnv) {
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            let body_valid = body.contains("Internet Computer Loading")
-                && body.contains(r#"<script defer src="/install-script.js">"#);
-            if !body_valid {
-                bail!("{name} failed: expected Service Worker loading page but got {body}")
+            if !body.contains(r#"console.log("Hello World!")"#) {
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
             Ok(())
@@ -1335,14 +1755,34 @@ pub fn sw_test(env: TestEnv) {
     }));
 
     let host = host_orig.clone();
+    let logger = logger_orig.clone();
+    let asset_canister = asset_canister_orig.clone();
     futs.push(rt.spawn({
         let client = client.clone();
-        let name = "get index.html with sw.js include from non-root path";
+        let name = "get from non-root path";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
+            let a_b_c = vec![
+                68, 111, 32, 114, 101, 32, 109, 105, 44, 32, 65, 32, 66, 32, 67, 44, 32, 49, 32,
+                50, 32, 51,
+            ];
+            info!(&logger, "Uploading A B C response...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/a/b/c".to_string(),
+                    content: a_b_c.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
             let res = client
-                .get(format!("https://{canister_id}.{host}/a/b/c"))
+                .get(format!(
+                    "https://{}.{host}/a/b/c",
+                    asset_canister.canister_id
+                ))
                 .send()
                 .await?;
 
@@ -1353,10 +1793,8 @@ pub fn sw_test(env: TestEnv) {
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            let body_valid = body.contains("Internet Computer Loading")
-                && body.contains(r#"<script defer src="/install-script.js">"#);
-            if !body_valid {
-                bail!("{name} failed: expected Service Worker loading page but got {body}")
+            if !body.contains("Do re mi, A B C, 1 2 3") {
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
             Ok(())
@@ -1364,57 +1802,28 @@ pub fn sw_test(env: TestEnv) {
     }));
 
     let host = host_orig.clone();
+    let logger = logger_orig.clone();
+    let asset_canister = asset_canister_orig.clone();
     futs.push(rt.spawn({
         let client = client.clone();
-        let name = "get service-worker bundle";
+        let name = "get uninstall script on root JS";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
             let res = client
-                .get(format!("https://{canister_id}.{host}/sw.js"))
-                .send()
-                .await?;
-
-            if res.status() != reqwest::StatusCode::OK {
-                bail!("{name} failed: {}", res.status())
-            }
-
-            if !res
-                .headers()
-                .get("Content-Type")
-                .unwrap()
-                .as_bytes()
-                .eq(b"application/javascript")
-            {
-                bail!("{name} failed: {}", res.status())
-            }
-
-            let body = res.bytes().await?.to_vec();
-            let body = String::from_utf8_lossy(&body);
-
-            if !body.contains("sourceMappingURL=sw.js.map") {
-                bail!("{name} failed: expected sw.js but got {body}")
-            }
-
-            Ok(())
-        }
-    }));
-
-    let host = host_orig;
-    futs.push(rt.spawn({
-        let client = client;
-        let name = "get uninstall script";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let res = client
-                .get(format!("https://{canister_id}.{host}/anything.js"))
+                .get(format!(
+                    "https://{}.{host}/anything.js",
+                    asset_canister.canister_id
+                ))
                 .header("Service-Worker", "script")
                 .send()
                 .await?;
 
             if res.status() != reqwest::StatusCode::OK {
-                bail!("{name} failed: {}", res.status())
+                let status = res.status();
+                let body = res.bytes().await?.to_vec();
+                let body = String::from_utf8_lossy(&body);
+                bail!("{name} failed: {} with body: {}", status, body)
             }
 
             if !res
@@ -1438,6 +1847,71 @@ pub fn sw_test(env: TestEnv) {
         }
     }));
 
+    let host = host_orig.clone();
+    let logger = logger_orig.clone();
+    let asset_canister = asset_canister_orig.clone();
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "do not get uninstall script on nested JS";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let hello_world_js = vec![
+                99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 34, 72, 101, 108, 108,
+                111, 32, 87, 111, 114, 108, 100, 33, 34, 41,
+            ];
+            info!(&logger, "Uploading hello world JS response...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/something/anything.js".to_string(),
+                    content: hello_world_js.clone(),
+                    content_type: "application/javascript".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
+            let res = client
+                .get(format!(
+                    "https://{}.{host}/something/anything.js",
+                    asset_canister.canister_id
+                ))
+                .header("Service-Worker", "script")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                let status = res.status();
+                let body = res.bytes().await?.to_vec();
+                let body = String::from_utf8_lossy(&body);
+                bail!("{name} failed: {} with body: {}", status, body)
+            }
+
+            if !res
+                .headers()
+                .get("Content-Type")
+                .unwrap()
+                .as_bytes()
+                .eq(b"application/javascript")
+            {
+                let status = res.status();
+                let body = res.bytes().await?.to_vec();
+                let body = String::from_utf8_lossy(&body);
+                bail!("{name} failed: {} with body: {}", status, body)
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains(r#"console.log("Hello World!")"#) {
+                bail!("{name} failed: expected canister javascript file but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    let logger = logger_orig.clone();
     rt.block_on(async move {
         let mut cnt_err = 0;
         info!(&logger, "Waiting for subtests");
@@ -1511,15 +1985,15 @@ pub fn icx_proxy_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != reqwest::StatusCode::OK {
+            if res.status() != reqwest::StatusCode::INTERNAL_SERVER_ERROR {
                 bail!("{name} failed: {}", res.status())
             }
 
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            if !body.contains("Counter is 0") {
-                bail!("{name} failed: expected icx-response but got {body}")
+            if !body.contains("Body does not pass verification") {
+                bail!("{name} failed: expected 'Body does not pass verification' but got {body}")
             }
 
             Ok(())
@@ -1665,8 +2139,15 @@ pub fn direct_to_replica_test(env: TestEnv) {
             .await
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
-            // Wait for the canister to finish installing
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            info!(&logger, "Waiting for canisters to finish installing...");
+            retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
+            })
+            .await
+            .unwrap();
 
             info!(&logger, "creating agent");
             let transport = ReqwestHttpReplicaV2Transport::create_with_client(
@@ -1711,8 +2192,15 @@ pub fn direct_to_replica_test(env: TestEnv) {
             .await
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
-            // Wait for the canister to finish installing
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            info!(&logger, "Waiting for canisters to finish installing...");
+            retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
+            })
+            .await
+            .unwrap();
 
             info!(&logger, "creating agent");
             let transport = ReqwestHttpReplicaV2Transport::create_with_client(
@@ -1808,8 +2296,15 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             .await
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
-            // Wait for the canister to finish installing
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            info!(&logger, "Waiting for canisters to finish installing...");
+            retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
+            })
+            .await
+            .unwrap();
 
             let out: Result<Principal, Error> = Ok(cid);
             out
@@ -1999,8 +2494,15 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             .await
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
-            // Wait for the canister to finish installing
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            info!(&logger, "Waiting for canisters to finish installing...");
+            retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
+            })
+            .await
+            .unwrap();
 
             info!(&logger, "creating agent");
             let transport = ReqwestHttpReplicaV2Transport::create_with_client(
@@ -2045,8 +2547,15 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             .await
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
-            // Wait for the canister to finish installing
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            info!(&logger, "Waiting for canisters to finish installing...");
+            retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
+            })
+            .await
+            .unwrap();
 
             info!(&logger, "creating agent");
             let transport = ReqwestHttpReplicaV2Transport::create_with_client(
@@ -2101,7 +2610,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
 }
 
 pub fn seo_test(env: TestEnv) {
-    let logger = env.logger();
+    let logger_orig = env.logger();
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -2111,13 +2620,8 @@ pub fn seo_test(env: TestEnv) {
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
-    let canister_id = rt
-        .block_on(install_canister(
-            env.clone(),
-            logger.clone(),
-            "rs/tests/test_canisters/http_counter/http_counter.wasm",
-        ))
-        .unwrap();
+    // create an asset canister for the test
+    let asset_canister_orig = rt.block_on(env.deploy_asset_canister()).unwrap();
 
     let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
@@ -2125,9 +2629,10 @@ pub fn seo_test(env: TestEnv) {
     } else {
         let host = "ic0.app";
         let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
-        let client_builder = client_builder
-            .danger_accept_invalid_certs(true)
-            .resolve(&format!("{canister_id}.{host}"), bn_addr.into());
+        let client_builder = client_builder.danger_accept_invalid_certs(true).resolve(
+            &format!("{0}.{host}", asset_canister_orig.canister_id),
+            bn_addr.into(),
+        );
         (client_builder, host.to_string())
     };
     let client = client_builder.build().unwrap();
@@ -2135,13 +2640,28 @@ pub fn seo_test(env: TestEnv) {
     let futs = FuturesUnordered::new();
 
     let host = host_orig;
+    let logger = logger_orig.clone();
+    let asset_canister = asset_canister_orig.clone();
+
     futs.push(rt.spawn({
         let name = "get sent to icx-proxy if you're a bot";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            info!(&logger, "Uploading hello world response...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/".to_string(),
+                    content: hello_world.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
             let res = client
-                .get(format!("https://{canister_id}.{host}/"))
+                .get(format!("https://{0}.{host}/", asset_canister.canister_id))
                 .header(
                     "User-Agent",
                     "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
@@ -2156,28 +2676,7 @@ pub fn seo_test(env: TestEnv) {
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            if !body.contains("Counter is 0") {
-                bail!("{name} failed: expected icx-response but got {body}")
-            }
-
-            // Test *.js to see if we end up in the nginx 404
-            let res = client
-                .get(format!("https://{canister_id}.{host}/foo.js"))
-                .header(
-                    "User-Agent",
-                    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-                )
-                .send()
-                .await?;
-
-            if res.status() != reqwest::StatusCode::OK {
-                bail!("{name} failed: {}", res.status())
-            }
-
-            let body = res.bytes().await?.to_vec();
-            let body = String::from_utf8_lossy(&body);
-
-            if !body.contains("Counter is 0") {
+            if !body.contains("Hello World!") {
                 bail!("{name} failed: expected icx-response but got {body}")
             }
 
@@ -2187,16 +2686,16 @@ pub fn seo_test(env: TestEnv) {
 
     rt.block_on(async move {
         let mut cnt_err = 0;
-        info!(&logger, "Waiting for subtests");
+        info!(&logger_orig, "Waiting for subtests");
 
         for fut in futs {
             match fut.await {
                 Ok(Err(err)) => {
-                    error!(logger, "test failed: {}", err);
+                    error!(logger_orig, "test failed: {}", err);
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test panicked: {}", err);
+                    error!(logger_orig, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}

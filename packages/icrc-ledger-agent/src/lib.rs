@@ -297,9 +297,12 @@ impl Icrc1Agent {
         Ok(())
     }
 
-    /// Returns the last block in the chain and this block's index.
-    /// Returns an error the block does not pass validation against the IC certificate.
-    pub async fn get_certified_chain_tip(&self) -> Result<(Hash, BlockIndex), Icrc1AgentError> {
+    /// Returns the hash of the last block in the chain and this block's index.
+    /// Returns an error if the hash and/or the index do not pass validation against the IC certificate.
+    /// Returns None if the blockchain has no blocks and this can be verified by the certificate.
+    pub async fn get_certified_chain_tip(
+        &self,
+    ) -> Result<Option<(Hash, BlockIndex)>, Icrc1AgentError> {
         let DataCertificate {
             certificate,
             hash_tree,
@@ -332,41 +335,53 @@ impl Icrc1Agent {
             .await?;
 
         let last_block_hash_vec = lookup_leaf(&hash_tree, "tip_hash")?;
-        let last_block_hash: Hash = match last_block_hash_vec.clone().try_into() {
-            Ok(last_block_hash) => last_block_hash,
-            Err(_) => {
-                return Err(Icrc1AgentError::VerificationFailed(format!(
+        if let Some(last_block_hash_vec) = last_block_hash_vec {
+            let last_block_hash: Hash = match last_block_hash_vec.clone().try_into() {
+                Ok(last_block_hash) => last_block_hash,
+                Err(_) => {
+                    return Err(Icrc1AgentError::VerificationFailed(format!(
                 "DataCertificate last_block_hash bytes: {}, cannot be decoded as last_block_hash",
                 hex::encode(last_block_hash_vec)
             )))
-            }
-        };
+                }
+            };
 
-        let last_block_index_vec = lookup_leaf(&hash_tree, "last_block_index")?;
-        let last_block_index_bytes: [u8; 8] = match last_block_index_vec.clone().try_into() {
-            Ok(last_block_index_bytes) => last_block_index_bytes,
-            Err(_) => {
-                return Err(Icrc1AgentError::VerificationFailed(format!(
+            let last_block_index_vec = lookup_leaf(&hash_tree, "last_block_index")?;
+            if let Some(last_block_index_vec) = last_block_index_vec {
+                let last_block_index_bytes: [u8; 8] = match last_block_index_vec.clone().try_into()
+                {
+                    Ok(last_block_index_bytes) => last_block_index_bytes,
+                    Err(_) => {
+                        return Err(Icrc1AgentError::VerificationFailed(format!(
                     "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
                     hex::encode(last_block_index_vec)
                 )))
-            }
-        };
-        let last_block_index = u64::from_be_bytes(last_block_index_bytes);
+                    }
+                };
+                let last_block_index = u64::from_be_bytes(last_block_index_bytes);
 
-        Ok((last_block_hash, Nat::from(last_block_index)))
+                return Ok(Some((last_block_hash, Nat::from(last_block_index))));
+            } else {
+                return Err(Icrc1AgentError::VerificationFailed(
+                    "certified hash_tree contains tip_hash but not last_block_index".to_string(),
+                ));
+            }
+        }
+
+        Ok(None)
     }
 }
 
-fn lookup_leaf(hash_tree: &HashTree, leaf_name: &str) -> Result<Vec<u8>, Icrc1AgentError> {
+fn lookup_leaf(hash_tree: &HashTree, leaf_name: &str) -> Result<Option<Vec<u8>>, Icrc1AgentError> {
     match hash_tree.lookup_subtree([leaf_name.as_bytes()]) {
         SubtreeLookupResult::Found(tree) => match tree.as_ref() {
-            HashTreeNode::Leaf(result) => Ok(result.clone()),
+            HashTreeNode::Leaf(result) => Ok(Some(result.clone())),
             _ => Err(Icrc1AgentError::VerificationFailed(format!(
                 "`{}` value in the hash_tree should be a leaf",
                 leaf_name
             ))),
         },
+        SubtreeLookupResult::Absent => Ok(None),
         _ => Err(Icrc1AgentError::VerificationFailed(format!(
             "`{}` not found in the response hash_tree",
             leaf_name

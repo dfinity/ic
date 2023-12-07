@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// more often than once a second.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Timestamp(i64);
+pub struct Timestamp(pub i64);
 
 pub fn from_system_time(timestamp: SystemTime) -> Result<Timestamp, ApiError> {
     timestamp

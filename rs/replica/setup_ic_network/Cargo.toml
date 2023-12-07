@@ -41,10 +41,7 @@ ic-state-sync-manager = { path = "../../p2p/state_sync_manager" }
 ic-transport = { path = "../../transport" }
 ic-types = { path = "../../types/types" }
 parking_lot = "0.12.1"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 threadpool = "1.8.1"
 tokio = { workspace = true }
 tower = { workspace = true }

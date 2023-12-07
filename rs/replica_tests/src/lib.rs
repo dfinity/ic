@@ -38,7 +38,7 @@ use ic_types::{
     messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
-    CanisterId, Height, NodeId, Time,
+    CanisterId, Height, NodeId, ReplicaVersion, Time,
 };
 use prost::Message;
 use slog_scope::info;
@@ -212,7 +212,6 @@ pub fn get_ic_config() -> IcConfig {
         NodeConfiguration {
             xnet_api: SocketAddr::from_str("0.0.0.1:0").expect("can't fail"),
             public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
-            p2p_addr: SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
             chip_id: None,
@@ -225,7 +224,7 @@ pub fn get_ic_config() -> IcConfig {
         SubnetConfig::new(
             subnet_index,
             subnet_nodes,
-            None,
+            ReplicaVersion::default(),
             None,
             None,
             None,
@@ -254,7 +253,7 @@ pub fn get_ic_config() -> IcConfig {
     IcConfig::new(
         prep_dir,
         topology_config,
-        /* replica_version_id= */ None,
+        ReplicaVersion::default(),
         /* generate_subnet_records= */ true,
         /* nns_subnet_id= */ Some(subnet_index),
         /* release_package_url= */ None,

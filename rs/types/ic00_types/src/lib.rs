@@ -2200,6 +2200,38 @@ pub struct NodeMetricsHistoryArgs {
 
 impl Payload<'_> for NodeMetricsHistoryArgs {}
 
+/// `CandidType` for `NodeMetrics`
+/// ```text
+/// record {
+///     node_id : principal;
+///     num_blocks_total : nat64;
+///     num_block_failures_total : nat64;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct NodeMetrics {
+    pub node_id: PrincipalId,
+    pub num_blocks_total: u64,
+    pub num_block_failures_total: u64,
+}
+
+impl Payload<'_> for NodeMetrics {}
+
+/// `CandidType` for `NodeMetricsHistoryResponse`
+/// ```text
+/// record {
+///     timestamp_nanos : nat64;
+///     node_metrics : vec node_metrics;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct NodeMetricsHistoryResponse {
+    pub timestamp_nanos: u64,
+    pub node_metrics: Vec<NodeMetrics>,
+}
+
+impl Payload<'_> for NodeMetricsHistoryResponse {}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     canister_id: principal;

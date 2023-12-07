@@ -6,10 +6,7 @@
 use crate::{
     artifact::Artifact,
     canister_http::CanisterHttpResponseShare,
-    chunkable::{
-        ArtifactChunk, ArtifactChunkData, ArtifactErrorCode, ChunkId, Chunkable, ChunkableArtifact,
-        CHUNKID_UNIT_CHUNK,
-    },
+    chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId, ChunkableArtifact, CHUNKID_UNIT_CHUNK},
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
         ConsensusMessage,
@@ -78,19 +75,4 @@ chunkable_artifact_impl! {EcdsaMessage, |self|
 }
 chunkable_artifact_impl! {CanisterHttpResponseShare, |self|
     ArtifactChunkData::UnitChunkData(Artifact::CanisterHttpMessage(*self))
-}
-
-// Basic chunking impl for [`SingleChunked`] object tracking
-impl Chunkable for SingleChunked {
-    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
-        let v: Vec<ChunkId> = vec![ChunkId::from(CHUNKID_UNIT_CHUNK)];
-        Box::new(v.into_iter())
-    }
-
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
-        match artifact_chunk.artifact_chunk_data {
-            ArtifactChunkData::UnitChunkData(artifact) => Ok(artifact),
-            _ => Err(ArtifactErrorCode::ChunkVerificationFailed),
-        }
-    }
 }

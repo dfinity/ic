@@ -8,6 +8,7 @@ use candid::Encode;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{
     http_handler::Config as HttpConfig,
+    ipv4_config::IPv4Config,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
@@ -197,6 +198,7 @@ impl NodeRegistration {
             p2p_flow_endpoints: vec![],
             chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
             prometheus_metrics_endpoint: "".to_string(),
+            public_ipv4_config: ipv4_config_to_vec(&self.log, &self.node_config.ipv4_config),
         }
     }
 
@@ -617,6 +619,17 @@ fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> Orchestrator
         IpAddr::V6(_) => format!("[{}]", ip_addr),
     };
     Ok(format!("{}:{}", ip_addr_str, port))
+}
+
+fn ipv4_config_to_vec(log: &ReplicaLogger, ipv4_config: &IPv4Config) -> Option<Vec<String>> {
+    info!(log, "Reading ipv4 config for registration");
+    if !ipv4_config.public_address.is_empty() {
+        return Some(vec![
+            ipv4_config.public_address.clone(),
+            ipv4_config.public_gateway.clone(),
+        ]);
+    }
+    None
 }
 
 /// Create a nonce to be included with the ingress message sent to the node

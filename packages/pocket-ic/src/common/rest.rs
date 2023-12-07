@@ -5,26 +5,15 @@
 use crate::UserError;
 use candid::Principal;
 use hex;
-use ic_cdk::api::management_canister::provisional::CanisterId;
 use reqwest::blocking::Response;
+use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub type InstanceId = usize;
 
-// ================================================================================================================= //
-// HTTP JSON Request types
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct RawCheckpoint {
-    pub checkpoint_name: String,
-}
-
-// ================================================================================================================= //
-// HTTP JSON Response types
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum CreateInstanceResponse {
     Created {
         instance_id: InstanceId,
@@ -35,7 +24,7 @@ pub enum CreateInstanceResponse {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Copy)]
+#[derive(Clone, Serialize, Deserialize, Debug, Copy, JsonSchema)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
 }
@@ -45,65 +34,82 @@ pub struct RawTime {
 /// If a canister ID is provided, the call will be sent to the management
 /// canister of the subnet where the canister is on.
 /// If None, the call will be sent to any management canister.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub enum RawEffectivePrincipal {
     None,
-    SubnetId(#[serde(with = "base64")] Vec<u8>),
-    CanisterId(#[serde(with = "base64")] Vec<u8>),
+    SubnetId(
+        #[serde(deserialize_with = "base64::deserialize")]
+        #[serde(serialize_with = "base64::serialize")]
+        Vec<u8>,
+    ),
+    CanisterId(
+        #[serde(deserialize_with = "base64::deserialize")]
+        #[serde(serialize_with = "base64::serialize")]
+        Vec<u8>,
+    ),
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterCall {
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub sender: Vec<u8>,
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub canister_id: Vec<u8>,
     pub effective_principal: RawEffectivePrincipal,
     pub method: String,
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub payload: Vec<u8>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub enum RawCanisterResult {
     Ok(RawWasmResult),
     Err(UserError),
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub enum RawWasmResult {
     /// Raw response, returned in a "happy" case
-    Reply(#[serde(with = "base64")] Vec<u8>),
+    Reply(
+        #[serde(deserialize_with = "base64::deserialize")]
+        #[serde(serialize_with = "base64::serialize")]
+        Vec<u8>,
+    ),
     /// Returned with an error message when the canister decides to reject the
     /// message
     Reject(String),
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawSetStableMemory {
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub canister_id: Vec<u8>,
     pub blob_id: BlobId,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawStableMemory {
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub blob: Vec<u8>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct ApiError {
     message: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct StartedOrBusyResponse {
     pub state_label: String,
     pub op_id: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 #[serde(untagged)]
 pub enum ApiResponse<T> {
     Success(T),
@@ -159,22 +165,24 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawAddCycles {
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub canister_id: Vec<u8>,
     pub amount: u128,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawCycles {
     pub cycles: u128,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Eq, PartialEq, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterId {
     // raw bytes of the principal
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub canister_id: Vec<u8>,
 }
 
@@ -186,9 +194,10 @@ impl From<Principal> for RawCanisterId {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawSubnetId {
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub subnet_id: Vec<u8>,
 }
 
@@ -208,20 +217,28 @@ impl From<RawSubnetId> for Principal {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 pub struct RawVerifyCanisterSigArg {
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub msg: Vec<u8>,
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub sig: Vec<u8>,
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub pubkey: Vec<u8>,
-    #[serde(with = "base64")]
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
     pub root_pubkey: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct BlobId(#[serde(with = "base64")] pub Vec<u8>);
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct BlobId(
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub Vec<u8>,
+);
 
 impl std::fmt::Display for BlobId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -235,7 +252,7 @@ pub struct BinaryBlob {
     pub compression: BlobCompression,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema)]
 pub enum BlobCompression {
     Gzip,
     NoCompression,
@@ -261,7 +278,7 @@ pub mod base64 {
 
 // ================================================================================================================= //
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum SubnetKind {
     Application,
     Bitcoin,
@@ -274,7 +291,7 @@ pub enum SubnetKind {
 
 /// This represents which named subnets the user wants to create, and how
 /// many of the general app/system subnets, which are indistinguishable.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct SubnetConfigSet {
     pub nns: bool,
     pub sns: bool,
@@ -318,7 +335,7 @@ impl SubnetConfigSet {
 }
 
 /// Configuration details for a subnet, returned by PocketIc server
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
     /// Number of nodes in the subnet.
@@ -327,13 +344,13 @@ pub struct SubnetConfig {
     pub canister_ranges: Vec<CanisterIdRange>,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CanisterIdRange {
-    pub start: CanisterId,
-    pub end: CanisterId,
+    pub start: RawCanisterId,
+    pub end: RawCanisterId,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Topology(pub HashMap<SubnetId, SubnetConfig>);
 
 impl Topology {

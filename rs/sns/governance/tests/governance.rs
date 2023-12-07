@@ -8,6 +8,7 @@ use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
+use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_sns_governance::{
     neuron::NeuronState,
     pb::{
@@ -31,12 +32,14 @@ use ic_sns_governance::{
             neuron,
             neuron::{DissolveState, Followees},
             proposal::Action,
+            transfer_sns_treasury_funds::TransferFrom,
             Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
             ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
-            MintTokensRequest, MintTokensResponse, Motion, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
-            RegisterDappCanisters, Vote, WaitForQuietState,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, Motion, NervousSystemParameters, Neuron,
+            NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
+            ProposalData, ProposalId, RegisterDappCanisters, TransferSnsTreasuryFunds, Vote,
+            WaitForQuietState,
         },
     },
     types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
@@ -2899,4 +2902,200 @@ async fn test_process_proposals_doesnt_tally_votes_for_proposals_where_voting_is
         .unwrap();
 
     assert_eq!(proposal.latest_tally, None);
+}
+
+#[test]
+fn test_motion_has_normal_voting_thresholds() {
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 42);
+
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id_2.clone(),
+                E8 * 1000,
+                NeuronPermission::new(&user_principal, vec![]),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        // Create with a test neuron so that the proposal doesn't instantly pass
+        .create_with_test_neuron();
+
+    let proposal = Motion {
+        motion_text: "Do stuff".to_string(),
+    };
+
+    // Create the proposal with neuron_id so it doesn't instantly pass
+    let (_, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, user_principal)
+        .unwrap();
+
+    assert_eq!(
+        proposal_data.decided_timestamp_seconds, 0,
+        "proposal should not have been decided yet. ballots: {:?}",
+        proposal_data.ballots
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
+        NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap(),
+        NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+    );
+}
+
+#[test]
+fn test_deregister_dapp_has_higher_voting_thresholds() {
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 42);
+
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id_2.clone(),
+                E8 * 1000,
+                NeuronPermission::new(&user_principal, vec![]),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        // Create with a test neuron so that the proposal doesn't instantly pass
+        .create_with_test_neuron();
+
+    let proposal = DeregisterDappCanisters {
+        canister_ids: vec![user_principal],
+        new_controllers: vec![user_principal],
+    };
+
+    // Create the proposal with neuron_id so it doesn't instantly pass
+    let (_, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, user_principal)
+        .unwrap();
+
+    assert_eq!(
+        proposal_data.decided_timestamp_seconds, 0,
+        "proposal should not have been decided yet. ballots: {:?}",
+        proposal_data.ballots
+    );
+    assert!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap()
+            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
+        Percentage::from_basis_points(6700)
+    );
+    assert!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap()
+            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap(),
+        Percentage::from_basis_points(2000)
+    );
+}
+
+#[test]
+fn test_transfer_treasury_funds_has_higher_voting_thresholds() {
+    let user_principal = PrincipalId::new_user_test_id(1001);
+    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 42);
+
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id_2.clone(),
+                E8 * 1000,
+                NeuronPermission::new(&user_principal, vec![]),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        // Create with a test neuron so that the proposal doesn't instantly pass
+        .create_with_test_neuron();
+
+    let proposal = TransferSnsTreasuryFunds {
+        from_treasury: TransferFrom::SnsTokenTreasury as i32,
+        amount_e8s: 10_000,
+        memo: None,
+        to_principal: Some(user_principal),
+        to_subaccount: None,
+    };
+
+    // Create the proposal with neuron_id so it doesn't instantly pass
+    let (_, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, user_principal)
+        .unwrap();
+
+    assert_eq!(
+        proposal_data.decided_timestamp_seconds, 0,
+        "proposal should not have been decided yet. ballots: {:?}",
+        proposal_data.ballots
+    );
+    assert!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap()
+            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
+        Percentage::from_basis_points(6700)
+    );
+    assert!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap()
+            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap(),
+        Percentage::from_basis_points(2000)
+    );
+}
+
+#[test]
+fn test_mint_sns_tokens_has_higher_voting_thresholds() {
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 1);
+
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id_2.clone(),
+                E8 * 1000,
+                NeuronPermission::all(&user_principal),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        // Create with a test neuron so that the proposal doesn't instantly pass
+        .create_with_test_neuron();
+
+    let proposal = MintSnsTokens {
+        amount_e8s: Some(10_000),
+        memo: None,
+        to_principal: Some(user_principal),
+        to_subaccount: None,
+    };
+
+    // Create the proposal with neuron_id so it doesn't instantly pass
+    let (_, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, user_principal)
+        .unwrap();
+
+    assert_eq!(
+        proposal_data.decided_timestamp_seconds, 0,
+        "proposal should not have been decided yet. ballots: {:?}",
+        proposal_data.ballots
+    );
+    assert!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap()
+            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
+        Percentage::from_basis_points(6700)
+    );
+    assert!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap()
+            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap(),
+        Percentage::from_basis_points(2000)
+    );
 }

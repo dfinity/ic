@@ -11,14 +11,15 @@ use crate::pocket_ic::{
     SetStableMemory, SetTime, Tick,
 };
 use crate::{pocket_ic::PocketIc, BindOperation, BlobStore, InstanceId, Operation};
+use aide::axum::routing::{delete, get, post, ApiMethodRouter};
+use aide::axum::ApiRouter;
 use axum::body::HttpBody;
 use axum::routing::MethodRouter;
 use axum::{
     extract::{self, Path, State},
     headers,
     http::{self, HeaderMap, HeaderName, StatusCode},
-    routing::{delete, get, post},
-    Json, Router,
+    Json,
 };
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
@@ -44,12 +45,12 @@ pub struct AppState {
     pub blob_store: Arc<dyn BlobStore>,
 }
 
-pub fn instance_read_routes<S>() -> Router<S>
+pub fn instance_read_routes<S>() -> ApiRouter<S>
 where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
-    Router::new()
+    ApiRouter::new()
         .directory_route("/query", post(handler_query))
         .directory_route("/get_time", get(handler_get_time))
         .directory_route("/get_cycles", post(handler_get_cycles))
@@ -58,12 +59,12 @@ where
         .directory_route("/pub_key", post(handler_pub_key))
 }
 
-pub fn instance_update_routes<S>() -> Router<S>
+pub fn instance_update_routes<S>() -> ApiRouter<S>
 where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
-    Router::new()
+    ApiRouter::new()
         .directory_route(
             "/execute_ingress_message",
             post(handler_execute_ingress_message),
@@ -74,19 +75,19 @@ where
         .directory_route("/tick", post(handler_tick))
 }
 
-pub fn instances_routes<S>() -> Router<S>
+pub fn instances_routes<S>() -> ApiRouter<S>
 where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
-    Router::new()
+    ApiRouter::new()
         //
         // List all IC instances.
-        .route("/", get(list_instances))
+        .api_route("/", get(list_instances))
         //
         // Create a new IC instance. Takes a SubnetConfig which must contain at least one subnet.
         // Returns an InstanceId.
-        .route("/", post(create_instance))
+        .api_route("/", post(create_instance))
         //
         // Deletes an instance.
         .directory_route("/:id", delete(delete_instance))
@@ -585,17 +586,24 @@ where
     B: HttpBody + Send + 'static,
     S: Clone + Send + Sync + 'static,
 {
-    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self;
+    fn directory_route(self, path: &str, method_router: ApiMethodRouter<S, B>) -> Self;
 }
 
-impl<S, B> RouterExt<S, B> for Router<S, B>
+impl<S, B> RouterExt<S, B> for ApiRouter<S, B>
 where
     B: HttpBody + Send + 'static,
     S: Clone + Send + Sync + 'static,
 {
-    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self {
-        self.route(path, method_router.clone())
-            .route(&format!("{path}/"), method_router)
+    fn directory_route(self, path: &str, method_router: ApiMethodRouter<S, B>) -> Self {
+        // Temporary hack because ApiMethodRouter does not implement clone.
+        // TODO: Fix when this is merged:
+        // https://github.com/tamasfe/aide/issues/89#ref-pullrequest-2016439982
+        let cp1 = MethodRouter::from(method_router);
+        let cp2 = cp1.clone();
+        let method_router1 = ApiMethodRouter::from(cp1);
+        let method_router2 = ApiMethodRouter::from(cp2);
+        self.api_route(path, method_router1)
+            .route(&format!("{path}/"), method_router2)
     }
 }
 

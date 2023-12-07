@@ -157,6 +157,7 @@ type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
   making_sns_proposal : opt MakingSnsProposal;
+  seed_accounts : opt SeedAccounts;
   most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
@@ -187,27 +188,37 @@ type GovernanceCachedMetrics = record {
   };
   neurons_with_invalid_stake_count : nat64;
   not_dissolving_neurons_count_buckets : vec record { nat64; nat64 };
+  ect_neuron_count : nat64;
   total_supply_icp : nat64;
   neurons_with_less_than_6_months_dissolve_delay_count : nat64;
   dissolved_neurons_count : nat64;
   community_fund_total_maturity_e8s_equivalent : nat64;
+  total_staked_e8s_seed : nat64;
+  total_staked_maturity_e8s_equivalent_ect : nat64;
   total_staked_e8s : nat64;
   not_dissolving_neurons_count : nat64;
   total_locked_e8s : nat64;
   neurons_fund_total_active_neurons : nat64;
   total_staked_maturity_e8s_equivalent : nat64;
+  not_dissolving_neurons_e8s_buckets_ect : vec record { nat64; float64 };
+  total_staked_e8s_ect : nat64;
   not_dissolving_neurons_staked_maturity_e8s_equivalent_sum : nat64;
   dissolved_neurons_e8s : nat64;
+  dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
   neurons_with_less_than_6_months_dissolve_delay_e8s : nat64;
   not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets : vec record {
     nat64;
     float64;
   };
   dissolving_neurons_count_buckets : vec record { nat64; nat64 };
+  dissolving_neurons_e8s_buckets_ect : vec record { nat64; float64 };
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
+  total_staked_maturity_e8s_equivalent_seed : nat64;
   community_fund_total_staked_e8s : nat64;
+  not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
   timestamp_seconds : nat64;
+  seed_neuron_count : nat64;
 };
 type GovernanceError = record { error_message : text; error_type : int32 };
 type GovernanceParameters = record {
@@ -319,6 +330,7 @@ type Neuron = record {
   controller : opt principal;
   recent_ballots : vec BallotInfo;
   kyc_verified : bool;
+  neuron_type : opt int32;
   not_for_profit : bool;
   maturity_e8s_equivalent : nat64;
   cached_neuron_stake_e8s : nat64;
@@ -362,6 +374,7 @@ type NeuronInFlightCommand = record {
 type NeuronInfo = record {
   dissolve_delay_seconds : nat64;
   recent_ballots : vec BallotInfo;
+  neuron_type : opt int32;
   created_timestamp_seconds : nat64;
   state : int32;
   stake_e8s : nat64;
@@ -535,6 +548,14 @@ type RewardNodeProviders = record {
 };
 type RewardToAccount = record { to_account : opt AccountIdentifier };
 type RewardToNeuron = record { dissolve_delay_seconds : nat64 };
+type SeedAccount = record {
+  error_count : nat64;
+  account_id : text;
+  neuron_type : int32;
+  tag_end_timestamp_seconds : opt nat64;
+  tag_start_timestamp_seconds : opt nat64;
+};
+type SeedAccounts = record { accounts : vec SeedAccount };
 type SetDefaultFollowees = record {
   default_followees : vec record { int32; Followees };
 };

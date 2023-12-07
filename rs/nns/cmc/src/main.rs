@@ -30,6 +30,7 @@ use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
     Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -122,6 +123,8 @@ pub enum NotificationStatus {
     NotifiedTopUp(Result<Cycles, NotifyError>),
     /// The cached result of a completed canister creation.
     NotifiedCreateCanister(Result<CanisterId, NotifyError>),
+    /// The cached result of a completed cycles mint.
+    NotifiedMint(NotifyMintCyclesResult),
 }
 
 #[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
@@ -133,6 +136,8 @@ pub struct State {
     /// An ID that provides an interface to a canister that provides exchange
     /// rate information such as the [XRC](https://github.com/dfinity/exchange-rate-canister).
     pub exchange_rate_canister_id: Option<CanisterId>,
+
+    pub cycles_ledger_canister_id: Option<CanisterId>,
 
     /// Account used to burn funds.
     pub minting_account_id: Option<AccountIdentifier>,
@@ -238,6 +243,7 @@ impl Default for State {
             ledger_canister_id: CanisterId::ic_00(),
             governance_canister_id: CanisterId::ic_00(),
             exchange_rate_canister_id: None,
+            cycles_ledger_canister_id: None,
             minting_account_id: None,
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
@@ -280,7 +286,7 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
     let args =
         maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
     print(format!(
-        "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, and minting account {}",
+        "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, minting account {}, and cycles ledger canister {}",
         args.ledger_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
         args.governance_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
         args.exchange_rate_canister.as_ref()
@@ -291,7 +297,10 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
             .unwrap_or_else(|| "<none>".to_string()),
         args.minting_account_id
             .map(|x| x.to_string())
-            .unwrap_or_else(|| "<none>".to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.cycles_ledger_canister_id.as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
     ));
 
     STATE.with(|state| state.replace(Some(State::default())));
@@ -306,6 +315,9 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
         state.last_purged_notification = args.last_purged_notification;
         if let Some(xrc_flag) = args.exchange_rate_canister {
             state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+        }
+        if args.cycles_ledger_canister_id.is_some() {
+            state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
         }
     });
 }
@@ -1017,6 +1029,11 @@ fn create_canister_() {
     over_async(candid_one, create_canister)
 }
 
+#[export_name = "canister_update notify_mint_cycles"]
+fn notify_mint_cycles_() {
+    over_async(candid_one, notify_mint_cycles)
+}
+
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
     if let Err(e) = result {
         return e.is_retriable();
@@ -1040,9 +1057,14 @@ async fn notify_top_up(
 ) -> Result<Cycles, NotifyError> {
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&canister_id);
-    let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    let expected_destination_account = AccountIdentifier::new(cmc_id.get(), Some(sub));
 
-    let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_TOP_UP_CANISTER).await?;
+    let (amount, from) = fetch_transaction(
+        block_index,
+        expected_destination_account,
+        MEMO_TOP_UP_CANISTER,
+    )
+    .await?;
 
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
@@ -1062,6 +1084,9 @@ async fn notify_top_up(
                         "The same payment is already processed as create canister request".into(),
                     )))
                 }
+                NotificationStatus::NotifiedMint(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as mint request".into(),
+                ))),
             },
             Entry::Vacant(entry) => {
                 entry.insert(NotificationStatus::Processing);
@@ -1079,6 +1104,85 @@ async fn notify_top_up(
                 state.blocks_notified.as_mut().unwrap().insert(
                     block_index,
                     NotificationStatus::NotifiedTopUp(result.clone()),
+                );
+                if is_transient_error(&result) {
+                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                }
+            });
+
+            result
+        }
+    }
+}
+
+/// Mints cycles from ICP and deposits the cycles into the cycles ledger
+///
+/// If the cycles are supposed to be deposited to a different canister use `notify_top_up` instead.
+///
+/// # Arguments
+///
+/// * `block_height` -  The height of the block you would like to send a
+///   notification about.
+/// * `to_subaccount` - Cycles ledger subaccount to which the cycles are minted to.
+#[candid_method(update, rename = "notify_mint_cycles")]
+async fn notify_mint_cycles(
+    NotifyMintCyclesArg {
+        block_index,
+        to_subaccount,
+        deposit_memo,
+    }: NotifyMintCyclesArg,
+) -> NotifyMintCyclesResult {
+    let cmc_id = dfn_core::api::id();
+    let subaccount = Subaccount::from(&caller());
+    let expected_destination_account = AccountIdentifier::new(cmc_id.get(), Some(subaccount));
+    let to_account = Account {
+        owner: caller().into(),
+        subaccount: to_subaccount,
+    };
+
+    let (amount, from) =
+        fetch_transaction(block_index, expected_destination_account, MEMO_MINT_CYCLES).await?;
+
+    let maybe_early_result = with_state_mut(|state| {
+        state.purge_old_notifications(MAX_NOTIFY_HISTORY);
+
+        if block_index <= state.last_purged_notification.unwrap() {
+            return Some(Err(NotifyError::TransactionTooOld(
+                state.last_purged_notification.unwrap() + 1,
+            )));
+        }
+
+        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+            Entry::Occupied(entry) => match entry.get() {
+                NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
+                NotificationStatus::NotifiedMint(resp) => Some(resp.clone()),
+                NotificationStatus::NotifiedCreateCanister(_) => {
+                    Some(Err(NotifyError::InvalidTransaction(
+                        "The same payment is already processed as a create canister request."
+                            .into(),
+                    )))
+                }
+                NotificationStatus::NotifiedTopUp(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as a top up request.".into(),
+                ))),
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(NotificationStatus::Processing);
+                None
+            }
+        }
+    });
+
+    match maybe_early_result {
+        Some(result) => result,
+        None => {
+            let result =
+                process_mint_cycles(to_account, amount, deposit_memo, from, subaccount).await;
+
+            with_state_mut(|state| {
+                state.blocks_notified.as_mut().unwrap().insert(
+                    block_index,
+                    NotificationStatus::NotifiedMint(result.clone()),
                 );
                 if is_transient_error(&result) {
                     state.blocks_notified.as_mut().unwrap().remove(&block_index);
@@ -1110,7 +1214,7 @@ async fn notify_create_canister(
 ) -> Result<CanisterId, NotifyError> {
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&controller);
-    let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    let expected_destination_account = AccountIdentifier::new(cmc_id.get(), Some(sub));
     let subnet_selection =
         get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
             NotifyError::Other {
@@ -1119,7 +1223,12 @@ async fn notify_create_canister(
             }
         })?;
 
-    let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_CREATE_CANISTER).await?;
+    let (amount, from) = fetch_transaction(
+        block_index,
+        expected_destination_account,
+        MEMO_CREATE_CANISTER,
+    )
+    .await?;
 
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
@@ -1136,6 +1245,9 @@ async fn notify_create_canister(
                 NotificationStatus::NotifiedCreateCanister(resp) => Some(resp.clone()),
                 NotificationStatus::NotifiedTopUp(_) => Some(Err(NotifyError::InvalidTransaction(
                     "The same payment is already processed as a top up request.".into(),
+                ))),
+                NotificationStatus::NotifiedMint(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as a mint request.".into(),
                 ))),
             },
             Entry::Vacant(entry) => {
@@ -1262,13 +1374,14 @@ fn memo_to_intent_str(memo: Memo) -> String {
     match memo {
         MEMO_CREATE_CANISTER => "CreateCanister".into(),
         MEMO_TOP_UP_CANISTER => "TopUp".into(),
+        MEMO_MINT_CYCLES => "MintCycles".into(),
         a => format!("unrecognized: {a:?}"),
     }
 }
 
 async fn fetch_transaction(
     block_index: BlockIndex,
-    expected_to: AccountIdentifier,
+    expected_destination_account: AccountIdentifier,
     expected_memo: Memo,
 ) -> Result<(Tokens, AccountIdentifier), NotifyError> {
     let ledger_id = with_state(|state| state.ledger_canister_id);
@@ -1285,10 +1398,10 @@ async fn fetch_transaction(
             ))
         }
     };
-    if to != expected_to {
+    if to != expected_destination_account {
         return Err(NotifyError::InvalidTransaction(format!(
             "Destination account in the block ({}) different than in the notification ({})",
-            to, expected_to
+            to, expected_destination_account
         )));
     }
     let memo = block.transaction().memo;
@@ -1340,6 +1453,9 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
                     Err(format!("Already notified: {:?}", resp))
                 }
                 NotificationStatus::NotifiedCreateCanister(resp) => {
+                    Err(format!("Already notified: {:?}", resp))
+                }
+                NotificationStatus::NotifiedMint(resp) => {
                     Err(format!("Already notified: {:?}", resp))
                 }
             },
@@ -1482,6 +1598,33 @@ async fn process_create_canister(
         }
         Err(err) => {
             let refund_block = refund_icp(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
+            Err(NotifyError::Refunded {
+                reason: err,
+                block_index: refund_block,
+            })
+        }
+    }
+}
+
+async fn process_mint_cycles(
+    to_account: Account,
+    amount: Tokens,
+    deposit_memo: Option<Vec<u8>>,
+    from: AccountIdentifier,
+    sub: Subaccount,
+) -> NotifyMintCyclesResult {
+    let cycles = tokens_to_cycles(amount)?;
+    match do_mint_cycles(to_account, cycles, deposit_memo).await {
+        Ok(deposit_result) => {
+            burn_and_log(sub, amount).await;
+            Ok(NotifyMintCyclesSuccess {
+                block_index: deposit_result.block_index,
+                minted: cycles.into(),
+                balance: deposit_result.balance,
+            })
+        }
+        Err(err) => {
+            let refund_block = refund_icp(sub, from, amount, MINT_CYCLES_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err,
                 block_index: refund_block,
@@ -1647,6 +1790,41 @@ async fn deposit_cycles(
     })?;
 
     Ok(())
+}
+
+async fn do_mint_cycles(
+    account: Account,
+    cycles: Cycles,
+    deposit_memo: Option<Vec<u8>>,
+) -> Result<CyclesLedgerDepositResult, String> {
+    let Some(cycles_ledger_canister_id) = with_state(|state| state.cycles_ledger_canister_id)
+    else {
+        return Err("No cycles ledger canister id configured.".to_string());
+    };
+
+    ensure_balance(cycles)?;
+
+    let arg = CyclesLedgerDepositArgs {
+        to: account,
+        memo: deposit_memo,
+    };
+    let result: Result<(CyclesLedgerDepositResult,), (Option<i32>, String)> =
+        dfn_core::api::call_with_funds_and_cleanup(
+            cycles_ledger_canister_id,
+            "deposit",
+            dfn_candid::candid_multi_arity,
+            (arg,),
+            dfn_core::api::Funds::new(u128::from(cycles) as u64),
+        )
+        .await;
+
+    result.map(|r| r.0).map_err(|(code, msg)| {
+        format!(
+            "Cycles ledger rejected deposit call with code {}: {:?}",
+            code.unwrap_or_default(),
+            msg
+        )
+    })
 }
 
 async fn do_create_canister(
@@ -1876,6 +2054,7 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         if let Some(xrc_flag) = args.exchange_rate_canister {
             new_state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
         }
+        new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
 
     STATE.with(|state| state.replace(Some(new_state)));
@@ -2018,6 +2197,7 @@ mod tests {
             governance_canister_id: Some(CanisterId::ic_00()),
             exchange_rate_canister: None,
             minting_account_id: None,
+            cycles_ledger_canister_id: None,
             last_purged_notification: Some(0),
         }))
     }

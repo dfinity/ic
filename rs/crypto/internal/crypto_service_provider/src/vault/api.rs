@@ -6,8 +6,7 @@ use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgTranscriptInternalBytes, MEGaPublicKey,
-    ThresholdEcdsaSigShareInternal,
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -24,7 +23,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
+    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
     ExtendedDerivationPath,
 };
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
@@ -844,6 +843,50 @@ pub trait ThresholdEcdsaSignerCspVault {
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+}
+
+/// Type-safe serialization of [`IDkgTranscriptInternal`].
+#[derive(Serialize, Deserialize, Debug)]
+pub struct IDkgTranscriptInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
+
+impl From<Vec<u8>> for IDkgTranscriptInternalBytes {
+    #[inline]
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl AsRef<[u8]> for IDkgTranscriptInternalBytes {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+/// Type-safe serialization of [`IDkgDealingInternalBytes`].
+#[derive(Serialize, Deserialize, Debug)]
+pub struct IDkgDealingInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
+
+impl IDkgDealingInternalBytes {
+    /// Move out the internal `Vec<u8>`.
+    #[inline]
+    pub fn into_vec(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+impl From<Vec<u8>> for IDkgDealingInternalBytes {
+    #[inline]
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl AsRef<[u8]> for IDkgDealingInternalBytes {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
 }
 
 /// An error returned by failing to generate a public seed from [`CspVault`].

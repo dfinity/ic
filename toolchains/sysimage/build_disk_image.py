@@ -15,8 +15,7 @@ import os
 import subprocess
 import sys
 import tarfile
-
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
+import tempfile
 
 
 def read_partition_description(data):
@@ -150,7 +149,7 @@ def main():
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = tempfile.mkdtemp()
 
     disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)
@@ -196,8 +195,6 @@ def main():
         ],
         check=True,
     )
-
-    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":

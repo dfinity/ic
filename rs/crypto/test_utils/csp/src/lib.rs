@@ -13,6 +13,8 @@ use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
 use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
 use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
 use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
+use ic_crypto_internal_csp::vault::api::IDkgDealingInternalBytes;
+use ic_crypto_internal_csp::vault::api::IDkgTranscriptInternalBytes;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
@@ -24,8 +26,8 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternal, MEGaPublicKey,
-    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
@@ -42,7 +44,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgDealingInternalBytes, IDkgTranscriptOperation},
+    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
     ExtendedDerivationPath, ThresholdEcdsaSigInputs,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;

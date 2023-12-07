@@ -84,6 +84,7 @@ mod tests {
     use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
     use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
     use ic_registry_subnet_type::SubnetType;
+    use ic_types::ReplicaVersion;
     use std::collections::BTreeMap;
     use std::net::SocketAddr;
     use std::str::FromStr;
@@ -125,7 +126,6 @@ mod tests {
             NodeConfiguration {
                 xnet_api: SocketAddr::from_str("1.2.3.4:8080").unwrap(),
                 public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
-                p2p_addr: SocketAddr::from_str("1.2.3.4:1234").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: None,
@@ -138,7 +138,7 @@ mod tests {
             SubnetConfig::new(
                 0,
                 subnet_nodes,
-                None,
+                ReplicaVersion::default(),
                 None,
                 None,
                 None,
@@ -162,7 +162,7 @@ mod tests {
         let ic_config = IcConfig::new(
             /* target_dir= */ tmp.path(),
             topology_config,
-            /* replica_version_id= */ None,
+            ReplicaVersion::default(),
             /* generate_subnet_records= */ true, // see note above
             /* nns_subnet_index= */ Some(0),
             /* release_package_download_url= */ None,

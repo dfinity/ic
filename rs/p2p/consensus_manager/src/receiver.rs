@@ -3,7 +3,7 @@ use crate::{
         ConsensusManagerMetrics, DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED,
         DOWNLOAD_TASK_RESULT_COMPLETED, DOWNLOAD_TASK_RESULT_DROP,
     },
-    AdvertUpdate, CommitId, SlotNumber, Update,
+    uri_prefix, AdvertUpdate, CommitId, SlotNumber, Update,
 };
 use axum::{
     extract::State,
@@ -14,7 +14,7 @@ use axum::{
 use bytes::Bytes;
 use crossbeam_channel::Sender as CrossbeamSender;
 use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
-use ic_logger::ReplicaLogger;
+use ic_logger::{error, ReplicaLogger};
 use ic_peer_manager::SubnetTopology;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
@@ -49,12 +49,17 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
     pool: ValidatedPoolReaderRef<Artifact>,
 ) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>) {
     let (update_tx, update_rx) = tokio::sync::mpsc::channel(100);
-    let endpoint: &'static str = Artifact::TAG.into();
     let router = Router::new()
-        .route(&format!("/{}/rpc", endpoint), any(rpc_handler))
+        .route(
+            &format!("/{}/rpc", uri_prefix::<Artifact>()),
+            any(rpc_handler),
+        )
         .with_state(pool)
-        .route(&format!("/{}/update", endpoint), any(update_handler))
-        .with_state(update_tx);
+        .route(
+            &format!("/{}/update", uri_prefix::<Artifact>()),
+            any(update_handler),
+        )
+        .with_state((log, update_tx));
 
     (router, update_rx)
 }
@@ -82,7 +87,7 @@ async fn rpc_handler<Artifact: ArtifactKind>(
 }
 
 async fn update_handler<Artifact: ArtifactKind>(
-    State(sender): State<ReceivedAdvertSender<Artifact>>,
+    State((log, sender)): State<(ReplicaLogger, ReceivedAdvertSender<Artifact>)>,
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
@@ -90,10 +95,12 @@ async fn update_handler<Artifact: ArtifactKind>(
     let update: AdvertUpdate<Artifact> =
         pb::AdvertUpdate::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    sender
-        .send((update, peer, conn_id))
-        .await
-        .expect("Channel should not be closed");
+    if sender.send((update, peer, conn_id)).await.is_err() {
+        error!(
+            log,
+            "Failed to send advert update from handler to event loop"
+        )
+    }
 
     Ok(())
 }
@@ -186,8 +193,6 @@ where
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
-
-        // Adverts received from peers
         adverts_received: Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
@@ -219,7 +224,7 @@ where
     }
 
     /// Event loop that processes advert updates and artifact downloads.
-    /// The eventloop preserves the following invariant:
+    /// The event loop preserves the following invariant:
     ///  - The number of download tasks is equal to the total number of distinct slot entries.
     async fn start_event_loop(mut self) {
         let mut priority_fn_interval = time::interval(PRIORITY_FUNCTION_UPDATE_INTERVAL);
@@ -236,6 +241,7 @@ where
                     match result {
                         Ok((receiver, id, attr)) => {
                             self.handle_artifact_processor_joined(receiver, id, attr);
+
                         }
                         Err(err) => {
                             // If the task panics we propagate the panic. But we allow tasks to be canceled.
@@ -255,16 +261,16 @@ where
                 self.artifact_processor_tasks.len(),
                 "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
             );
-            debug_assert_eq!(
-                self.artifact_processor_tasks.len(),
-                HashSet::<Artifact::Id>::from_iter(
-                    self.slot_table
-                        .iter()
-                        .flat_map(|(k, v)| v.iter())
-                        .map(|(_, s)| s.id.clone())
-                )
-                .len(),
-                "Number of download tasks differs from slot entries with distinct artifact IDs."
+            debug_assert!(
+                self.artifact_processor_tasks.len()
+                    >= HashSet::<Artifact::Id>::from_iter(
+                        self.slot_table
+                            .iter()
+                            .flat_map(|(k, v)| v.iter())
+                            .map(|(_, s)| s.id.clone())
+                    )
+                    .len(),
+                "Number of download tasks should always be the same or exceed the number of distinct ids stored."
             );
             debug_assert!(
                 self.active_downloads
@@ -311,6 +317,13 @@ where
         } else {
             self.active_downloads.remove(&id);
         }
+        debug_assert!(
+            self.slot_table
+                .iter()
+                .flat_map(|(k, v)| v.iter())
+                .all(|(k, v)| self.active_downloads.contains_key(&v.id)),
+            "Every entry in the slot table should have an active download task."
+        );
     }
 
     pub(crate) fn handle_advert_receive(
@@ -351,7 +364,6 @@ where
             .entry(slot_number)
         {
             Entry::Occupied(mut slot_entry_mut) => {
-                // TODO: What if same advert update is sent twice? (Seen this in a test)
                 if slot_entry_mut.get().should_be_replaced(&new_slot_entry) {
                     self.metrics.slot_table_overwrite_total.inc();
                     let to_remove = slot_entry_mut.insert(new_slot_entry).id;
@@ -403,33 +415,35 @@ where
         }
 
         if let Some(to_remove) = to_remove {
-            // TODO: this should always be a Some.
-            // Sender should not be dropped before all peers have overwritten/removed the slot.
-            let sender = self
-                .active_downloads
-                .get_mut(&to_remove)
-                .expect("Sender should always be present for slots in use");
-            self.metrics.slot_table_removals_total.inc();
-            sender.send_if_modified(|h| h.remove(peer_id));
+            match self.active_downloads.get_mut(&to_remove) {
+                Some(sender) => {
+                    sender.send_if_modified(|h| h.remove(peer_id));
+                    self.metrics.slot_table_removals_total.inc();
+                }
+                None => {
+                    error!(
+                        self.log,
+                        "Slot table contains an artifact ID that is not present in the `active_downloads`. This should never happen."
+                    );
+                    if cfg!(debug_assertions) {
+                        panic!("Invariant violated");
+                    }
+                }
+            };
         }
     }
-    /// Downloads a given artifact.
-    ///
-    /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
-    ///
-    /// The download fails iff:
-    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadResult::PriorityIsDrop`]
-    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadResult::AllPeersDeletedTheArtifact`]
-    async fn download_artifact(
+
+    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop a `DownloadResult` is returned.
+    async fn wait_fetch(
         id: &Artifact::Id,
         attr: &Artifact::Attribute,
-        // Only first peer for specific artifact ID is considered for push
-        mut artifact: Option<(Artifact::Message, NodeId)>,
+        artifact: &mut Option<(Artifact::Message, NodeId)>,
+        metrics: &ConsensusManagerMetrics,
         mut peer_rx: &mut watch::Receiver<PeerCounter>,
-        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-        transport: Arc<dyn Transport>,
-        metrics: ConsensusManagerMetrics,
-    ) -> DownloadResult<Artifact::Message> {
+        mut priority_fn_watcher: &mut watch::Receiver<
+            PriorityFn<Artifact::Id, Artifact::Attribute>,
+        >,
+    ) -> Result<(), DownloadStopped> {
         let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
 
         // Clear the artifact from memory if it was pushed.
@@ -446,11 +460,11 @@ where
                 res = peer_rx.changed() => {
                     match res {
                         Ok(()) if peer_rx.borrow().is_empty() => {
-                            return DownloadResult::AllPeersDeletedTheArtifact;
+                            return Err(DownloadStopped::AllPeersDeletedTheArtifact);
                         },
                         Ok(()) => {},
                         Err(_) => {
-                            return DownloadResult::AllPeersDeletedTheArtifact;
+                            return Err(DownloadStopped::AllPeersDeletedTheArtifact);
                         }
                     }
                 }
@@ -458,16 +472,46 @@ where
         }
 
         if let Priority::Drop = priority {
-            return DownloadResult::PriorityIsDrop;
+            return Err(DownloadStopped::PriorityIsDrop);
         }
+        Ok(())
+    }
+
+    /// Downloads a given artifact.
+    ///
+    /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
+    ///
+    /// The download fails iff:
+    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadResult::PriorityIsDrop`]
+    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadResult::AllPeersDeletedTheArtifact`]
+    async fn download_artifact(
+        id: &Artifact::Id,
+        attr: &Artifact::Attribute,
+        // Only first peer for specific artifact ID is considered for push
+        mut artifact: Option<(Artifact::Message, NodeId)>,
+        mut peer_rx: &mut watch::Receiver<PeerCounter>,
+        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+        transport: Arc<dyn Transport>,
+        metrics: ConsensusManagerMetrics,
+    ) -> Result<(Artifact::Message, NodeId), DownloadStopped> {
+        // Evaluate priority and wait until we should fetch.
+        Self::wait_fetch(
+            id,
+            attr,
+            &mut artifact,
+            &metrics,
+            peer_rx,
+            &mut priority_fn_watcher,
+        )
+        .await?;
 
         match artifact {
             // Artifact was pushed by peer.
-            Some((artifact, peer_id)) => DownloadResult::Completed(artifact, peer_id),
+            Some((artifact, peer_id)) => Ok((artifact, peer_id)),
 
             // Fetch artifact
             None => {
-                let mut result = DownloadResult::AllPeersDeletedTheArtifact;
+                let mut result = Err(DownloadStopped::AllPeersDeletedTheArtifact);
 
                 let timer = metrics
                     .download_task_artifact_download_duration
@@ -479,7 +523,7 @@ where
                 } {
                     let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));
                     let request = Request::builder()
-                        .uri(format!("/{}/rpc", Artifact::TAG.to_string().to_lowercase()))
+                        .uri(format!("/{}/rpc", uri_prefix::<Artifact>()))
                         .body(bytes)
                         .unwrap();
 
@@ -488,7 +532,7 @@ where
                         Ok(Ok(response)) if response.status() == StatusCode::OK => {
                             let body = response.into_body();
                             if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
-                                result = DownloadResult::Completed(message, peer);
+                                result = Ok((message, peer));
                                 break;
                             }
                         }
@@ -499,18 +543,18 @@ where
 
                     // Wait before checking the priority so we might be able to avoid an unnecessary download.
                     sleep_until(next_request_at).await;
-                    if priority_fn_watcher.has_changed().is_ok()
-                        && priority_fn_watcher.borrow_and_update()(id, attr) == Priority::Drop
-                    {
-                        result = DownloadResult::PriorityIsDrop;
-                        break;
-                    }
+                    Self::wait_fetch(
+                        id,
+                        attr,
+                        &mut artifact,
+                        &metrics,
+                        peer_rx,
+                        &mut priority_fn_watcher,
+                    )
+                    .await?;
                 }
 
-                // Only record artifacts that were actually downloaded.
-                if !matches!(result, DownloadResult::Completed(_, _)) {
-                    timer.stop_and_discard();
-                }
+                timer.stop_and_discard();
 
                 result
             }
@@ -549,7 +593,7 @@ where
         .await;
 
         match download_result {
-            DownloadResult::Completed(artifact, peer_id) => {
+            Ok((artifact, peer_id)) => {
                 // Send artifact to pool
                 sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
 
@@ -563,7 +607,7 @@ where
                     .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
                     .inc();
             }
-            DownloadResult::PriorityIsDrop => {
+            Err(DownloadStopped::PriorityIsDrop) => {
                 // wait for deletion from peers
                 peer_rx.wait_for(|p| p.is_empty()).await;
                 metrics
@@ -571,7 +615,7 @@ where
                     .with_label_values(&[DOWNLOAD_TASK_RESULT_DROP])
                     .inc();
             }
-            DownloadResult::AllPeersDeletedTheArtifact => {
+            Err(DownloadStopped::AllPeersDeletedTheArtifact) => {
                 metrics
                     .download_task_result_total
                     .with_label_values(&[DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED])
@@ -615,8 +659,7 @@ where
     }
 }
 
-enum DownloadResult<T> {
-    Completed(T, NodeId),
+enum DownloadStopped {
     AllPeersDeletedTheArtifact,
     PriorityIsDrop,
 }
@@ -629,23 +672,18 @@ struct SlotEntry<T> {
 }
 
 impl<T> SlotEntry<T> {
-    // TODO: Revisit this. We should never reach the error case since we don't transmit twice
-    // for same connid/commitid so it would only happen in the malicious case.
     fn should_be_replaced(&self, other: &SlotEntry<T>) -> bool {
         if other.conn_id != self.conn_id {
             return other.conn_id > self.conn_id;
         }
         // connection ids are the same
-        if other.commit_id != self.commit_id {
-            return other.commit_id > self.commit_id;
-        }
-        false
+        other.commit_id > self.commit_id
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::backtrace::Backtrace;
+    use std::{backtrace::Backtrace, sync::Mutex};
 
     use axum::http::Response;
     use ic_metrics::MetricsRegistry;
@@ -1706,6 +1744,68 @@ mod tests {
                 "Expected artifact processor task for id 0 to closed"
             );
             assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        });
+    }
+
+    #[test]
+    fn fetch_to_stash() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        with_test_replica_logger(|log| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let mock_reader = MockValidatedPoolReader::new();
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+            let priorities = Arc::new(Mutex::new(vec![Priority::Fetch, Priority::Stash]));
+            mock_pfn
+                .expect_get_priority_function()
+                .times(1)
+                .returning(move |_| {
+                    let priorities = priorities.clone();
+                    Box::new(move |_, _| priorities.lock().unwrap().remove(0))
+                });
+            let mut mock_transport = MockTransport::new();
+            mock_transport.expect_rpc().once().returning(|_, _| {
+                Ok(Response::builder()
+                    .status(StatusCode::NO_CONTENT)
+                    .body(Bytes::new())
+                    .unwrap())
+            });
+            let (_tx, rx) = tokio::sync::mpsc::channel(100);
+            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+            let mut mgr = create_receive_manager(
+                log,
+                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                rt.handle().clone(),
+                rx,
+                Arc::new(RwLock::new(mock_reader)),
+                Arc::new(mock_pfn),
+                cb_tx,
+                Arc::new(mock_transport),
+                pfn_rx,
+            );
+            mgr.handle_advert_receive(
+                AdvertUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    update: Update::Advert((0, ())),
+                },
+                NODE_1,
+                ConnId::from(1),
+            );
+            rt.block_on(async {
+                timeout(
+                    Duration::from_secs(4),
+                    mgr.artifact_processor_tasks.join_next(),
+                )
+                .await
+            })
+            .expect_err("Task should not close because it is stash.");
         });
     }
 }

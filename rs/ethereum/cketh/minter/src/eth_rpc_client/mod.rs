@@ -139,6 +139,11 @@ impl EthRpcClient {
     ) -> Result<Block, MultiCallError<Block>> {
         use crate::eth_rpc::GetBlockByNumberParams;
 
+        let expected_block_size = match self.chain {
+            EthereumNetwork::Sepolia => 12 * 1024,
+            EthereumNetwork::Mainnet => 24 * 1024,
+        };
+
         let results: MultiCallResults<Block> = self
             .parallel_call(
                 "eth_getBlockByNumber",
@@ -146,7 +151,7 @@ impl EthRpcClient {
                     block,
                     include_full_transactions: false,
                 },
-                ResponseSizeEstimate::new(12 * 1024),
+                ResponseSizeEstimate::new(expected_block_size),
             )
             .await;
         results.reduce_with_equality()

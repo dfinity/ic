@@ -1,3 +1,4 @@
+use super::governance_client::GovernanceClient;
 use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::convert::neuron_account_from_public_key;
@@ -20,8 +21,8 @@ use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
 use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, Error, Object, PublicKey, RosettaSupportedKeyPair,
-    Signature, SignatureType,
+    ConstructionPayloadsResponse, CurveType, Error, PublicKey, RosettaSupportedKeyPair, Signature,
+    SignatureType,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request::request_result::RequestResult;
@@ -42,12 +43,11 @@ use icp_ledger::{AccountIdentifier, Operation};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
+use rosetta_core::objects::ObjectMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use super::governance_client::GovernanceClient;
 
 pub(crate) fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
     make_user_ed25519(seed)
@@ -162,10 +162,14 @@ where
             {
                 assert_eq!(
                     submit_res.transaction_identifier,
-                    transaction_identifier.clone().unwrap()
+                    transaction_identifier.clone().unwrap().into()
                 );
             }
-            Ok((submit_res.transaction_identifier, results, charged_fee))
+            Ok((
+                submit_res.transaction_identifier.into(),
+                results,
+                charged_fee,
+            ))
         }
         Err(e) => Err(e),
     }
@@ -199,7 +203,7 @@ where
     .await
     {
         Ok((submit_res, charged_fee)) => Ok((
-            submit_res.transaction_identifier,
+            submit_res.transaction_identifier.into(),
             submit_res.metadata,
             charged_fee,
         )),
@@ -331,7 +335,7 @@ where
         // first ask for the fee
         let mut fee_found = false;
         for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
-            if o._type == OperationType::Fee {
+            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
                 fee_found = true;
             } else {
                 dry_run_ops.push(o.clone());
@@ -416,7 +420,7 @@ where
 
     if accept_suggested_fee {
         for o in &mut all_ops {
-            if o._type == OperationType::Fee {
+            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
                 o.amount = Some(signed_amount(-(fee_icpts.get_e8s() as i128), token_name));
             }
         }
@@ -717,11 +721,11 @@ pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
     };
 
     assert_eq!(
-        err.code, code,
+        err.0.code, code,
         "rosetta error {:?} does not have code: {}",
         err, code
     );
-    let details = err.details.as_ref().unwrap();
+    let details = err.0.details.as_ref().unwrap();
     assert!(
         details
             .get("error_message")
@@ -744,8 +748,8 @@ pub fn assert_ic_error(err: &RosettaError, code: u32, ic_http_status: u64, text:
         err.clone()
     };
 
-    assert_eq!(err.code, code);
-    let details = err.details.as_ref().unwrap();
+    assert_eq!(err.0.code, code);
+    let details = err.0.details.as_ref().unwrap();
     assert_eq!(
         details.get("ic_http_status").unwrap().as_u64().unwrap(),
         ic_http_status
@@ -771,13 +775,13 @@ pub fn acc_id(seed: u64) -> AccountIdentifier {
     PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 
-pub async fn raw_construction(ros: &RosettaApiClient, operation: &str, req: Value) -> Object {
+pub async fn raw_construction(ros: &RosettaApiClient, operation: &str, req: Value) -> ObjectMap {
     let req = req.to_string();
     let res = &ros
         .raw_construction_endpoint(operation, req.as_bytes())
         .await
         .unwrap();
-    let output: Object = serde_json::from_slice(&res.0).unwrap();
+    let output: ObjectMap = serde_json::from_slice(&res.0).unwrap();
     assert!(
         res.1.is_success(),
         "Result of {} should be a success, got: {:?}",

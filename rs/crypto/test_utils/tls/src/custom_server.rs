@@ -7,6 +7,7 @@ use crate::CipherSuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use crate::TlsVersion;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
+use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_rustls::rustls;
@@ -40,10 +41,14 @@ impl CustomServerBuilder {
         self
     }
 
-    pub fn build_with_default_server_cert(self, server_node: NodeId) -> CustomServer {
+    pub fn build_with_default_server_cert<R: Rng + CryptoRng>(
+        self,
+        server_node: NodeId,
+        rng: &mut R,
+    ) -> CustomServer {
         let cert = CertWithPrivateKey::builder()
             .cn(server_node.to_string())
-            .build_ed25519();
+            .build_ed25519(rng);
         self.build(cert)
     }
 

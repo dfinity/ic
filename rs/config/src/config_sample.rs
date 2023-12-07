@@ -81,6 +81,13 @@ pub const SAMPLE_CONFIG: &str = r#"
         listening_port: 3000,
     },
     // ============================================
+    // Configuration of IPv4 networking
+    // ============================================
+    ipv4_config: {
+        public_address: "",
+        public_gateway: "",
+    },
+    // ============================================
     // Configuration of registry client
     // ============================================
     registry_client: {

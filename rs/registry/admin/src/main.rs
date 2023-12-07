@@ -152,7 +152,7 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
-use std::net::{Ipv6Addr, TcpStream};
+use std::net::Ipv6Addr;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
@@ -4381,32 +4381,85 @@ async fn get_subnet_record_with_details(
         .with_node_details(all_nodes_with_details)
 }
 
-/// Check if a connection to the Url can be established ==> Url is reachable
-fn is_url_reachable(url: &Url) -> bool {
-    let addrs = match url.socket_addrs(|| None) {
-        Ok(addrs) => addrs,
-        Err(err) => {
-            eprintln!("WARNING: could not resolve {}: {}", url, err);
-            return false;
-        }
+/// Utility function to convert a Url to a host:port string.
+fn url_to_host_with_port(url: Url) -> String {
+    let host = url.host_str().unwrap_or("");
+    let host = if host.contains(':') && !host.starts_with('[') && !host.ends_with(']') {
+        // Likely an IPv6 address, enclose in brackets
+        format!("[{}]", host)
+    } else {
+        // IPv4 or hostname
+        host.to_string()
     };
-    for addr in addrs.into_iter() {
-        // A Url may have multiple IP addresses so we'll check if any of them are reachable
-        match TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(1)) {
-            Ok(_) => return true,
-            Err(err) => {
-                if url.to_string().contains(&addr.to_string()) {
-                    eprintln!("WARNING: could not connect to {}: {}, skipping", url, err);
-                } else {
-                    eprintln!(
-                        "WARNING: could not connect to {} ({}): {}, skipping",
-                        addr, url, err
-                    );
-                }
+    let port = url.port_or_known_default().unwrap_or(8080);
+
+    format!("{}:{}", host, port)
+}
+
+/// Utility function to find NNS URLs that the local machine can connect to.
+async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
+    let retries_max = 3;
+    let timeout_duration = tokio::time::Duration::from_secs(10);
+
+    for i in 1..=retries_max {
+        let tasks: Vec<_> = nns_urls
+            .iter()
+            .map(|url| {
+                Box::pin(async move {
+                    let host_with_port = url_to_host_with_port(url.clone());
+
+                    match tokio::net::lookup_host(host_with_port.clone()).await {
+                        Ok(ips) => {
+                            for ip in ips {
+                                match tokio::time::timeout(
+                                    timeout_duration,
+                                    tokio::net::TcpStream::connect(ip),
+                                )
+                                .await
+                                {
+                                    Ok(connection) => match connection {
+                                        Ok(_) => return Some(url.clone()),
+                                        Err(err) => {
+                                            eprintln!(
+                                                "WARNING: Failed to connect to {}: {:?}",
+                                                ip, err
+                                            );
+                                        }
+                                    },
+                                    Err(err) => {
+                                        eprintln!(
+                                            "WARNING: Failed to connect to {}: {:?}",
+                                            ip, err
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("WARNING: Failed to lookup {}: {:?}", host_with_port, err);
+                        }
+                    }
+                    None
+                })
+            })
+            .collect();
+
+        // Wait for the first task to complete ==> until we have a reachable NNS URL.
+        // select_all returns the completed future at position 0, and the remaining futures at position 2.
+        match futures::future::select_all(tasks).await.0 {
+            Some(url) => return vec![url],
+            None => {
+                eprintln!(
+                    "WARNING: None of the provided NNS urls are reachable. Retrying in 5 seconds... ({}/{})",
+                    i,
+                    retries_max
+                );
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
         }
     }
-    false
+
+    Vec::new()
 }
 
 /// `main()` method for the `ic-admin` utility.
@@ -4414,16 +4467,18 @@ fn is_url_reachable(url: &Url) -> bool {
 async fn main() {
     let opts: Opts = Opts::parse();
 
-    // Check all NNS urls in parallel to see which ones are reachable (and join async)
-    let reachable_nns_urls: Vec<Url> = opts
-        .nns_urls
-        .iter()
-        .filter(|addr| is_url_reachable(addr))
-        .cloned()
-        .collect();
+    let reachable_nns_urls = find_reachable_nns_urls(opts.nns_urls.clone()).await;
 
     if reachable_nns_urls.is_empty() {
         panic!("None of the provided NNS urls are reachable");
+    } else {
+        eprintln!(
+            "Using NNS URLs: {:?}",
+            reachable_nns_urls
+                .iter()
+                .map(|url| url.as_str())
+                .collect::<Vec<_>>()
+        );
     }
 
     let registry_canister = RegistryCanister::new(reachable_nns_urls.clone());

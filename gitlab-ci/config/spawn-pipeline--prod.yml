@@ -17,7 +17,10 @@ prod-nightly-pipeline:
 prod-nightly-triggered:
   # Support running a nightly test in a "triggered" pipeline
   # https://docs.gitlab.com/ee/api/pipeline_triggers.html
-  extends: .rules-rollout-pipeline-run-on-trigger
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
   needs: []
   variables:
     CD_ENV: "NIGHTLY"

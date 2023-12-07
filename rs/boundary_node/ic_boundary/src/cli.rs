@@ -116,10 +116,6 @@ pub struct HealthChecksConfig {
     #[clap(long, default_value = "3")]
     pub check_retries: u32,
 
-    /// Minimum registry version snapshot to process
-    #[clap(long, default_value = "0")]
-    pub min_registry_version: u64,
-
     /// Minimum required OK health checks
     /// for a replica to be included in the routing table
     #[clap(long, default_value = "1")]
@@ -181,7 +177,7 @@ pub struct CacheConfig {
     #[clap(long)]
     pub cache_size_bytes: Option<u64>,
     /// Maximum size of a single cached response item in bytes
-    #[clap(long, default_value = "65536")]
+    #[clap(long, default_value = "131072")]
     pub cache_max_item_size_bytes: u64,
     /// Time-to-live for cache entries in seconds
     #[clap(long, default_value = "1")]

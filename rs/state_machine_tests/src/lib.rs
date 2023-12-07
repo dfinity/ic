@@ -252,9 +252,9 @@ fn make_nodes_registry(
                 ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
                 port: 1234,
             }),
-            p2p_flow_endpoints: vec![],
             hostos_version_id: None,
             chip_id: None,
+            public_ipv4_config: None,
         };
         registry_data_provider
             .add(

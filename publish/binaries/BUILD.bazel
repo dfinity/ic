@@ -123,7 +123,6 @@ filegroup(
 
 upload_artifacts(
     name = "upload",
-    allow_openssl_static = True,
     inputs = [":binaries"],
     remote_subdir = "binaries/" + select({
         "@platforms//cpu:x86_64": "x86_64",
@@ -145,4 +144,20 @@ upload_artifacts(
     remote_subdir = "release",
     target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//testnet/tools:__pkg__"],
+)
+
+BINS_TO_TEST = [
+    ":ic-starter",
+    ":replica",
+]
+
+sh_test(
+    name = "binary-libraries-test",
+    size = "small",
+    srcs = ["binary-libraries-test.sh"],
+    args = ["$(rootpath " + b + ")" for b in BINS_TO_TEST],
+    data = BINS_TO_TEST,
+    tags = [
+        "test_macos",
+    ],
 )

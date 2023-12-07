@@ -28,7 +28,7 @@ rust_library(
     name = "tls",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_tls",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

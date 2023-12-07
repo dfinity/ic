@@ -30,7 +30,7 @@ opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 pem = "1.1.0"
 prometheus = { workspace = true }
-rcgen = "0.10.0"
+rcgen = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }

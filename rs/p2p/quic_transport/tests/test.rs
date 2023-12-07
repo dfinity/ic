@@ -19,7 +19,7 @@ use ic_p2p_test_utils::{
 };
 use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, SUBNET_1};
 use tokio::sync::Notify;
 use turmoil::Builder;
 
@@ -97,9 +97,19 @@ fn test_real_socket() {
             create_peer_manager_and_registry_handle(rt.handle(), log.clone());
 
         let node_crypto_1 = temp_crypto_component_with_tls_keys(&registry_handler, NODE_1);
-        let sev_handshake_1 = Arc::new(Sev::new(NODE_1, registry_handler.registry_client.clone()));
+        let sev_handshake_1 = Arc::new(Sev::new(
+            NODE_1,
+            SUBNET_1,
+            registry_handler.registry_client.clone(),
+            log.clone(),
+        ));
         let node_crypto_2 = temp_crypto_component_with_tls_keys(&registry_handler, NODE_2);
-        let sev_handshake_2 = Arc::new(Sev::new(NODE_2, registry_handler.registry_client.clone()));
+        let sev_handshake_2 = Arc::new(Sev::new(
+            NODE_2,
+            SUBNET_1,
+            registry_handler.registry_client.clone(),
+            log.clone(),
+        ));
         registry_handler.registry_client.update_to_latest_version();
 
         let socket_1: SocketAddr = "127.0.1.1:4100".parse().unwrap();

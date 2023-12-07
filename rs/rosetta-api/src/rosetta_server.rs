@@ -206,7 +206,7 @@ async fn construction_submit(
 
 #[post("/network/list")]
 async fn network_list(
-    msg: web::Json<MetadataRequest>,
+    msg: web::Json<rosetta_core::request_types::MetadataRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
     let res = req_handler.network_list(msg.into_inner()).await;
@@ -287,7 +287,7 @@ fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> Http
             let err = errors::convert_to_error(&err);
             match serde_json::to_string(&err) {
                 Ok(resp) => {
-                    let err_code = format!("{}", err.code);
+                    let err_code = format!("{}", err.0.code);
                     ENDPOINTS_METRICS
                         .rosetta_api_status_total
                         .with_label_values(&[&err_code])

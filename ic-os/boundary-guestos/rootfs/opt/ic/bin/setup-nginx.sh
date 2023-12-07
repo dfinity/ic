@@ -293,26 +293,6 @@ server {
 EOF
 }
 
-function setup_certification() {
-    local -r SEO_PATH="/run/ic-node/etc/nginx/conf.d/proxy_headers_seo.conf"
-    local -r UNDERSCORE_PATH="/run/ic-node/etc/nginx/conf.d/proxy_headers_underscore.conf"
-
-    if [[ "${REQUIRE_SEO_CERTIFICATION:-}" == 1 ]]; then
-        cat >"${SEO_PATH}" <<EOF
-proxy_set_header x-icx-require-certification "1";
-EOF
-    else
-        touch "${SEO_PATH}"
-    fi
-    if [[ "${REQUIRE_UNDERSCORE_CERTIFICATION:-}" == 1 ]]; then
-        cat >"${UNDERSCORE_PATH}" <<EOF
-proxy_set_header x-icx-require-certification "1";
-EOF
-    else
-        touch "${UNDERSCORE_PATH}"
-    fi
-}
-
 function main() {
     read_variables
     copy_certs
@@ -324,7 +304,6 @@ function main() {
     setup_pre_isolation_canisters
     setup_canister_id_alises
     setup_cgi
-    setup_certification
 }
 
 main "$@"

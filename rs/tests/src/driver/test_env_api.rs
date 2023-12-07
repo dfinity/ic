@@ -662,6 +662,11 @@ impl IcNodeSnapshot {
         IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node")
     }
 
+    pub fn get_ipv4_configuration(&self) -> Option<pb_node::IPv4InterfaceConfig> {
+        let node_record = self.raw_node_record();
+        node_record.public_ipv4_config
+    }
+
     /// Is it accessible via ssh with the `admin` user.
     /// Waits until connection is ready.
     pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {

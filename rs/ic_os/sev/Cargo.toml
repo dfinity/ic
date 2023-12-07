@@ -11,6 +11,7 @@ anyhow = "1.0.57"
 async-trait = "0.1.41"
 ic-types = { path = "../../types/types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-logger = { path = "../../monitoring/logger" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
@@ -22,6 +23,7 @@ thiserror = "1"
 tokio = { workspace = true }
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
 sev = { version = "2.0.2", features = ["crypto_nossl"] }
+slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"

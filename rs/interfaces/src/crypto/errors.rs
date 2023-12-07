@@ -166,6 +166,8 @@ impl ErrorReproducibility for DkgKeyRemovalError {
             DkgKeyRemovalError::TransientInternalError(_) => false,
             // true, as the encryption public key is fetched from the registry
             DkgKeyRemovalError::KeyNotFoundError(_) => true,
+            // true, as the key ID is computed from the transcripts provided as input
+            DkgKeyRemovalError::KeyIdInstantiationError(_) => true,
         }
     }
 }

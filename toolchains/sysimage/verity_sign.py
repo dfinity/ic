@@ -8,8 +8,7 @@ import os
 import re
 import subprocess
 import sys
-
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
+import tempfile
 
 root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
@@ -39,7 +38,7 @@ def main():
 
     args = parser.parse_args(sys.argv[1:])
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = tempfile.mkdtemp()
 
     subprocess.run(
         [
@@ -102,8 +101,6 @@ def main():
         ],
         check=True,
     )
-
-    print_artifact_info(args.output)
 
 
 if __name__ == "__main__":

@@ -63,8 +63,6 @@ impl Ord for IDkgTranscriptInternal {
     }
 }
 
-pub type IDkgTranscriptInternalBytes = serde_bytes::ByteBuf;
-
 /// Some type of commitment, specifying its combination strategy
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum CombinedCommitment {

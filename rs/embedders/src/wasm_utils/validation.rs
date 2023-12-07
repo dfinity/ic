@@ -947,7 +947,8 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
     Ok(())
 }
 
-// Checks that no more than `max_globals` are defined in the module.
+// Checks that no more than `max_globals` are defined in the module
+// and all globals have supported type.
 fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), WasmValidationError> {
     if module.globals.len() > max_globals {
         return Err(WasmValidationError::TooManyGlobals {

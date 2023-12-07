@@ -78,6 +78,10 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
                     internal_error: e.internal_error,
                 })
             }
+            CspDkgLoadPrivateKeyError::KeyIdInstantiationError(message) => {
+                // Forward to the caller because the argument is invalid.
+                DkgLoadTranscriptError::InvalidTranscript(InvalidArgumentError { message })
+            }
         }
     }
 }

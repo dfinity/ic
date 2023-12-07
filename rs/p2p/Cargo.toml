@@ -25,10 +25,7 @@ lru = { version = "0.7.8", default-features = false }
 parking_lot = "0.12.1"
 prometheus = { workspace = true }
 serde = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 threadpool = "1.8.1"

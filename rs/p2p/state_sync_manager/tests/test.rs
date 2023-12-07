@@ -7,8 +7,8 @@ use std::{
 };
 
 use crate::common::{
-    create_node, empty_artifact_chunk, latency_30ms_throughput_1000mbits,
-    latency_50ms_throughput_300mbits, SharableMockChunkable, State,
+    create_node, latency_30ms_throughput_1000mbits, latency_50ms_throughput_300mbits,
+    SharableMockChunkable, State,
 };
 use common::SharableMockStateSync;
 use ic_logger::info;
@@ -656,7 +656,7 @@ fn test_state_sync_abortion() {
         s1.get_mut().expect_available_states().return_const(vec![]);
         s1.get_mut()
             .expect_chunk()
-            .returning(|_, _| Some(empty_artifact_chunk(ChunkId::from(1))));
+            .returning(|_, _| Some(vec![].into()));
 
         // Verify that peers got expected number of adverts. The last advert on node 2
         // is used to start the state sync.
@@ -701,7 +701,7 @@ fn test_state_sync_abortion() {
         s3.get_mut().checkpoint();
         s3.get_mut()
             .expect_chunk()
-            .returning(|_, _| Some(empty_artifact_chunk(ChunkId::from(1))));
+            .returning(|_, _| Some(vec![].into()));
         s3.get_mut()
             .expect_available_states()
             .once()

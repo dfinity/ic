@@ -3,8 +3,9 @@ use crate::common::{
     build_lifeline_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
     NnsInitPayloads,
 };
-use candid::{Decode, Encode, Nat};
+use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
+use cycles_minting_canister::CYCLES_LEDGER_CANISTER_ID;
 use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
 };
@@ -26,7 +27,8 @@ use ic_nns_constants::{
     memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID,
     LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
@@ -45,6 +47,7 @@ use ic_nns_governance::pb::v1::{
     MostRecentMonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
     RewardNodeProviders, Vote,
 };
+use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_sns_governance::{
     pb::v1::{
         self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
@@ -69,6 +72,7 @@ use icrc_ledger_types::icrc1::{
 use num_traits::ToPrimitive;
 use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
+use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -479,6 +483,33 @@ pub fn setup_nns_governance_with_correct_canister_id(
         .unwrap();
 }
 
+pub fn setup_nns_root_with_correct_canister_id(
+    machine: &StateMachine,
+    init_payload: RootCanisterInitPayload,
+) {
+    let root_canister_id = create_canister_id_at_position(
+        machine,
+        ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation_of(ROOT_CANISTER_ID))
+                .with_controllers(vec![LIFELINE_CANISTER_ID.get()])
+                .build(),
+        ),
+    );
+
+    assert_eq!(root_canister_id, ROOT_CANISTER_ID);
+
+    machine
+        .install_wasm_in_mode(
+            root_canister_id,
+            CanisterInstallMode::Install,
+            build_root_wasm().bytes(),
+            Encode!(&init_payload).unwrap(),
+        )
+        .unwrap();
+}
+
 /// Creates empty canisters up until the correct SNS-WASM id, then installs SNS-WASMs with payload
 /// This allows creating a few canisters before calling this.
 pub fn setup_nns_sns_wasms_with_correct_canister_id(
@@ -537,18 +568,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
     );
     assert_eq!(ledger_canister_id, LEDGER_CANISTER_ID);
 
-    let root_canister_id = create_canister(
-        machine,
-        build_root_wasm(),
-        Some(Encode!(&init_payloads.root).unwrap()),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(ROOT_CANISTER_ID))
-                .with_controllers(vec![LIFELINE_CANISTER_ID.get()])
-                .build(),
-        ),
-    );
-    assert_eq!(root_canister_id, ROOT_CANISTER_ID);
+    setup_nns_root_with_correct_canister_id(machine, init_payloads.root);
 
     let cmc_canister_id = create_canister(
         machine,
@@ -638,7 +658,7 @@ pub fn nns_governance_get_full_neuron(
     state_machine: &mut StateMachine,
     sender: PrincipalId,
     neuron_id: u64,
-) -> Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError> {
+) -> Result<nns_governance_pb::Neuron, GovernanceError> {
     let result = state_machine
         .execute_ingress_as(
             sender,
@@ -657,7 +677,33 @@ pub fn nns_governance_get_full_neuron(
             )
         }
     };
-    Decode!(&result, Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError>).unwrap()
+    Decode!(&result, Result<nns_governance_pb::Neuron, GovernanceError>).unwrap()
+}
+
+pub fn nns_governance_get_neuron_info(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: u64,
+) -> Result<nns_governance_pb::NeuronInfo, GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "get_neuron_info",
+            Encode!(&neuron_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_neuron_info was rejected by the NNS governance canister: {:#?}",
+                reject
+            )
+        }
+    };
+    Decode!(&result, Result<nns_governance_pb::NeuronInfo, GovernanceError>).unwrap()
 }
 
 pub fn nns_governance_get_proposal_info_as_anonymous(
@@ -1696,4 +1742,45 @@ pub fn cmc_set_default_authorized_subnetworks(
     };
 
     nns_wait_for_proposal_execution(machine, proposal_id.id);
+}
+
+pub fn setup_cycles_ledger(state_machine: &StateMachine) {
+    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    enum LedgerArgs {
+        Init(Config),
+    }
+    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    struct Config {
+        pub max_transactions_per_request: u64,
+        pub index_id: Option<candid::Principal>,
+    }
+
+    state_machine.reroute_canister_range(
+        std::ops::RangeInclusive::<CanisterId>::new(
+            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+        ),
+        state_machine.get_subnet_id(),
+    );
+    state_machine.create_canister_with_cycles(
+        Some(CYCLES_LEDGER_CANISTER_ID),
+        Cycles::zero(),
+        None,
+    );
+    let cycles_ledger_wasm = std::fs::read(
+        std::env::var("CYCLES_LEDGER_WASM_PATH").expect("CYCLES_LEDGER_WASM_PATH not set"),
+    )
+    .unwrap();
+    let arg = Encode!(&LedgerArgs::Init(Config {
+        max_transactions_per_request: 50,
+        index_id: None,
+    }))
+    .unwrap();
+    state_machine
+        .install_existing_canister(
+            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+            cycles_ledger_wasm,
+            arg,
+        )
+        .expect("Installing cycles ledger failed");
 }

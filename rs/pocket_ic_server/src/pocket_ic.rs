@@ -15,7 +15,7 @@ use ic_state_machine_tests::{
     StateMachineConfig, Time,
 };
 use ic_test_utilities::types::ids::subnet_test_id;
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, RawAddCycles, RawCanisterCall, RawEffectivePrincipal,
@@ -62,6 +62,7 @@ impl PocketIc {
         let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
         let mut subnet_ids = Vec::new();
         let mut routing_table = RoutingTable::new();
+        let mut nns_subnet_id = None;
 
         for (subnet_counter, subnet_kind) in fixed_range_subnets
             .into_iter()
@@ -70,6 +71,10 @@ impl PocketIc {
         {
             let subnet_id = subnet_test_id(subnet_counter as u64);
             subnet_ids.push(subnet_id);
+
+            if subnet_kind == SubnetKind::NNS {
+                nns_subnet_id = Some(subnet_id);
+            }
 
             let RangeConfig {
                 canister_id_ranges: ranges,
@@ -104,16 +109,14 @@ impl PocketIc {
         } in subnet_config_info
         {
             let subnet_config = SubnetConfig::new(conv_type(subnet_kind));
-            let hypervisor_config = execution_environment::Config {
-                default_provisional_cycles_balance: Cycles::new(0),
-                ..Default::default()
-            };
+            let hypervisor_config = execution_environment::Config::default();
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
             let subnet_size = subnet_size(subnet_kind);
             StateMachineBuilder::new()
                 .with_runtime(runtime.clone())
                 .with_config(Some(sm_config))
                 .with_subnet_id(subnet_id)
+                .with_nns_subnet_id(nns_subnet_id.unwrap_or(subnet_ids[0]))
                 .with_subnet_list(subnet_ids.clone())
                 .with_subnet_size(subnet_size.try_into().unwrap())
                 .with_routing_table(routing_table.clone())
@@ -263,8 +266,8 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
 
 fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     let CanisterIdRange { start, end } = range;
-    let start = start.get().into();
-    let end = end.get().into();
+    let start = start.get().0.into();
+    let end = end.get().0.into();
     rest::CanisterIdRange { start, end }
 }
 

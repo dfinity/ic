@@ -1,8 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
-    "//rs/p2p/quic_transport:__subpackages__",
-    "//rs/p2p/state_sync_manager:__subpackages__",
+    "//rs/p2p:__subpackages__",
 ])
 
 DEPENDENCIES = [
@@ -30,6 +29,6 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_memory_transport",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )

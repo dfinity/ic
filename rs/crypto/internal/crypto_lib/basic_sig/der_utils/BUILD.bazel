@@ -4,7 +4,7 @@ rust_library(
     name = "der_utils",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_basic_sig_der_utils",
-    version = "0.8.0",
+    version = "0.9.0",
     visibility = [
         "//rs/canister_client/sender:__pkg__",
         "//rs/crypto:__subpackages__",

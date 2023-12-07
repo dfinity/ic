@@ -204,7 +204,7 @@ impl GossipImpl {
             registry_client,
             transport,
             transport_channel_mapper: TransportChannelIdMapper::new(transport_channels),
-            artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log)),
+            artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::default()),
             metrics: DownloadManagementMetrics::new(metrics_registry),
             gossip_config,
             receive_check_caches: RwLock::new(HashMap::new()),

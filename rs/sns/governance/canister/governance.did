@@ -8,6 +8,7 @@ type Action = variant {
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
+  MintSnsTokens : MintSnsTokens;
   Unspecified : record {};
   ManageSnsMetadata : ManageSnsMetadata;
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
@@ -247,6 +248,12 @@ type MergeMaturity = record { percentage_to_merge : nat32 };
 type MergeMaturityResponse = record {
   merged_maturity_e8s : nat64;
   new_stake_e8s : nat64;
+};
+type MintSnsTokens = record {
+  to_principal : opt principal;
+  to_subaccount : opt Subaccount;
+  memo : opt nat64;
+  amount_e8s : opt nat64;
 };
 type Motion = record { motion_text : text };
 type NervousSystemFunction = record {

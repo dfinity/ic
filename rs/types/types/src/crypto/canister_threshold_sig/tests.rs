@@ -450,6 +450,42 @@ fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
     );
 }
 
+#[test]
+fn bincode_serialization_of_extended_derivation_path_has_stable_representation() {
+    let bytes = bincode::serialize(&derivation_path()).expect("failed to serialize");
+    let expected_bytes: Vec<u8> = vec![
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 21, 0, 0, 0, 0, 0, 0, 0, 105, 110, 110,
+        101, 114, 32, 100, 101, 114, 105, 118, 97, 116, 105, 111, 110, 32, 112, 97, 116, 104,
+    ];
+    assert_eq!(bytes, expected_bytes);
+}
+
+#[test]
+fn bincode_deserialization_of_extended_derivation_path_is_backward_compatible() {
+    let stable_bytes: Vec<u8> = vec![
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 21, 0, 0, 0, 0, 0, 0, 0, 105, 110, 110,
+        101, 114, 32, 100, 101, 114, 105, 118, 97, 116, 105, 111, 110, 32, 112, 97, 116, 104,
+    ];
+    let computed_derivation_path: ExtendedDerivationPath =
+        bincode::deserialize(&stable_bytes).expect("failed to deserialize");
+    let expected_derivation_path = derivation_path();
+    assert_eq!(computed_derivation_path, expected_derivation_path);
+}
+
+#[test]
+fn serde_cbor_deserialization_of_extended_derivation_path_is_backward_compatible() {
+    let stable_bytes: Vec<u8> = vec![
+        162, 102, 99, 97, 108, 108, 101, 114, 64, 111, 100, 101, 114, 105, 118, 97, 116, 105, 111,
+        110, 95, 112, 97, 116, 104, 129, 149, 24, 105, 24, 110, 24, 110, 24, 101, 24, 114, 24, 32,
+        24, 100, 24, 101, 24, 114, 24, 105, 24, 118, 24, 97, 24, 116, 24, 105, 24, 111, 24, 110,
+        24, 32, 24, 112, 24, 97, 24, 116, 24, 104,
+    ];
+    let computed_derivation_path: ExtendedDerivationPath =
+        serde_cbor::from_slice(&stable_bytes).expect("failed to deserialize");
+    let expected_derivation_path = derivation_path();
+    assert_eq!(computed_derivation_path, expected_derivation_path);
+}
+
 // A randomized way to get non-repeating IDs.
 pub fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
     let id = rng.gen();

@@ -117,11 +117,6 @@ rules_proto_dependencies()
 rules_proto_toolchains()
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
-load("//bazel/openssl_static_env:defs.bzl", "openssl_static_env")
-
-openssl_static_env(name = "openssl_static_env")
-
-load("@openssl_static_env//:defs.bzl", "DFINITY_OPENSSL_STATIC")
 load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
 
 sanitizers_enabled_env(name = "sanitizers_enabled_env")
@@ -130,10 +125,9 @@ load("@sanitizers_enabled_env//:defs.bzl", "SANITIZERS_ENABLED")
 
 external_crates_repository(
     name = "crate_index",
-    cargo_lockfile = "//:Cargo.Bazel.StaticOpenSSL.toml.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.Fuzzing.toml.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.toml.lock",
-    lockfile = "//:Cargo.Bazel.StaticOpenSSL.json.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock",
+    cargo_lockfile = "//:Cargo.Bazel.Fuzzing.toml.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.toml.lock",
+    lockfile = "//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock",
     sanitizers_enabled = SANITIZERS_ENABLED,
-    static_openssl = DFINITY_OPENSSL_STATIC,
 )
 
 load("@crate_index//:defs.bzl", "crate_repositories")
@@ -686,6 +680,22 @@ http_file(
     url = "https://download.dfinity.systems/testdata/blocks.json.gz",
 )
 
+# Contains the first 800_000 headers of the Bitcoin testnet blockchain.
+http_file(
+    name = "bitcoin_adapter_testnet_headers",
+    downloaded_file_path = "testnet_headers.json.gz",
+    sha256 = "c01542d816d9631a7e59210aea29c1d46ed805b0bcbfd9e067d8d53a5e5919c8",
+    url = "https://download.dfinity.systems/testdata/testnet_headers.json.gz",
+)
+
+# Contains blocks 350_990 to 350_999 (inclusive) of the Bitcoin testnet blockchain.
+http_file(
+    name = "bitcoin_adapter_testnet_blocks",
+    downloaded_file_path = "testnet_blocks.json.gz",
+    sha256 = "ae57b5b58d8a1e89545c0caedeb114d0dd179e0c5fd4a44e43321b2cdbac74fb",
+    url = "https://download.dfinity.systems/testdata/testnet_blocks.json.gz",
+)
+
 # Internet Identity canister (test build)
 
 http_file(
@@ -711,6 +721,14 @@ http_file(
     downloaded_file_path = "sns_aggregator_dev.wasm.gz",
     sha256 = "fb50fbd91ca28373a1dd9207dee7cab22b5d73fde66fe1cc8a9dac63b9549da1",
     url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm.gz",
+)
+
+# Cycles Ledger canister
+
+http_file(
+    name = "cycles-ledger.wasm.gz",
+    sha256 = "4f26aae9edef5b4e2c785c1dc6f312163af055f22954dd99d515d8a862bd59bd",
+    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v0.2.3/cycles-ledger.wasm.gz",
 )
 
 # Import Python rules
@@ -1013,6 +1031,14 @@ cc_library(
     sha256 = "b93a14c35f56eca8dddaab95dea94294d51ca680a7d6bb1c1f048e1cd71550cd",
     strip_prefix = "core-ec77b2817a0e360b1893affe4cfa44d19391efc7",
     urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
+)
+
+# interface spec v0.22
+http_file(
+    name = "interface_spec",
+    downloaded_file_path = "ic.did",
+    sha256 = "bf3987bd483cf710ff0c54134350ca188c29ff0fdd38567aa4df5e74131543e4",
+    url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
 )
 
 load("//rs/tests:kubeconfig.bzl", "kubeconfig")

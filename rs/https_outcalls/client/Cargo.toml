@@ -22,7 +22,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
-slog = "2.7.0"
+slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }

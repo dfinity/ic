@@ -10,10 +10,10 @@ use crate::{
         proposal::Action,
         transfer_sns_treasury_funds::TransferFrom,
         DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance,
-        ManageLedgerParameters, ManageSnsMetadata, Motion, NervousSystemFunction,
-        NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus,
-        ProposalRewardStatus, RegisterDappCanisters, Tally, TransferSnsTreasuryFunds,
-        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+        ManageSnsMetadata, ManageLedgerParameters, MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters,
+        Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
+        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, Vote,
     },
 };
 
@@ -239,6 +239,14 @@ pub async fn validate_and_render_action(
                 .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
             validate_and_render_transfer_sns_treasury_funds(transfer, sns_transfer_fee_e8s)
         }
+        proposal::Action::MintSnsTokens(mint) => {
+            let sns_transfer_fee_e8s = governance_proto
+                .parameters
+                .as_ref()
+                .and_then(|params| params.transaction_fee_e8s)
+                .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
+            validate_and_render_mint_sns_tokens(mint, sns_transfer_fee_e8s)
+        }
         proposal::Action::ManageLedgerParameters(manage_ledger_parameters) => {
             validate_and_render_manage_ledger_parameters(manage_ledger_parameters)
         }
@@ -316,7 +324,7 @@ fn validate_and_render_transfer_sns_treasury_funds(
 
     let to_principal = if let Some(to_principal) = transfer.to_principal {
         if to_principal == PrincipalId::new_anonymous() {
-            defects.push("Principal must not be anonymous.".to_string());
+            defects.push("to_principal must not be anonymous.".to_string());
         }
         to_principal
     } else {
@@ -363,6 +371,72 @@ fn validate_and_render_transfer_sns_treasury_funds(
 ## Memo: {memo}",
         amount_e8s = transfer.amount_e8s,
         memo = transfer.memo.unwrap_or(0)
+    ))
+}
+
+/// Validates and render MintSnsTokens proposal
+fn validate_and_render_mint_sns_tokens(
+    mint: &MintSnsTokens,
+    sns_transfer_fee_e8s: u64,
+) -> Result<String, String> {
+    let mut defects: Vec<String> = vec![];
+
+    let minimum_transaction_e8s = sns_transfer_fee_e8s;
+
+    if mint.amount_e8s.is_none() {
+        defects.push("Must specify an amount_e8s to mint.".to_string());
+    } else if mint.amount_e8s() < minimum_transaction_e8s {
+        defects.push(format!("The minimum mint is {minimum_transaction_e8s} e8s",))
+    }
+
+    let to_principal = if let Some(to_principal) = mint.to_principal {
+        if to_principal == PrincipalId::new_anonymous() {
+            defects.push("to_principal must not be anonymous.".to_string());
+        }
+        to_principal
+    } else {
+        defects.push("Must specify a to_principal to make the mint to.".to_string());
+        PrincipalId::new_anonymous()
+    };
+
+    let to_account = match &mint.to_subaccount {
+        None => Account {
+            owner: to_principal.0,
+            subaccount: None,
+        }
+        .to_string(),
+        Some(s) => match bytes_to_subaccount(&s.subaccount[..]) {
+            Ok(s) => Account {
+                owner: to_principal.0,
+                subaccount: Some(s),
+            }
+            .to_string(),
+            Err(e) => {
+                defects.push(e.error_message);
+                "".to_string()
+            }
+        },
+    };
+
+    // Generate final report.
+    if !defects.is_empty() {
+        return Err(format!(
+            "MintSnsTokens proposal was invalid for the following reason(s):\n{}",
+            defects.join("\n"),
+        ));
+    }
+
+    let display_amount_tokens = i2d(mint.amount_e8s()) / i2d(E8);
+
+    Ok(format!(
+        r"# Proposal to mint SNS Tokens:
+## Amount: {display_amount_tokens:.8} SNS Tokens
+## Amount (e8s): {amount_e8s}
+## Target principal: {to_principal}
+## Target account: {to_account}
+## Memo: {memo}",
+        amount_e8s = mint.amount_e8s(),
+        memo = mint.memo()
     ))
 }
 
@@ -1147,6 +1221,9 @@ impl ProposalData {
     /// Returns true if the proposal meets the conditions to be accepted, also called "adopted".
     /// The result is only meaningful if a decision on the proposal's result can be made, i.e.,
     /// either there is a majority of yes-votes or the proposal's deadline has passed.
+    ///
+    /// If this function changes, the GIX team should be notified, since they maintain a
+    /// TypeScript version of it
     pub fn is_accepted(&self) -> bool {
         let minimum_yes_proportion_of_exercised = self.minimum_yes_proportion_of_exercised();
         let minimum_yes_proportion_of_total = self.minimum_yes_proportion_of_total();
@@ -1253,26 +1330,27 @@ impl ProposalData {
     }
 
     pub fn minimum_yes_proportion_of_total(&self) -> Percentage {
-        let minimum_yes_proportion_of_total = self
-            .minimum_yes_proportion_of_total
-            .unwrap_or(NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER);
+        let minimum_yes_proportion_of_total = self.minimum_yes_proportion_of_total.unwrap_or(
+            NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
+        );
         // make sure minimum_yes_proportion_of_total.basis_points isn't None
         if minimum_yes_proportion_of_total.basis_points.is_some() {
             minimum_yes_proportion_of_total
         } else {
-            NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+            NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
         }
     }
 
     pub fn minimum_yes_proportion_of_exercised(&self) -> Percentage {
-        let minimum_yes_proportion_of_exercised = self
-            .minimum_yes_proportion_of_exercised
-            .unwrap_or(NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER);
+        let minimum_yes_proportion_of_exercised =
+            self.minimum_yes_proportion_of_exercised.unwrap_or(
+                NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
+            );
         // make sure minimum_yes_proportion_of_exercised.basis_points isn't None
         if minimum_yes_proportion_of_exercised.basis_points.is_some() {
             minimum_yes_proportion_of_exercised
         } else {
-            NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+            NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
         }
     }
 
@@ -2528,7 +2606,7 @@ Version {
                 0
             )
             .unwrap_err(),
-            "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nPrincipal must not be anonymous.".to_string()
+            "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nto_principal must not be anonymous.".to_string()
         );
     }
 
@@ -2555,7 +2633,6 @@ Version {
 
     #[test]
     fn validate_and_render_transfer_sns_treasury_funds_amount_less_than_fee() {
-        // Valid case
         assert_eq!(
             validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
@@ -2583,6 +2660,149 @@ Version {
             )
             .unwrap_err(),
             "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nFor transactions from SNS Token Treasury (SNS Ledger), the fee and minimum transaction is 1000 e8s"
+        );
+    }
+
+    #[test]
+    fn validate_and_render_mint_sns_tokens_renders_for_valid_inputs() {
+        // Valid case
+        assert_eq!(
+            validate_and_render_mint_sns_tokens(
+                &MintSnsTokens {
+                    amount_e8s: Some(1000000),
+                    memo: Some(1000),
+                    to_principal: Some(basic_principal_id()),
+                    to_subaccount: None
+                },
+                0
+            )
+            .unwrap(),
+            r"# Proposal to mint SNS Tokens:
+## Amount: 0.01000000 SNS Tokens
+## Amount (e8s): 1000000
+## Target principal: bg4sm-wzk
+## Target account: bg4sm-wzk
+## Memo: 1000"
+        );
+
+        // Valid case with default sub-account
+        assert_eq!(
+            validate_and_render_mint_sns_tokens(
+                &MintSnsTokens {
+                    amount_e8s: Some(10000000),
+                    memo: None,
+                    to_principal: Some(basic_principal_id()),
+                    to_subaccount: Some(Subaccount {
+                        subaccount: vec![0; 32]
+                    })
+                },
+                0
+            )
+            .unwrap(),
+            r"# Proposal to mint SNS Tokens:
+## Amount: 0.10000000 SNS Tokens
+## Amount (e8s): 10000000
+## Target principal: bg4sm-wzk
+## Target account: bg4sm-wzk
+## Memo: 0"
+        );
+
+        // Valid case with non-default sub-account
+        // The textual representation of ICRC-1 Accounts can be
+        // found at https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/TextualEncoding.md
+        assert_eq!(
+            validate_and_render_mint_sns_tokens(
+                &MintSnsTokens {
+                    amount_e8s: Some(E8),
+                    memo: None,
+                    to_principal: Some(basic_principal_id()),
+                    to_subaccount: Some(subaccount_1())
+                },
+                0
+            )
+            .unwrap(),
+            r"# Proposal to mint SNS Tokens:
+## Amount: 1.00000000 SNS Tokens
+## Amount (e8s): 100000000
+## Target principal: bg4sm-wzk
+## Target account: bg4sm-wzk-msokwai.1
+## Memo: 0"
+        );
+    }
+
+    #[test]
+    fn validate_and_render_mint_sns_tokens_no_principal() {
+        // invalid case no principal
+        assert_eq!(
+            validate_and_render_mint_sns_tokens(
+                &MintSnsTokens {
+                    amount_e8s: Some(1000000),
+                    memo: None,
+                    to_principal: None,
+                    to_subaccount: Some(Subaccount {
+                        subaccount: vec![0; 32]
+                    })
+                },
+                0
+            )
+            .unwrap_err(),
+            "MintSnsTokens proposal was invalid for the following reason(s):\nMust specify a to_principal to make the mint to.".to_string()
+        );
+    }
+
+    #[test]
+    fn validate_and_render_mint_sns_tokens_anonymous_principal() {
+        // invalid case anonymous principal
+        assert_eq!(
+            validate_and_render_mint_sns_tokens(
+                &MintSnsTokens {
+                    amount_e8s: Some(1000000),
+                    memo: None,
+                    to_principal: Some(PrincipalId::new_anonymous()),
+                    to_subaccount: None
+                },
+                0
+            )
+            .unwrap_err(),
+            "MintSnsTokens proposal was invalid for the following reason(s):\nto_principal must not be anonymous.".to_string()
+        );
+    }
+
+    #[test]
+    fn validate_and_render_mint_sns_tokens_bad_subaccount() {
+        // invalid case bad subaccount
+        assert_eq!(
+            validate_and_render_mint_sns_tokens(
+                &MintSnsTokens {
+                    amount_e8s: Some(1000000),
+                    memo: None,
+                    to_principal: Some(basic_principal_id()),
+                    to_subaccount: Some(Subaccount {
+                        subaccount: vec![1, 2]
+                    })
+                },
+                0
+            )
+            .unwrap_err(),
+            "MintSnsTokens proposal was invalid for the following reason(s):\nInvalid subaccount"
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn validate_and_render_mint_sns_tokens_amount_less_than_fee() {
+        assert_eq!(
+            validate_and_render_mint_sns_tokens(
+                &MintSnsTokens {
+                    amount_e8s: Some(999),
+                    memo: Some(1000),
+                    to_principal: Some(basic_principal_id()),
+                    to_subaccount: None
+                },
+                1000
+            )
+            .unwrap_err(),
+            "MintSnsTokens proposal was invalid for the following reason(s):\nThe minimum mint is 1000 e8s"
         );
     }
 

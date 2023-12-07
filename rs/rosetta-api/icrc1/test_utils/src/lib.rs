@@ -1,4 +1,7 @@
 use candid::{Nat, Principal};
+use ic_agent::identity::BasicIdentity;
+use ic_agent::Identity;
+use ic_canister_client_sender::Ed25519KeyPair;
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
@@ -10,24 +13,34 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const E8: u64 = 100_000_000;
 pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
+pub const IDENTITY_PEM:&str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
+
+pub fn minter_identity() -> BasicIdentity {
+    let rng = ring::rand::SystemRandom::new();
+    let key_pair = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng)
+        .expect("Could not generate a key pair.");
+
+    BasicIdentity::from_key_pair(
+        ring::signature::Ed25519KeyPair::from_pkcs8(key_pair.as_ref())
+            .expect("Could not read the key pair."),
+    )
+}
 
 pub fn principal_strategy() -> impl Strategy<Value = Principal> {
     let bytes_strategy = prop::collection::vec(0..=255u8, 29);
     bytes_strategy.prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
-}
-
-fn token_amount<Tokens: TokensType>(n: u64) -> Tokens {
-    Tokens::try_from(candid::Nat::from(n))
-        .unwrap_or_else(|e| panic!("failed to convert {n} to tokens: {e}"))
 }
 
 pub fn account_strategy() -> impl Strategy<Value = Account> {
@@ -37,6 +50,11 @@ pub fn account_strategy() -> impl Strategy<Value = Account> {
         owner: principal,
         subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
     })
+}
+
+fn token_amount<Tokens: TokensType>(n: u64) -> Tokens {
+    Tokens::try_from(candid::Nat::from(n))
+        .unwrap_or_else(|e| panic!("failed to convert {n} to tokens: {e}"))
 }
 
 pub fn arb_small_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
@@ -146,7 +164,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
     let transaction_strategy = transaction_strategy(amount_strategy);
     let fee_collector_strategy = prop::option::of(account_strategy());
     let fee_collector_block_index_strategy = prop::option::of(prop::num::u64::ANY);
-    let effective_fee_strategy = prop::option::of(arb_small_amount());
+    let fee_strategy = prop::option::of(arb_small_amount());
     let timestamp_strategy = Just({
         let end = SystemTime::now();
         // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
@@ -159,13 +177,23 @@ pub fn blocks_strategy<Tokens: TokensType>(
     });
     (
         transaction_strategy,
-        effective_fee_strategy,
+        fee_strategy,
         timestamp_strategy,
         fee_collector_strategy,
         fee_collector_block_index_strategy,
     )
         .prop_map(
-            |(transaction, effective_fee, timestamp, fee_collector, fee_collector_block_index)| {
+            |(transaction, fee, timestamp, fee_collector, fee_collector_block_index)| {
+                let transaction_fee = match transaction.operation {
+                    Operation::Transfer { fee, .. } => fee,
+                    Operation::Approve { fee, .. } => fee,
+                    Operation::Burn { .. } => None,
+                    Operation::Mint { .. } => None,
+                };
+                let effective_fee = transaction_fee
+                    .is_none()
+                    .then(|| fee.unwrap_or(token_amount(DEFAULT_TRANSFER_FEE)));
+                assert!(effective_fee.is_some() || transaction_fee.is_some());
                 Block {
                     parent_hash: Some(Block::<Tokens>::block_hash(
                         &Block {
@@ -254,16 +282,30 @@ impl LedgerEndpointArg {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ArgWithCaller {
-    pub caller: Principal,
+    pub caller: Arc<BasicIdentity>,
+    pub principal_to_basic_identity: HashMap<Principal, Arc<BasicIdentity>>,
     pub arg: LedgerEndpointArg,
+}
+
+impl fmt::Debug for ArgWithCaller {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ArgWithCaller")
+            .field(
+                "account_to_basic_identity",
+                &self.principal_to_basic_identity,
+            )
+            .field("arg", &self.principal_to_basic_identity)
+            .field("caller", &self.caller.sender().unwrap())
+            .finish_non_exhaustive()
+    }
 }
 
 impl ArgWithCaller {
     pub fn from(&self) -> Account {
         Account {
-            owner: self.caller,
+            owner: self.caller.sender().unwrap(),
             subaccount: self.arg.subaccount_from(),
         }
     }
@@ -341,18 +383,30 @@ impl ArgWithCaller {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default, Debug)]
 struct TransactionsAndBalances {
     transactions: Vec<ArgWithCaller>,
     balances: HashMap<Account, u64>,
     txs: HashSet<Transaction<Tokens>>,
+    principal_to_basic_identity: HashMap<Principal, Arc<BasicIdentity>>,
     allowances: HashMap<(Account, Account), Tokens>,
 }
 
 impl TransactionsAndBalances {
-    pub fn apply(&mut self, minter: Account, default_fee: u64, tx: ArgWithCaller) {
+    pub fn apply(
+        &mut self,
+        minter_identity: Arc<BasicIdentity>,
+        default_fee: u64,
+        tx: ArgWithCaller,
+    ) {
         let fee = tx.fee().unwrap_or(default_fee);
+        let minter: Account = minter_identity.sender().unwrap().into();
         let transaction = tx.to_transaction(minter);
+        self.principal_to_basic_identity
+            .extend(tx.principal_to_basic_identity.clone());
+        self.principal_to_basic_identity
+            .entry(tx.from().owner)
+            .or_insert(tx.caller.clone());
         if self.duplicate(
             transaction.operation.clone(),
             transaction.created_at_time,
@@ -365,12 +419,14 @@ impl TransactionsAndBalances {
                 self.credit(to, amount.get_e8s());
             }
             Operation::Burn { from, amount, .. } => {
+                assert_eq!(tx.from(), from);
                 self.debit(from, amount.get_e8s());
             }
             Operation::Transfer {
                 from, to, amount, ..
             } => {
                 self.credit(to, amount.get_e8s());
+                assert_eq!(tx.from(), from);
                 self.debit(from, amount.get_e8s() + fee);
             }
             Operation::Approve {
@@ -379,6 +435,7 @@ impl TransactionsAndBalances {
                 amount,
                 ..
             } => {
+                assert_eq!(tx.from(), from);
                 self.allowances
                     .entry((from, spender))
                     .and_modify(|current_allowance| {
@@ -443,6 +500,42 @@ fn amount_strategy() -> impl Strategy<Value = u64> {
     0..100_000_000_000u64 // max is 1M ICP
 }
 
+fn basic_identity_strategy() -> impl Strategy<Value = BasicIdentity> {
+    prop::array::uniform32(0u8..).prop_map(|ran| {
+        let rng = ChaCha20Rng::from_seed(ran);
+        let signing_key = ed25519_consensus::SigningKey::new(rng);
+        let keypair = Ed25519KeyPair {
+            secret_key: signing_key.to_bytes(),
+            public_key: signing_key.verification_key().to_bytes(),
+        };
+        BasicIdentity::from_pem(keypair.to_pem().as_bytes()).unwrap()
+    })
+}
+
+#[derive(Debug)]
+struct SigningAccount {
+    identity: BasicIdentity,
+    subaccount: Option<Subaccount>,
+}
+
+impl SigningAccount {
+    fn account(&self) -> Account {
+        Account {
+            owner: self.identity.sender().unwrap(),
+            subaccount: self.subaccount,
+        }
+    }
+}
+
+fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount> {
+    let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+    let identity_strategy = basic_identity_strategy();
+    (bytes_strategy, identity_strategy).prop_map(|(bytes, identity)| SigningAccount {
+        identity,
+        subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
+    })
+}
+
 /// Generates a list of valid transaction args with the caller, i.e.
 /// transaction args that the Ledger will accept and that have the
 /// Principal that should send them.
@@ -451,25 +544,27 @@ fn amount_strategy() -> impl Strategy<Value = u64> {
 ///       e.g. exponential distribution
 /// TODO: allow to pass the account distribution
 pub fn valid_transactions_strategy(
-    minter: Account,
+    minter_identity: BasicIdentity,
     default_fee: u64,
     length: usize,
     now: SystemTime,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
     fn mint_strategy(
-        minter: Account,
-        tx_dedup_set: Arc<HashSet<Transaction<Tokens>>>,
+        minter_identity: Arc<BasicIdentity>,
         now: SystemTime,
+        tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
+        let minter: Account = minter_identity.sender().unwrap().into();
         (
-            account_strategy(),
+            basic_identity_and_account_strategy(),
             amount_strategy(),
             valid_created_at_time_strategy(now),
             arb_memo(),
         )
             .prop_filter_map(
                 "The minting account is set as to account or tx is a duplicate",
-                move |(to, amount, created_at_time, memo)| {
+                move |(to_signer, amount, created_at_time, memo)| {
+                    let to = to_signer.account();
                     let tx = Transaction {
                         operation: Operation::Mint::<Tokens> {
                             amount: Tokens::from_e8s(amount),
@@ -478,11 +573,12 @@ pub fn valid_transactions_strategy(
                         created_at_time,
                         memo: memo.clone(),
                     };
-                    if to == minter || tx_dedup_set.contains(&tx) {
+                    if to == minter || tx_hash_set_pointer.contains(&tx) {
                         None
                     } else {
+                        assert_eq!(minter_identity.sender().unwrap(), minter.owner);
                         Some(ArgWithCaller {
-                            caller: minter.owner,
+                            caller: minter_identity.clone(),
                             arg: LedgerEndpointArg::TransferArg(TransferArg {
                                 from_subaccount: minter.subaccount,
                                 to,
@@ -491,6 +587,10 @@ pub fn valid_transactions_strategy(
                                 fee: None,
                                 memo,
                             }),
+                            principal_to_basic_identity: HashMap::from([(
+                                to.owner,
+                                Arc::new(to_signer.identity),
+                            )]),
                         })
                     }
                 },
@@ -499,13 +599,16 @@ pub fn valid_transactions_strategy(
 
     fn burn_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
-        minter: Account,
+        minter_identity: Arc<BasicIdentity>,
         default_fee: u64,
-        tx_dedup_set: Arc<HashSet<Transaction<Tokens>>>,
         now: SystemTime,
+        tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
+        account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
+        let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, balance)| {
-            let tx_hash_set = tx_dedup_set.clone();
+            let tx_hash_set = tx_hash_set_pointer.clone();
+            let account_to_basic_identity = account_to_basic_identity_pointer.clone();
             (
                 default_fee..=balance,
                 valid_created_at_time_strategy(now),
@@ -527,8 +630,11 @@ pub fn valid_transactions_strategy(
                         if tx_hash_set.contains(&tx) {
                             None
                         } else {
+                            let caller =
+                                account_to_basic_identity.get(&from.owner).unwrap().clone();
+                            assert_eq!(caller.sender().unwrap(), from.owner);
                             Some(ArgWithCaller {
-                                caller: from.owner,
+                                caller,
                                 arg: LedgerEndpointArg::TransferArg(TransferArg {
                                     from_subaccount: from.subaccount,
                                     to: minter,
@@ -537,6 +643,7 @@ pub fn valid_transactions_strategy(
                                     fee: None,
                                     memo,
                                 }),
+                                principal_to_basic_identity: HashMap::new(),
                             })
                         }
                     },
@@ -546,15 +653,18 @@ pub fn valid_transactions_strategy(
 
     fn transfer_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
-        minter: Account,
+        minter_identity: Arc<BasicIdentity>,
         default_fee: u64,
-        tx_dedup_set: Arc<HashSet<Transaction<Tokens>>>,
         now: SystemTime,
+        tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
+        account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
+        let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, balance)| {
-            let tx_hash_set = tx_dedup_set.clone();
+            let tx_hash_set = tx_hash_set_pointer.clone();
+            let account_to_basic_identity = account_to_basic_identity_pointer.clone();
             (
-                account_strategy(),
+                basic_identity_and_account_strategy(),
                 0..=(balance - default_fee),
                 valid_created_at_time_strategy(now),
                 arb_memo(),
@@ -562,7 +672,8 @@ pub fn valid_transactions_strategy(
             )
                 .prop_filter_map(
                     "Tx is a self transfer or duplicate",
-                    move |(to, amount, created_at_time, memo, fee)| {
+                    move |(to_signer, amount, created_at_time, memo, fee)| {
+                        let to = to_signer.account();
                         let tx = Transaction {
                             operation: Operation::Transfer::<Tokens> {
                                 amount: Tokens::from_e8s(amount),
@@ -579,8 +690,11 @@ pub fn valid_transactions_strategy(
                         {
                             None
                         } else {
+                            let caller =
+                                account_to_basic_identity.get(&from.owner).unwrap().clone();
+                            assert_eq!(caller.sender().unwrap(), from.owner);
                             Some(ArgWithCaller {
-                                caller: from.owner,
+                                caller,
                                 arg: LedgerEndpointArg::TransferArg(TransferArg {
                                     from_subaccount: from.subaccount,
                                     to,
@@ -589,6 +703,10 @@ pub fn valid_transactions_strategy(
                                     fee: fee.map(Nat::from),
                                     memo,
                                 }),
+                                principal_to_basic_identity: HashMap::from([(
+                                    to.owner,
+                                    Arc::new(to_signer.identity),
+                                )]),
                             })
                         }
                     },
@@ -598,17 +716,20 @@ pub fn valid_transactions_strategy(
 
     fn approve_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
-        minter: Account,
+        minter_identity: Arc<BasicIdentity>,
         default_fee: u64,
-        tx_dedup_set: Arc<HashSet<Transaction<Tokens>>>,
         now: SystemTime,
-        allowance_map: Arc<HashMap<(Account, Account), Tokens>>,
+        tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
+        account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
+        allowance_map_pointer: Arc<HashMap<(Account, Account), Tokens>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
+        let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, balance)| {
-            let tx_hash_set = tx_dedup_set.clone();
-            let allowance_map_clone = allowance_map.clone();
+            let tx_hash_set = tx_hash_set_pointer.clone();
+            let account_to_basic_identity = account_to_basic_identity_pointer.clone();
+            let allowance_map = allowance_map_pointer.clone();
             (
-                account_strategy(),
+                basic_identity_and_account_strategy(),
                 0..=(balance - default_fee),
                 valid_created_at_time_strategy(now),
                 arb_memo(),
@@ -619,7 +740,7 @@ pub fn valid_transactions_strategy(
                 .prop_filter_map(
                     "Tx is a duplicate or self approve",
                     move |(
-                        spender,
+                        spender_signer,
                         amount,
                         created_at_time,
                         memo,
@@ -627,7 +748,8 @@ pub fn valid_transactions_strategy(
                         expires_at,
                         expect_allowance,
                     )| {
-                        let expected_allowance = allowance_map_clone.get(&(from, spender)).copied();
+                        let spender = spender_signer.account();
+                        let expected_allowance = allowance_map.get(&(from, spender)).copied();
                         let tx = Transaction {
                             operation: Operation::Approve::<Tokens> {
                                 from,
@@ -651,8 +773,11 @@ pub fn valid_transactions_strategy(
                         {
                             None
                         } else {
+                            let caller =
+                                account_to_basic_identity.get(&from.owner).unwrap().clone();
+                            assert_eq!(caller.sender().unwrap(), from.owner);
                             Some(ArgWithCaller {
-                                caller: from.owner,
+                                caller,
                                 arg: LedgerEndpointArg::ApproveArg(ApproveArgs {
                                     from_subaccount: from.subaccount,
                                     spender,
@@ -663,6 +788,10 @@ pub fn valid_transactions_strategy(
                                     expected_allowance: expected_allowance.map(Nat::from),
                                     expires_at,
                                 }),
+                                principal_to_basic_identity: HashMap::from([(
+                                    spender.owner,
+                                    Arc::new(spender_signer.identity),
+                                )]),
                             })
                         }
                     },
@@ -672,7 +801,7 @@ pub fn valid_transactions_strategy(
 
     fn generate_strategy(
         state: TransactionsAndBalances,
-        minter: Account,
+        minter_identity: Arc<BasicIdentity>,
         default_fee: u64,
         additional_length: usize,
         now: SystemTime,
@@ -685,33 +814,43 @@ pub fn valid_transactions_strategy(
         // If there are no balances bigger than default_fees then the only next
         // transaction possible is minting, otherwise we can also burn or transfer.
         let balances = state.non_dust_balances(default_fee);
-        let tx_hashes = Arc::new(state.txs.clone());
-        let mint_strategy = mint_strategy(minter, tx_hashes.clone(), now).boxed();
-
+        let tx_hashes_pointer = Arc::new(state.txs.clone());
+        let account_to_basic_identity_pointer = Arc::new(state.principal_to_basic_identity.clone());
+        let allowance_map_pointer = Arc::new(state.allowances.clone());
+        let mint_strategy =
+            mint_strategy(minter_identity.clone(), now, tx_hashes_pointer.clone()).boxed();
         let arb_tx = if balances.is_empty() {
             mint_strategy
         } else {
             let account_balance = Rc::new(select(balances));
             let approve_strategy = approve_strategy(
                 account_balance.clone(),
-                minter,
+                minter_identity.clone(),
                 default_fee,
-                tx_hashes.clone(),
                 now,
-                Arc::new(state.allowances.clone()),
+                tx_hashes_pointer.clone(),
+                account_to_basic_identity_pointer.clone(),
+                allowance_map_pointer.clone(),
             )
             .boxed();
             let burn_strategy = burn_strategy(
                 account_balance.clone(),
-                minter,
+                minter_identity.clone(),
                 default_fee,
-                tx_hashes.clone(),
                 now,
+                tx_hashes_pointer.clone(),
+                account_to_basic_identity_pointer.clone(),
             )
             .boxed();
-            let transfer_strategy =
-                transfer_strategy(account_balance, minter, default_fee, tx_hashes.clone(), now)
-                    .boxed();
+            let transfer_strategy = transfer_strategy(
+                account_balance,
+                minter_identity.clone(),
+                default_fee,
+                now,
+                tx_hashes_pointer.clone(),
+                account_to_basic_identity_pointer.clone(),
+            )
+            .boxed();
             proptest::strategy::Union::new_weighted(vec![
                 (10, approve_strategy),
                 (1, burn_strategy),
@@ -723,20 +862,26 @@ pub fn valid_transactions_strategy(
 
         (Just(state), arb_tx)
             .prop_flat_map(move |(mut state, tx)| {
-                state.apply(minter, default_fee, tx);
-                generate_strategy(state, minter, default_fee, additional_length - 1, now)
+                state.apply(minter_identity.clone(), default_fee, tx);
+                generate_strategy(
+                    state,
+                    minter_identity.clone(),
+                    default_fee,
+                    additional_length - 1,
+                    now,
+                )
             })
             .boxed()
     }
 
     generate_strategy(
         TransactionsAndBalances::default(),
-        minter,
+        Arc::new(minter_identity),
         default_fee,
         length,
         now,
     )
-    .prop_map(|res| res.transactions)
+    .prop_map(|res| res.transactions.clone())
 }
 
 pub fn decimals_strategy() -> impl Strategy<Value = u8> {
@@ -761,9 +906,7 @@ pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>
 
 #[cfg(test)]
 mod tests {
-    use crate::valid_transactions_strategy;
-    use candid::Principal;
-    use icrc_ledger_types::icrc1::account::Account;
+    use crate::{minter_identity, valid_transactions_strategy};
     use proptest::{
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
@@ -773,12 +916,8 @@ mod tests {
     #[test]
     fn test_valid_transactions_strategy_generates_transaction() {
         let size = 10;
-        let strategy = valid_transactions_strategy(
-            Account::from(Principal::management_canister()),
-            10_000,
-            size,
-            SystemTime::now(),
-        );
+        let strategy =
+            valid_transactions_strategy(minter_identity(), 10_000, size, SystemTime::now());
         let tree = strategy
             .new_tree(&mut TestRunner::default())
             .expect("Unable to run valid_transactions_strategy");

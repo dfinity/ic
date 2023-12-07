@@ -1,6 +1,6 @@
 use std::{path::PathBuf, time::Duration};
 
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 use downloader_loop::run_downloader_loop;
 use futures_util::FutureExt;
 use humantime::parse_duration;
@@ -152,7 +152,7 @@ pub mod log_subtype {
         },
         #[clap(about = "Generate a vector config for a exec and journald source")]
         ExecAndJournald {
-            #[clap(long = "script-path", help = "Path for the script folder")]
+            #[clap(long = "script-path", help = "Path for the script file")]
             script_path: String,
 
             #[clap(long = "journals-folder", help = "Path to the root journals folder")]
@@ -167,12 +167,27 @@ pub mod log_subtype {
             #[clap(long = "data-folder", help = "Path for the data folder")]
             data_folder: String,
 
+            #[clap(long = "restart-on-exit", help = "Restart on respawn")]
+            restart_on_exit: bool,
+        },
+        #[clap(about = "Generate a vector config for pure exec script")]
+        Exec {
+            #[clap(long = "script-path", help = "Path for the script file")]
+            script_path: String,
+
+            #[clap(long = "cursors-folder", help = "Path for cursors")]
+            cursors_folder: String,
+
             #[clap(
                 long = "restart-on-exit",
                 help = "Restart on respawn",
-                default_value = "true"
+                action = ArgAction::SetTrue,
+                default_value = "false"
             )]
             restart_on_exit: bool,
+
+            #[clap(long = "include-stderr", help = "Include stderr", action = ArgAction::SetTrue, default_value = "false")]
+            include_stderr: bool,
         },
     }
 }

@@ -12,8 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
-
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
+import tempfile
 
 
 def parse_size(s):
@@ -236,7 +235,7 @@ def main():
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = tempfile.mkdtemp()
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()
@@ -297,8 +296,6 @@ def main():
         ],
         check=True,
     )
-
-    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":

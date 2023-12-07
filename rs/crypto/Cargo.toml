@@ -46,10 +46,7 @@ ic-types = { path = "../types/types" }
 parking_lot = "0.12.1"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = "3.1.0"

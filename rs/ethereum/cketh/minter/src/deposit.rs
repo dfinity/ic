@@ -94,7 +94,7 @@ async fn scrap_eth_logs_range_inclusive(
 ) -> Option<BlockNumber> {
     /// The maximum block spread is introduced by Cloudflare limits.
     /// https://developers.cloudflare.com/web3/ethereum-gateway/
-    const MAX_BLOCK_SPREAD: u16 = 800;
+    const MAX_BLOCK_SPREAD: u16 = 799;
     match from.cmp(&to) {
         Ordering::Less | Ordering::Equal => {
             let max_to = from
@@ -148,7 +148,6 @@ async fn scrap_eth_logs_range_inclusive(
                 };
             };
 
-            let has_new_events = !transaction_events.is_empty();
             for event in transaction_events {
                 log!(
                     INFO,
@@ -179,7 +178,7 @@ async fn scrap_eth_logs_range_inclusive(
                     mutate_state(|s| process_event(s, EventType::AcceptedDeposit(event)));
                 }
             }
-            if has_new_events {
+            if read_state(State::has_events_to_mint) {
                 ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint_cketh()));
             }
             for error in errors {

@@ -1,12 +1,18 @@
+use aide::{
+    axum::{
+        routing::{get, post},
+        ApiRouter, IntoApiResponse,
+    },
+    openapi::{Info, OpenApi},
+};
 use axum::{
     async_trait,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
-    routing::{get, post},
-    Json, Router, Server,
+    response::IntoResponse,
+    Extension, Json, Server,
 };
 use clap::Parser;
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
@@ -95,7 +101,7 @@ async fn start(runtime: Arc<Runtime>) {
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default().build();
     // A time-to-live mechanism: Requests bump this value, and the server
-    // gracefully shuts down when the value wasn't bumped for a while
+    // gracefully shuts down when the value wasn't bumped for a while.
     let min_alive_until = Arc::new(RwLock::new(Instant::now()));
     let app_state = AppState {
         api_state,
@@ -104,7 +110,10 @@ async fn start(runtime: Arc<Runtime>) {
         blob_store: Arc::new(InMemoryBlobStore::new()),
     };
 
-    let router = Router::new()
+    let router = ApiRouter::new()
+        //
+        // Serve OpenAPI documentation.
+        .route("/api.json", get(serve_api))
         //
         // Get server health.
         .directory_route("/status", get(status))
@@ -115,7 +124,7 @@ async fn start(runtime: Arc<Runtime>) {
         // Get a blob store entry.
         .directory_route("/blobstore/:id", get(get_blob_store_entry))
         //
-        // verify signature
+        // Verify signature.
         .directory_route("/verify_signature", post(verify_signature))
         //
         // All instance routes.
@@ -130,12 +139,29 @@ async fn start(runtime: Arc<Runtime>) {
         .layer(TraceLayer::new_for_http())
         .with_state(app_state.clone());
 
+    let mut api = OpenApi {
+        info: Info {
+            description: Some("PocketIC server API".to_string()),
+            ..Info::default()
+        },
+        ..OpenApi::default()
+    };
+
     let server_res = Server::try_bind(
         &format!("127.0.0.1:{}", args.port)
             .parse()
             .expect("Invalid server address"),
     )
-    .map(|s| s.serve(router.into_make_service()));
+    .map(|s| {
+        s.serve(
+            router
+                // Generate documentation
+                .finish_api(&mut api)
+                // Expose documentation
+                .layer(Extension(api))
+                .into_make_service(),
+        )
+    });
     let server = match server_res {
         Ok(s) => s,
         Err(e) => {
@@ -182,6 +208,10 @@ async fn start(runtime: Arc<Runtime>) {
     };
     let server = server.with_graceful_shutdown(shutdown_signal);
     server.await.expect("Failed to launch the PocketIC server");
+}
+
+async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
+    Json(api)
 }
 
 // Registers a global subscriber that collects tracing events and spans.
@@ -255,7 +285,7 @@ async fn bump_last_request_timestamp<B>(
     headers: HeaderMap,
     request: http::Request<B>,
     next: Next<B>,
-) -> Response {
+) -> impl IntoApiResponse {
     // TTL should not decrease: If now + header_timeout is later
     // than the current TTL (from previous requests), reset it.
     // Otherwise, a previous request set a larger TTL and we don't
@@ -272,7 +302,7 @@ async fn bump_last_request_timestamp<B>(
 async fn get_blob_store_entry(
     State(AppState { blob_store, .. }): State<AppState>,
     Path(id): Path<String>,
-) -> Response {
+) -> impl IntoApiResponse {
     let hash = hex::decode(id);
     if hash.is_err() {
         return StatusCode::BAD_REQUEST.into_response();
@@ -293,7 +323,7 @@ async fn get_blob_store_entry(
             compression: BlobCompression::NoCompression,
             ..
         }) => (StatusCode::OK, blob.unwrap().data).into_response(),
-        None => (StatusCode::NOT_FOUND).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 

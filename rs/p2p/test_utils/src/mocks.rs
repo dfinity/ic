@@ -10,8 +10,8 @@ use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::{artifact::PriorityFn, chunkable::ArtifactChunk};
 use ic_types::{
     artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
-    chunkable::ChunkId,
     chunkable::{ArtifactErrorCode, Chunkable},
+    chunkable::{Chunk, ChunkId},
     NodeId,
 };
 use mockall::mock;
@@ -29,9 +29,9 @@ mock! {
 
         fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
 
-        fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk>;
+        fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk>;
 
-        fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId);
+        fn deliver_state_sync(&self, msg: StateSyncMessage);
     }
 }
 

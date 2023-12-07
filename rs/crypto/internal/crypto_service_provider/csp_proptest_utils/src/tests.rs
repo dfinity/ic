@@ -140,6 +140,7 @@ should_have_a_strategy_for_each_variant!(
     UnsupportedAlgorithm { .. },
     WrongSecretKeyType { .. },
     MalformedSecretKey { .. },
+    KeyIdInstantiationError(..),
     TransientInternalError { .. }
 );
 

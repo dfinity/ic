@@ -99,7 +99,6 @@ after_script:
     GET_SOURCES_ATTEMPTS: 5
     GIT_DEPTH: 0  # Pull the complete repo initially
     GIT_STRATEGY: "fetch"  # And then pull only new commits
-    SHELL_WRAPPER: "/usr/bin/time"
 
 .build-k8s-legacy:
   extends:
@@ -118,24 +117,6 @@ after_script:
     - dfinity-ic
   variables:
     GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
-
-.cargo-rules:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "web" && $DISKIMG_BRANCH == ""'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CI_PIPELINE_SOURCE == "trigger"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-
-.rules-parent-pipeline:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
 
 # 1. If on the RC branch and "hotfix" (case insensitive) is in the commit message,
 #    then allow manual execution of prod hourly and nightly tests.
@@ -156,30 +137,6 @@ after_script:
     - if: '$CI_PIPELINE_SOURCE == "trigger"'
       when: manual
       allow_failure: true
-
-#  If on the RC branch, whether "hotfix" is in the commit message or not,
-#  always perform automatic execution of the prod hotfix tests. This means that, hotfix
-#  tests are not only exercised on hotfix pipelines, but are also exercised on nightly
-#  release qualification pipelines to ensure the hotfix tests are always working.
-.rules-prod-hotfix-pipeline:
-  rules:
-    - if: $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
-      when: always
-    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-
-.rules-rollout-pipeline-run-on-trigger:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "trigger"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
 
 .rules-master-pipeline-no-merge-train:
   rules:

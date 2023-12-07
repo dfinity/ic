@@ -37,7 +37,7 @@ rust_library(
         "@crate_index//:async-trait",
         "@crate_index//:derive_more",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

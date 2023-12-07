@@ -21,7 +21,7 @@ use ic_p2p_test_utils::{
 };
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
-use ic_types_test_utils::ids::node_test_id;
+use ic_types_test_utils::ids::{node_test_id, SUBNET_1};
 use tokio::{
     runtime::{Handle, Runtime},
     sync::watch,
@@ -49,7 +49,12 @@ fn spawn_transport(
     let node_addr: SocketAddr = (Ipv4Addr::LOCALHOST, 8000 + id as u16).into();
     let node_id = node_test_id(id);
     let tls = temp_crypto_component_with_tls_keys(&registry_handle, node_id);
-    let sev = Arc::new(Sev::new(node_id, registry_handle.registry_client.clone()));
+    let sev = Arc::new(Sev::new(
+        node_id,
+        SUBNET_1,
+        registry_handle.registry_client.clone(),
+        log.clone(),
+    ));
     registry_handle.registry_client.reload();
     registry_handle.registry_client.update_to_latest_version();
 

@@ -60,12 +60,13 @@ use crate::ledger_client::{
     handle_stake_maturity::handle_stake_maturity, handle_start_dissolve::handle_start_dissolve,
     handle_stop_dissolve::handle_stop_dissolve,
 };
-use crate::models::{EnvelopePair, Object, SignedTransaction};
+use crate::models::{EnvelopePair, SignedTransaction};
 use crate::request::request_result::RequestResult;
 use crate::request::transaction_results::TransactionResults;
 use crate::request::Request;
 use crate::request_types::{RequestType, Status};
 use crate::transaction_id::TransactionIdentifier;
+use rosetta_core::objects::ObjectMap;
 
 use self::proposal_info_response::ProposalInfoResponse;
 
@@ -611,10 +612,10 @@ impl LedgerClient {
                         result.neuron_id = Some(neuron_id);
                     }
                     OperationOutput::NeuronResponse(response) => {
-                        result.response = Some(Object::from(response));
+                        result.response = Some(ObjectMap::from(response));
                     }
                     OperationOutput::ProposalInfoResponse(response) => {
-                        result.response = Some(Object::from(response));
+                        result.response = Some(ObjectMap::from(response));
                     }
                 }
                 result.status = Status::Completed;

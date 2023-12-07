@@ -1,16 +1,35 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    backtrace::Backtrace,
+    collections::HashMap,
+    net::SocketAddr,
+    ops::Range,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
+use futures::StreamExt;
+use ic_interfaces::p2p::artifact_manager::JoinGuard;
+use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_memory_transport::TransportRouter;
+use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
-    consensus::TestConsensus,
+    consensus::{TestConsensus, U64Artifact},
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for, wait_for,
-        wait_for_timeout, waiter_fut, PeerManagerAction,
+        add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for, start_test_processor,
+        wait_for, wait_for_timeout, waiter_fut, PeerManagerAction,
     },
 };
+use ic_peer_manager::SubnetTopology;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::RegistryVersion;
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
-use tokio::sync::Notify;
+use ic_types::{NodeId, RegistryVersion};
+use ic_types_test_utils::ids::{node_test_id, NODE_1, NODE_2, NODE_3};
+use rand::{rngs::ThreadRng, Rng};
+use tokio::{
+    runtime::Handle,
+    sync::{watch, Notify},
+    task::JoinSet,
+};
+use tokio_util::time::DelayQueue;
 use turmoil::Builder;
 
 const TIMEOUT_DURATION_TRIGGER: Duration = Duration::from_secs(5);
@@ -235,6 +254,263 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
     });
 }
 
+fn start_consenus_manager(
+    log: ReplicaLogger,
+    rt_handle: Handle,
+    node_id: NodeId,
+    processor: TestConsensus<U64Artifact>,
+    transport_router: &mut TransportRouter,
+    topology_watcher: watch::Receiver<SubnetTopology>,
+) -> Box<dyn JoinGuard> {
+    let _enter = rt_handle.enter();
+    let metrics = MetricsRegistry::default();
+    let pool = Arc::new(RwLock::new(processor));
+    let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
+        start_test_processor(pool.clone(), pool.clone().read().unwrap().clone());
+    let pfn_producer = Arc::new(pool.clone().read().unwrap().clone());
+    let mut cm1 =
+        ic_consensus_manager::ConsensusManagerBuilder::new(log, rt_handle.clone(), &metrics);
+    cm1.add_client(
+        artifact_manager_event_rx,
+        pool,
+        pfn_producer,
+        artifact_sender,
+    );
+    let memory_transport =
+        transport_router.add_peer(node_id, cm1.router(), Duration::from_millis(0), 1000000000);
+    cm1.run(Arc::new(memory_transport), topology_watcher);
+    artifact_processor_jh
+}
+
+async fn generate_consenus_events(
+    processor: TestConsensus<U64Artifact>,
+    test_duration: Duration,
+    purge_fraction: f64,
+    num_event: u64,
+    max_purge_delay: Duration,
+    id_range: Range<u64>,
+) {
+    enum Event {
+        Insert(u64),
+        Purge(u64),
+    }
+    let mut delay_queue = DelayQueue::new();
+    {
+        let mut rng = ThreadRng::default();
+        for _ in 0..num_event {
+            let rand_id = rng.gen_range(id_range.clone());
+            let insert_time =
+                Duration::from_millis(rng.gen_range(0..test_duration.as_millis()) as u64);
+            delay_queue.insert(Event::Insert(rand_id), insert_time);
+        }
+    }
+
+    while let Some(v) = delay_queue.next().await {
+        match v.into_inner() {
+            Event::Insert(e) => {
+                processor.push_advert(e);
+
+                let mut rng = ThreadRng::default();
+                let should_purge = rng.gen_bool(purge_fraction);
+                if should_purge {
+                    let purge_delay = rng.gen_range(0..max_purge_delay.as_millis() as u64);
+                    delay_queue.insert(Event::Purge(e), Duration::from_millis(purge_delay));
+                }
+            }
+            Event::Purge(e) => processor.push_purge(e),
+        }
+    }
+}
+
+/// Verifies that all active adverts sent by Node A are present in the pool of every peer.
+fn check_pools_equal(node_pool_map: &HashMap<NodeId, TestConsensus<U64Artifact>>) -> bool {
+    for (node1, pool1) in node_pool_map {
+        for (node2, pool2) in node_pool_map {
+            // Check that all adverts produced by 1 were received by 2.
+            if node2 != node1 {
+                // If other pool subset everything is fine
+                if !pool1.my_pool().is_subset(&pool2.peer_pool(node1)) {
+                    // It can be case that muliple peers advertised same id and it only got downloaded from a different peer.
+                    // In that case check that the id is contained in some other pool.
+                    for diff in pool1.my_pool().difference(&pool2.peer_pool(node1)) {
+                        let mut found = false;
+                        for n in node_pool_map.keys() {
+                            if n != node1 && pool2.peer_pool(n).contains(diff) {
+                                found |= true;
+                            }
+                        }
+                        if !found {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    true
+}
+
+/// Generates load test for the consensus manager by generating a event sequence of pool additions/removals and verifies
+/// that the pools contains all expected elements according to `check_pools_equal` after all eveents were emitted.
+/// num_peers: Number of consensus managers to spawn
+/// num_events: Number of add/remove events to generate.
+/// purge_fraction: Number of add events that have a corresponding purge event. Setting it to 1 means that every add event has remove event that follows later.
+///                 Later meaning 0-MAX_PURGE_DELAY after the insert.
+/// id_overlap: If true all advert ids used are unique for a peer.
+/// id_range: ID range from which to pick a random advert ID.
+fn load_test(
+    log: ReplicaLogger,
+    num_peers: u64,
+    num_events: u64,
+    purge_fraction: f64,
+    id_overlap: bool,
+    id_range: Range<u64>,
+) {
+    const TEST_DURATION: Duration = Duration::from_secs(20);
+    const MAX_PURGE_DELAY: Duration = Duration::from_secs(4);
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut transport_router = {
+        let _enter = rt.enter();
+        TransportRouter::new()
+    };
+    let mut node_advert_map = HashMap::new();
+    let mut jhs = vec![];
+    let mut nodes = vec![];
+    let mock_addr: SocketAddr = "127.0.0.1:8000".parse().unwrap();
+    let (_tx, topology_rx) = watch::channel(SubnetTopology::new(
+        (0..num_peers).map(|n| (node_test_id(n), mock_addr)),
+        1.into(),
+        1.into(),
+    ));
+    for i in 0..num_peers {
+        let node = node_test_id(i);
+        let processor = TestConsensus::new(log.clone(), node);
+        let jh = start_consenus_manager(
+            no_op_logger(),
+            rt.handle().clone(),
+            node,
+            processor.clone(),
+            &mut transport_router,
+            topology_rx.clone(),
+        );
+        jhs.push(jh);
+        nodes.push(node);
+        node_advert_map.insert(node, processor);
+    }
+
+    rt.block_on(async move {
+        let mut load_set = JoinSet::new();
+        // Generate some random load
+        for (i, processor) in node_advert_map.values().enumerate() {
+            load_set.spawn(generate_consenus_events(
+                processor.clone(),
+                TEST_DURATION,
+                purge_fraction,
+                num_events,
+                MAX_PURGE_DELAY,
+                if id_overlap {
+                    id_range.clone()
+                } else {
+                    let range_len = id_range.end - id_range.start;
+                    Range {
+                        start: id_range.start + i as u64 * range_len,
+                        end: id_range.end + i as u64 * range_len,
+                    }
+                },
+            ));
+        }
+
+        while load_set.join_next().await.is_some() {}
+
+        loop {
+            if check_pools_equal(&node_advert_map) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    });
+}
+/// NOTE: The values used for the tests below do not test anything specific and are set
+/// to cover a variaty of scenrios. The error signal of these tests is flakiness which indicate
+/// that there might be some hidden race condition in the code.
+///
+///
+/// Small load test with four nodes and overlapping advert Id
+#[test]
+fn test_small_load_test() {
+    // Abort process if a thread panics. This catches detached tokio tasks that panic.
+    // https://github.com/tokio-rs/tokio/issues/4516
+    std::panic::set_hook(Box::new(|info| {
+        let stacktrace = Backtrace::force_capture();
+        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        std::process::abort();
+    }));
+    with_test_replica_logger(|log| {
+        load_test(log, 4, 100, 0.5, true, 0..100);
+    });
+}
+
+/// Large load test with 40 nodes without overlapping id.
+#[test]
+fn test_large_load_test_many_nodes() {
+    // Abort process if a thread panics. This catches detached tokio tasks that panic.
+    // https://github.com/tokio-rs/tokio/issues/4516
+    std::panic::set_hook(Box::new(|info| {
+        let stacktrace = Backtrace::force_capture();
+        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        std::process::abort();
+    }));
+    with_test_replica_logger(|log| {
+        load_test(log, 40, 500, 0.5, false, 0..100);
+    });
+}
+
+/// Load test with 20 nodes and large distribution of Id.
+#[test]
+fn test_load_test_many_ids() {
+    // Abort process if a thread panics. This catches detached tokio tasks that panic.
+    // https://github.com/tokio-rs/tokio/issues/4516
+    std::panic::set_hook(Box::new(|info| {
+        let stacktrace = Backtrace::force_capture();
+        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        std::process::abort();
+    }));
+    with_test_replica_logger(|log| {
+        load_test(log, 20, 500, 0.8, true, 0..1000);
+    });
+}
+
+/// Small load test with four nodes and no purging..
+#[test]
+fn test_small_load_test_without_purging() {
+    // Abort process if a thread panics. This catches detached tokio tasks that panic.
+    // https://github.com/tokio-rs/tokio/issues/4516
+    std::panic::set_hook(Box::new(|info| {
+        let stacktrace = Backtrace::force_capture();
+        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        std::process::abort();
+    }));
+    with_test_replica_logger(|log| {
+        load_test(log, 4, 10000, 0.0, true, 0..200);
+    });
+}
+
+/// Small load test with four nodes and no purging..
+#[test]
+fn test_small_load_test_with_non_overlap() {
+    // Abort process if a thread panics. This catches detached tokio tasks that panic.
+    // https://github.com/tokio-rs/tokio/issues/4516
+    std::panic::set_hook(Box::new(|info| {
+        let stacktrace = Backtrace::force_capture();
+        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        std::process::abort();
+    }));
+    with_test_replica_logger(|log| {
+        load_test(log, 4, 10000, 0.1, false, 0..1000);
+    });
+}
+
 /// Test that nodes retransmits adverts tp peers that reconnect.
 /// Scenario
 /// 1. Node_1 connects to Node_2 and Node_3.
@@ -247,7 +523,7 @@ fn test_adverts_are_retransmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(30))
             .build();
 
         let exit_notify = Arc::new(Notify::new());

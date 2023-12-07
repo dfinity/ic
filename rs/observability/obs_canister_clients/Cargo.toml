@@ -11,4 +11,4 @@ candid = { workspace = true }
 serde = { workspace = true }
 rand = "0.8"
 url = "2.2.2"
-slog = { version = "2.5.2", features = ["nested-values"] }
+slog = { workspace = true }

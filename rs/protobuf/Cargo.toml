@@ -14,7 +14,7 @@ maplit = "1.0.2"
 prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-slog = { version = "2.5", features = ["nested-values"] }
+slog = { workspace = true }
 
 [dev-dependencies]
 hex = "0.4.2"

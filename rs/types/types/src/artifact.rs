@@ -15,7 +15,7 @@
 //! defined in the chunkable module.
 use crate::{
     canister_http::CanisterHttpResponseShare,
-    chunkable::{ArtifactChunk, ChunkId, ChunkableArtifact},
+    chunkable::{Chunk, ChunkId},
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
         dkg::DkgMessageId,
@@ -106,7 +106,6 @@ pub enum ArtifactId {
     DkgMessage(DkgMessageId),
     EcdsaMessage(EcdsaMessageId),
     FileTreeSync(FileTreeSyncId),
-    StateSync(StateSyncArtifactId),
 }
 
 impl From<ArtifactId> for pb::ArtifactId {
@@ -120,7 +119,6 @@ impl From<ArtifactId> for pb::ArtifactId {
             ArtifactId::EcdsaMessage(x) => Kind::Ecdsa(x.into()),
             ArtifactId::CanisterHttpMessage(x) => Kind::CanisterHttp(x.into()),
             ArtifactId::FileTreeSync(x) => Kind::FileTreeSync(x.clone()),
-            ArtifactId::StateSync(x) => Kind::StateSync(x.clone().into()),
         };
         Self { kind: Some(kind) }
     }
@@ -142,7 +140,6 @@ impl TryFrom<pb::ArtifactId> for ArtifactId {
             Kind::Ecdsa(x) => ArtifactId::EcdsaMessage(x.try_into()?),
             Kind::CanisterHttp(x) => ArtifactId::CanisterHttpMessage(x.clone().try_into()?),
             Kind::FileTreeSync(x) => ArtifactId::FileTreeSync(x.clone()),
-            Kind::StateSync(x) => ArtifactId::StateSync(x.clone().into()),
         })
     }
 }
@@ -200,7 +197,6 @@ impl From<&ArtifactId> for ArtifactTag {
             ArtifactId::EcdsaMessage(_) => ArtifactTag::EcdsaArtifact,
             ArtifactId::FileTreeSync(_) => ArtifactTag::FileTreeSyncArtifact,
             ArtifactId::IngressMessage(_) => ArtifactTag::IngressArtifact,
-            ArtifactId::StateSync(_) => ArtifactTag::StateSyncArtifact,
         }
     }
 }
@@ -230,7 +226,6 @@ impl From<&Artifact> for ArtifactTag {
 pub struct ArtifactFilter {
     pub consensus_filter: ConsensusMessageFilter,
     pub certification_filter: CertificationMessageFilter,
-    pub state_sync_filter: StateSyncFilter,
     pub no_filter: (),
 }
 
@@ -577,8 +572,8 @@ pub struct StateSyncMessage {
     pub state_sync_file_group: Arc<crate::state_sync::FileGroupChunks>,
 }
 
-impl ChunkableArtifact for StateSyncMessage {
-    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+impl StateSyncMessage {
+    pub fn get_chunk(&self, chunk_id: ChunkId) -> Option<Chunk> {
         #[cfg(not(target_family = "unix"))]
         {
             let _keep_clippy_quiet = chunk_id;
@@ -587,7 +582,6 @@ impl ChunkableArtifact for StateSyncMessage {
 
         #[cfg(target_family = "unix")]
         {
-            use crate::chunkable::ArtifactChunkData;
             use crate::state_sync::{
                 encode_manifest, encode_meta_manifest, state_sync_chunk_type, StateSyncChunk,
                 DEFAULT_CHUNK_SIZE,
@@ -643,10 +637,7 @@ impl ChunkableArtifact for StateSyncMessage {
                 }
             }
 
-            Some(ArtifactChunk {
-                chunk_id,
-                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(payload),
-            })
+            Some(payload.into())
         }
     }
 }
@@ -685,12 +676,6 @@ impl std::hash::Hash for StateSyncMessage {
     }
 }
 
-/// State sync filter is by height.
-#[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StateSyncFilter {
-    pub height: Height,
-}
-
 // ------------------------------------------------------------------------------
 // Conversions
 
@@ -704,9 +689,7 @@ impl From<Artifact> for pb::Artifact {
             Artifact::EcdsaMessage(x) => Kind::Ecdsa(x.into()),
             Artifact::CanisterHttpMessage(x) => Kind::HttpShare(x.into()),
             Artifact::FileTreeSync(x) => Kind::FileTreeSync(x.clone().into()),
-            Artifact::StateSync(_) => {
-                panic!("state sync messages are not supposed to be serialized!")
-            }
+            Artifact::StateSync(_) => unimplemented!(),
         };
         Self { kind: Some(kind) }
     }
@@ -740,7 +723,6 @@ impl From<ArtifactFilter> for pb::ArtifactFilter {
         Self {
             consensus_filter: Some(filter.consensus_filter.into()),
             certification_message_filter: Some(filter.certification_filter.into()),
-            state_sync_filter: Some(filter.state_sync_filter.into()),
         }
     }
 }
@@ -756,10 +738,6 @@ impl TryFrom<pb::ArtifactFilter> for ArtifactFilter {
             certification_filter: try_from_option_field(
                 filter.certification_message_filter,
                 "ArtifactFilter.certification_message_filter",
-            )?,
-            state_sync_filter: try_from_option_field(
-                filter.state_sync_filter,
-                "ArtifactFilter.state_sync_filter",
             )?,
             no_filter: (),
         })
@@ -794,23 +772,6 @@ impl From<CertificationMessageFilter> for pb::CertificationMessageFilter {
 impl TryFrom<pb::CertificationMessageFilter> for CertificationMessageFilter {
     type Error = ProxyDecodeError;
     fn try_from(filter: pb::CertificationMessageFilter) -> Result<Self, Self::Error> {
-        Ok(Self {
-            height: Height::from(filter.height),
-        })
-    }
-}
-
-impl From<StateSyncFilter> for pb::StateSyncFilter {
-    fn from(filter: StateSyncFilter) -> Self {
-        Self {
-            height: filter.height.get(),
-        }
-    }
-}
-
-impl TryFrom<pb::StateSyncFilter> for StateSyncFilter {
-    type Error = ProxyDecodeError;
-    fn try_from(filter: pb::StateSyncFilter) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::from(filter.height),
         })

@@ -28,6 +28,7 @@ use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
+use ic_types_test_utils::ids::SUBNET_1;
 use quinn::{
     self,
     udp::{EcnCodepoint, Transmit},
@@ -281,8 +282,14 @@ pub fn add_transport_to_sim<F>(
 
     let node_crypto =
         crypto.unwrap_or_else(|| temp_crypto_component_with_tls_keys(&registry_handler, peer));
-    let sev_handshake =
-        sev.unwrap_or_else(|| Arc::new(Sev::new(peer, registry_handler.registry_client.clone())));
+    let sev_handshake = sev.unwrap_or_else(|| {
+        Arc::new(Sev::new(
+            peer,
+            SUBNET_1,
+            registry_handler.registry_client.clone(),
+            log.clone(),
+        ))
+    });
     registry_handler.registry_client.update_to_latest_version();
 
     sim.host(peer.to_string(), move || {
@@ -386,7 +393,7 @@ pub fn waiter_fut(
 }
 
 #[allow(clippy::type_complexity)]
-fn start_test_processor(
+pub fn start_test_processor(
     pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> (

@@ -12,6 +12,15 @@
         node_ip: "{{ ipv6_address }}",
         listening_port: 4100,
     },
+
+    // ============================================
+    // Configuration of IPv4 networking
+    // ============================================
+    ipv4_config: {
+        public_address: "{{ ipv4_address }}",
+        public_gateway: "{{ ipv4_gateway }}",
+    },
+
     // ============================================
     // Configuration of registry client
     // ============================================

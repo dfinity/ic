@@ -34,7 +34,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/common/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:serial_test",
     "@crate_index//:tempfile",
 ]
 
@@ -44,7 +43,7 @@ rust_library(
         "src/**/*.rs",
     ]),
     crate_name = "ic_nns_common",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -55,7 +54,7 @@ rust_library(
     ]),
     crate_features = ["test"],
     crate_name = "ic_nns_common",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

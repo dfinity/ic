@@ -10,4 +10,4 @@ documentation.workspace = true
 ic-logger = { path = "../../../monitoring/logger" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-types = { path = "../../../types/types" }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }

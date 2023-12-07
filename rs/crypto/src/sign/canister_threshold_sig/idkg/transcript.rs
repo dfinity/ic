@@ -7,6 +7,7 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
 };
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::vault::api::IDkgTranscriptInternalBytes;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal,
@@ -165,7 +166,7 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         transcript.context_data(),
         self_index,
         self_mega_pubkey,
-        transcript.transcript_to_bytebuf(),
+        IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )?;
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
 
@@ -230,7 +231,7 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
         transcript.context_data(),
         self_index,
         self_mega_pubkey,
-        transcript.transcript_to_bytebuf(),
+        IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )
 }
 

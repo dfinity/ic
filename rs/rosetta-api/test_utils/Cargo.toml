@@ -18,8 +18,9 @@ nix = { workspace = true }
 rand = "0.8"
 serde = { workspace = true }
 serde_json = { workspace = true }
-slog = { version = "2.5.2", features = ["release_max_level_trace"] }
+slog = { workspace = true }
 tempfile = "3.1.0"
 reqwest = { workspace = true }
 tokio = { workspace = true }
 url = "2.1.1"
+rosetta-core = {path = "../rosetta_core"}

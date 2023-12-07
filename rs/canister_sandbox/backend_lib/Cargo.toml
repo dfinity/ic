@@ -26,7 +26,7 @@ libflate = "1.1.2"
 memory_tracker = { path = "../../memory_tracker" }
 nix = { workspace = true }
 serde_json = { workspace = true }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 threadpool = "1.8.1"
 rayon = "1.5.1"
 

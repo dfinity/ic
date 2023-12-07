@@ -29,6 +29,7 @@ DEPENDENCIES = [
     "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
     "@crate_index//:indicatif",
+    "@crate_index//:strum",
     "@crate_index//:tracing-subscriber",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
@@ -38,6 +39,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/tokens_u64",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
     "//rs/types/base_types",
     "//rs/crypto/tree_hash",
 ]
@@ -58,6 +60,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
 ]
 
 MACRO_DEV_DEPENDENCIES = [

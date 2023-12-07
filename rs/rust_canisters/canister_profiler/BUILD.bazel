@@ -9,7 +9,7 @@ rust_library(
         "src/stats.rs",
     ],
     crate_name = "ic_canister_profiler",
-    version = "0.8.0",
+    version = "0.9.0",
     deps =
         select({
             "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@crate_index//:ic0"],

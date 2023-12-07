@@ -27,9 +27,7 @@ use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
-use registry_canister::mutations::node_management::do_add_node::{
-    connection_endpoint_from_string, flow_endpoint_from_string,
-};
+use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -211,10 +209,6 @@ pub fn prepare_registry_with_nodes_from_template(
                 http: Some(connection_endpoint_from_string(&format!(
                     "128.0.{effective_id}.1:4321"
                 ))),
-                p2p_flow_endpoints: [&format!("123,128.0.{effective_id}.1:10000")]
-                    .iter()
-                    .map(|x| flow_endpoint_from_string(x))
-                    .collect(),
                 ..node_template.clone()
             };
             mutations.append(&mut make_add_node_registry_mutations(

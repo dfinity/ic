@@ -419,7 +419,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
     DashboardAssert::assert_that(dashboard)
         .has_eth_balance("8_900_000_000_000_000")
         .has_total_effective_tx_fees("42_000_000_000_000")
-        .has_total_unspent_tx_fees("21_000_000_000_000")
+        .has_total_unspent_tx_fees("42_000_000_000_000")
         .has_finalized_transactions(
             1,
             &vec![
@@ -587,7 +587,7 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "17",
                 "123",
-                "1_079_000_000_000_000",
+                "1_058_000_000_000_000",
                 "0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762",
             ],
         )
@@ -596,7 +596,7 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "16",
                 "123",
-                "1_079_000_000_000_000",
+                "1_058_000_000_000_000",
                 "0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e",
             ],
         );

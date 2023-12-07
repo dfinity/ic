@@ -24,7 +24,7 @@ impl RosettaRequestHandler {
             self.ledger.token_symbol(),
         )?;
         Ok(ConstructionSubmitResponse {
-            transaction_identifier,
+            transaction_identifier: transaction_identifier.into(),
             metadata,
         })
     }
@@ -41,8 +41,6 @@ fn transaction_identifier(results: &TransactionResults) -> TransactionIdentifier
                 .operations
                 .iter()
                 .all(|r| r._type.is_neuron_management()));
-            TransactionIdentifier {
-                hash: transaction_id::NEURON_MANAGEMENT_PSEUDO_HASH.to_owned(),
-            }
+            TransactionIdentifier::from(transaction_id::NEURON_MANAGEMENT_PSEUDO_HASH.to_owned())
         })
 }

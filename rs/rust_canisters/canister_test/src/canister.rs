@@ -342,17 +342,32 @@ impl<'a> Runtime {
         num_cycles: Option<u128>,
         specified_id: Option<PrincipalId>,
     ) -> Result<Canister<'a>, String> {
-        let canister_id_record: Result<CanisterIdRecord, String> = self
-            .get_management_canister()
-            .update_(
-                ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
-                candid,
-                (ProvisionalCreateCanisterWithCyclesArgs::new(
-                    num_cycles,
-                    specified_id,
-                ),),
-            )
-            .await;
+        let canister_id_record: Result<CanisterIdRecord, String> = match specified_id {
+            Some(canister_id) => {
+                self.get_management_canister_with_effective_canister_id(canister_id)
+                    .update_(
+                        ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+                        candid,
+                        (ProvisionalCreateCanisterWithCyclesArgs::new(
+                            num_cycles,
+                            specified_id,
+                        ),),
+                    )
+                    .await
+            }
+            None => {
+                self.get_management_canister()
+                    .update_(
+                        ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+                        candid,
+                        (ProvisionalCreateCanisterWithCyclesArgs::new(
+                            num_cycles,
+                            specified_id,
+                        ),),
+                    )
+                    .await
+            }
+        };
         let canister_id = canister_id_record?.get_canister_id();
         Ok(Canister {
             runtime: self,
@@ -379,26 +394,8 @@ impl<'a> Runtime {
         &'a self,
         specified_id: PrincipalId,
     ) -> Result<Canister<'a>, String> {
-        let canister_id_record: CanisterIdRecord = self
-            .get_management_canister()
-            .update_(
-                ic_ic00_types::Method::ProvisionalCreateCanisterWithCycles.to_string(),
-                candid,
-                (ProvisionalCreateCanisterWithCyclesArgs::new(
-                    None,
-                    Some(specified_id),
-                ),),
-            )
+        self.create_canister_with_specified_id(None, Some(specified_id))
             .await
-            .expect("Failed to create canister at specific id.");
-        let canister_id = canister_id_record.get_canister_id();
-        assert_eq!(canister_id.get(), specified_id);
-        Ok(Canister {
-            runtime: self,
-            effective_canister_id: canister_id.into(),
-            canister_id,
-            wasm: None,
-        })
     }
 
     pub async fn create_canister_at_id_max_cycles_with_retries(

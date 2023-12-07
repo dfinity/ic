@@ -125,7 +125,6 @@ fn main() {
         NodeConfiguration {
             xnet_api: SocketAddr::new(ipv6_addr, 2497),
             public_api: SocketAddr::new(ipv6_addr, 8080),
-            p2p_addr: SocketAddr::new(ipv6_addr, 4100),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: None,
@@ -140,7 +139,7 @@ fn main() {
     let ic_config = IcConfig::new(
         &prep_dir,
         ic_topology,
-        Some(version),
+        version,
         true,
         Some(0),
         None,
@@ -209,7 +208,7 @@ fn subnet_to_subnet_config(
     SubnetConfig::new(
         0,
         nodes,
-        Some(version),
+        version,
         subnet.max_ingress_bytes_per_message,
         subnet.max_ingress_messages_per_block,
         subnet.max_block_payload_size,

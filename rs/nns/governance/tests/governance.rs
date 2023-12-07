@@ -54,7 +54,9 @@ use ic_nns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
+        governance::{
+            GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc, SeedAccounts,
+        },
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
@@ -81,9 +83,10 @@ use ic_nns_governance::{
         Governance as GovernanceProto, GovernanceChange, GovernanceError,
         IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
-        NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider,
-        OpenSnsTokenSwap, Proposal, ProposalChange, ProposalData, ProposalDataChange,
+        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics,
+        Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData, NeuronsFundParticipation,
+        NeuronsFundSnapshot, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalChange,
+        ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
@@ -1431,6 +1434,48 @@ async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewar
     )
     .unwrap();
     assert_eq!(actual_node_provider_reward, expected_node_provider_reward);
+}
+
+#[tokio::test]
+async fn test_mint_monthly_node_provider_rewards() {
+    // Step 1: prepare the canister state and the Governance minting account.
+    let mut driver = fake::FakeDriver::default();
+    let node_provider = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(1)),
+        reward_account: None,
+    };
+    driver.create_account_with_funds(
+        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None),
+        1_000_000_000,
+    );
+    let mut gov = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            node_providers: vec![node_provider.clone()],
+            most_recent_monthly_node_provider_rewards: Some(MostRecentMonthlyNodeProviderRewards {
+                timestamp: 0,
+                rewards: vec![],
+            }),
+            ..Default::default()
+        },
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Run twice heartbeat so that minting rewards is reached.
+    gov.run_periodic_tasks().now_or_never();
+    gov.run_periodic_tasks().now_or_never();
+
+    // Step 3: Verify that node provider rewards are minted.
+    let most_recent_monthly_node_provider_rewards = gov
+        .heap_data
+        .most_recent_monthly_node_provider_rewards
+        .unwrap();
+    assert!(most_recent_monthly_node_provider_rewards.timestamp > 0);
+    assert_eq!(most_recent_monthly_node_provider_rewards.rewards.len(), 1);
+    let reward = most_recent_monthly_node_provider_rewards.rewards[0].clone();
+    assert_eq!(reward.node_provider.unwrap(), node_provider);
 }
 
 #[tokio::test]
@@ -4035,6 +4080,7 @@ fn test_get_neuron_ids_by_principal() {
 fn empty_fixture() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
+        seed_accounts: Some(SeedAccounts::default()),
         ..Default::default()
     }
 }
@@ -5243,6 +5289,84 @@ fn test_neuron_split() {
     assert_eq!(neuron_ids, expected_neuron_ids);
 }
 
+#[test]
+fn test_seed_neuron_split() {
+    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    // Compute the subaccount to which the transfer would have been made
+    let nonce = 1234u64;
+
+    let block_height = 543212234;
+    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let neuron_stake_e8s = 1_000_000_000;
+
+    let (driver, mut gov, id, _) = governance_with_staked_neuron(
+        dissolve_delay_seconds,
+        neuron_stake_e8s,
+        block_height,
+        from,
+        nonce,
+    );
+
+    let neuron = gov
+        .with_neuron_mut(&id, |neuron| {
+            neuron.neuron_type = Some(NeuronType::Seed as i32);
+            neuron.clone()
+        })
+        .expect("Neuron did not exist");
+
+    let transaction_fee = gov
+        .heap_data
+        .economics
+        .as_ref()
+        .unwrap()
+        .transaction_fee_e8s;
+
+    assert_eq!(
+        neuron.get_neuron_info(driver.now()).state(),
+        NeuronState::NotDissolving
+    );
+
+    let child_nid = gov
+        .split_neuron(
+            &id,
+            &from,
+            &Split {
+                amount_e8s: 100_000_000 + transaction_fee,
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    let child_neuron = gov
+        .neuron_store
+        .with_neuron(&child_nid, |n| n.clone())
+        .expect("The child neuron is missing");
+    let parent_neuron = gov
+        .neuron_store
+        .with_neuron(&id, |n| n.clone())
+        .expect("The parent neuron is missing");
+    let child_subaccount = child_neuron.account.clone();
+
+    assert_eq!(
+        child_neuron,
+        Neuron {
+            id: Some(child_nid),
+            account: child_subaccount,
+            controller: parent_neuron.controller,
+            cached_neuron_stake_e8s: 100_000_000,
+            created_timestamp_seconds: parent_neuron.created_timestamp_seconds,
+            aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                parent_neuron.dissolve_delay_seconds(driver.get_fake_env().now())
+            )),
+            kyc_verified: true,
+            neuron_type: Some(NeuronType::Seed as i32),
+            ..Default::default()
+        }
+    );
+}
+
 // Spawn neurons has the least priority in the periodic tasks, so we need to run
 // them often enough to make sure it happens.
 fn run_periodic_tasks_on_governance_often_enough_to_spawn(gov: &mut Governance) {
@@ -5254,7 +5378,9 @@ fn run_periodic_tasks_on_governance_often_enough_to_spawn(gov: &mut Governance) 
 /// Checks that:
 /// * An attempt to spawn a neuron does nothing if the parent has too little
 ///   maturity.
-/// * when the parent neuron has sufficient maturity, a new neuron may be spawn.
+/// * When the parent neuron has sufficient maturity, a new neuron may be spawn.
+/// * The spawned neuron always has neuron_type: None, even if the parent's
+///   neuron_type is NeuronType::Seed.
 #[test]
 fn test_neuron_spawn() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
@@ -5290,6 +5416,7 @@ fn test_neuron_spawn() {
                 neuron.maturity_e8s_equivalent
                     < NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
             );
+            neuron.neuron_type = Some(NeuronType::Seed as i32);
 
             neuron.clone()
         })
@@ -5387,6 +5514,7 @@ fn test_neuron_spawn() {
             )),
             kyc_verified: true,
             maturity_e8s_equivalent: parent_maturity_e8s_equivalent,
+            neuron_type: None,
             ..Default::default()
         }
     );
@@ -5904,7 +6032,7 @@ fn test_staked_maturity() {
         _ => panic!("Invalid response"),
     };
 
-    // Nowset the neuron to dissolve and advance time
+    // Now set the neuron to dissolve and advance time
     gov.neuron_store
         .with_neuron_mut(&id, |neuron| {
             assert_eq!(neuron.maturity_e8s_equivalent, 0);
@@ -5963,6 +6091,7 @@ fn test_disburse_to_neuron() {
         .transaction_fee_e8s;
 
     gov.with_neuron_mut(&id, |parent_neuron| {
+        parent_neuron.neuron_type = Some(NeuronType::Seed as i32);
         // Now Set the neuron to start dissolving
         parent_neuron.configure(
             &from,
@@ -9116,6 +9245,7 @@ fn test_compute_cached_metrics() {
             id: Some(NeuronId {id: 1}),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
+            neuron_type: Some(NeuronType::Seed as i32),
             ..Default::default()
         },
         2 => Neuron {
@@ -9124,6 +9254,7 @@ fn test_compute_cached_metrics() {
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             joined_community_fund_timestamp_seconds: Some(1),
             maturity_e8s_equivalent: 450_988_012,
+            neuron_type: Some(NeuronType::Ect as i32),
             ..Default::default()
         },
         3 => Neuron {
@@ -9162,6 +9293,8 @@ fn test_compute_cached_metrics() {
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS,
             )),
+            neuron_type: Some(NeuronType::Seed as i32),
+            staked_maturity_e8s_equivalent: Some(100_000_000),
             ..Default::default()
         },
         9 => Neuron {
@@ -9170,6 +9303,8 @@ fn test_compute_cached_metrics() {
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 3,
             )),
+            staked_maturity_e8s_equivalent: Some(100_000_000),
+            neuron_type: Some(NeuronType::Ect as i32),
             ..Default::default()
         },
         10 => Neuron {
@@ -9236,33 +9371,21 @@ fn test_compute_cached_metrics() {
         timestamp_seconds: 100,
         total_supply_icp: 147,
         dissolving_neurons_count: 5,
-        dissolving_neurons_e8s_buckets: [
-            (2, 234000000.0),
-            (6, 568000000.0),
-            (10, 7210000000.0),
-            (14, 18000000000.0),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
-        dissolving_neurons_count_buckets: [(2, 1), (6, 1), (10, 2), (14, 1)]
-            .iter()
-            .cloned()
-            .collect(),
+        dissolving_neurons_e8s_buckets: hashmap! {
+            2 => 234000000.0,
+            6 => 568000000.0,
+            10 => 7210000000.0,
+            14 => 18000000000.0
+        },
+        dissolving_neurons_count_buckets: hashmap! { 2 => 1, 6 => 1, 10 => 2, 14 => 1 },
         not_dissolving_neurons_count: 7,
-        not_dissolving_neurons_e8s_buckets: [
-            (0, 100000100.0),
-            (2, 234000000.0),
-            (8, 1691000000.0),
-            (16, 6087000000.0),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
-        not_dissolving_neurons_count_buckets: [(0, 3), (2, 1), (8, 2), (16, 1)]
-            .iter()
-            .cloned()
-            .collect(),
+        not_dissolving_neurons_e8s_buckets: hashmap! {
+            0 => 100000100.0,
+            2 => 234000000.0,
+            8 => 1691000000.0,
+            16 => 6087000000.0,
+        },
+        not_dissolving_neurons_count_buckets: hashmap! {0 => 3, 2 => 1, 8 => 2, 16 => 1},
         dissolved_neurons_count: 3,
         dissolved_neurons_e8s: 5770000000,
         garbage_collectable_neurons_count: 2,
@@ -9275,27 +9398,31 @@ fn test_compute_cached_metrics() {
         neurons_fund_total_active_neurons: 1,
         total_locked_e8s: 34_124_000_100,
         total_maturity_e8s_equivalent: 450_988_012,
-        total_staked_maturity_e8s_equivalent: 0_u64,
-        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [
-            (2, 0.0),
-            (6, 0.0),
-            (10, 0.0),
-            (14, 0.0),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
-        dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
-        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [
-            (0, 0.0),
-            (2, 0.0),
-            (8, 0.0),
-            (16, 0.0),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
+        total_staked_maturity_e8s_equivalent: 200_000_000_u64,
+        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: hashmap! {
+            2 => 100000000.0,
+            6 => 100000000.0,
+            10 => 0.0,
+            14 => 0.0,
+        },
+        dissolving_neurons_staked_maturity_e8s_equivalent_sum: 200_000_000_u64,
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: hashmap! {
+            0 => 0.0,
+            2 => 0.0,
+            8 => 0.0,
+            16 => 0.0,
+        },
         not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
+        seed_neuron_count: 2_u64,
+        ect_neuron_count: 2_u64,
+        total_staked_e8s_seed: 334000000,
+        total_staked_e8s_ect: 802000000,
+        total_staked_maturity_e8s_equivalent_seed: 100_000_000_u64,
+        total_staked_maturity_e8s_equivalent_ect: 100_000_000_u64,
+        dissolving_neurons_e8s_buckets_seed: hashmap! { 2 => 234000000.0 },
+        dissolving_neurons_e8s_buckets_ect: hashmap! { 6 => 568000000.0 },
+        not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
+        not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 234000000.0 },
     };
 
     assert_eq!(expected_metrics, actual_metrics);
@@ -14142,6 +14269,7 @@ async fn test_metrics() {
             }),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
+            neuron_type: Some(NeuronType::Seed as i32),
             ..Default::default()
         },
         2 => Neuron {
@@ -14150,6 +14278,7 @@ async fn test_metrics() {
             }),
             cached_neuron_stake_e8s: 200_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+            neuron_type: Some(NeuronType::Ect as i32),
             ..Default::default()
         },
         // Dissolving neurons: 300m.
@@ -14188,14 +14317,17 @@ async fn test_metrics() {
         timestamp_seconds: 100,
         total_supply_icp: 0,
         dissolving_neurons_count: 1,
-        dissolving_neurons_e8s_buckets: [(6, 300000000.0)].iter().cloned().collect(),
-        dissolving_neurons_count_buckets: [(6, 1)].iter().cloned().collect(),
+        dissolving_neurons_e8s_buckets: hashmap! { 6 => 300000000.0 },
+        dissolving_neurons_count_buckets: hashmap! { 6 => 1 },
         not_dissolving_neurons_count: 2,
-        not_dissolving_neurons_e8s_buckets: [(2, 200000000.0), (0, 100000000.0)]
-            .iter()
-            .cloned()
-            .collect(),
-        not_dissolving_neurons_count_buckets: [(0, 1), (2, 1)].iter().cloned().collect(),
+        not_dissolving_neurons_e8s_buckets: hashmap! {
+            2 => 200000000.0,
+            0 => 100000000.0
+        },
+        not_dissolving_neurons_count_buckets: hashmap! {
+            0 => 1,
+            2 => 1
+        },
         dissolved_neurons_count: 1,
         dissolved_neurons_e8s: 400000000,
         garbage_collectable_neurons_count: 0,
@@ -14209,16 +14341,23 @@ async fn test_metrics() {
         total_locked_e8s: 600_000_000,
         total_maturity_e8s_equivalent: 0_u64,
         total_staked_maturity_e8s_equivalent: 0_u64,
-        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [(6, 0.0)]
-            .iter()
-            .cloned()
-            .collect(),
+        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: hashmap! { 6 => 0.0 },
         dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
-        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [(0, 0.0), (2, 0.0)]
-            .iter()
-            .cloned()
-            .collect(),
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: hashmap! {
+            0 => 0.0,
+            2 => 0.0
+        },
         not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
+        seed_neuron_count: 1_u64,
+        ect_neuron_count: 1_u64,
+        total_staked_e8s_seed: 100000000_u64,
+        total_staked_e8s_ect: 200000000_u64,
+        total_staked_maturity_e8s_equivalent_seed: 0,
+        total_staked_maturity_e8s_equivalent_ect: 0,
+        dissolving_neurons_e8s_buckets_seed: Default::default(),
+        dissolving_neurons_e8s_buckets_ect: Default::default(),
+        not_dissolving_neurons_e8s_buckets_seed: hashmap! {0 => 100000000.0},
+        not_dissolving_neurons_e8s_buckets_ect: hashmap! {2 => 200000000.0},
     };
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
@@ -14249,14 +14388,17 @@ async fn test_metrics() {
         timestamp_seconds: 60 * 60 * 24 * 30,
         total_supply_icp: 0,
         dissolving_neurons_count: 1,
-        dissolving_neurons_e8s_buckets: [(5, 300000000.0)].iter().cloned().collect(),
-        dissolving_neurons_count_buckets: [(5, 1)].iter().cloned().collect(),
+        dissolving_neurons_e8s_buckets: hashmap! { 5 => 300000000.0 },
+        dissolving_neurons_count_buckets: hashmap! { 5 => 1 },
         not_dissolving_neurons_count: 2,
-        not_dissolving_neurons_e8s_buckets: [(2, 200000000.0), (0, 100000000.0)]
-            .iter()
-            .cloned()
-            .collect(),
-        not_dissolving_neurons_count_buckets: [(0, 1), (2, 1)].iter().cloned().collect(),
+        not_dissolving_neurons_e8s_buckets: hashmap! {
+            2 => 200000000.0,
+            0 => 100000000.0
+        },
+        not_dissolving_neurons_count_buckets: hashmap! {
+            0 => 1,
+            2 => 1
+        },
         dissolved_neurons_count: 1,
         dissolved_neurons_e8s: 400000000,
         garbage_collectable_neurons_count: 0,
@@ -14270,16 +14412,21 @@ async fn test_metrics() {
         total_locked_e8s: 600_000_000,
         total_maturity_e8s_equivalent: 0,
         total_staked_maturity_e8s_equivalent: 0_u64,
-        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [(5, 0.0)]
-            .iter()
-            .cloned()
-            .collect(),
+        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: hashmap! { 5 => 0.0 },
         dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
-        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [(0, 0.0), (2, 0.0)]
-            .iter()
-            .cloned()
-            .collect(),
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: hashmap! { 0 => 0.0, 2 => 0.0
+        },
         not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
+        seed_neuron_count: 1_u64,
+        ect_neuron_count: 1_u64,
+        total_staked_e8s_seed: 100000000_u64,
+        total_staked_e8s_ect: 200000000_u64,
+        total_staked_maturity_e8s_equivalent_seed: 0_u64,
+        total_staked_maturity_e8s_equivalent_ect: 0_u64,
+        dissolving_neurons_e8s_buckets_seed: Default::default(),
+        dissolving_neurons_e8s_buckets_ect: Default::default(),
+        not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
+        not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 200000000.0 },
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
     assert_eq!(
