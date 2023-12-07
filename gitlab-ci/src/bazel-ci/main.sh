@@ -31,6 +31,7 @@ if [[ "${CI_COMMIT_TAG:-}" =~ ^release-.+ ]]; then
     RC="True"
 fi
 
+EXIT_CODE=0
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
@@ -44,4 +45,12 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
     2>&1 \
-    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
+    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/' || EXIT_CODE="${PIPESTATUS[0]}"
+
+if [ "$EXIT_CODE" == "38" ]; then
+    echo "Tolerating BEP upload failure."
+    # ERROR: The Build Event Protocol upload failed: Not retrying publishBuildEvents, no more attempts left: status='Status{code=CANCELLED, description=context canceled, cause=null}' CANCELLED: CANCELLED: context canceled CANCELLED: CANCELLED: context canceled
+    #Error: exit status 38
+else
+    exit "$EXIT_CODE"
+fi
