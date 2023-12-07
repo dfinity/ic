@@ -112,46 +112,20 @@ fn mark_writes_on_bytemap(
     Ok(())
 }
 
-struct Overhead {
-    system_api_overhead: NumInstructions,
-}
-
 macro_rules! overhead {
     ($name:ident, $metering_type:expr) => {
         match $metering_type {
-            MeteringType::Old => Overhead {
-                system_api_overhead: system_api_complexity::overhead::old::$name,
-            },
-            MeteringType::New => Overhead {
-                system_api_overhead: system_api_complexity::overhead::new::$name,
-            },
-            MeteringType::None => Overhead {
-                system_api_overhead: system_api_complexity::overhead::old::$name,
-            },
+            MeteringType::Old => system_api_complexity::overhead::old::$name,
+            MeteringType::New => system_api_complexity::overhead::new::$name,
+            MeteringType::None => system_api_complexity::overhead::old::$name,
         }
     };
-}
-
-impl Overhead {
-    fn add_charge(&mut self, charge: NumInstructions) -> HypervisorResult<()> {
-        let (new_system_api_overhead, overflow) =
-            charge.get().overflowing_add(self.system_api_overhead.get());
-        if overflow {
-            return Err(unexpected_err(format!(
-                "Overflow while calculating charge for System API Call:\
-                             base overhead: {}, additional charge: {}",
-                self.system_api_overhead, charge
-            )));
-        }
-        self.system_api_overhead = NumInstructions::from(new_system_api_overhead);
-        Ok(())
-    }
 }
 
 /// Charge for system api call that doesn't involve touching memory
 fn charge_for_cpu(
     caller: &mut Caller<'_, StoreData>,
-    overhead: Overhead,
+    overhead: NumInstructions,
 ) -> Result<(), anyhow::Error> {
     charge_for_system_api_call(caller, overhead, 0).map_err(|e| process_err(caller, e))
 }
@@ -159,17 +133,18 @@ fn charge_for_cpu(
 /// Charge for system api call that involves writing/reading heap
 fn charge_for_cpu_and_mem(
     caller: &mut Caller<'_, StoreData>,
-    overhead: Overhead,
+    overhead: NumInstructions,
     num_bytes: u64,
 ) -> Result<(), anyhow::Error> {
     charge_for_system_api_call(caller, overhead, num_bytes).map_err(|e| process_err(caller, e))
 }
 
 /// Charge for system api call that involves writing/reading stable memory
+// TODO: RUN-841: Cover with tests
 #[inline(never)]
 fn charge_for_stable_write(
     caller: &mut Caller<'_, StoreData>,
-    mut overhead: Overhead,
+    mut overhead: NumInstructions,
     offset: u64,
     size: u64,
     stable_memory_dirty_page_limit: NumPages,
@@ -178,7 +153,15 @@ fn charge_for_stable_write(
     let (new_stable_dirty_pages, dirty_page_cost) =
         system_api.dirty_pages_from_stable_write(offset, size)?;
 
-    overhead.add_charge(dirty_page_cost)?;
+    overhead = overhead
+        .get()
+        .checked_add(dirty_page_cost.get())
+        .ok_or(unexpected_err(format!(
+            "Overflow while calculating charge for stable write:\
+             overhead: {}, dirty page cost: {}",
+            overhead, dirty_page_cost
+        )))?
+        .into();
 
     #[allow(non_upper_case_globals)]
     const KiB: u64 = 1024;
@@ -226,21 +209,31 @@ fn charge_for_stable_write(
 /// code to handle hypothetical bugs.
 //
 // Note: marked not for inlining as we don't want to spill this code into every system API call.
+// TODO: RUN-841: Cover with tests
 #[inline(never)]
 fn charge_for_system_api_call(
     caller: &mut Caller<'_, StoreData>,
-    mut overhead: Overhead,
+    mut overhead: NumInstructions,
     num_bytes: u64,
 ) -> HypervisorResult<()> {
     let system_api = caller.data_mut().system_api()?;
     if num_bytes > 0 {
         let bytes_charge = system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes));
-        overhead.add_charge(bytes_charge)?;
+        overhead = overhead
+            .get()
+            .checked_add(bytes_charge.get())
+            .ok_or(unexpected_err(format!(
+                "Overflow while calculating charge for System API call:\
+             overhead: {}, bytes charge: {}",
+                overhead, bytes_charge
+            )))?
+            .into();
     }
 
-    charge_direct_fee(caller, overhead.system_api_overhead)
+    charge_direct_fee(caller, overhead)
 }
 
+// TODO: RUN-841: Cover with tests
 fn charge_direct_fee(
     caller: &mut Caller<'_, StoreData>,
     fee: NumInstructions,
@@ -1043,12 +1036,7 @@ pub(crate) fn syscalls(
                   current_size: i64,
                   additional_pages: i64,
                   stable_memory_api: i32| {
-                let overhead = Overhead {
-                    system_api_overhead: system_api::complexity_overhead_native!(
-                        STABLE_GROW,
-                        metering_type
-                    ),
-                };
+                let overhead = system_api::complexity_overhead_native!(STABLE_GROW, metering_type);
                 charge_for_cpu(&mut caller, overhead)?;
                 with_system_api(&mut caller, |s| {
                     match s.try_grow_stable_memory(
@@ -1207,36 +1195,4 @@ pub(crate) fn syscalls(
             }
         })
         .unwrap();
-}
-
-#[test]
-fn handle_overflow_when_calculating_overhead() {
-    let mut fee = Overhead {
-        system_api_overhead: NumInstructions::from(1000),
-    };
-
-    assert!(fee.add_charge(NumInstructions::from(500)).is_ok());
-    assert!(fee.add_charge(NumInstructions::from(u64::MAX - 5)).is_err());
-}
-
-#[test]
-fn overhead_doesnt_overflow_under_practical_limits() {
-    let mut fee = Overhead {
-        system_api_overhead: NumInstructions::from(10000), // bigger than any static overhead
-    };
-
-    let dirty_page_overhead =
-        ic_config::subnet_config::SchedulerConfig::application_subnet().dirty_page_overhead;
-    let dirty_page_limit = ic_config::embedders::STABLE_MEMORY_DIRTY_PAGE_LIMIT;
-
-    let (dirty_page_cost, overflow) = dirty_page_limit.overflowing_mul(dirty_page_overhead.get());
-    assert!(!overflow);
-
-    assert!(fee
-        .add_charge(NumInstructions::from(dirty_page_cost))
-        .is_ok());
-
-    let num_bytes = dirty_page_limit * PAGE_SIZE as u64;
-    let bytes_charge = NumInstructions::from(num_bytes);
-    assert!(fee.add_charge(NumInstructions::from(bytes_charge)).is_ok());
 }
