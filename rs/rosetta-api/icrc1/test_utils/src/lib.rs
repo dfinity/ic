@@ -164,7 +164,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
     let transaction_strategy = transaction_strategy(amount_strategy);
     let fee_collector_strategy = prop::option::of(account_strategy());
     let fee_collector_block_index_strategy = prop::option::of(prop::num::u64::ANY);
-    let effective_fee_strategy = prop::option::of(arb_small_amount());
+    let fee_strategy = prop::option::of(arb_small_amount());
     let timestamp_strategy = Just({
         let end = SystemTime::now();
         // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
@@ -177,13 +177,23 @@ pub fn blocks_strategy<Tokens: TokensType>(
     });
     (
         transaction_strategy,
-        effective_fee_strategy,
+        fee_strategy,
         timestamp_strategy,
         fee_collector_strategy,
         fee_collector_block_index_strategy,
     )
         .prop_map(
-            |(transaction, effective_fee, timestamp, fee_collector, fee_collector_block_index)| {
+            |(transaction, fee, timestamp, fee_collector, fee_collector_block_index)| {
+                let transaction_fee = match transaction.operation {
+                    Operation::Transfer { fee, .. } => fee,
+                    Operation::Approve { fee, .. } => fee,
+                    Operation::Burn { .. } => None,
+                    Operation::Mint { .. } => None,
+                };
+                let effective_fee = transaction_fee
+                    .is_none()
+                    .then(|| fee.unwrap_or(token_amount(DEFAULT_TRANSFER_FEE)));
+                assert!(effective_fee.is_some() || transaction_fee.is_some());
                 Block {
                     parent_hash: Some(Block::<Tokens>::block_hash(
                         &Block {
