@@ -99,7 +99,6 @@ after_script:
     GET_SOURCES_ATTEMPTS: 5
     GIT_DEPTH: 0  # Pull the complete repo initially
     GIT_STRATEGY: "fetch"  # And then pull only new commits
-    SHELL_WRAPPER: "/usr/bin/time"
 
 .build-k8s-legacy:
   extends:

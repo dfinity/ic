@@ -37,7 +37,6 @@
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 ".bazel-test-all":
   after_script:
     - |
@@ -110,7 +109,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 ".benchmark-spot-test":
   artifacts:
     expire_in: 3 days
@@ -249,7 +247,6 @@
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 ".build-ic":
   artifacts:
     expire_in: 3 days
@@ -339,7 +336,6 @@
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 ".build-k8s-legacy":
   artifacts:
     expire_in: 3 days
@@ -359,7 +355,6 @@
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 ".ic-build-image":
   artifacts:
     expire_in: 3 days
@@ -456,7 +451,6 @@ after-script-test-ic-build-image:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 after-script-test-ic-build-legacy-image:
   artifacts:
     expire_in: 3 days
@@ -496,7 +490,6 @@ after-script-test-ic-build-legacy-image:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 after_script:
   - |
     # Start the after_script section
@@ -584,7 +577,6 @@ bazel-build-fuzzers:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-build-fuzzers-afl:
   after_script:
     - |
@@ -659,7 +651,6 @@ bazel-build-fuzzers-afl:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-build-fuzzers-archives:
   after_script:
     - |
@@ -731,7 +722,6 @@ bazel-build-fuzzers-archives:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-build-fuzzers-weekly:
   after_script:
     - |
@@ -803,7 +793,6 @@ bazel-build-fuzzers-weekly:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-config-check-all-rebuild:
   after_script:
     - |
@@ -878,7 +867,6 @@ bazel-config-check-all-rebuild:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-system-test-hotfix:
   after_script:
     - |
@@ -954,7 +942,6 @@ bazel-system-test-hotfix:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-system-test-nightly:
   after_script:
     - |
@@ -1032,7 +1019,6 @@ bazel-system-test-nightly:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-system-test-nightly-nns:
   after_script:
     - |
@@ -1102,7 +1088,6 @@ bazel-system-test-nightly-nns:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-system-test-staging:
   after_script:
     - |
@@ -1180,7 +1165,6 @@ bazel-system-test-staging:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-test-all:
   after_script:
     - |
@@ -1257,7 +1241,6 @@ bazel-test-all:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-test-all-rebuild:
   after_script:
     - |
@@ -1328,7 +1311,6 @@ bazel-test-all-rebuild:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-test-coverage:
   after_script:
     - bazel clean --expunge
@@ -1377,7 +1359,6 @@ bazel-test-coverage:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 bazel-test-macos:
   after_script:
     - |
@@ -1448,7 +1429,6 @@ bazel-test-macos:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 before_script:
   - |
     # Execute the before_script section
@@ -1685,7 +1665,6 @@ benchmarks:
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     RUST_BACKTRACE: full
-    SHELL_WRAPPER: "/usr/bin/time"
 boundary-node-service-worker:
   artifacts:
     expire_in: 3 days
@@ -1754,7 +1733,6 @@ boundary-node-service-worker:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 build-base-images-ref-update:
   artifacts:
     expire_in: 3 days
@@ -1855,7 +1833,6 @@ build-base-images-ref-update:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 build-boundaryos-api-guestos-base:
   artifacts:
     expire_in: 3 days
@@ -1914,7 +1891,6 @@ build-boundaryos-api-guestos-base:
     GIT_STRATEGY: fetch
     IMAGE: boundary-api-guestos-base
     REF_FILE: ic-os/boundary-api-guestos/rootfs/docker-base.prod
-    SHELL_WRAPPER: "/usr/bin/time"
 build-boundaryos-api-guestos-base-snp:
   artifacts:
     expire_in: 3 days
@@ -1974,7 +1950,6 @@ build-boundaryos-api-guestos-base-snp:
     GIT_STRATEGY: fetch
     IMAGE: boundary-api-guestos-base-snp
     REF_FILE: ic-os/boundary-api-guestos/rootfs/docker-base.snp
-    SHELL_WRAPPER: "/usr/bin/time"
 build-boundaryos-base:
   artifacts:
     expire_in: 3 days
@@ -2033,7 +2008,6 @@ build-boundaryos-base:
     GIT_STRATEGY: fetch
     IMAGE: boundaryos-base
     REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.prod
-    SHELL_WRAPPER: "/usr/bin/time"
 build-boundaryos-base-snp:
   artifacts:
     expire_in: 3 days
@@ -2093,7 +2067,6 @@ build-boundaryos-base-snp:
     GIT_STRATEGY: fetch
     IMAGE: boundaryos-base-snp
     REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.snp
-    SHELL_WRAPPER: "/usr/bin/time"
 build-determinism:
   artifacts:
     expire_in: 3 days
@@ -2140,7 +2113,6 @@ build-determinism:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 build-determinism-release:
   artifacts:
     expire_in: 3 days
@@ -2192,7 +2164,6 @@ build-determinism-release:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 build-guestos-base:
   artifacts:
     expire_in: 3 days
@@ -2251,7 +2222,6 @@ build-guestos-base:
     GIT_STRATEGY: fetch
     IMAGE: guestos-base
     REF_FILE: ic-os/guestos/rootfs/docker-base.prod
-    SHELL_WRAPPER: "/usr/bin/time"
 build-guestos-base-dev:
   artifacts:
     expire_in: 3 days
@@ -2311,7 +2281,6 @@ build-guestos-base-dev:
     GIT_STRATEGY: fetch
     IMAGE: guestos-base-dev
     REF_FILE: ic-os/guestos/rootfs/docker-base.dev
-    SHELL_WRAPPER: "/usr/bin/time"
 build-guestos-base-dev-sev:
   artifacts:
     expire_in: 3 days
@@ -2371,7 +2340,6 @@ build-guestos-base-dev-sev:
     GIT_STRATEGY: fetch
     IMAGE: guestos-base-dev-sev
     REF_FILE: ic-os/guestos/rootfs/docker-base.dev-sev
-    SHELL_WRAPPER: "/usr/bin/time"
 build-hostos-base:
   artifacts:
     expire_in: 3 days
@@ -2430,7 +2398,6 @@ build-hostos-base:
     GIT_STRATEGY: fetch
     IMAGE: hostos-base
     REF_FILE: ic-os/hostos/rootfs/docker-base.prod
-    SHELL_WRAPPER: "/usr/bin/time"
 build-hostos-base-dev:
   artifacts:
     expire_in: 3 days
@@ -2490,7 +2457,6 @@ build-hostos-base-dev:
     GIT_STRATEGY: fetch
     IMAGE: hostos-base-dev
     REF_FILE: ic-os/hostos/rootfs/docker-base.dev
-    SHELL_WRAPPER: "/usr/bin/time"
 build-hostos-base-dev-sev:
   artifacts:
     expire_in: 3 days
@@ -2550,7 +2516,6 @@ build-hostos-base-dev-sev:
     GIT_STRATEGY: fetch
     IMAGE: hostos-base-dev-sev
     REF_FILE: ic-os/hostos/rootfs/docker-base.dev-sev
-    SHELL_WRAPPER: "/usr/bin/time"
 build-ic:
   artifacts:
     expire_in: 3 days
@@ -2758,7 +2723,6 @@ build-setupos-base:
     GIT_STRATEGY: fetch
     IMAGE: setupos-base
     REF_FILE: ic-os/setupos/rootfs/docker-base.prod
-    SHELL_WRAPPER: "/usr/bin/time"
 build-setupos-base-dev:
   artifacts:
     expire_in: 3 days
@@ -2818,7 +2782,6 @@ build-setupos-base-dev:
     GIT_STRATEGY: fetch
     IMAGE: setupos-base-dev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev
-    SHELL_WRAPPER: "/usr/bin/time"
 build-setupos-base-dev-sev:
   artifacts:
     expire_in: 3 days
@@ -2878,7 +2841,6 @@ build-setupos-base-dev-sev:
     GIT_STRATEGY: fetch
     IMAGE: setupos-base-dev-sev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev-sev
-    SHELL_WRAPPER: "/usr/bin/time"
 cargo-build-release-linux:
   artifacts:
     expire_in: 3 days
@@ -2908,7 +2870,6 @@ cargo-build-release-linux:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 cargo-clippy-linux:
   artifacts:
     expire_in: 3 days
@@ -2940,7 +2901,6 @@ cargo-clippy-linux:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 commit-lint:
   artifacts:
     expire_in: 3 days
@@ -2976,7 +2936,6 @@ commit-lint:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 container-autobuild:
   artifacts:
     expire_in: 3 days
@@ -3074,7 +3033,6 @@ container-autobuild:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 container-autobuild-protected:
   artifacts:
     expire_in: 3 days
@@ -3126,7 +3084,6 @@ container-autobuild-protected:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 cut-release-candidate:
   artifacts:
     expire_in: 3 days
@@ -3161,7 +3118,6 @@ cut-release-candidate:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 default:
   interruptible: true
   retry:
@@ -3464,7 +3420,6 @@ legacy-cargo-check:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 lock-generate:
   artifacts:
     expire_in: 3 days
@@ -3532,7 +3487,6 @@ lock-generate:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 maximum-capacity-boundary-nodes-queries:
   artifacts:
     expire_in: 3 days
@@ -4142,7 +4096,6 @@ no-interrupt:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 notify-gitlab-failure:
   artifacts:
     expire_in: 3 days
@@ -4169,7 +4122,6 @@ notify-gitlab-failure:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 notify-gitlab-success:
   artifacts:
     expire_in: 3 days
@@ -4198,7 +4150,6 @@ notify-gitlab-success:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 pre-commit:
   artifacts:
     expire_in: 3 days
@@ -4250,7 +4201,6 @@ pre-commit:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PRE_COMMIT_HOME: "/cache/pre-commit/$CI_CONCURRENT_ID"
-    SHELL_WRAPPER: "/usr/bin/time"
 python-gitlab-ci-tests:
   artifacts:
     expire_in: 3 days
@@ -4283,7 +4233,6 @@ python-gitlab-ci-tests:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    SHELL_WRAPPER: "/usr/bin/time"
 release-boundary-node-service-worker:
   artifacts:
     expire_in: 3 days
@@ -4354,7 +4303,6 @@ release-boundary-node-service-worker:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 rosetta-api-docker-image:
   artifacts:
     expire_in: 3 days
@@ -4420,7 +4368,6 @@ rosetta-api-docker-image:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 rosetta-release:
   artifacts:
     expire_in: 3 days
@@ -4477,7 +4424,6 @@ rosetta-release:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 stages:
   - ".pre"
   - init
@@ -4732,7 +4678,6 @@ test-push-branch:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 tnet-test:
   after_script:
     - |
@@ -4863,7 +4808,6 @@ tnet-test:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
 variables:
   TEST_ES_HOSTNAMES: elasticsearch.testnet.dfinity.network:443
 xnet-nightly:
