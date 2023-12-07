@@ -66,13 +66,11 @@ impl Error {
         })
     }
 
-    pub fn invalid_block_identifier() -> Self {
+    pub fn invalid_block_identifier(description: String) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_BLOCK_IDENTIFIER,
             message: "Invalid block identifier provided".into(),
-            description: Some(
-                "Invalid block identifier provided. Must provide either an index or hash.".into(),
-            ),
+            description: Some(description),
             retriable: false,
             details: None,
         })

@@ -5,7 +5,6 @@ use axum::{
     Router,
 };
 use clap::{Parser, ValueEnum};
-use endpoints::block;
 use http::Request;
 use ic_agent::{
     agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
@@ -27,10 +26,6 @@ use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{debug, error_span, info, Level, Span};
 use url::Url;
-
-use crate::endpoints::{block_transaction, mempool};
-
-mod endpoints;
 
 lazy_static! {
     static ref MAINNET_DEFAULT_URL: &'static str = "https://ic0.app";
