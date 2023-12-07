@@ -34,7 +34,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/common/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:serial_test",
     "@crate_index//:tempfile",
 ]
 
