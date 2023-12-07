@@ -62,6 +62,7 @@ impl PocketIc {
         let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
         let mut subnet_ids = Vec::new();
         let mut routing_table = RoutingTable::new();
+        let mut nns_subnet_id = None;
 
         for (subnet_counter, subnet_kind) in fixed_range_subnets
             .into_iter()
@@ -70,6 +71,10 @@ impl PocketIc {
         {
             let subnet_id = subnet_test_id(subnet_counter as u64);
             subnet_ids.push(subnet_id);
+
+            if subnet_kind == SubnetKind::NNS {
+                nns_subnet_id = Some(subnet_id);
+            }
 
             let RangeConfig {
                 canister_id_ranges: ranges,
@@ -111,6 +116,7 @@ impl PocketIc {
                 .with_runtime(runtime.clone())
                 .with_config(Some(sm_config))
                 .with_subnet_id(subnet_id)
+                .with_nns_subnet_id(nns_subnet_id.unwrap_or(subnet_ids[0]))
                 .with_subnet_list(subnet_ids.clone())
                 .with_subnet_size(subnet_size.try_into().unwrap())
                 .with_routing_table(routing_table.clone())
