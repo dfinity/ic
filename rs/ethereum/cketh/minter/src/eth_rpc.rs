@@ -401,10 +401,8 @@ impl From<BlockNumber> for BlockSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
-// #[serde(rename_all = "camelCase")]
 pub struct Block {
     ///The block number. `None` when its pending block.
-    #[serde(rename = "number")]
     pub number: BlockNumber,
     /// Base fee value of this block
     #[serde(rename = "baseFeePerGas")]
