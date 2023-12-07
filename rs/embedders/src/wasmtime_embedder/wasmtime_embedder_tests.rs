@@ -81,6 +81,7 @@ fn test_wasmtime_system_api() {
         StoreData {
             system_api,
             num_instructions_global: None,
+            accessed_main_memory_pages: None,
         },
     );
 

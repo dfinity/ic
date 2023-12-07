@@ -16,7 +16,7 @@ use std::{
 use wasmtime::Config;
 
 use crate::wasm_utils::instrumentation::{
-    ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    STABLE_ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
 };
 use crate::{
     wasm_utils::wasm_transform::{DataSegment, DataSegmentKind, Module},
@@ -30,7 +30,7 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
     "canister counter_instructions",
     "canister_start",
     DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+    STABLE_ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
     STABLE_MEMORY_NAME,
     STABLE_BYTEMAP_MEMORY_NAME,
 ];

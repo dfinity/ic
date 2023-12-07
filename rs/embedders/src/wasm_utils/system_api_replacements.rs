@@ -42,7 +42,7 @@ pub(super) fn replacement_functions(
 ) -> Vec<(SystemApiFunc, (FuncType, Body<'static>))> {
     let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
     let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
-    let accessed_pages_counter_index = special_indices.accessed_pages_counter_ix.unwrap();
+    let accessed_pages_counter_index = special_indices.stable_accessed_pages_counter_ix.unwrap();
     let stable_memory_index = special_indices.stable_memory_index;
     let decr_instruction_counter_fn = special_indices.decr_instruction_counter_fn;
 

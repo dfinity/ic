@@ -37,8 +37,8 @@ use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
-    ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    STABLE_ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, MAIN_ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
 };
 use crate::{serialized_module::SerializedModuleBytes, wasm_utils::validation::ensure_determinism};
 
@@ -115,7 +115,7 @@ fn get_exported_globals<T>(
 ) -> Vec<wasmtime::Global> {
     const TO_IGNORE: &[&str] = &[
         DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-        ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+        STABLE_ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
     ];
     let globals_to_ignore = match wasm_native_stable_memory {
         FlagStatus::Enabled => TO_IGNORE,
@@ -333,6 +333,7 @@ impl WasmtimeEmbedder {
             StoreData {
                 system_api,
                 num_instructions_global: None,
+                accessed_main_memory_pages: None,
             },
         );
 
@@ -364,6 +365,9 @@ impl WasmtimeEmbedder {
 
         store.data_mut().num_instructions_global =
             instance.get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME);
+
+        store.data_mut().accessed_main_memory_pages =
+            instance.get_global(&mut store, MAIN_ACCESSED_PAGES_COUNTER_GLOBAL_NAME);
 
         if let Some(exported_globals) = exported_globals {
             let instance_globals = get_exported_globals(
@@ -427,7 +431,7 @@ impl WasmtimeEmbedder {
                 .expect("Counter for dirty pages global should have been added with native stable memory enabled.")
                 .set(&mut store, Val::I64(self.config.stable_memory_dirty_page_limit.get() as i64))
                 .expect("Couldn't set dirty page counter global");
-            instance.get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
+            instance.get_global(&mut store, STABLE_ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
                 .expect("Counter for accessed pages global should have been added with native stable memory enabled.")
                 .set(&mut store, Val::I64(self.config.stable_memory_accessed_page_limit.get() as i64))
                 .expect("Couldn't set dirty page counter global");
@@ -650,6 +654,7 @@ fn sigsegv_memory_tracker<S>(
 pub struct StoreData<S> {
     pub system_api: S,
     pub num_instructions_global: Option<wasmtime::Global>,
+    pub accessed_main_memory_pages: Option<wasmtime::Global>,
 }
 
 pub struct PageAccessResults {
@@ -952,6 +957,11 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                             }
                         }
                         *previous_page_marked_written = false;
+                        Ok(())
+                    }
+                    2 => {
+                        // Used for 64-bit main memory, to guard working set limit:
+                        // `2` denotes a read-only access on this page.
                         Ok(())
                     }
                     _ => Err(HypervisorError::ContractViolation(format!(
