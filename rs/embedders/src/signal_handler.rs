@@ -1,8 +1,5 @@
 use crate::wasmtime_embedder::host_memory::MemoryPageSize;
-use crate::wasmtime_embedder::MAIN_MEMORY_PAGE_ACCESS_LIMIT;
 
-use ic_interfaces::execution_environment::HypervisorResult;
-use ic_replicated_state::EmbedderCache;
 use libc::c_void;
 use memory_tracker::{signal_access_kind_and_address, SigsegvMemoryTracker};
 use std::convert::TryFrom;
@@ -11,7 +8,6 @@ use std::sync::{atomic::Ordering, Arc, Mutex};
 
 /// Helper function to create a memory tracking SIGSEGV handler function.
 pub(crate) fn sigsegv_memory_tracker_handler(
-    cache: EmbedderCache,
     memories: Vec<(Arc<Mutex<SigsegvMemoryTracker>>, MemoryPageSize)>,
 ) -> impl Fn(i32, *const libc::siginfo_t, *const libc::c_void) -> bool + Send + Sync {
     let mut memories: Vec<_> = memories
@@ -73,17 +69,6 @@ pub(crate) fn sigsegv_memory_tracker_handler(
             .unwrap_or(&memories[0]);
 
         let mut memory_tracker = memory_tracker.lock().unwrap();
-
-        // Limiting the number of page accesses in 64-bit main memory support.
-        // This is done by interrupting the wasmtime engine in a controlled way by using the epoch mechanism.
-        if memory_tracker.num_accessed_pages() as u64 > MAIN_MEMORY_PAGE_ACCESS_LIMIT {
-            let module = cache
-                .downcast::<HypervisorResult<wasmtime::Module>>()
-                .unwrap()
-                .as_ref()
-                .unwrap();
-            module.engine().increment_epoch();
-        }
 
         // We handle SIGSEGV from the Wasm module heap ourselves.
         if memory_tracker.area().is_within(si_addr) {
