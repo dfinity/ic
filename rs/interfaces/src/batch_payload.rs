@@ -10,6 +10,7 @@ use prost::{bytes::BufMut, DecodeError, Message};
 ///
 /// The purpose is to allow the payload builders to deduplicate
 /// messages that they have already included in prior.
+#[derive(Debug, Clone)]
 pub struct PastPayload<'a> {
     /// Height of the payload
     pub height: Height,
