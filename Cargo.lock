@@ -804,17 +804,6 @@ dependencies = [
 
 [[package]]
 name = "backoff"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fe17f59a06fe8b87a6fc8bf53bb70b3aba76d7685f432487a68cd5552853625"
-dependencies = [
- "getrandom 0.2.8",
- "instant",
- "rand 0.8.5",
-]
-
-[[package]]
-name = "backoff"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b62ddb9cb1ec0a098ad4bbf9344d0713fa193ae1a80af55febcff2627b6a00c1"
@@ -1658,7 +1647,7 @@ dependencies = [
 name = "canister-test"
 version = "0.9.0"
 dependencies = [
- "backoff 0.3.0",
+ "backoff",
  "candid",
  "cargo_metadata",
  "dfn_candid",
@@ -1781,7 +1770,7 @@ dependencies = [
  "opentelemetry-prometheus 0.13.0",
  "pem 1.1.1",
  "prometheus",
- "rcgen 0.10.0",
+ "rcgen",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -4833,7 +4822,7 @@ version = "0.30.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "263d5c7b295ba69eac0692e6f6b35a01ca323889d10612c0f8c8fd223b0bfec5"
 dependencies = [
- "backoff 0.4.0",
+ "backoff",
  "cached 0.46.1",
  "candid",
  "ed25519-consensus",
@@ -5124,7 +5113,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rayon",
- "rcgen 0.10.0",
+ "rcgen",
  "regex",
  "reqwest",
  "rustls",
@@ -5304,7 +5293,7 @@ name = "ic-canister-client"
 version = "0.9.0"
 dependencies = [
  "async-trait",
- "backoff 0.4.0",
+ "backoff",
  "futures-util",
  "hex",
  "hyper 0.14.26",
@@ -5925,7 +5914,7 @@ name = "ic-consensus-manager"
 version = "0.1.0"
 dependencies = [
  "axum",
- "backoff 0.4.0",
+ "backoff",
  "bytes",
  "crossbeam-channel",
  "futures",
@@ -6440,7 +6429,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rayon",
- "rcgen 0.10.0",
+ "rcgen",
  "rsa",
  "serde",
  "serde_bytes",
@@ -6669,7 +6658,7 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rcgen 0.11.1",
+ "rcgen",
  "serde",
  "serde_cbor",
  "time 0.3.22",
@@ -11658,7 +11647,7 @@ dependencies = [
 name = "ic-workload-generator"
 version = "0.9.0"
 dependencies = [
- "backoff 0.4.0",
+ "backoff",
  "byte-unit",
  "candid",
  "chrono",
@@ -15452,18 +15441,6 @@ dependencies = [
 
 [[package]]
 name = "rcgen"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffbe84efe2f38dea12e9bfc1f65377fdf03e53a18cb3b995faedf7934c7e785b"
-dependencies = [
- "pem 1.1.1",
- "ring",
- "time 0.3.22",
- "yasna",
-]
-
-[[package]]
-name = "rcgen"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4954fbc00dcd4d8282c987710e50ba513d351400dbdd00e803a05172a90d8976"
@@ -17700,7 +17677,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rayon",
- "rcgen 0.10.0",
+ "rcgen",
  "regex",
  "registry-canister",
  "reqwest",

@@ -55,7 +55,7 @@ moka = { version = "0.12", features = ["future"] }
 prometheus = { workspace = true }
 rand = "0.8.4"
 rayon = "1.5.3"
-rcgen = "0.10.0"
+rcgen = { workspace = true }
 regex = "1.3.9"
 # same feature as in bazel
 reqwest = { workspace = true }
