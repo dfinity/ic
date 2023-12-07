@@ -17,7 +17,7 @@ use wasmtime::{
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::embedders::{MeteringType, STABLE_MEMORY_ACCESSED_PAGE_LIMIT};
+use ic_config::embedders::MeteringType;
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
@@ -48,10 +48,6 @@ use self::host_memory::{MemoryPageSize, MemoryStart};
 
 #[cfg(test)]
 mod wasmtime_embedder_tests;
-
-/// Used for 64-bit main memory support:
-/// Limit for the number of pages accessed in a single message.
-pub const MAIN_MEMORY_PAGE_ACCESS_LIMIT: u64 = STABLE_MEMORY_ACCESSED_PAGE_LIMIT;
 
 const BAD_SIGNATURE_MESSAGE: &str = "function invocation does not match its signature";
 pub(crate) const WASM_HEAP_MEMORY_NAME: &str = "memory";
@@ -104,10 +100,6 @@ fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
             HypervisorError::Trapped(TrapCode::IntegerDivByZero)
         }
         wasmtime::Trap::UnreachableCodeReached => HypervisorError::Trapped(TrapCode::Unreachable),
-        wasmtime::Trap::Interrupt => HypervisorError::MemoryAccessLimitExceeded(
-            format!("Exceeded the limit for the number of modified pages in the main memory in a single message execution: limit: {} KB.",
-                MAIN_MEMORY_PAGE_ACCESS_LIMIT * PAGE_SIZE as u64 / 1024),
-            ),
         _ => {
             // The `wasmtime::TrapCode` enum is marked as #[non_exhaustive]
             // so we have to use the wildcard matching here.
@@ -202,8 +194,6 @@ impl WasmtimeEmbedder {
     pub fn initial_wasmtime_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
         let mut config = wasmtime::Config::default();
         config.cranelift_opt_level(OptLevel::None);
-        // The epoch mechanism is used for limiting the number of page accesses in 64-bit main memory support.
-        config.epoch_interruption(true);
         ensure_determinism(&mut config);
         disable_unused_features(&mut config);
         if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled
@@ -450,8 +440,7 @@ impl WasmtimeEmbedder {
                 self.instantiate_memory(memory_info, &instance, store, &mut memories, canister_id)?;
         }
 
-        let memory_trackers =
-            sigsegv_memory_tracker(cache.clone(), memories, &mut store, self.log.clone());
+        let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
 
         let signal_stack = WasmtimeSignalStack::new();
         Ok(WasmtimeInstance {
@@ -607,7 +596,6 @@ pub struct MemorySigSegvInfo {
 }
 
 fn sigsegv_memory_tracker<S>(
-    cache: EmbedderCache,
     memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
@@ -650,9 +638,7 @@ fn sigsegv_memory_tracker<S>(
         tracked_memories.push((sigsegv_memory_tracker, current_memory_size_in_pages));
     }
 
-    // The epoch mechanism is used for limiting the number of page accesses in 64-bit main memory support.
-    store.set_epoch_deadline(1);
-    let handler = crate::signal_handler::sigsegv_memory_tracker_handler(cache, tracked_memories);
+    let handler = crate::signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
     // http://man7.org/linux/man-pages/man7/signal-safety.7.html
     unsafe {
         store.set_signal_handler(handler);

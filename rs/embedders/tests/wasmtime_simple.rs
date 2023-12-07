@@ -102,8 +102,7 @@ impl WasmtimeSimple {
             &EmbeddersConfig::default(),
         ))
         .expect("Failed to initialize Wasmtime engine");
-        let mut store = Store::new(&engine, ());
-        store.set_epoch_deadline(1);
+        let store = Store::new(&engine, ());
         Self { engine, store }
     }
 
