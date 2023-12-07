@@ -1,5 +1,5 @@
 {
-  "checksum": "522bfddf2267ddef8ea49fbd7bf70e1abd9fff51e38fdf1553c93c320d4a470d",
+  "checksum": "09b0473c5796112854c1d235641945326da05273bd223af8282943106143c2d0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13719,7 +13719,7 @@
               "target": "isocountry"
             },
             {
-              "id": "itertools 0.10.5",
+              "id": "itertools 0.12.0",
               "target": "itertools"
             },
             {
@@ -14117,20 +14117,12 @@
               "target": "serde_json"
             },
             {
-              "id": "serde_millis 0.1.1",
-              "target": "serde_millis"
-            },
-            {
               "id": "serde_with 1.14.0",
               "target": "serde_with"
             },
             {
               "id": "serde_yaml 0.8.26",
               "target": "serde_yaml"
-            },
-            {
-              "id": "serial_test 0.8.0",
-              "target": "serial_test"
             },
             {
               "id": "sev 2.0.2",
@@ -25132,6 +25124,53 @@
         },
         "edition": "2018",
         "version": "0.11.0"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "itertools 0.12.0": {
+      "name": "itertools",
+      "version": "0.12.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/itertools/0.12.0/download",
+          "sha256": "25db6b064527c5d482d0423354fcd07a89a2dfe07b67892e62411946db7f07b0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "itertools",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "itertools",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "use_alloc",
+            "use_std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "either 1.8.1",
+              "target": "either"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.12.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -45151,45 +45190,6 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "serde_millis 0.1.1": {
-      "name": "serde_millis",
-      "version": "0.1.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_millis/0.1.1/download",
-          "sha256": "e6e2dc780ca5ee2c369d1d01d100270203c4ff923d2a4264812d723766434d00"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_millis",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "serde_millis",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.190",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.1"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "serde_path_to_error 0.1.14": {
       "name": "serde_path_to_error",
       "version": "0.1.14",
@@ -45701,134 +45701,6 @@
         "version": "0.8.26"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "serial_test 0.8.0": {
-      "name": "serial_test",
-      "version": "0.8.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/serial_test/0.8.0/download",
-          "sha256": "7eec42e7232e5ca56aa59d63af3c7f991fe71ee6a3ddd2d3480834cf3902b007"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serial_test",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "serial_test",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "log",
-            "logging"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "futures 0.3.28",
-              "target": "futures"
-            },
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "log 0.4.19",
-              "target": "log"
-            },
-            {
-              "id": "parking_lot 0.12.1",
-              "target": "parking_lot"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "serial_test_derive 0.8.0",
-              "target": "serial_test_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.8.0"
-      },
-      "license": "MIT"
-    },
-    "serial_test_derive 0.8.0": {
-      "name": "serial_test_derive",
-      "version": "0.8.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/serial_test_derive/0.8.0/download",
-          "sha256": "f1b95bb2f4f624565e8fe8140c789af7e2082c0e0561b5a82a1b678baa9703dc"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "serial_test_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "serial_test_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro-error 1.0.4",
-              "target": "proc_macro_error"
-            },
-            {
-              "id": "proc-macro2 1.0.66",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.31",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "rustversion 1.0.14",
-              "target": "rustversion"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.8.0"
-      },
-      "license": "MIT"
     },
     "servo_arc 0.3.0": {
       "name": "servo_arc",

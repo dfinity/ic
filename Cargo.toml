@@ -450,7 +450,7 @@ ic-stable-structures = "0.5.4"
 ic-utils = { version = "0.30.2", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c" }
 indexmap = "2.1.0"
-itertools = "0.10.5"
+itertools = "0.12.0"
 k256 = { version = "0.13.2", default_features = false, features = [
   "arithmetic",
   "ecdsa",
@@ -491,8 +491,7 @@ serde_bytes_repr = "0.1.5"
 serde_cbor = "0.11.2"
 serde_derive = "1.0"
 serde_json = { version = "1.0.107", features = ["std"] }
-serde_millis = "0.1"
-serde_with = "1.6.2"
+serde_with = "1.14.0"
 serde_yaml = "0.8.24"
 signature = "2.1.0"
 simple_asn1 = "0.6.2"

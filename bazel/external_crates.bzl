@@ -606,7 +606,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "0.3.2",
             ),
             "itertools": crate.spec(
-                version = "^0.10.5",
+                version = "^0.12.0",
             ),
             "jemalloc-ctl": crate.spec(
                 version = "^0.3.3",
@@ -1015,17 +1015,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "serde_json": crate.spec(
                 version = "^1.0.107",
             ),
-            "serde_millis": crate.spec(
-                version = "^0.1",
-            ),
             "serde_with": crate.spec(
-                version = "^1.6.2",
+                version = "^1.14.0",
             ),
             "serde_yaml": crate.spec(
                 version = "^0.8.24",
-            ),
-            "serial_test": crate.spec(
-                version = "^0.8.0",
             ),
             "sev": crate.spec(
                 version = "^2.0.2",

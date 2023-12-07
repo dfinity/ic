@@ -31,7 +31,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-itertools = "0.10"
+itertools = { workspace = true }
 lazy_static = "1.4.0"
 libc = "0.2.91"
 maplit = "1.0.2"
