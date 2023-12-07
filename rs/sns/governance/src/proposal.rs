@@ -10,10 +10,10 @@ use crate::{
         proposal::Action,
         transfer_sns_treasury_funds::TransferFrom,
         DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance,
-        ManageSnsMetadata, ManageLedgerParameters, MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters,
-        Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
-        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Vote,
+        ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+        NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus,
+        ProposalRewardStatus, RegisterDappCanisters, Tally, TransferSnsTreasuryFunds,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
     },
 };
 

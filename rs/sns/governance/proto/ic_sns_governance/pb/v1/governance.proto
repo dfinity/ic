@@ -348,16 +348,13 @@ message TransferSnsTreasuryFunds {
 // A proposal function that changes the ledger's parameters.
 // Fields with None values will remain unchanged.
 message ManageLedgerParameters {
-  
   optional uint64 transfer_fee = 1;
-  
+
   oneof change_fee_collector {
     Empty unset = 2;
     Account set_to = 3;
-  }  
+  }
 }
-
-
 
 // A proposal to mint SNS tokens to (optionally a Subaccount of) the
 // target principal.
@@ -504,16 +501,16 @@ message Proposal {
     //
     // Id = 11.
     DeregisterDappCanisters deregister_dapp_canisters = 15;
-    
+
     // Mint SNS tokens to an account.
     //
     // Id = 12.
     MintSnsTokens mint_sns_tokens = 16;
-  
+
     // Change some parameters on the ledger.
     //
     // Id = 13
-    ManageLedgerParameters manage_ledger_parameters = 17;  
+    ManageLedgerParameters manage_ledger_parameters = 17;
   }
 }
 

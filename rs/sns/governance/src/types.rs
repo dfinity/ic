@@ -104,7 +104,7 @@ pub mod native_action_ids {
 
     /// MintSnsTokens
     pub const MINT_SNS_TOKENS: u64 = 12;
-    
+
     /// ManageLedgerParameters Action.
     pub const MANAGE_LEDGER_PARAMETERS: u64 = 13;
 }
