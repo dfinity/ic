@@ -22,6 +22,7 @@ use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::CanisterId;
 use prometheus::Registry;
+use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
@@ -104,7 +105,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // TLS Configuration
     let rustls_config = rustls::ClientConfig::builder()
-        .with_safe_default_cipher_suites()
+        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .context("unable to build Rustls config")?

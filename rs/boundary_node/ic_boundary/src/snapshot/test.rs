@@ -22,8 +22,9 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities_registry::test_subnet_record;
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::{CanisterId, RegistryVersion};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, NodeId, PrincipalId, RegistryVersion,
+};
 use rand::Rng;
 
 fn new_random_certified_data() -> Digest {
@@ -123,6 +124,113 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
 
         routing_table.insert(canister_range, subnet_id).unwrap();
     }
+
+    // Add list of subnets
+    data_provider
+        .add(
+            make_subnet_list_record_key().as_str(),
+            reg_ver,
+            Some(SubnetListRecord { subnets }),
+        )
+        .expect("Could not add subnet list record.");
+
+    // Add routing table
+    data_provider
+        .add(
+            &make_routing_table_record_key(),
+            reg_ver,
+            Some(PbRoutingTable::from(routing_table)),
+        )
+        .unwrap();
+
+    let registry_client = FakeRegistryClient::new(Arc::new(data_provider));
+    registry_client.update_to_latest_version();
+
+    registry_client
+}
+
+pub fn create_fake_registry_client_single_node() -> FakeRegistryClient {
+    let mut subnets: Vec<Vec<u8>> = vec![];
+    let data_provider = ProtoRegistryDataProvider::new();
+    let reg_ver = RegistryVersion::new(1);
+
+    let nns_subnet_id = subnet_test_id(0);
+
+    // Add NNS subnet
+    data_provider
+        .add(
+            ROOT_SUBNET_ID_KEY,
+            reg_ver,
+            Some(ic_types::subnet_id_into_protobuf(nns_subnet_id)),
+        )
+        .unwrap();
+
+    data_provider
+        .add(
+            &make_crypto_threshold_signing_pubkey_key(nns_subnet_id),
+            reg_ver,
+            Some(PublicKeyProto::from(new_threshold_key())),
+        )
+        .unwrap();
+
+    // Routing table
+    let mut routing_table = RoutingTableIC::default();
+
+    let subnet_id = subnet_test_id(1);
+    // Same node_id that valid_tls_certificate_and_validation_time() is valid for
+    let node_id = NodeId::from(
+        PrincipalId::from_str("4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae")
+            .unwrap(),
+    );
+    let node_ip = "192.168.0.1".into();
+
+    subnets.push(subnet_id.get().into_vec());
+
+    let mut subnet_record = test_subnet_record();
+    subnet_record.membership = vec![node_id.get().into_vec()];
+
+    // Add subnet with node
+    data_provider
+        .add(
+            &make_subnet_record_key(subnet_id),
+            reg_ver,
+            Some(subnet_record),
+        )
+        .unwrap();
+
+    // Set connection information
+    let http_endpoint = ConnectionEndpoint {
+        ip_addr: node_ip,
+        port: 8080,
+    };
+
+    data_provider
+        .add(
+            &make_node_record_key(node_id),
+            reg_ver,
+            Some(NodeRecord {
+                http: Some(http_endpoint),
+                ..Default::default()
+            }),
+        )
+        .unwrap();
+
+    // Add some TLS certificate
+    data_provider
+        .add(
+            &make_crypto_tls_cert_key(node_id),
+            reg_ver,
+            Some(valid_tls_certificate_and_validation_time().0),
+        )
+        .expect("failed to add TLS certificate to registry");
+
+    // Add subnet to routing table
+    let canister_range = CanisterIdRange {
+        start: CanisterId::from(0),
+        end: CanisterId::from(999_999),
+    };
+
+    routing_table.insert(canister_range, subnet_id).unwrap();
 
     // Add list of subnets
     data_provider
