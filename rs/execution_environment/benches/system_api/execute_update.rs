@@ -308,6 +308,11 @@ pub fn execute_update_bench(c: &mut Criterion) {
             1048000006,
         ),
         common::Benchmark(
+            "ic0_in_replicated_execution()".into(),
+            Module::Test.from_ic0("in_replicated_execution", NoParams, Result::I32),
+            517000006,
+        ),
+        common::Benchmark(
             "ic0_cycles_burn128()".into(),
             Module::Test.from_ic0("cycles_burn128", Params3(1_i64, 2_i64, 3_i32), Result::No),
             19000006,

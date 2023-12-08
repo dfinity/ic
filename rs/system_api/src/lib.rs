@@ -2882,6 +2882,31 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_in_replicated_execution")),
+            ApiType::Init { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. }
+            | ApiType::Update { .. }
+            | ApiType::SystemTask { .. } => Ok(1),
+            ApiType::ReplicatedQuery {
+                data_certificate, ..
+            }
+            | ApiType::NonReplicatedQuery {
+                data_certificate, ..
+            } => match data_certificate {
+                None => Ok(1),
+                Some(_) => Ok(0),
+            },
+        };
+        trace_syscall!(self, ic0_in_replicated_execution, result);
+        result
+    }
+
     fn ic0_cycles_burn128(
         &mut self,
         amount: Cycles,
