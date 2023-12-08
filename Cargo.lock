@@ -1358,7 +1358,7 @@ dependencies = [
 [[package]]
 name = "build-info"
 version = "0.0.26"
-source = "git+https://github.com/dfinity-lab/build-info?rev=83b9ae07d0624db04675a71ae4179c4a17e99f77#83b9ae07d0624db04675a71ae4179c4a17e99f77"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "build-info-common",
  "build-info-proc",
@@ -1369,7 +1369,7 @@ dependencies = [
 [[package]]
 name = "build-info-build"
 version = "0.0.26"
-source = "git+https://github.com/dfinity-lab/build-info?rev=83b9ae07d0624db04675a71ae4179c4a17e99f77#83b9ae07d0624db04675a71ae4179c4a17e99f77"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -1388,7 +1388,7 @@ dependencies = [
 [[package]]
 name = "build-info-common"
 version = "0.0.26"
-source = "git+https://github.com/dfinity-lab/build-info?rev=83b9ae07d0624db04675a71ae4179c4a17e99f77#83b9ae07d0624db04675a71ae4179c4a17e99f77"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "chrono",
  "derive_more 0.99.17",
@@ -1399,7 +1399,7 @@ dependencies = [
 [[package]]
 name = "build-info-proc"
 version = "0.0.26"
-source = "git+https://github.com/dfinity-lab/build-info?rev=83b9ae07d0624db04675a71ae4179c4a17e99f77#83b9ae07d0624db04675a71ae4179c4a17e99f77"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
