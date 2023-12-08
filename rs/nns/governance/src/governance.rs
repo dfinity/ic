@@ -3327,7 +3327,7 @@ impl Governance {
             )
         })?;
         let proposal_data =
-            self.get_proposal_data_or_fail(&proposal_id, "get_neurons_fund_audit_info")?;
+            self.get_proposal_data_or_err(&proposal_id, "get_neurons_fund_audit_info")?;
         let action = proposal_data
             .proposal
             .as_ref()
@@ -4601,8 +4601,10 @@ impl Governance {
             )
         } else if IS_MATCHED_FUNDING_ENABLED {
             // Case B: Matched Funding is enabled in principle, but Neurons' Fund participation was
-            // not requested for this SNS swap. Nothing to do.
-            (vec![], None, None)
+            // not requested for this SNS swap. Record this fact in proposal data and provide sound
+            // default values.
+            self.record_neurons_fund_participation_not_requested(&proposal_id)?;
+            (vec![], Some(NeuronsFundSnapshot::empty()), None)
         } else {
             // Case C. Legacy, or fixed funding schema.
             // Return error in case ProposalData is unavailable for some reason. This check needs to
@@ -4728,6 +4730,8 @@ impl Governance {
         self.set_proposal_execution_status(proposal_id, result);
     }
 
+    // TODO[NNS1-2566]: `initial_neurons_fund_participation_snapshot` is optional because we need
+    // to support the legacy Neurons' Fund mechanism that does not work with snapshots.
     async fn execute_create_service_nervous_system_proposal(
         &mut self,
         executed_create_service_nervous_system_proposal: ExecutedCreateServiceNervousSystemProposal,
@@ -4745,14 +4749,6 @@ impl Governance {
                     )
                 })
                 .unwrap_or((false, false));
-        if is_start_time_unspecified {
-            println!(
-                "{}The swap's start time for proposal {:?} is unspecified, so a random time of {:?} will be used.",
-                LOG_PREFIX,
-                executed_create_service_nervous_system_proposal.proposal_id,
-                executed_create_service_nervous_system_proposal.random_swap_start_time
-            );
-        }
 
         // Step 1: Convert proposal into main request object.
         let sns_init_payload =
@@ -4784,6 +4780,16 @@ impl Governance {
         } else {
             sns_init_payload
         };
+        #[cfg(not(feature = "test"))]
+        if is_start_time_unspecified {
+            println!(
+                "{}The swap's start time for proposal {:?} is unspecified, \
+                so a random time of {:?} will be used.",
+                LOG_PREFIX,
+                executed_create_service_nervous_system_proposal.proposal_id,
+                executed_create_service_nervous_system_proposal.random_swap_start_time
+            );
+        }
 
         // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
         // Do NOT return Err right away using the ? operator, because we must refund maturity to the
@@ -4804,7 +4810,7 @@ impl Governance {
                     &mut self.neuron_store,
                     &executed_create_service_nervous_system_proposal.neurons_fund_participants,
                 );
-                err.error_message += &format!(" refund_result: {:#?}", refund_result);
+                err.error_message += &format!(" refund result: {:#?}", refund_result);
             } else if let Some(initial_neurons_fund_participation_snapshot) =
                 initial_neurons_fund_participation_snapshot
             {
@@ -4819,7 +4825,7 @@ impl Governance {
 
         // Step 3.2: Otherwise, deploy_new_sns was successful. Record this fact for latter
         // settlement.
-        let proposal_data = self.mut_proposal_data_or_fail(
+        let proposal_data = self.mut_proposal_data_or_err(
             &proposal_id,
             "in execute_create_service_nervous_system_proposal",
         )?;
@@ -7083,7 +7089,7 @@ impl Governance {
         Ok(())
     }
 
-    fn get_proposal_data_or_fail(
+    fn get_proposal_data_or_err(
         &self,
         proposal_id: &ProposalId,
         context: &str,
@@ -7097,7 +7103,7 @@ impl Governance {
         Ok(proposal_data)
     }
 
-    fn mut_proposal_data_or_fail(
+    fn mut_proposal_data_or_err(
         &mut self,
         proposal_id: &ProposalId,
         context: &str,
@@ -7127,7 +7133,7 @@ impl Governance {
         request: SettleNeuronsFundParticipationRequest,
     ) -> Result<NeuronsFundSnapshot, GovernanceError> {
         let request: ValidatedSettleNeuronsFundParticipationRequest = request.try_into()?;
-        let proposal_data = self.get_proposal_data_or_fail(
+        let proposal_data = self.get_proposal_data_or_err(
             &request.nns_proposal_id,
             &format!("before awaiting SNS-W for {:?}", request.request_str),
         )?;
@@ -7183,7 +7189,7 @@ impl Governance {
             ));
         }
         // Re-acquire the proposal_data mutably after the await
-        let proposal_data = self.mut_proposal_data_or_fail(
+        let proposal_data = self.mut_proposal_data_or_err(
             &request.nns_proposal_id,
             &format!("after awaiting SNS-W for {:?}", request.request_str),
         )?;
@@ -7234,7 +7240,7 @@ impl Governance {
                 )
             })?;
         // This field is expected to be set if and only if this function has been called before.
-        let previously_computed_effective_neurons_fund_participation = neurons_fund_data
+        let previously_computed_final_neurons_fund_participation = neurons_fund_data
             .final_neurons_fund_participation
             .as_ref()
             .map(|final_neurons_fund_participation| {
@@ -7259,16 +7265,18 @@ impl Governance {
             .and_then(|v| Lifecycle::try_from(v).ok())
             .unwrap_or(Lifecycle::Unspecified);
         // Validate the state machine
-        let initial_neurons_fund_participation = match (
-            initial_neurons_fund_participation,
+        match (
+            &initial_neurons_fund_participation,
             previously_computed_neurons_fund_refunds,
-            previously_computed_effective_neurons_fund_participation,
+            previously_computed_final_neurons_fund_participation,
         ) {
+            // The first two cases detect mismatch between `previously_computed_*`:
+            // When this function is called, they must both be `Some`, or they must both be `None`.
             (_, None, Some(_)) => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::NotFound,
                     format!(
-                        "Refunds must be set if there is effective participation (ProposalId {:?}).",
+                        "Refunds must be set if there is final participation (ProposalId {:?}).",
                         request.nns_proposal_id,
                     ),
                 ));
@@ -7277,13 +7285,14 @@ impl Governance {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::NotFound,
                     format!(
-                        "If the swap failed early, the refunds are set and there is no effective \
+                        "If the swap failed early, the refunds are set and there is no final \
                         participation. However, settle_neurons_fund_participation cannot be called \
                         in this state (ProposalId {:?}).",
                         request.nns_proposal_id,
                     ),
                 ));
             }
+            // In all remaining cases, `previously_computed_*` are either both `Some`, or both `None`.
             (Some(_), Some(_), Some(_)) if !original_sns_token_swap_lifecycle.is_terminal() => {
                 // Err case 3. All data is present for this proposal, but the SNS lifecycle is not
                 // terminal. This can only happen if there is a bug.
@@ -7297,7 +7306,7 @@ impl Governance {
                     ),
                 ));
             }
-            (_, None, None) if original_sns_token_swap_lifecycle.is_terminal() => {
+            (Some(_), None, None) if original_sns_token_swap_lifecycle.is_terminal() => {
                 // Err case 4. This function has been called before, but its ultimate results are
                 // still being computed.
                 return Err(GovernanceError::new_with_message(
@@ -7309,25 +7318,25 @@ impl Governance {
                     ),
                 ));
             }
-            (None, _, _) => {
-                // Ok case I: The Neurons' Fund does not participate in this swap.
-                None
-            }
-            (Some(_), Some(_), Some(previously_computed_effective_neurons_fund_participation)) => {
-                // Ok case II: Return the priorly computed results (this is an idempotent function).
+            (Some(_), Some(_), Some(previously_computed_final_neurons_fund_participation)) => {
+                // Ok case I: Return the priorly computed results (this is an idempotent function).
                 println!(
                     "{}INFO: settle_neurons_fund_participation was called for a swap \
                         that has already been settled with ProposalId {:?}. Returning without \
                         doing additional work.",
                     LOG_PREFIX, proposal_data.id
                 );
-                return Ok(previously_computed_effective_neurons_fund_participation.into_snapshot());
+                return Ok(previously_computed_final_neurons_fund_participation.into_snapshot());
             }
-            (Some(initial_neurons_fund_participation), None, None) => {
+            (None, _, _) => {
+                // Ok case II: The Neurons' Fund does not participate in this swap.
+                // Nothing to do.
+            }
+            (Some(_), None, None) => {
                 // Ok case III: This function invocation should compute the Neurons' Fund
                 // participation, mint ICP to SNS treasury, refund the leftovers, and return
                 // the (newly computed) Neurons' Fund participants.
-                Some(initial_neurons_fund_participation)
+                // Nothing to do.
             }
         };
 
@@ -7367,29 +7376,29 @@ impl Governance {
         };
 
         // This is the source of truth for the Neurons' Fund participation in the SNS swap.
-        let effective_nf_participation = initial_neurons_fund_participation
+        let final_neurons_fund_participation = initial_neurons_fund_participation
             .from_initial_participation(direct_participation_icp_e8s)
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::NotFound,
                     format!(
-                        "Error while computing effective NeuronsFundParticipation \
+                        "Error while computing final NeuronsFundParticipation \
                         for proposal {:?}: {}",
                         request.nns_proposal_id, err,
                     ),
                 )
             })?;
 
-        let settlement_result = if effective_nf_participation.is_empty() {
+        let settlement_result = if final_neurons_fund_participation.is_empty() {
             // TODO: Provide the reason why there is no Matched Funding in this case.
             println!(
                 "{}INFO: The Neurons' Fund has decided against participating in the SNS \
                 created via proposal {:?}.",
                 LOG_PREFIX, request.nns_proposal_id,
             );
-            self.record_no_neurons_fund_participation(
+            self.record_neurons_fund_decision_not_to_participate(
                 &request.nns_proposal_id,
-                effective_nf_participation,
+                final_neurons_fund_participation,
             )?;
             Ok(NeuronsFundSnapshot::empty())
         } else if let Committed(committed) = &request.request_type {
@@ -7399,14 +7408,14 @@ impl Governance {
                 of its neurons. Congratulations!",
                 LOG_PREFIX,
                 request.nns_proposal_id,
-                effective_nf_participation.total_amount_icp_e8s(),
-                effective_nf_participation.num_neurons(),
+                final_neurons_fund_participation.total_amount_icp_e8s(),
+                final_neurons_fund_participation.num_neurons(),
             );
-            let participated_reserves = effective_nf_participation.snapshot_cloned();
+            let participated_reserves = final_neurons_fund_participation.snapshot_cloned();
             self.mint_to_sns_governance(
                 &request.nns_proposal_id,
                 committed,
-                effective_nf_participation,
+                final_neurons_fund_participation,
             )
             .await
             .map(|_| participated_reserves)
@@ -7414,7 +7423,7 @@ impl Governance {
             // This should never happen, as it would mean that the swap was aborted, but
             // the Neurons' Fund still decided to participate. This could indicate a bug
             // in `NeuronsFundParticipation::from_initial_participation`, from which we
-            // recover by ignoring `effective_nf_participation` and returning an empty
+            // recover by ignoring `final_neurons_fund_participation` and returning an empty
             // list of Neurons' Fund participants, logging the observation to add debugging.
             println!(
                 "{}ERROR: Despite the fact that the SNS swap failed, the Neurons' Fund estimated \
@@ -7423,8 +7432,8 @@ impl Governance {
                 an empty list of Neurons' Fund participants.",
                 LOG_PREFIX,
                 request.nns_proposal_id,
-                effective_nf_participation.total_amount_icp_e8s(),
-                effective_nf_participation.num_neurons(),
+                final_neurons_fund_participation.total_amount_icp_e8s(),
+                final_neurons_fund_participation.num_neurons(),
             );
             Ok(NeuronsFundSnapshot::empty())
         };
@@ -7528,6 +7537,24 @@ impl Governance {
         Ok((initial_neurons_fund_participation_snapshot, constraints))
     }
 
+    /// Records the empty participation into ProposalData for this `proposal_id`.
+    fn record_neurons_fund_participation_not_requested(
+        &mut self,
+        proposal_id: &ProposalId,
+    ) -> Result<(), GovernanceError> {
+        let proposal_data = self.mut_proposal_data_or_err(
+            proposal_id,
+            "in record_neurons_fund_participation_not_requested",
+        )?;
+        let neurons_fund_data = NeuronsFundData {
+            initial_neurons_fund_participation: None,
+            final_neurons_fund_participation: None,
+            neurons_fund_refunds: None,
+        };
+        proposal_data.neurons_fund_data = Some(neurons_fund_data);
+        Ok(())
+    }
+
     /// Refunds the maturity represented via `refunds` and stores this information in ProposalData
     /// of this `proposal_id` (for auditability).
     fn refund_maturity_to_neurons_fund(
@@ -7538,7 +7565,7 @@ impl Governance {
         self.neuron_store
             .refund_maturity_to_neurons_fund(&refunds)?;
         let proposal_data =
-            self.mut_proposal_data_or_fail(proposal_id, "in refund_maturity_to_neurons_fund")?;
+            self.mut_proposal_data_or_err(proposal_id, "in refund_maturity_to_neurons_fund")?;
         let neurons_fund_data: &mut NeuronsFundData =
             proposal_data.neurons_fund_data.as_mut().ok_or_else(|| {
                 format!(
@@ -7550,34 +7577,35 @@ impl Governance {
         Ok(())
     }
 
-    /// Records the empty participation into ProposalDat for this `proposal_id`.
-    fn record_no_neurons_fund_participation(
+    /// Records the empty `final_neurons_fund_participation` into ProposalData for this `proposal_id`.
+    fn record_neurons_fund_decision_not_to_participate(
         &mut self,
         proposal_id: &ProposalId,
-        effective_nf_participation: PolynomialNeuronsFundParticipation,
+        final_neurons_fund_participation: PolynomialNeuronsFundParticipation,
     ) -> Result<(), GovernanceError> {
-        if !effective_nf_participation.is_empty() {
+        if !final_neurons_fund_participation.is_empty() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "Expected effective_nf_participation to be empty in \
-                record_no_neurons_fund_participation.",
+                "Expected final_neurons_fund_participation to be empty in \
+                record_neurons_fund_decision_not_to_participate.",
             ));
         }
-        let proposal_data =
-            self.mut_proposal_data_or_fail(proposal_id, "in mint_to_sns_governance")?;
-        let neurons_fund_data: &mut NeuronsFundData =
-            proposal_data.neurons_fund_data.as_mut().ok_or_else(|| {
-                format!(
-                    "ProposalData.neurons_fund_data for proposal {:?} not found.",
-                    proposal_id
-                )
-            })?;
-        let final_neurons_fund_participation = effective_nf_participation.into();
+        let proposal_data = self.mut_proposal_data_or_err(
+            proposal_id,
+            "in record_neurons_fund_decision_not_to_participate",
+        )?;
+        let neurons_fund_data = proposal_data.neurons_fund_data.as_mut().ok_or_else(|| {
+            format!(
+                "ProposalData.neurons_fund_data for proposal {:?} not found.",
+                proposal_id
+            )
+        })?;
+        let final_neurons_fund_participation = final_neurons_fund_participation.into();
         neurons_fund_data.final_neurons_fund_participation = Some(final_neurons_fund_participation);
         Ok(())
     }
 
-    /// Asks ICP Ledger to mint an amount of ICP represented via `effective_nf_participation`
+    /// Asks ICP Ledger to mint an amount of ICP represented via `final_neurons_fund_participation`
     /// and records this information in ProposalData of this `proposal_id` (for auditability).
     ///
     /// This function may be called only from `settle_neurons_fund_participation`.
@@ -7585,7 +7613,7 @@ impl Governance {
         &mut self,
         proposal_id: &ProposalId,
         committed: &settle_neurons_fund_participation_request::Committed,
-        effective_nf_participation: PolynomialNeuronsFundParticipation,
+        final_neurons_fund_participation: PolynomialNeuronsFundParticipation,
     ) -> Result<(), GovernanceError> {
         let owner = committed.sns_governance_canister_id.ok_or_else(|| {
             GovernanceError::new_with_message(
@@ -7595,7 +7623,7 @@ impl Governance {
             )
         })?;
         let destination = AccountIdentifier::new(owner, /* subaccount = */ None);
-        let amount_icp_e8s = effective_nf_participation.total_amount_icp_e8s();
+        let amount_icp_e8s = final_neurons_fund_participation.total_amount_icp_e8s();
 
         // Sanity check if the NNS Governance and the Swap canister agree on how much ICP
         // the Neurons' Fund should participate with.
@@ -7639,7 +7667,7 @@ impl Governance {
                 )
             })?;
         let proposal_data =
-            self.mut_proposal_data_or_fail(proposal_id, "in mint_to_sns_governance")?;
+            self.mut_proposal_data_or_err(proposal_id, "in mint_to_sns_governance")?;
         let neurons_fund_data: &mut NeuronsFundData =
             proposal_data.neurons_fund_data.as_mut().ok_or_else(|| {
                 format!(
@@ -7647,7 +7675,7 @@ impl Governance {
                     proposal_id
                 )
             })?;
-        let final_neurons_fund_participation = effective_nf_participation.into();
+        let final_neurons_fund_participation = final_neurons_fund_participation.into();
         neurons_fund_data.final_neurons_fund_participation = Some(final_neurons_fund_participation);
         Ok(())
     }
