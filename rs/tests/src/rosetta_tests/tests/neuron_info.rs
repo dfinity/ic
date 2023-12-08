@@ -13,6 +13,7 @@ use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::{DissolveState, Followees};
+use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{AddHotKey, NeuronInfo, PublicKeyOrPrincipal};
@@ -152,7 +153,7 @@ async fn test_neuron_info(
                 .operations
                 .first()
                 .expect("Expected one neuron info operation."),
-            ic_rosetta_api::models::operation::Operation {
+            ic_rosetta_api::models::Operation {
                 _type: _expected_type,
                 ..
             }
@@ -263,7 +264,10 @@ async fn test_neuron_info_with_hotkey(
         );
         assert_eq!(
             ic_rosetta_api::models::operation::OperationType::NeuronInfo,
-            results.operations[0]._type,
+            results.operations[0]
+                ._type
+                .parse::<OperationType>()
+                .unwrap(),
             "Expecting one neuron info operation."
         );
         results

@@ -13,7 +13,7 @@ ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-governance = { path = "../../../nns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
 rust_decimal = "1.25"
-slog = { version = "2.5.2", features = ["release_max_level_trace"] }
+slog = { workspace = true }
 tests = { path = "../../" }
 
 [lib]

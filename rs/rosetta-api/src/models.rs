@@ -3,14 +3,9 @@ pub mod operation;
 pub mod seconds;
 pub mod timestamp;
 
-use crate::models::amount::Amount;
-use crate::models::operation::Operation;
-use crate::models::timestamp::Timestamp;
+use crate::errors::convert_to_error;
 use crate::request::transaction_operation_results::TransactionOperationResults;
-use crate::{
-    convert::from_hex, errors, errors::ApiError, request_types::RequestType,
-    transaction_id::TransactionIdentifier,
-};
+use crate::{convert::from_hex, errors, errors::ApiError, request_types::RequestType};
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use ic_canister_client_sender::{ed25519_public_key_from_der, Secp256k1KeyPair};
 use ic_crypto_ecdsa_secp256k1;
@@ -21,17 +16,11 @@ use ic_types::{
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-pub use rosetta_core::identifiers::BlockIdentifier;
-pub use rosetta_core::objects::Currency;
-use rosetta_core::objects::ObjectMap;
-pub use rosetta_core::request_types::NetworkRequest;
-pub use rosetta_core::response_types::Allow;
-pub use rosetta_core::response_types::NetworkOptionsResponse;
-pub use rosetta_core::response_types::NetworkStatusResponse;
-pub use rosetta_core::response_types::OperationStatus;
-pub use rosetta_core::response_types::Peer;
-pub use rosetta_core::response_types::SyncStatus;
-pub use rosetta_core::response_types::Version;
+pub use rosetta_core::identifiers::*;
+pub use rosetta_core::miscellaneous::*;
+pub use rosetta_core::objects::*;
+pub use rosetta_core::request_types::*;
+pub use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
@@ -121,261 +110,6 @@ impl AccountBalanceResponse {
             balances,
             metadata: None,
         }
-    }
-}
-
-/// The account_identifier uniquely identifies an account within a network. All
-/// fields in the account_identifier are utilized to determine this uniqueness
-/// (including the metadata field, if populated).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct AccountIdentifier {
-    /// The address may be a cryptographic public key (or some encoding of it)
-    /// or a provided username.
-    #[serde(rename = "address")]
-    pub address: String,
-
-    #[serde(rename = "sub_account")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_account: Option<SubAccountIdentifier>,
-
-    /// Blockchains that utilize a username model (where the address is not a
-    /// derivative of a cryptographic public key) should specify the public
-    /// key(s) owned by the address in metadata.
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl AccountIdentifier {
-    pub fn new(address: String) -> AccountIdentifier {
-        AccountIdentifier {
-            address,
-            sub_account: None,
-            metadata: None,
-        }
-    }
-}
-
-/// Blocks contain an array of Transactions that occurred at a particular
-/// BlockIdentifier.  A hard requirement for blocks returned by Rosetta
-/// implementations is that they MUST be _inalterable_: once a client has
-/// requested and received a block identified by a specific BlockIdentifier,
-/// all future calls for that same BlockIdentifier must return the same block
-/// contents.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Block {
-    #[serde(rename = "block_identifier")]
-    pub block_identifier: BlockIdentifier,
-
-    #[serde(rename = "parent_block_identifier")]
-    pub parent_block_identifier: BlockIdentifier,
-
-    #[serde(rename = "timestamp")]
-    pub timestamp: Timestamp,
-
-    #[serde(rename = "transactions")]
-    pub transactions: Vec<Transaction>,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl Block {
-    pub fn new(
-        block_identifier: BlockIdentifier,
-        parent_block_identifier: BlockIdentifier,
-        timestamp: Timestamp,
-        transactions: Vec<Transaction>,
-    ) -> Block {
-        Block {
-            block_identifier,
-            parent_block_identifier,
-            timestamp,
-            transactions,
-            metadata: None,
-        }
-    }
-}
-
-/// A BlockRequest is utilized to make a block request on the /block endpoint.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct BlockRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "block_identifier")]
-    pub block_identifier: PartialBlockIdentifier,
-}
-
-impl BlockRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        block_identifier: PartialBlockIdentifier,
-    ) -> BlockRequest {
-        BlockRequest {
-            network_identifier,
-            block_identifier,
-        }
-    }
-}
-
-/// A BlockResponse includes a fully-populated block or a partially-populated
-/// block with a list of other transactions to fetch (other_transactions).  As a
-/// result of the consensus algorithm of some blockchains, blocks can be omitted
-/// (i.e. certain block indexes can be skipped). If a query for one of these
-/// omitted indexes is made, the response should not include a `Block` object.
-/// It is VERY important to note that blocks MUST still form a canonical,
-/// connected chain of blocks where each block has a unique index. In other
-/// words, the `PartialBlockIdentifier` of a block after an omitted block should
-/// reference the last non-omitted block.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct BlockResponse {
-    #[serde(rename = "block")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub block: Option<Block>,
-
-    /// Some blockchains may require additional transactions to be fetched that
-    /// weren't returned in the block response (ex: block only returns
-    /// transaction hashes). For blockchains with a lot of transactions in each
-    /// block, this can be very useful as consumers can concurrently fetch all
-    /// transactions returned.
-    #[serde(rename = "other_transactions")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub other_transactions: Option<Vec<TransactionIdentifier>>,
-}
-
-impl BlockResponse {
-    pub fn new() -> BlockResponse {
-        BlockResponse {
-            block: None,
-            other_transactions: None,
-        }
-    }
-}
-
-/// A BlockTransactionRequest is used to fetch a Transaction included in a block
-/// that is not returned in a BlockResponse.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct BlockTransactionRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "block_identifier")]
-    pub block_identifier: BlockIdentifier,
-
-    #[serde(rename = "transaction_identifier")]
-    pub transaction_identifier: TransactionIdentifier,
-}
-
-impl BlockTransactionRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        block_identifier: BlockIdentifier,
-        transaction_identifier: TransactionIdentifier,
-    ) -> BlockTransactionRequest {
-        BlockTransactionRequest {
-            network_identifier,
-            block_identifier,
-            transaction_identifier,
-        }
-    }
-}
-
-/// A BlockTransactionResponse contains information about a block transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct BlockTransactionResponse {
-    #[serde(rename = "transaction")]
-    pub transaction: Transaction,
-}
-
-impl BlockTransactionResponse {
-    pub fn new(transaction: Transaction) -> BlockTransactionResponse {
-        BlockTransactionResponse { transaction }
-    }
-}
-
-/// CoinActions are different state changes that a Coin can undergo. When a Coin
-/// is created, it is coin_created. When a Coin is spent, it is coin_spent. It
-/// is assumed that a single Coin cannot be created or spent more than once.
-/// Enumeration of values.
-/// Since this enum's variants do not hold data, we can easily define them them
-/// as `#[repr(C)]` which helps with FFI.
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
-pub enum CoinAction {
-    #[serde(rename = "coin_created")]
-    Created,
-    #[serde(rename = "coin_spent")]
-    Spent,
-}
-
-impl ::std::fmt::Display for CoinAction {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            CoinAction::Created => write!(f, "coin_created"),
-            CoinAction::Spent => write!(f, "coin_spent"),
-        }
-    }
-}
-
-impl ::std::str::FromStr for CoinAction {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "coin_created" => Ok(CoinAction::Created),
-            "coin_spent" => Ok(CoinAction::Spent),
-            _ => Err(()),
-        }
-    }
-}
-
-/// CoinChange is used to represent a change in state of a some coin identified
-/// by a coin_identifier. This object is part of the Operation model and must be
-/// populated for UTXO-based blockchains.  Coincidentally, this abstraction of
-/// UTXOs allows for supporting both account-based transfers and UTXO-based
-/// transfers on the same blockchain (when a transfer is account-based, don't
-/// populate this model).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct CoinChange {
-    #[serde(rename = "coin_identifier")]
-    pub coin_identifier: CoinIdentifier,
-
-    #[serde(rename = "coin_action")]
-    pub coin_action: CoinAction,
-}
-
-impl CoinChange {
-    pub fn new(coin_identifier: CoinIdentifier, coin_action: CoinAction) -> CoinChange {
-        CoinChange {
-            coin_identifier,
-            coin_action,
-        }
-    }
-}
-
-/// CoinIdentifier uniquely identifies a Coin.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct CoinIdentifier {
-    /// Identifier should be populated with a globally unique identifier of a
-    /// Coin. In Bitcoin, this identifier would be transaction_hash:index.
-    #[serde(rename = "identifier")]
-    pub identifier: String,
-}
-
-impl CoinIdentifier {
-    pub fn new(identifier: String) -> CoinIdentifier {
-        CoinIdentifier { identifier }
     }
 }
 
@@ -1048,15 +782,15 @@ impl ::std::str::FromStr for CurveType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Error(pub rosetta_core::objects::Error);
+pub struct Error(pub rosetta_core::miscellaneous::Error);
 
-impl From<Error> for rosetta_core::objects::Error {
+impl From<Error> for rosetta_core::miscellaneous::Error {
     fn from(value: Error) -> Self {
         value.0
     }
 }
-impl From<rosetta_core::objects::Error> for Error {
-    fn from(value: rosetta_core::objects::Error) -> Self {
+impl From<rosetta_core::miscellaneous::Error> for Error {
+    fn from(value: rosetta_core::miscellaneous::Error) -> Self {
         Error(value)
     }
 }
@@ -1074,6 +808,12 @@ impl Error {
     pub fn serialization_error_json_str() -> String {
         "{\"code\":700,\"message\":\"Internal server error\",\"retriable\":true,\"details\":null}"
             .to_string()
+    }
+}
+
+impl From<ApiError> for Error {
+    fn from(error: ApiError) -> Self {
+        convert_to_error(&error)
     }
 }
 
@@ -1183,30 +923,6 @@ impl NetworkIdentifier {
         Self(rosetta_core::identifiers::NetworkIdentifier::new(
             blockchain, network,
         ))
-    }
-}
-
-/// When fetching data by BlockIdentifier, it may be possible to only specify
-/// the index or hash. If neither property is specified, it is assumed that the
-/// client is making a request at the current block.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct PartialBlockIdentifier {
-    #[serde(rename = "index")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<u64>,
-
-    #[serde(rename = "hash")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hash: Option<String>,
-}
-
-impl PartialBlockIdentifier {
-    pub fn new() -> PartialBlockIdentifier {
-        PartialBlockIdentifier {
-            index: None,
-            hash: None,
-        }
     }
 }
 
@@ -1348,67 +1064,6 @@ impl SigningPayload {
             account_identifier: None,
             hex_bytes,
             signature_type: None,
-        }
-    }
-}
-
-/// An account may have state specific to a contract address (ERC-20 token)
-/// and/or a stake (delegated balance). The sub_account_identifier should
-/// specify which state (if applicable) an account instantiation refers to.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct SubAccountIdentifier {
-    /// The SubAccount address may be a cryptographic value or some other
-    /// identifier (ex: bonded) that uniquely specifies a SubAccount.
-    #[serde(rename = "address")]
-    pub address: String,
-
-    /// If the SubAccount address is not sufficient to uniquely specify a
-    /// SubAccount, any other identifying information can be stored here.  It is
-    /// important to note that two SubAccounts with identical addresses but
-    /// differing metadata will not be considered equal by clients.
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl SubAccountIdentifier {
-    pub fn new(address: String) -> SubAccountIdentifier {
-        SubAccountIdentifier {
-            address,
-            metadata: None,
-        }
-    }
-}
-
-/// Transactions contain an array of Operations that are attributable to the
-/// same TransactionIdentifier.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Transaction {
-    #[serde(rename = "transaction_identifier")]
-    pub transaction_identifier: TransactionIdentifier,
-
-    #[serde(rename = "operations")]
-    pub operations: Vec<Operation>,
-
-    /// Transactions that are related to other transactions (like a cross-shard
-    /// transaction) should include the transaction_identifier of these
-    /// transactions in the metadata.
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl Transaction {
-    pub fn new(
-        transaction_identifier: TransactionIdentifier,
-        operations: Vec<Operation>,
-    ) -> Transaction {
-        Transaction {
-            transaction_identifier,
-            operations,
-            metadata: None,
         }
     }
 }

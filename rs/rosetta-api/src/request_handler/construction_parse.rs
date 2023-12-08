@@ -594,12 +594,12 @@ mod tests {
     use url::Url;
 
     use crate::ledger_client::LedgerClient;
-    use crate::models::amount::Amount;
-    use crate::models::operation::{Operation, OperationIdentifier, OperationType};
+    use crate::models::operation::OperationType;
+    use crate::models::Amount;
     use crate::models::{
         ConstructionCombineRequest, ConstructionDeriveRequest, ConstructionParseRequest,
         ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, Currency, CurveType,
-        PublicKey, Signature, SignatureType,
+        Operation, OperationIdentifier, PublicKey, Signature, SignatureType,
     };
     use crate::request_handler::RosettaRequestHandler;
     use rosetta_core::objects::ObjectMap;
@@ -650,7 +650,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Transaction,
+                _type: OperationType::Transaction.to_string(),
                 status: None,
                 account: account.clone(),
                 amount: Some(Amount {
@@ -667,7 +667,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Transaction,
+                _type: OperationType::Transaction.to_string(),
                 status: None,
                 account: account.clone(),
                 amount: Some(Amount {
@@ -684,7 +684,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Fee,
+                _type: OperationType::Fee.to_string(),
                 status: None,
                 account,
                 amount: Some(Amount {

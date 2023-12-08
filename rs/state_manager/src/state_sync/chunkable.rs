@@ -1159,15 +1159,8 @@ impl Chunkable for IncompleteState {
 
     fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
         let ix = artifact_chunk.chunk_id.get();
-
-        let payload = match artifact_chunk.artifact_chunk_data {
-            ArtifactChunkData::SemiStructuredChunkData(ref payload) => payload,
-            other => {
-                warn!(self.log, "State sync chunk has wrong shape {:?}", other);
-                return Err(ChunkVerificationFailed);
-            }
-        };
-
+        let ArtifactChunkData::SemiStructuredChunkData(ref payload) =
+            artifact_chunk.artifact_chunk_data;
         match &mut self.state {
             DownloadState::Complete(ref artifact) => {
                 debug!(

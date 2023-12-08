@@ -5,7 +5,7 @@ use std::{
 };
 
 use axum::http::Request;
-use backoff::backoff::Backoff;
+use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent, consensus::ValidatedPoolReader,
@@ -23,39 +23,20 @@ use tokio::{
     time,
 };
 
-use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, SlotNumber, Update};
+use crate::{
+    metrics::ConsensusManagerMetrics, uri_prefix, AdvertUpdate, CommitId, SlotNumber, Update,
+};
 
 /// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
 /// in size are pushed.
 const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
 
-//TODO(NET-1539): Move all these bounds to the ArtifactKind trait directly.
-// pub trait Send + Sync + Hash +'static: Send + Sync  + Hash + 'static {}
-
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
-// The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
-// See VER-1060 for details.
-const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(10);
-// The multiplier is chosen such that the sum of all intervals is about 100
-// seconds: `sum ~= (1.1^25 - 1) / (1.1 - 1) ~= 98`.
-const BACKOFF_INTERVAL_MULTIPLIER: f64 = 1.1;
-const MAX_ELAPSED_TIME: Duration = Duration::from_secs(60 * 5); // 5 minutes
+const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(60);
+const BACKOFF_MULTIPLIER: f64 = 2.0;
 
 // Used to log warnings if the slot table grows beyond the threshold.
 const SLOT_TABLE_THRESHOLD: u64 = 30_000;
-
-pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
-    backoff::ExponentialBackoff {
-        initial_interval: MIN_BACKOFF_INTERVAL,
-        current_interval: MIN_BACKOFF_INTERVAL,
-        randomization_factor: 0.1,
-        multiplier: BACKOFF_INTERVAL_MULTIPLIER,
-        start_time: std::time::Instant::now(),
-        max_interval: MAX_BACKOFF_INTERVAL,
-        max_elapsed_time: Some(MAX_ELAPSED_TIME),
-        clock: backoff::SystemClock::default(),
-    }
-}
 
 pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     log: ReplicaLogger,
@@ -63,7 +44,6 @@ pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     rt_handle: Handle,
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     transport: Arc<dyn Transport>,
-
     adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
     slot_manager: SlotManager,
     current_commit_id: CommitId,
@@ -79,7 +59,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         transport: Arc<dyn Transport>,
         adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
     ) {
-        let slot_manager = SlotManager::new(log.clone(), metrics.clone());
+        let slot_manager = SlotManager::new(log.clone(), metrics.clone(), Artifact::TAG.into());
 
         let manager = Self {
             log,
@@ -125,7 +105,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         error!(
             self.log,
             "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
-            Artifact::TAG
+            uri_prefix::<Artifact>()
         );
     }
 
@@ -133,7 +113,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         if let Some((send_task, free_slot)) = self.active_adverts.remove(id) {
             self.metrics.send_view_consensus_purge_active_total.inc();
             send_task.abort();
-            self.slot_manager.give_slot(free_slot);
+            self.slot_manager.return_slot(free_slot);
         } else {
             self.metrics.send_view_consensus_dup_purge_total.inc();
         }
@@ -145,7 +125,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
 
-            let slot = self.slot_manager.take_free_slot();
+            let slot = self.slot_manager.slot();
 
             let send_future = Self::send_advert_to_all_peers(
                 self.rt_handle.clone(),
@@ -234,7 +214,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
                         if !is_initiated {
                             metrics.send_view_send_to_peer_total.inc();
-                            let task = send_advert_to_peer(transport.clone(), body.clone(), peer, Artifact::TAG.into());
+                            let task = send_advert_to_peer(transport.clone(), body.clone(), peer, uri_prefix::<Artifact>());
                             in_progress_transmissions.spawn_on(task, &rt_handle);
                             initiated_transmissions.insert(peer, connection_id);
                         }
@@ -264,9 +244,14 @@ async fn send_advert_to_peer(
     transport: Arc<dyn Transport>,
     message: Bytes,
     peer: NodeId,
-    uri_prefix: &str,
+    uri_prefix: String,
 ) {
-    let mut backoff = get_backoff_policy();
+    let mut backoff = ExponentialBackoffBuilder::new()
+        .with_initial_interval(MIN_BACKOFF_INTERVAL)
+        .with_max_interval(MAX_BACKOFF_INTERVAL)
+        .with_multiplier(BACKOFF_MULTIPLIER)
+        .with_max_elapsed_time(None)
+        .build();
 
     loop {
         let request = Request::builder()
@@ -278,7 +263,7 @@ async fn send_advert_to_peer(
             return;
         }
 
-        let backoff_duration = backoff.next_backoff().unwrap_or(MAX_ELAPSED_TIME);
+        let backoff_duration = backoff.next_backoff().unwrap_or(MAX_BACKOFF_INTERVAL);
         time::sleep(backoff_duration).await;
     }
 }
@@ -288,24 +273,30 @@ struct SlotManager {
     free_slots: Vec<SlotNumber>,
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
+    service_name: &'static str,
 }
 
 impl SlotManager {
-    fn new(log: ReplicaLogger, metrics: ConsensusManagerMetrics) -> Self {
+    fn new(
+        log: ReplicaLogger,
+        metrics: ConsensusManagerMetrics,
+        service_name: &'static str,
+    ) -> Self {
         Self {
             next_free_slot: 0.into(),
             free_slots: vec![],
             log,
             metrics,
+            service_name,
         }
     }
 
-    fn give_slot(&mut self, slot: SlotNumber) {
+    fn return_slot(&mut self, slot: SlotNumber) {
         self.free_slots.push(slot);
         self.metrics.slot_manager_used_slots.dec();
     }
 
-    fn take_free_slot(&mut self) -> SlotNumber {
+    fn slot(&mut self) -> SlotNumber {
         self.metrics.slot_manager_used_slots.inc();
         match self.free_slots.pop() {
             Some(slot) => slot,
@@ -313,7 +304,9 @@ impl SlotManager {
                 if self.next_free_slot.get() > SLOT_TABLE_THRESHOLD {
                     warn!(
                         self.log,
-                        "Slot table threshold exceeded. Slots in use = {}.", self.next_free_slot
+                        "Slot table threshold exceeded for service {}. Slots in use = {}.",
+                        self.service_name,
+                        self.next_free_slot
                     );
                 }
 
@@ -718,17 +711,18 @@ mod tests {
         let mut sm = SlotManager::new(
             no_op_logger(),
             ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+            "test",
         );
 
         // Take more than SLOT_TABLE_THRESHOLD number of slots
         for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
-            assert_eq!(sm.take_free_slot().get(), i);
+            assert_eq!(sm.slot().get(), i);
         }
         // Give back all the slots.
         for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
-            sm.give_slot(SlotNumber::from(i));
+            sm.return_slot(SlotNumber::from(i));
         }
         // Check that we get the slot that was returned last
-        assert_eq!(sm.take_free_slot().get(), SLOT_TABLE_THRESHOLD * 5 - 1);
+        assert_eq!(sm.slot().get(), SLOT_TABLE_THRESHOLD * 5 - 1);
     }
 }

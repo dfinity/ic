@@ -15,7 +15,7 @@ futures = { workspace = true }
 futures-util = "0.3.13"
 hyper = { version = "0.14.16", features = ["full"] }
 ic-types = { path = "../types/types" }
-slog = "2.5.2"
+slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }

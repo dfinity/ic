@@ -1,9 +1,10 @@
 use x509_cert::der; // re-export of der create
 use x509_cert::spki; // re-export of spki create
 
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+use rand::{CryptoRng, Rng};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use x509_cert::{
@@ -102,8 +103,7 @@ impl pkcs8::EncodePublicKey for VerifyingKey {
 }
 
 impl KeyPair {
-    pub fn gen_ed25519() -> Self {
-        let rng = &mut reproducible_rng();
+    pub fn gen_ed25519<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let key_pair = ic_crypto_internal_basic_sig_ed25519::api::keypair_from_rng(rng);
         Self::Ed25519 {
             secret_key: key_pair.0,
@@ -111,8 +111,7 @@ impl KeyPair {
         }
     }
 
-    pub fn gen_secp256r1() -> Self {
-        let rng = &mut reproducible_rng();
+    pub fn gen_secp256r1<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let secret_key = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
         let public_key = secret_key.public_key();
         Self::Secp256r1 {
@@ -154,20 +153,20 @@ impl KeyPair {
 }
 
 /// Generates an ed25519 key pair.
-pub fn ed25519_key_pair() -> KeyPair {
-    KeyPair::gen_ed25519()
+pub fn ed25519_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> KeyPair {
+    KeyPair::gen_ed25519(rng)
 }
 
 /// Generates a prime256v1 key pair.
 ///
 /// Note that NIST P-256, prime256v1, secp256r1 are all the same, see https://tools.ietf.org/search/rfc4492#appendix-A
-pub fn prime256v1_key_pair() -> KeyPair {
-    KeyPair::gen_secp256r1()
+pub fn prime256v1_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> KeyPair {
+    KeyPair::gen_secp256r1(rng)
 }
 
 /// Generates an X.509 certificate together with its private key.
-pub fn generate_ed25519_cert() -> CertWithPrivateKey {
-    CertWithPrivateKey::builder().build_ed25519()
+pub fn generate_ed25519_cert<R: Rng + CryptoRng>(rng: &mut R) -> CertWithPrivateKey {
+    CertWithPrivateKey::builder().build_ed25519(rng)
 }
 
 /// Converts the `cert` into an `X509PublicKeyCert`.
@@ -188,7 +187,7 @@ pub struct CertBuilder {
     set_ca_key_usage_extension: bool,
     duplicate_subject_cn: bool,
     duplicate_issuer_cn: bool,
-    self_sign_with_wrong_secret_key: bool,
+    self_sign_with_wrong_secret_key: Option<ReproducibleRng>,
 }
 
 impl CertBuilder {
@@ -260,21 +259,21 @@ impl CertBuilder {
         self
     }
 
-    pub fn self_sign_with_wrong_secret_key(mut self) -> Self {
-        self.self_sign_with_wrong_secret_key = true;
+    pub fn self_sign_with_wrong_secret_key(mut self, rng: ReproducibleRng) -> Self {
+        self.self_sign_with_wrong_secret_key = Some(rng);
         self
     }
 
-    pub fn build_ed25519(self) -> CertWithPrivateKey {
-        self.build(ed25519_key_pair())
+    pub fn build_ed25519<R: Rng + CryptoRng>(self, rng: &mut R) -> CertWithPrivateKey {
+        self.build(ed25519_key_pair(rng))
     }
 
-    pub fn build_prime256v1(self) -> CertWithPrivateKey {
-        self.build(prime256v1_key_pair())
+    pub fn build_prime256v1<R: Rng + CryptoRng>(self, rng: &mut R) -> CertWithPrivateKey {
+        self.build(prime256v1_key_pair(rng))
     }
 
     pub fn build(self, key_pair: KeyPair) -> CertWithPrivateKey {
-        if self.self_sign_with_wrong_secret_key && self.ca_signing_data.is_some() {
+        if self.self_sign_with_wrong_secret_key.is_some() && self.ca_signing_data.is_some() {
             panic!(
                 "unsupported CertBuilder usage: self_sign_with_wrong_secret_key 
                     and ca_signing_data cannot be used in combination. Choose either."
@@ -293,7 +292,11 @@ impl CertBuilder {
     }
 
     fn x509(self, key_pair: &KeyPair) -> x509_cert::Certificate {
-        let cn_or_default = self.cn.clone().unwrap_or_else(|| DEFAULT_CN.to_string());
+        let validity = Validity {
+            not_before: self.not_before_asn_1_time(),
+            not_after: self.not_after_asn_1_time(),
+        };
+        let cn_or_default = self.cn.unwrap_or_else(|| DEFAULT_CN.to_string());
         let (profile, cert_signer) = if let Some((ca_key_pair, issuer)) = &self.ca_signing_data {
             // CA signed cert
             let cert_signer = ca_key_pair.clone();
@@ -303,8 +306,8 @@ impl CertBuilder {
             (profile, cert_signer)
         } else {
             // self signed cert
-            let cert_signer = if self.self_sign_with_wrong_secret_key {
-                KeyPair::gen_ed25519()
+            let cert_signer = if let Some(mut rng) = self.self_sign_with_wrong_secret_key {
+                KeyPair::gen_ed25519(&mut rng)
             } else {
                 key_pair.clone()
             };
@@ -316,10 +319,6 @@ impl CertBuilder {
 
         let serial_number = SerialNumber::new(&self.serial_number.unwrap_or(DEFAULT_SERIAL))
             .expect("serial failed");
-        let validity = Validity {
-            not_before: self.not_before_asn_1_time(),
-            not_after: self.not_after_asn_1_time(),
-        };
         let subject = x509_cert_cn(&cn_or_default, self.duplicate_subject_cn);
         let subject_public_key_info =
             spki::SubjectPublicKeyInfoOwned::try_from(key_pair.public_key_der().as_slice())
@@ -437,7 +436,7 @@ impl CertWithPrivateKey {
             set_ca_key_usage_extension: false,
             duplicate_subject_cn: false,
             duplicate_issuer_cn: false,
-            self_sign_with_wrong_secret_key: false,
+            self_sign_with_wrong_secret_key: None,
         }
     }
 

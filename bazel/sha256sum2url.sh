@@ -3,7 +3,7 @@
 set -eEuo pipefail
 
 BASE_URL_DIRECT='https://artifacts.idx.dfinity.network'
-BASE_URL_PROXY='http://artifacts.idx.proxy-global.dfinity.network:8080'
+BASE_URL_PROXY='https://artifacts.cache.idx.dfinity.network'
 
 SHASUM="$(cat "${SHASUMFILE}")"
 

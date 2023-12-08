@@ -1,4 +1,5 @@
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
+use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::blocks::generic_block_to_encoded_block;
@@ -12,7 +13,9 @@ use ic_icrc1_ledger::{
     ChangeFeeCollector, FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
     UpgradeArgs as LedgerUpgradeArgs,
 };
-use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg};
+use ic_icrc1_test_utils::{
+    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
+};
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
@@ -35,11 +38,6 @@ const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 10;
 const MAX_BLOCKS_FROM_ARCHIVE: u64 = 10;
-
-const MINTER: Account = Account {
-    owner: PrincipalId::new(0, [0u8; 29]).0,
-    subaccount: None,
-};
 
 // Metadata-related constants
 const TOKEN_NAME: &str = "Test Token";
@@ -97,9 +95,10 @@ fn install_ledger(
     initial_balances: Vec<(Account, u64)>,
     archive_options: ArchiveOptions,
     fee_collector_account: Option<Account>,
+    minter_principal: Principal,
 ) -> CanisterId {
     let mut builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
-        .with_minting_account(MINTER)
+        .with_minting_account(minter_principal)
         .with_transfer_fee(FEE)
         .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
         .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
@@ -357,12 +356,18 @@ fn apply_arg_with_caller(
     arg: ArgWithCaller,
 ) -> BlockIndex {
     match arg.arg {
-        LedgerEndpointArg::ApproveArg(approve_arg) => {
-            icrc2_approve(env, ledger_id, PrincipalId(arg.caller), approve_arg)
-        }
-        LedgerEndpointArg::TransferArg(transfer_arg) => {
-            icrc1_transfer(env, ledger_id, PrincipalId(arg.caller), transfer_arg)
-        }
+        LedgerEndpointArg::ApproveArg(approve_arg) => icrc2_approve(
+            env,
+            ledger_id,
+            PrincipalId(arg.caller.sender().unwrap()),
+            approve_arg,
+        ),
+        LedgerEndpointArg::TransferArg(transfer_arg) => icrc1_transfer(
+            env,
+            ledger_id,
+            PrincipalId(arg.caller.sender().unwrap()),
+            transfer_arg,
+        ),
     }
 }
 
@@ -546,7 +551,13 @@ fn test_ledger_growing() {
 
     let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter_identity().sender().unwrap(),
+    );
     let index_id = install_index_ng(env, ledger_id);
 
     // Test initial mint block.
@@ -589,14 +600,15 @@ fn test_ledger_growing() {
 #[test]
 fn test_archive_indexing() {
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(env, vec![], default_archive_options(), None, minter);
     let index_id = install_index_ng(env, ledger_id);
 
     // Test indexing archive by forcing the ledger to archive some transactions
     // and by having enough transactions such that the index must use archive
     // pagination.
     for i in 0..(ARCHIVE_TRIGGER_THRESHOLD + MAX_BLOCKS_FROM_ARCHIVE * 4) {
-        transfer(env, ledger_id, MINTER, account(i, 0), i * 1_000_000);
+        transfer(env, ledger_id, minter.into(), account(i, 0), i * 1_000_000);
     }
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -652,7 +664,14 @@ fn assert_txs_with_id_eq(txs1: Vec<TransactionWithId>, txs2: Vec<TransactionWith
 fn test_get_account_transactions() {
     let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
     let index_id = install_index_ng(env, ledger_id);
 
     // List of the transactions that the test is going to add. This exists to make
@@ -780,7 +799,14 @@ fn test_get_account_transactions_start_length() {
     // 10 mint transactions to index for the same account.
     let initial_balances: Vec<_> = (0..10).map(|i| (account(1, 0), i * 10_000)).collect();
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
     let index_id = install_index_ng(env, ledger_id);
     let expected_txs: Vec<_> = (0..10)
         .map(|i| TransactionWithId {
@@ -831,7 +857,14 @@ fn test_get_account_transactions_pagination() {
     // 10_000 mint transactions to index for the same account.
     let initial_balances: Vec<_> = (0..10_000).map(|i| (account(1, 0), i * 10_000)).collect();
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
     let index_id = install_index_ng(env, ledger_id);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -898,14 +931,22 @@ fn test_icrc1_balance_of() {
     // 1 case only because the test is expensive to run.
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
+    let minter = minter_identity();
+    let minter_principal = minter.sender().unwrap();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 100, now),),
+            &(valid_transactions_strategy(minter, FEE, 100, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
                 // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
                 env.set_time(now);
-                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                let ledger_id = install_ledger(
+                    env,
+                    vec![],
+                    default_archive_options(),
+                    None,
+                    minter_principal,
+                );
                 let index_id = install_index_ng(env, ledger_id);
 
                 for arg_with_caller in &transactions {
@@ -963,7 +1004,14 @@ fn test_list_subaccounts() {
     initial_balances.extend(accounts_2.iter().map(|account| (*account, 10_000)));
 
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter.sender().unwrap(),
+    );
     let index_id = install_index_ng(env, ledger_id);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -1024,11 +1072,13 @@ fn test_list_subaccounts() {
 #[test]
 fn test_post_upgrade_start_timer() {
     let env = &StateMachine::new();
+    let minter = minter_identity();
     let ledger_id = install_ledger(
         env,
         vec![(account(1, 0), 10_000_000)],
         default_archive_options(),
         None,
+        minter.sender().unwrap(),
     );
     let index_id = install_index_ng(env, ledger_id);
 
@@ -1050,11 +1100,13 @@ fn test_post_upgrade_start_timer() {
 #[test]
 fn test_oldest_tx_id() {
     let env = &StateMachine::new();
+    let minter = minter_identity().sender().unwrap();
     let ledger_id = install_ledger(
         env,
         vec![(account(1, 0), 10_000_000)],
         default_archive_options(),
         None,
+        minter,
     );
     let index_id = install_index_ng(env, ledger_id);
 
@@ -1128,11 +1180,13 @@ fn assert_contain_same_elements<T: Debug + Eq + Hash>(vl: Vec<T>, vr: Vec<T>) {
 fn test_fee_collector() {
     let env = &StateMachine::new();
     let fee_collector = account(42, 0);
+    let minter = minter_identity().sender().unwrap();
     let ledger_id = install_ledger(
         env,
         vec![(account(1, 0), 10_000_000)], // txid: 0
         default_archive_options(),
         Some(fee_collector),
+        minter,
     );
     let index_id = install_index_ng(env, ledger_id);
 
@@ -1229,14 +1283,22 @@ fn test_fee_collector() {
 fn test_get_account_transactions_vs_old_index() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
+    let minter = minter_identity();
+    let minter_principal = minter.sender().unwrap();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 10, now),),
+            &(valid_transactions_strategy(minter, FEE, 10, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
                 // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
                 env.set_time(now);
-                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                let ledger_id = install_ledger(
+                    env,
+                    vec![],
+                    default_archive_options(),
+                    None,
+                    minter_principal,
+                );
                 let index_ng_id = install_index_ng(env, ledger_id);
                 let index_id = install_index(env, ledger_id);
 
@@ -1270,14 +1332,22 @@ fn test_upgrade_index_to_index_ng() {
         ..Default::default()
     });
     let now = SystemTime::now();
+    let minter = minter_identity();
+    let minter_principal = minter.sender().unwrap();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 10, now),),
+            &(valid_transactions_strategy(minter, FEE, 10, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
                 // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
                 env.set_time(now);
-                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                let ledger_id = install_ledger(
+                    env,
+                    vec![],
+                    default_archive_options(),
+                    None,
+                    minter_principal,
+                );
                 let index_ng_id = install_index_ng(env, ledger_id);
                 let index_id = install_index(env, ledger_id);
 
@@ -1317,14 +1387,22 @@ fn test_upgrade_index_to_index_ng() {
 fn test_index_ledger_coherence() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
+    let minter = minter_identity();
+    let minter_principal = minter.sender().unwrap();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 50, now),),
+            &(valid_transactions_strategy(minter, FEE, 50, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
                 // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
                 env.set_time(now);
-                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                let ledger_id = install_ledger(
+                    env,
+                    vec![],
+                    default_archive_options(),
+                    None,
+                    minter_principal,
+                );
                 let index_id = install_index_ng(env, ledger_id);
 
                 for arg_with_caller in &transactions {
@@ -1342,7 +1420,14 @@ fn test_index_ledger_coherence() {
 fn test_principal_subaccounts() {
     let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
     let index_id = install_index_ng(env, ledger_id);
 
     // Test initial mint block.

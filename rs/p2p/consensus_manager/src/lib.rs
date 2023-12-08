@@ -204,8 +204,42 @@ impl<Artifact: ArtifactKind> TryFrom<pb::AdvertUpdate> for AdvertUpdate<Artifact
     }
 }
 
+pub(crate) fn uri_prefix<Artifact: ArtifactKind>() -> String {
+    Artifact::TAG.to_string().to_lowercase()
+}
+
 struct SlotNumberTag;
 pub(crate) type SlotNumber = AmountOf<SlotNumberTag, u64>;
 
 struct CommitIdTag;
 pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
+
+#[cfg(test)]
+mod tests {
+    use ic_types::artifact_kind::{
+        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
+        IngressArtifact,
+    };
+
+    use crate::uri_prefix;
+
+    #[test]
+    fn no_special_chars_in_uri() {
+        assert!(uri_prefix::<ConsensusArtifact>()
+            .chars()
+            .all(char::is_alphabetic));
+        assert!(uri_prefix::<CertificationArtifact>()
+            .chars()
+            .all(char::is_alphabetic));
+        assert!(uri_prefix::<DkgArtifact>().chars().all(char::is_alphabetic));
+        assert!(uri_prefix::<IngressArtifact>()
+            .chars()
+            .all(char::is_alphabetic));
+        assert!(uri_prefix::<EcdsaArtifact>()
+            .chars()
+            .all(char::is_alphabetic));
+        assert!(uri_prefix::<CanisterHttpArtifact>()
+            .chars()
+            .all(char::is_alphabetic));
+    }
+}

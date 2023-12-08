@@ -31,15 +31,13 @@ ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifac
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-state-sync-manager = { path = "../state_sync_manager" }
 ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 mockall = "0.11.4"
 quinn = { version = "0.10.2", features = ["ring"] }
 serde = "1.0.99"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 tempfile = "3.0"
 tokio = { workspace = true }
 turmoil = "0.5"

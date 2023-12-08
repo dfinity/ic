@@ -17,7 +17,7 @@ def sanitize_external_crates(sanitizers_enabled):
         "bincode": FUZZING_ANNOTATION,
     }
 
-def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, sanitizers_enabled):
+def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
         "ic_bls12_381": [crate.annotation(
             rustc_flags = [
@@ -33,6 +33,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
         "ic-wasm": [crate.annotation(
             gen_binaries = True,
         )],
+        # OpenSSL is still an indirect dependency of some tests that require ssh2.
+        # It shouldn't be used by any main binaries however.
         "openssl-sys": [crate.annotation(
             build_script_data = [
                 "@openssl//:gen_dir",
@@ -46,7 +48,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             },
             data = ["@openssl"],
             deps = ["@openssl"],
-        )] if static_openssl or sanitizers_enabled else [],
+        )] if sanitizers_enabled else [],
         "librocksdb-sys": [crate.annotation(
             build_script_env = {
                 # Bazel executors assign only one core when executing
@@ -162,7 +164,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 ],
             ),
             "backoff": crate.spec(
-                version = "^0.3.0",
+                version = "^0.4.0",
             ),
             "base32": crate.spec(
                 version = "^0.4.0",
@@ -604,7 +606,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "0.3.2",
             ),
             "itertools": crate.spec(
-                version = "^0.10.5",
+                version = "^0.12.0",
             ),
             "jemalloc-ctl": crate.spec(
                 version = "^0.3.3",
@@ -683,14 +685,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "minicbor-derive": crate.spec(
                 version = "^0.13.0",
             ),
-            "mio": crate.spec(
-                version = "^0.7",
-                features = [
-                    "os-ext",
-                    "os-poll",
-                    "pipe",
-                ],
-            ),
             "mockall": crate.spec(
                 version = "^0.11.4",
             ),
@@ -702,9 +696,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "nix": crate.spec(
                 version = "^0.24.3",
-            ),
-            "nonblock": crate.spec(
-                version = "^0.1.0",
             ),
             "notify": crate.spec(
                 version = "^4.0.12",
@@ -930,9 +921,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                     "stream",
                 ],
             ),
-            "retain_mut": crate.spec(
-                version = "^0.1",
-            ),
             "ring": crate.spec(
                 version = "^0.16.11",
                 features = [
@@ -1027,17 +1015,11 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "serde_json": crate.spec(
                 version = "^1.0.107",
             ),
-            "serde_millis": crate.spec(
-                version = "^0.1",
-            ),
             "serde_with": crate.spec(
-                version = "^1.6.2",
+                version = "^1.14.0",
             ),
             "serde_yaml": crate.spec(
                 version = "^0.8.24",
-            ),
-            "serial_test": crate.spec(
-                version = "^0.8.0",
             ),
             "sev": crate.spec(
                 version = "^2.0.2",
@@ -1077,7 +1059,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.1.2",
             ),
             "slog": crate.spec(
-                version = "^2.5.2",
+                version = "^2.7.0",
                 features = [
                     "max_level_trace",
                     "nested-values",
@@ -1123,13 +1105,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.3.4",
             ),
             "strum": crate.spec(
-                version = "^0.24.1",
+                version = "^0.25.0",
                 features = [
                     "derive",
                 ],
             ),
             "strum_macros": crate.spec(
-                version = "^0.24.1",
+                version = "^0.25.3",
             ),
             "stubborn-io": crate.spec(
                 version = "^0.3.2",

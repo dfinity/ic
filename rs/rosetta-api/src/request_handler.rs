@@ -11,6 +11,7 @@ use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
 use crate::models::{CallResponse, NetworkIdentifier};
 use crate::request_types::GetProposalInfo;
+use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
@@ -195,7 +196,10 @@ impl RosettaRequestHandler {
 
     /// Get a Block
     pub async fn block(&self, msg: models::BlockRequest) -> Result<BlockResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.into(),
+        )?;
 
         let blocks = self.ledger.read_blocks().await;
         let hb = get_block(&blocks, Some(msg.block_identifier))?;
@@ -211,7 +215,9 @@ impl RosettaRequestHandler {
         let block = Some(models::Block::new(
             b_id,
             parent_id,
-            models::timestamp::from_system_time(block.timestamp.into())?,
+            models::timestamp::from_system_time(block.timestamp.into())?
+                .0
+                .try_into()?,
             transactions,
         ));
 
@@ -226,7 +232,10 @@ impl RosettaRequestHandler {
         &self,
         msg: models::BlockTransactionRequest,
     ) -> Result<BlockTransactionResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.into(),
+        )?;
         let blocks = self.ledger.read_blocks().await;
         let b_id = Some(PartialBlockIdentifier {
             index: Some(msg.block_identifier.index),
@@ -321,7 +330,7 @@ impl RosettaRequestHandler {
                     }
                     errs.into_iter()
                         .map(|err| err.0)
-                        .collect::<Vec<rosetta_core::objects::Error>>()
+                        .collect::<Vec<rosetta_core::miscellaneous::Error>>()
                 },
                 true,
             ),
@@ -521,8 +530,16 @@ impl RosettaRequestHandler {
                 ));
             }
 
-            let tid = ic_ledger_hash_of::HashOf::try_from(tid)
-                .map_err(|e| ApiError::InvalidTransactionId(false, e.into()))?;
+            let tid = ic_ledger_hash_of::HashOf::try_from(&TransactionIdentifier(tid.clone()))
+                .map_err(|_| {
+                    ApiError::InvalidTransactionId(
+                        false,
+                        Details::from(format!(
+                            "Could not calculate hash of transaction identifier: {:?}",
+                            tid
+                        )),
+                    )
+                })?;
 
             if let Ok(indices) = blocks.get_block_idxs_by_transaction_hash(&tid) {
                 for idx in indices {

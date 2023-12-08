@@ -33,6 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
+    "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:leb128",
     "@crate_index//:proptest",
@@ -48,7 +49,7 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_icrc1",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

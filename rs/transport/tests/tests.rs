@@ -16,7 +16,8 @@ use ic_transport_test_utils::{
     create_mock_event_handler, get_free_localhost_port, large_transport_message, peer_down_message,
     setup_test_peer, start_connection_between_two_peers,
     temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider, TestPeerBuilder,
-    TestTopologyBuilder, NODE_ID_1, NODE_ID_2, NODE_ID_3, NODE_ID_4, REG_V1, TRANSPORT_CHANNEL_ID,
+    TestTopologyBuilder, NODE_ID_1, NODE_ID_2, NODE_ID_3, NODE_ID_4, REG_V1, SUBNET_ID_1,
+    TRANSPORT_CHANNEL_ID,
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -613,6 +614,7 @@ fn test_event_handler_drop() {
     };
     let sev_handshake = Arc::new(Sev::new(
         NODE_ID_1,
+        SUBNET_ID_1,
         registry_and_data.registry,
         no_op_logger(),
     ));

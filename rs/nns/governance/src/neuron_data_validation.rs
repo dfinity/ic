@@ -386,11 +386,7 @@ impl<Validator: CardinalityAndRangeValidator> NeuronRangeValidationTask<Validato
         Self {
             // NeuronId cannot be 0.
             heap_next_neuron_id: Some(NeuronId { id: 1 }),
-            stable_next_neuron_id: if crate::should_store_inactive_neurons_only_in_stable_memory() {
-                Some(NeuronId { id: 1 })
-            } else {
-                None
-            },
+            stable_next_neuron_id: Some(NeuronId { id: 1 }),
             _phantom: PhantomData,
         }
     }
@@ -444,11 +440,7 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap = neuron_store.heap_neurons().len() as u64;
         let cardinality_primary_stable =
-            if crate::should_store_inactive_neurons_only_in_stable_memory() {
-                with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len() as u64)
-            } else {
-                0
-            };
+            with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len() as u64);
         let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.subaccount().num_entries()) as u64;
@@ -498,14 +490,9 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
             .values()
             .map(|neuron| neuron.principal_ids_with_special_permissions().len() as u64)
             .sum();
-        let cardinality_primary_stable =
-            if crate::should_store_inactive_neurons_only_in_stable_memory() {
-                with_stable_neuron_store(|stable_neuron_store|
+        let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store|
                     // `stable_neuron_store.len()` is for the controllers.
-                    stable_neuron_store.lens().hot_keys + stable_neuron_store.len() as u64)
-            } else {
-                0
-            };
+                    stable_neuron_store.lens().hot_keys + stable_neuron_store.len() as u64);
         let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.principal().num_entries()) as u64;
@@ -563,11 +550,7 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
             .map(|neuron| neuron.topic_followee_pairs().len() as u64)
             .sum();
         let cardinality_primary_stable =
-            if crate::should_store_inactive_neurons_only_in_stable_memory() {
-                with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.lens().followees)
-            } else {
-                0
-            };
+            with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.lens().followees);
         let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.following().num_entries()) as u64;
@@ -624,14 +607,9 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
             .values()
             .filter(|neuron| neuron.known_neuron_data.is_some())
             .count() as u64;
-        let cardinality_primary_stable =
-            if crate::should_store_inactive_neurons_only_in_stable_memory() {
-                with_stable_neuron_store(|stable_neuron_store| {
-                    stable_neuron_store.lens().known_neuron_data
-                })
-            } else {
-                0
-            };
+        let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store.lens().known_neuron_data
+        });
         let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.known_neuron().num_entries()) as u64;

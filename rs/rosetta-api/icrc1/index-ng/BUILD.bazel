@@ -113,6 +113,7 @@ rust_test(
             "//rs/types/base_types",
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
+            "@crate_index//:ic-agent",
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
             "@crate_index//:serde",

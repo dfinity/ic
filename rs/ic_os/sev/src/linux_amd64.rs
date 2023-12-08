@@ -8,7 +8,7 @@ References:
 use crate::{load_certs, pem_to_der, SnpError};
 use crate::{ValidateAttestationError, ValidateAttestedStream};
 use async_trait::async_trait;
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{NodeId, RegistryVersion, SubnetId};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -32,14 +32,21 @@ pub struct AttestationPackage {
 
 pub struct Sev {
     pub node_id: NodeId,
+    pub subnet_id: SubnetId,
     pub registry: Arc<dyn RegistryClient>,
     log: ReplicaLogger,
 }
 
 impl Sev {
-    pub fn new(node_id: NodeId, registry: Arc<dyn RegistryClient>, log: ReplicaLogger) -> Self {
+    pub fn new(
+        node_id: NodeId,
+        subnet_id: SubnetId,
+        registry: Arc<dyn RegistryClient>,
+        log: ReplicaLogger,
+    ) -> Self {
         Self {
             node_id,
+            subnet_id,
             registry,
             log,
         }
@@ -58,19 +65,9 @@ where
         registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
         // If sev_enabled is None or false in the subnet registry, just return and do not perform attestation.
-        let subnet_id = self
-            .registry
-            .get_subnet_id_from_node_id(self.node_id, registry_version)
-            .map_err(ValidateAttestationError::RegistryError)?
-            .ok_or(ValidateAttestationError::RegistryDataMissing {
-                node_id: self.node_id,
-                registry_version,
-                description: "unable to get our subnet_id".into(),
-            })?;
-
         if !self
             .registry
-            .get_features(subnet_id, registry_version)
+            .get_features(self.subnet_id, registry_version)
             .map_err(ValidateAttestationError::RegistryError)?
             .unwrap_or_default()
             .sev_enabled

@@ -9,7 +9,7 @@ rust_library(
     aliases = {},
     crate_name = "ic_stable_memory_integrity",
     proc_macro_deps = [],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",

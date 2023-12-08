@@ -1,23 +1,20 @@
-use http::{Method, Response, Uri};
-use hyper::{body::HttpBody as _, client::Client, client::HttpConnector, Body};
-use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use flate2::read::GzDecoder;
+use http::Method;
 use ic_crypto_sha2::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
+use reqwest::{Client, Response};
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-use flate2::read::GzDecoder;
 use tar::Archive;
 
 /// Streams HTTP response bodies to files
 pub struct FileDownloader {
-    http_client: Client<HttpsConnector<HttpConnector>, Body>,
+    client: Client,
     logger: Option<ReplicaLogger>,
     /// This is a timeout that is applied to the downloading each chunk that is
     /// yielded, not to the entire downloading of the file.
@@ -35,15 +32,8 @@ impl FileDownloader {
         timeout: Duration,
         allow_redirects: bool,
     ) -> Self {
-        let https = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
-        let http_client = Client::builder().build::<_, hyper::Body>(https);
-
         Self {
-            http_client,
+            client: Client::new(),
             logger,
             timeout,
             allow_redirects,
@@ -124,7 +114,12 @@ impl FileDownloader {
         }
         let response = self.http_get(url).await?;
         if let Some(logger) = &self.logger {
-            info!(logger, "Request initiated");
+            info!(
+                logger,
+                "Download request initiated to {:?}, headers: {:?}",
+                response.remote_addr(),
+                response.headers()
+            );
         }
         self.stream_response_body_to_file(response, file_path)
             .await?;
@@ -140,15 +135,8 @@ impl FileDownloader {
     }
 
     /// Perform a HTTP GET against the given URL
-    async fn http_get(&self, url: &str) -> FileDownloadResult<Response<Body>> {
-        let url: Uri = url
-            .parse::<Uri>()
-            .map_err(|e| FileDownloadError::bad_url(url, e))?;
-
-        let response = tokio::time::timeout(self.timeout, self.http_client.get(url.clone()))
-            .await
-            .map_err(|_| FileDownloadError::TimeoutError)?
-            .map_err(FileDownloadError::from)?;
+    async fn http_get(&self, url: &str) -> FileDownloadResult<Response> {
+        let response = self.client.get(url).timeout(self.timeout).send().await?;
 
         if response.status().is_success() {
             return Ok(response);
@@ -158,21 +146,13 @@ impl FileDownloader {
             match response.headers().get(http::header::LOCATION) {
                 Some(url) => {
                     let url = url.to_str().unwrap();
-                    let url: Uri = url
-                        .parse::<Uri>()
-                        .map_err(|e| FileDownloadError::bad_url(url, e))?;
-                    let response =
-                        tokio::time::timeout(self.timeout, self.http_client.get(url.clone()))
-                            .await
-                            .map_err(|_| FileDownloadError::TimeoutError)?
-                            .map_err(FileDownloadError::from)?;
+                    let response = self.client.get(url).timeout(self.timeout).send().await?;
                     if response.status().is_success() {
                         return Ok(response);
                     }
                     return Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
                         Method::GET,
-                        url,
-                        response.status(),
+                        response,
                     )));
                 }
                 None => {
@@ -189,30 +169,27 @@ impl FileDownloader {
 
         Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
             Method::GET,
-            url,
-            response.status(),
+            response,
         )))
     }
 
     /// Stream the bytes of a given HTTP response body into the given file
     async fn stream_response_body_to_file(
         &self,
-        mut response: Response<Body>,
+        mut response: Response,
         file_path: &Path,
     ) -> FileDownloadResult<()> {
         let mut output_file = File::create(file_path)
             .map_err(|e| FileDownloadError::file_create_error(file_path, e))?;
 
-        while let Some(next) = tokio::time::timeout(self.timeout, response.data())
+        while let Some(chunk) = tokio::time::timeout(self.timeout, response.chunk())
             .await
-            .map_err(|_| FileDownloadError::TimeoutError)?
+            .map_err(|_| FileDownloadError::TimeoutError)??
         {
-            let chunk = next.map_err(FileDownloadError::from)?;
             output_file
                 .write_all(&chunk)
                 .map_err(|e| FileDownloadError::file_write_error(file_path, e))?;
         }
-
         Ok(())
     }
 }
@@ -346,27 +323,27 @@ impl fmt::Display for FileDownloadError {
         match self {
             FileDownloadError::IoError(msg, e) => write!(
                 f,
-                "IO error, message: {:?}, error: {:?}",
+                "IO error, message: {}, error: {:?}",
                 msg, e
             ),
             FileDownloadError::HttpError(HttpError::MalformedUrl(bad_url, e)) => write!(
                 f,
-                "Unable to parse URL: {:?}, error: {:?}",
+                "Unable to parse URL: {}, error: {:?}",
                 bad_url, e
             ),
-            FileDownloadError::HttpError(HttpError::HyperError(e)) => write!(
+            FileDownloadError::HttpError(HttpError::ReqwestError(e)) => write!(
                 f,
-                "Encountered error when making HTTP request: {:?}",
+                "Encountered error when making Reqwest request: {}",
                 e
             ),
-            FileDownloadError::HttpError(HttpError::NonSuccessResponse(method, uri, status_code)) => write!(
+            FileDownloadError::HttpError(HttpError::NonSuccessResponse(method, response)) => write!(
                 f,
-                "Received non-success response from endpoint: method: {:?}, uri: {:?}, status_code: {:?}",
-                method.as_str(), uri, status_code
+                "Received non-success response from endpoint: method: {}, uri: {}, remote_addr: {:?}, status_code: {}, headers: {:?}",
+                method.as_str(), response.url(), response.remote_addr(), response.status(), response.headers()
             ),
             FileDownloadError::HttpError(HttpError::RedirectMissingHeader(method, header, status_code)) => write!(
                 f,
-                "Received a redirect response from endpoint but a header is missing: method: {:?}, header: {:?}, status_code: {:?}",
+                "Received a redirect response from endpoint but a header is missing: method: {}, header: {}, status_code: {}",
                 method.as_str(), header, status_code
             ),
             FileDownloadError::FileHashMismatchError { computed_hash, expected_hash, file_path } =>
@@ -384,9 +361,9 @@ impl fmt::Display for FileDownloadError {
     }
 }
 
-impl From<hyper::Error> for FileDownloadError {
-    fn from(e: hyper::Error) -> Self {
-        FileDownloadError::HttpError(HttpError::HyperError(e))
+impl From<reqwest::Error> for FileDownloadError {
+    fn from(e: reqwest::Error) -> Self {
+        FileDownloadError::HttpError(HttpError::ReqwestError(e))
     }
 }
 
@@ -398,11 +375,11 @@ pub enum HttpError {
     /// Failed to parse this String as a URL
     MalformedUrl(String, http::uri::InvalidUri),
 
-    /// A hyper HTTP client produced an error
-    HyperError(hyper::Error),
+    /// A reqwest HTTP client produced an error
+    ReqwestError(reqwest::Error),
 
     /// A non-success HTTP response was received from the given URI
-    NonSuccessResponse(http::Method, http::Uri, http::StatusCode),
+    NonSuccessResponse(http::Method, Response),
 
     /// A redirect response without a required header
     RedirectMissingHeader(http::Method, http::HeaderName, http::StatusCode),

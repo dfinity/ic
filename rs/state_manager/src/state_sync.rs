@@ -9,7 +9,7 @@ use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId, StateSyncMessage},
-    chunkable::{ArtifactChunk, ChunkId, Chunkable, ChunkableArtifact},
+    chunkable::{Chunk, ChunkId, Chunkable},
     state_sync::FileGroupChunks,
     Height,
 };
@@ -252,9 +252,9 @@ impl StateSyncClient for StateSync {
     }
 
     /// Blocking. Makes synchronous file system calls.
-    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         let msg = self.get_validated_by_identifier(id)?;
-        Box::new(msg).get_chunk(chunk_id)
+        msg.get_chunk(chunk_id)
     }
 
     /// Blocking. Makes synchronous file system calls.

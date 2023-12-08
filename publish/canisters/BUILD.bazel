@@ -71,8 +71,8 @@ CANISTERS_MAX_SIZE_E5_BYTES = {
     "ledger-canisternotify-method.wasm": "19",
     "root-canister.wasm": "15",
     "sns-canister.wasm": "15",
-    "sns-governance-canister.wasm": "19",
-    "sns-governance-canister_test.wasm": "19",
+    "sns-governance-canister.wasm": "20",
+    "sns-governance-canister_test.wasm": "20",
     "sns-root-canister.wasm": "15",
     "sns-swap-canister.wasm": "15",
 }

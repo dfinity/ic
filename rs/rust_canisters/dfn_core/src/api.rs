@@ -84,6 +84,7 @@ pub mod ic0 {
         pub fn canister_version() -> u64;
         pub fn mint_cycles(amount: u64) -> u64;
         pub fn is_controller(src: u32, size: u32) -> u32;
+        pub fn in_replicated_execution() -> u32;
     }
 }
 
@@ -285,6 +286,10 @@ pub mod ic0 {
     }
     pub unsafe fn is_controller(_src: u32, _size: u32) -> u32 {
         wrong_arch("is_controller")
+    }
+
+    pub unsafe fn in_replicated_execution() -> u32 {
+        wrong_arch("in_replicated_execution")
     }
 }
 

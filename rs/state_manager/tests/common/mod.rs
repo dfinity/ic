@@ -24,7 +24,7 @@ use ic_types::{
     chunkable::{
         ArtifactChunk, ArtifactChunkData,
         ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
-        ChunkId, Chunkable, ChunkableArtifact,
+        ChunkId, Chunkable,
     },
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
@@ -396,12 +396,6 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> St
 
 fn alter_chunk_data(chunk: &mut ArtifactChunk) {
     let mut chunk_data = match &chunk.artifact_chunk_data {
-        ArtifactChunkData::UnitChunkData(_) => {
-            panic!(
-                "Unexpected artifact chunk data type: {:?}",
-                chunk.artifact_chunk_data
-            );
-        }
         ArtifactChunkData::SemiStructuredChunkData(chunk_data) => chunk_data.clone(),
     };
     match chunk_data.last_mut() {
@@ -431,9 +425,15 @@ pub fn pipe_meta_manifest(
 
     let id = ids[0];
 
-    let mut chunk = Box::new(src.clone())
-        .get_chunk(id)
-        .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+    let mut chunk = ArtifactChunk {
+        chunk_id: id,
+        artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
+            src.clone()
+                .get_chunk(id)
+                .unwrap_or_else(|| panic!("Requested unknown chunk {}", id))
+                .into(),
+        ),
+    };
 
     if use_bad_chunk {
         alter_chunk_data(&mut chunk);
@@ -467,9 +467,15 @@ pub fn pipe_manifest(
     assert!(ids.iter().all(|id| manifest_chunks.contains(id)));
 
     for (index, id) in ids.iter().enumerate() {
-        let mut chunk = Box::new(src.clone())
-            .get_chunk(*id)
-            .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+        let mut chunk = ArtifactChunk {
+            chunk_id: *id,
+            artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
+                src.clone()
+                    .get_chunk(*id)
+                    .unwrap_or_else(|| panic!("Requested unknown chunk {}", id))
+                    .into(),
+            ),
+        };
 
         if use_bad_chunk && index == ids.len() / 2 {
             alter_chunk_data(&mut chunk);
@@ -512,9 +518,15 @@ pub fn pipe_partial_state_sync(
                 omitted_chunks = true;
                 continue;
             }
-            let mut chunk = Box::new(src.clone())
-                .get_chunk(*id)
-                .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+            let mut chunk = ArtifactChunk {
+                chunk_id: *id,
+                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
+                    src.clone()
+                        .get_chunk(*id)
+                        .unwrap_or_else(|| panic!("Requested unknown chunk {}", id))
+                        .into(),
+                ),
+            };
 
             if use_bad_chunk && index == ids.len() / 2 {
                 alter_chunk_data(&mut chunk);

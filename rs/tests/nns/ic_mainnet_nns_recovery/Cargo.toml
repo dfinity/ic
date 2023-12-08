@@ -27,5 +27,5 @@ tests = { path = "../../" }
 ic-types = { path = "../../../types/types" }
 reqwest = { workspace = true }
 serde = { workspace = true }
-slog = { version = "2.5.2" }
+slog = { workspace = true }
 url = "2.1.1"

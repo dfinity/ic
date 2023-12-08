@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::net::{Ipv6Addr, SocketAddr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 
@@ -133,6 +133,19 @@ impl InternetComputer {
                 self.required_host_features.clone(),
             ));
         }
+        self
+    }
+
+    /// Add a single unassigned node with the given IPv4 configuration
+    pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: Ipv4Config) -> Self {
+        self.unassigned_nodes.push(
+            Node::new_with_settings(
+                self.default_vm_resources,
+                self.vm_allocation.clone(),
+                self.required_host_features.clone(),
+            )
+            .with_ipv4_config(ipv4_config),
+        );
         self
     }
 
@@ -299,6 +312,29 @@ impl InternetComputer {
         match malicious_nodes.len() {
             0 => None,
             1 => malicious_nodes.first().unwrap().clone(),
+            _ => panic!("more than one node has id={node_id}"),
+        }
+    }
+
+    pub fn get_ipv4_config_of_node(&self, node_id: NodeId) -> Option<Ipv4Config> {
+        let node_filter_map = |n: &Node| {
+            if n.secret_key_store.as_ref().unwrap().node_id == node_id {
+                Some(n.ipv4.clone())
+            } else {
+                None
+            }
+        };
+        // extract ipv4-enabled nodes all subnet nodes
+        let mut ipv4_enabled_nodes: Vec<Option<Ipv4Config>> = self
+            .subnets
+            .iter()
+            .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
+            .collect();
+        // extract malicious nodes from all unassigned nodes
+        ipv4_enabled_nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        match ipv4_enabled_nodes.len() {
+            0 => None,
+            1 => ipv4_enabled_nodes.first().unwrap().clone(),
             _ => panic!("more than one node has id={node_id}"),
         }
     }
@@ -518,6 +554,16 @@ impl Subnet {
         self
     }
 
+    pub fn add_node_with_ipv4(self, ipv4_config: Ipv4Config) -> Self {
+        let default_vm_resources = self.default_vm_resources;
+        let vm_allocation = self.vm_allocation.clone();
+        let required_host_features = self.required_host_features.clone();
+        self.add_node(
+            Node::new_with_settings(default_vm_resources, vm_allocation, required_host_features)
+                .with_ipv4_config(ipv4_config),
+        )
+    }
+
     /// provides a small summary of this subnet topology and config to be used
     /// as a part of a test environment identifier.
     pub fn summary(&self) -> String {
@@ -596,6 +642,7 @@ pub struct Node {
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
     pub malicious_behaviour: Option<MaliciousBehaviour>,
+    pub ipv4: Option<Ipv4Config>,
 }
 
 impl Node {
@@ -626,4 +673,16 @@ impl Node {
         self.malicious_behaviour = Some(malicious_behaviour);
         self
     }
+
+    pub fn with_ipv4_config(mut self, ipv4_config: Ipv4Config) -> Self {
+        self.ipv4 = Some(ipv4_config);
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Ipv4Config {
+    pub ip_addr: Ipv4Addr,
+    pub gateway_ip_addr: Ipv4Addr,
+    pub prefix_length: u32,
 }

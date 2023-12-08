@@ -31,7 +31,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-itertools = "0.10"
+itertools = { workspace = true }
 lazy_static = "1.4.0"
 libc = "0.2.91"
 maplit = "1.0.2"
@@ -41,10 +41,7 @@ rand_chacha = "0.3.0"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 serde = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = "3.1.0"

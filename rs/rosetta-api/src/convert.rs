@@ -5,7 +5,7 @@ use crate::errors::ApiError;
 use crate::models::amount::{from_amount, ledgeramount_from_amount};
 use crate::models::operation::OperationType;
 use crate::models::RosettaSupportedKeyPair;
-use crate::models::{self, operation::Operation, AccountIdentifier, BlockIdentifier};
+use crate::models::{self, AccountIdentifier, BlockIdentifier, Operation};
 use crate::request::request_result::RequestResult;
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
@@ -52,7 +52,7 @@ pub fn block_to_transaction(
         }
         ops
     };
-    let mut t = models::Transaction::new(transaction_identifier, operations);
+    let mut t = models::Transaction::new(transaction_identifier.into(), operations);
     let mut metadata = Map::new();
     metadata.insert(
         "memo".to_string(),
@@ -94,7 +94,7 @@ pub fn operations_to_requests(
             .map_err(|e| op_error(o, e))?;
 
         let validate_neuron_management_op = || {
-            if o.amount.is_some() && o._type != OperationType::Disburse {
+            if o.amount.is_some() && o._type.parse::<OperationType>()? != OperationType::Disburse {
                 Err(op_error(
                     o,
                     format!(
@@ -115,7 +115,7 @@ pub fn operations_to_requests(
             }
         };
 
-        match o._type {
+        match o._type.parse::<OperationType>()? {
             OperationType::Transaction => {
                 let amount = o
                     .amount
@@ -296,7 +296,7 @@ pub fn block_id(block: &HashedBlock) -> Result<BlockIdentifier, ApiError> {
 }
 
 pub fn to_model_account_identifier(aid: &icp_ledger::AccountIdentifier) -> AccountIdentifier {
-    AccountIdentifier::new(aid.to_hex())
+    AccountIdentifier::new(aid.to_hex(), None)
 }
 
 pub fn from_model_account_identifier(
@@ -446,9 +446,9 @@ pub fn from_transaction_operation_results(
     for _type in requests.into_iter() {
         let o = match (&_type, &t.operations[op_idx..]) {
             (Request::Transfer(LedgerOperation::Transfer { .. }), [withdraw, deposit, fee, ..])
-                if withdraw._type == OperationType::Transaction
-                    && deposit._type == OperationType::Transaction
-                    && fee._type == OperationType::Fee =>
+                if withdraw._type.parse::<OperationType>()? == OperationType::Transaction
+                    && deposit._type.parse::<OperationType>()? == OperationType::Transaction
+                    && fee._type.parse::<OperationType>()? == OperationType::Fee =>
             {
                 op_idx += 3;
                 fee

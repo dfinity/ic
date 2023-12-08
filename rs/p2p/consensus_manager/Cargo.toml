@@ -7,10 +7,10 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6.12"
-backoff = "0.3.0"
+backoff = { workspace = true }
 bytes = { workspace = true }
 crossbeam-channel = "0.5.5"
-futures ={ workspace = true }
+futures = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-interfaces = { path = "../../interfaces" }
@@ -23,15 +23,14 @@ ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 rand = "0.8.5"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+ic-memory-transport = { path = "../memory_transport" }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = "0.11.4"
+tokio-util = { version = "0.7.4", features = ["codec", "time"] }
 turmoil = "0.5"

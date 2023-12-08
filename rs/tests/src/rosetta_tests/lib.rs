@@ -1,3 +1,4 @@
+use super::governance_client::GovernanceClient;
 use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::convert::neuron_account_from_public_key;
@@ -47,8 +48,6 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use super::governance_client::GovernanceClient;
 
 pub(crate) fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
     make_user_ed25519(seed)
@@ -163,10 +162,14 @@ where
             {
                 assert_eq!(
                     submit_res.transaction_identifier,
-                    transaction_identifier.clone().unwrap()
+                    transaction_identifier.clone().unwrap().into()
                 );
             }
-            Ok((submit_res.transaction_identifier, results, charged_fee))
+            Ok((
+                submit_res.transaction_identifier.into(),
+                results,
+                charged_fee,
+            ))
         }
         Err(e) => Err(e),
     }
@@ -200,7 +203,7 @@ where
     .await
     {
         Ok((submit_res, charged_fee)) => Ok((
-            submit_res.transaction_identifier,
+            submit_res.transaction_identifier.into(),
             submit_res.metadata,
             charged_fee,
         )),
@@ -332,7 +335,7 @@ where
         // first ask for the fee
         let mut fee_found = false;
         for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
-            if o._type == OperationType::Fee {
+            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
                 fee_found = true;
             } else {
                 dry_run_ops.push(o.clone());
@@ -417,7 +420,7 @@ where
 
     if accept_suggested_fee {
         for o in &mut all_ops {
-            if o._type == OperationType::Fee {
+            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
                 o.amount = Some(signed_amount(-(fee_icpts.get_e8s() as i128), token_name));
             }
         }

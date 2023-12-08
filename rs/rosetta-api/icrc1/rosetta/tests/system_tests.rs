@@ -7,11 +7,8 @@ use ic_icrc1_tokens_u64::U64;
 use ic_icrc_rosetta::{
     common::{
         storage::types::RosettaBlock,
-        types::{
-            AccountIdentifier, Amount, ApproveMetadata, Block, BlockResponse,
-            BlockTransactionResponse, Operation, OperationIdentifier, OperationType,
-            PartialBlockIdentifier, Transaction, TransactionIdentifier,
-        },
+        types::{ApproveMetadata, OperationType},
+        utils::utils::icrc1_account_to_rosetta_accountidentifier,
     },
     Metadata,
 };
@@ -28,10 +25,9 @@ use icrc_ledger_types::{
     icrc3::blocks::GetBlocksRequest,
 };
 use lazy_static::lazy_static;
-use rosetta_core::identifiers::BlockIdentifier;
-use rosetta_core::identifiers::NetworkIdentifier;
-use rosetta_core::objects::Currency;
-use rosetta_core::objects::ObjectMap;
+use rosetta_core::identifiers::*;
+use rosetta_core::objects::*;
+use rosetta_core::response_types::*;
 use serde_json::Number;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -304,154 +300,80 @@ fn expected_operations(
     icrc_ledger_canister_id: CanisterId,
     Metadata { decimals, symbol }: Metadata,
 ) -> Vec<Vec<Operation>> {
+    let currency = Currency {
+        symbol: symbol.clone(),
+        decimals: decimals.into(),
+        metadata: None,
+    };
     vec![
-        vec![Operation {
-            operation_identifier: OperationIdentifier { index: 0 },
-            account: AccountIdentifier {
-                address: TEST_ACCOUNT.owner.to_string(),
-                sub_account: None,
-            },
-            r#type: OperationType::Mint,
-            amount: Some(Amount {
-                amount: "1000000000000".to_string(),
-                currency: Currency {
-                    symbol: symbol.clone(),
-                    decimals: decimals.into(),
-                    metadata: None,
-                },
-            }),
-            metadata: None,
-        }],
-        vec![Operation {
-            operation_identifier: OperationIdentifier { index: 0 },
-            account: AccountIdentifier {
-                address: TEST_ACCOUNT_2.owner.to_string(),
-                sub_account: None,
-            },
-            r#type: OperationType::Mint,
-            amount: Some(Amount {
-                amount: "100000000000".to_string(),
-                currency: Currency {
-                    symbol: symbol.clone(),
-                    decimals: decimals.into(),
-                    metadata: None,
-                },
-            }),
-            metadata: None,
-        }],
+        vec![Operation::new(
+            0,
+            OperationType::Mint.to_string(),
+            Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT)),
+            Some(Amount::new("1000000000000".to_string(), currency.clone())),
+        )],
+        vec![Operation::new(
+            0,
+            OperationType::Mint.to_string(),
+            Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
+            Some(Amount::new("100000000000".to_string(), currency.clone())),
+        )],
         vec![
-            Operation {
-                operation_identifier: OperationIdentifier { index: 0 },
-                account: AccountIdentifier {
-                    address: TEST_ACCOUNT_2.owner.to_string(),
-                    sub_account: None,
-                },
-                r#type: OperationType::Transfer,
-                amount: Some(Amount {
-                    amount: "-100000000".to_string(),
-                    currency: Currency {
-                        symbol: symbol.clone(),
-                        decimals: decimals.into(),
-                        metadata: None,
-                    },
-                }),
-                metadata: None,
-            },
-            Operation {
-                operation_identifier: OperationIdentifier { index: 1 },
-                account: AccountIdentifier {
-                    address: icrc_ledger_canister_id.to_string(),
-                    sub_account: None,
-                },
-                r#type: OperationType::Transfer,
-                amount: Some(Amount {
-                    amount: "100000000".to_string(),
-                    currency: Currency {
-                        symbol: symbol.clone(),
-                        decimals: decimals.into(),
-                        metadata: None,
-                    },
-                }),
-                metadata: None,
-            },
-            Operation {
-                operation_identifier: OperationIdentifier { index: 2 },
-                account: AccountIdentifier {
-                    address: TEST_ACCOUNT_2.owner.to_string(),
-                    sub_account: None,
-                },
-                r#type: OperationType::Fee,
-                amount: Some(Amount {
-                    amount: "-10000".to_string(),
-                    currency: Currency {
-                        symbol: symbol.clone(),
-                        decimals: decimals.into(),
-                        metadata: None,
-                    },
-                }),
-                metadata: None,
-            },
+            Operation::new(
+                0,
+                OperationType::Transfer.to_string(),
+                Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
+                Some(Amount::new("-100000000".to_string(), currency.clone())),
+            ),
+            Operation::new(
+                1,
+                OperationType::Transfer.to_string(),
+                Some(icrc1_account_to_rosetta_accountidentifier(
+                    &icrc_ledger_canister_id.get().0.into(),
+                )),
+                Some(Amount::new("100000000".to_string(), currency.clone())),
+            ),
+            Operation::new(
+                2,
+                OperationType::Fee.to_string(),
+                Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
+                Some(Amount::new("-10000".to_string(), currency.clone())),
+            ),
         ],
-        vec![Operation {
-            operation_identifier: OperationIdentifier { index: 0 },
-            account: AccountIdentifier {
-                address: TEST_ACCOUNT_2.owner.to_string(),
-                sub_account: None,
-            },
-            r#type: OperationType::Burn,
-            amount: Some(Amount {
-                amount: "-100000000".to_string(),
-                currency: Currency {
-                    symbol: symbol.clone(),
-                    decimals: decimals.into(),
-                    metadata: None,
-                },
-            }),
-            metadata: None,
-        }],
+        vec![Operation::new(
+            0,
+            OperationType::Burn.to_string(),
+            Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
+            Some(Amount::new("-100000000".to_string(), currency.clone())),
+        )],
         vec![
             Operation {
-                operation_identifier: OperationIdentifier { index: 0 },
-                account: AccountIdentifier {
-                    address: TEST_ACCOUNT_2.owner.to_string(),
-                    sub_account: None,
-                },
-                r#type: OperationType::Approve,
+                operation_identifier: OperationIdentifier::new(0),
+                account: Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
+                _type: OperationType::Approve.to_string(),
                 amount: None,
                 metadata: Some(
                     ApproveMetadata {
-                        from: AccountIdentifier {
-                            address: TEST_ACCOUNT_2.owner.to_string(),
-                            sub_account: None,
-                        },
-                        spender: AccountIdentifier {
-                            address: icrc_ledger_canister_id.to_string(),
-                            sub_account: None,
-                        },
+                        from: icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2),
+                        spender: icrc1_account_to_rosetta_accountidentifier(
+                            &icrc_ledger_canister_id.get().0.into(),
+                        ),
                         allowance: U64::new(100_000_000),
                         expected_allowance: None,
                         expires_at: None,
                     }
                     .into(),
                 ),
+                related_operations: None,
+                status: None,
+                coin_change: None,
             },
-            Operation {
-                operation_identifier: OperationIdentifier { index: 1 },
-                account: AccountIdentifier {
-                    address: TEST_ACCOUNT_2.owner.to_string(),
-                    sub_account: None,
-                },
-                r#type: OperationType::Fee,
-                amount: Some(Amount {
-                    amount: "-10000".to_string(),
-                    currency: Currency {
-                        symbol: symbol.clone(),
-                        decimals: decimals.into(),
-                        metadata: None,
-                    },
-                }),
-                metadata: None,
-            },
+            Operation::new(
+                1,
+                OperationType::Fee.to_string(),
+                Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
+                Some(Amount::new("-10000".to_string(), currency.clone())),
+            ),
         ],
     ]
 }
@@ -487,30 +409,22 @@ fn create_expected_rosetta_responses(
             );
         }
 
-        responses.push(BlockResponse {
-            block: Block {
-                block_identifier: BlockIdentifier {
-                    index: index as u64,
-                    hash: block_hash,
+        responses.push(BlockResponse::new(Some(Block::new(
+            BlockIdentifier::new(index as u64, block_hash),
+            BlockIdentifier::new(index.saturating_sub(1) as u64, parent_hash),
+            Duration::from_nanos(block.timestamp).as_millis() as u64,
+            vec![Transaction {
+                transaction_identifier: TransactionIdentifier {
+                    hash: transaction_hash,
                 },
-                parent_block_identifier: BlockIdentifier {
-                    index: index.saturating_sub(1) as u64,
-                    hash: parent_hash,
+                operations,
+                metadata: if !transaction_metadata.is_empty() {
+                    Some(transaction_metadata)
+                } else {
+                    None
                 },
-                timestamp: Duration::from_nanos(block.timestamp).as_millis() as u64,
-                transactions: vec![Transaction {
-                    transaction_identifier: TransactionIdentifier {
-                        hash: transaction_hash,
-                    },
-                    operations,
-                    metadata: if !transaction_metadata.is_empty() {
-                        Some(transaction_metadata)
-                    } else {
-                        None
-                    },
-                }],
-            },
-        });
+            }],
+        ))));
     }
 
     responses
@@ -576,11 +490,27 @@ async fn test_block() {
             },
             2 => PartialBlockIdentifier {
                 index: None,
-                hash: Some(expected_response.block.block_identifier.hash.clone()),
+                hash: Some(
+                    expected_response
+                        .block
+                        .clone()
+                        .unwrap()
+                        .block_identifier
+                        .hash
+                        .clone(),
+                ),
             },
             _ => PartialBlockIdentifier {
                 index: Some(index as u64),
-                hash: Some(expected_response.block.block_identifier.hash.clone()),
+                hash: Some(
+                    expected_response
+                        .block
+                        .clone()
+                        .unwrap()
+                        .block_identifier
+                        .hash
+                        .clone(),
+                ),
             },
         };
 
@@ -726,27 +656,6 @@ async fn test_mempool() {
     let icrc_ledger_canister_id =
         local_replica::deploy_icrc_ledger_with_default_args(&replica_context).await;
     let ledger_id = Principal::from(icrc_ledger_canister_id);
-
-    // Create a testing agent and make one transfer.
-    // Empty ledger has no certified data and rosetta would crash on startup.
-    // TODO: remove this when the ICRC ledger is fixed to create certified data on init.
-    let ic_agent = local_replica::get_testing_agent(&replica_context).await;
-    let icrc_agent = Icrc1Agent {
-        agent: ic_agent,
-        ledger_canister_id: icrc_ledger_canister_id.into(),
-    };
-    icrc_agent
-        .transfer(TransferArg {
-            from_subaccount: TEST_ACCOUNT.subaccount,
-            to: *TEST_ACCOUNT_2,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(100_000_000_000u64),
-        })
-        .await
-        .expect("Failed to generate a new transfer operation")
-        .expect("Failed to mint");
 
     let rosetta_context = start_rosetta(
         &rosetta_bin(),

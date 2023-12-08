@@ -56,7 +56,7 @@ pub(crate) async fn state_sync_chunk_handler(
         tokio::task::spawn_blocking(
             move || match state.state_sync.chunk(&artifact_id, chunk_id) {
                 Some(data) => {
-                    let pb_chunk: pb::StateSyncChunkResponse = data.into();
+                    let pb_chunk = pb::StateSyncChunkResponse { data: data.into() };
                     let mut raw = BytesMut::with_capacity(pb_chunk.encoded_len());
                     pb_chunk.encode(&mut raw).expect("Allocated enough memory");
                     let raw = raw.freeze();

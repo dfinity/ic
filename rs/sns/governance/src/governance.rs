@@ -49,7 +49,7 @@ use crate::{
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
             ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-            ManageNeuronResponse, ManageSnsMetadata, NervousSystemFunction,
+            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, NervousSystemFunction,
             NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
             NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
             ProposalRewardStatus, RegisterDappCanisters, RewardEvent, Tally,
@@ -2110,6 +2110,7 @@ impl Governance {
             Action::TransferSnsTreasuryFunds(transfer) => {
                 self.perform_transfer_sns_treasury_funds(transfer).await
             }
+            Action::MintSnsTokens(mint) => self.perform_mint_sns_tokens(mint).await,
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -2667,6 +2668,34 @@ impl Governance {
         }
     }
 
+    async fn perform_mint_sns_tokens(
+        &mut self,
+        mint: MintSnsTokens,
+    ) -> Result<(), GovernanceError> {
+        let to = Account {
+            owner: mint
+                .to_principal
+                .ok_or(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    "Expected mint to have a target principal",
+                ))?
+                .0,
+            subaccount: mint
+                .to_subaccount
+                .as_ref()
+                .map(|s| bytes_to_subaccount(&s.subaccount[..]))
+                .transpose()?,
+        };
+        let amount_e8s = mint.amount_e8s.ok_or(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Expected MintSnsTokens to have an an amount_e8s",
+        ))?;
+        self.ledger
+            .transfer_funds(amount_e8s, 0, None, to, mint.memo())
+            .await?;
+        Ok(())
+    }
+
     // Returns an option with the NervousSystemParameters
     fn nervous_system_parameters(&self) -> Option<&NervousSystemParameters> {
         self.proto.parameters.as_ref()
@@ -2851,12 +2880,12 @@ impl Governance {
             let proposer_dissolve_delay = proposer.dissolve_delay_seconds(now_seconds);
             if proposer_dissolve_delay < min_dissolve_delay_for_vote {
                 return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "The proposer's dissolve delay {} is less than the minimum required dissolve delay of {}",
-                    proposer_dissolve_delay, min_dissolve_delay_for_vote
-                ),
-            ));
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "The proposer's dissolve delay {} is less than the minimum required dissolve delay of {}",
+                        proposer_dissolve_delay, min_dissolve_delay_for_vote
+                    ),
+                ));
             }
 
             // If the current stake of the proposer neuron is less than the cost
@@ -2918,6 +2947,8 @@ impl Governance {
             let initial_voting_period_seconds = self.initial_voting_period_seconds_or_panic();
             let wait_for_quiet_deadline_increase_seconds =
                 self.wait_for_quiet_deadline_increase_seconds_or_panic();
+            let minimum_yes_proportion_of_total = action.minimum_yes_proportion_of_total();
+            let minimum_yes_proportion_of_exercised = action.minimum_yes_proportion_of_exercised();
 
             for (k, v) in self.proto.neurons.iter() {
                 // If this neuron is eligible to vote, record its
@@ -2987,12 +3018,8 @@ impl Governance {
                 wait_for_quiet_state: ProposalData::default().wait_for_quiet_state,
                 reward_event_end_timestamp_seconds: ProposalData::default()
                     .reward_event_end_timestamp_seconds,
-                minimum_yes_proportion_of_total: Some(
-                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
-                ),
-                minimum_yes_proportion_of_exercised: Some(
-                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER,
-                ),
+                minimum_yes_proportion_of_total: Some(minimum_yes_proportion_of_total),
+                minimum_yes_proportion_of_exercised: Some(minimum_yes_proportion_of_exercised),
                 // This field is on its way to deletion, but before we can do that, we temporarily
                 // set it to true. It used to be that this was set based on whether the reward rate
                 // is positive, but that was a mistake. That's why we are getting rid of this.
@@ -5221,14 +5248,14 @@ impl Governance {
     #[cfg(feature = "test")]
     pub async fn mint_tokens(
         &mut self,
-        add_maturity_request: MintTokensRequest,
+        mint_tokens_request: MintTokensRequest,
     ) -> MintTokensResponse {
         self.ledger
             .transfer_funds(
-                add_maturity_request.amount_e8s(),
+                mint_tokens_request.amount_e8s(),
                 0,    // Minting transfer don't pay a fee
                 None, // This is a minting transfer, no 'from' account is needed
-                add_maturity_request
+                mint_tokens_request
                     .recipient
                     .expect("recipient must be set")
                     .try_into()

@@ -345,6 +345,22 @@ message TransferSnsTreasuryFunds {
   optional Subaccount to_subaccount = 5;
 }
 
+// A proposal to mint SNS tokens to (optionally a Subaccount of) the
+// target principal.
+message MintSnsTokens {
+  // The amount to transfer, in e8s.
+  optional uint64 amount_e8s = 1;
+
+  // An optional memo to use for the transfer.
+  optional uint64 memo = 2;
+
+  // The principal to transfer the funds to.
+  optional ic_base_types.pb.v1.PrincipalId to_principal = 3;
+
+  // An (optional) Subaccount of the principal to transfer the funds to.
+  optional Subaccount to_subaccount = 4;
+}
+
 // A proposal function to change the values of SNS metadata.
 // Fields with None values will remain unchanged.
 message ManageSnsMetadata {
@@ -474,6 +490,11 @@ message Proposal {
     //
     // Id = 11.
     DeregisterDappCanisters deregister_dapp_canisters = 15;
+
+    // Mint SNS tokens to an account.
+    //
+    // Id = 12.
+    MintSnsTokens mint_sns_tokens = 16;
   }
 }
 

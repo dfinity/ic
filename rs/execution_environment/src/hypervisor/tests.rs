@@ -4430,7 +4430,8 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         WasmResult::Reject(reject_message) => reject_message,
     };
     assert!(
-        reject_message.contains("trapped explicitly: panicked at 'get_callback: 1 out of bounds'"),
+        reject_message.contains("trapped explicitly: panicked at")
+            && reject_message.contains("get_callback: 1 out of bounds"),
         "Unexpected error message: {}",
         reject_message
     );

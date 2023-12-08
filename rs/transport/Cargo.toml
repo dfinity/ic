@@ -22,10 +22,7 @@ h2 = "0.3.14"
 http = "0.2.8"
 prometheus = { workspace = true }
 serde = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 strum = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { version = "0.7.4", features = ["io"] }

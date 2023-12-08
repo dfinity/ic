@@ -28,10 +28,12 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/p2p/memory_transport",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
     "@crate_index//:mockall",
+    "@crate_index//:tokio-util",
     "@crate_index//:turmoil",
 ]
 
@@ -39,7 +41,7 @@ rust_library(
     name = "consensus_manager",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_consensus_manager",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -47,7 +49,7 @@ rust_test(
     name = "consensus_manager_test",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_consensus_manager",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

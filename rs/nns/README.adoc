@@ -103,7 +103,7 @@ Create proposal (web UI)
 Demo `get_proposal_info` and `get_pending_proposals`
 ----
 # create key material
-cargo run --bin ic-prep --release -- --working-dir /tmp/replicas --replica-version 0.8.0 --release-package-url <download url> --node idx:1,subnet_idx:1,p2p_addr:"[::1]:4100",xnet_api:"[::1]:2497",public_api:"[::1]:8080" --node idx:2,subnet_idx:1,p2p_addr:"[::1]:4100",xnet_api:"[::1]:2497",public_api:"[::1]:8080" --node idx:3,subnet_idx:1,p2p_addr:"[::1]:4100",xnet_api:"[::1]:2497",public_api:"[::1]:8080"
+cargo run --bin ic-prep --release -- --working-dir /tmp/replicas --replica-version 0.8.0 --release-package-url <download url> --node idx:1,subnet_idx:1,xnet_api:"[::1]:2497",public_api:"[::1]:8080" --node idx:2,subnet_idx:1,xnet_api:"[::1]:2497",public_api:"[::1]:8080" --node idx:3,subnet_idx:1,xnet_api:"[::1]:2497",public_api:"[::1]:8080"
 
 # upload the key material to the registry
 cargo run --bin ic-admin -- --registry-url http://localhost:8080 add-all-pb-files-in-path /tmp/replicas/node-1

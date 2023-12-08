@@ -178,7 +178,7 @@ rust_library(
     name = "sha",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_sha",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = ["//rs/crypto/internal/crypto_lib/sha2"],
 )
 
@@ -351,13 +351,13 @@ nice if you updated this line in your BUILD.bazel files.
 
 ### How do I lint (i.e. run rustfmt, and clippy)?
 
-Add `—-config=lint` to your bazel command.
+Add `--config=lint` to your bazel command.
 
 By default, clippy violations are just warnings, but formatting issues do not
 generate warnings (just like what you’re probably used to from cargo).
 
-Alternatively, if you only want one or the other, do `—-config=fmt` or
-`—-config=clippy` instead (the latter maybe isn’t so useful, since you get
+Alternatively, if you only want one or the other, do `--config=fmt` or
+`--config=clippy` instead (the latter maybe isn’t so useful, since you get
 warnings by default anyway).
 
 E.g.
@@ -417,7 +417,7 @@ have `bazel` commands installed locally.
 
 `bazel clean`
 
-You might also want to consider adding `—expunge`.
+You might also want to consider adding `--expunge`.
 
 ### How do I make debug vs. release builds?
 

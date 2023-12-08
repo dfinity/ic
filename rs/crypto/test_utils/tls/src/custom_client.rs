@@ -8,6 +8,7 @@ use crate::TlsVersion;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
+use rand::{CryptoRng, Rng};
 use rustls::{ClientConfig, ServerName};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -44,11 +45,15 @@ impl CustomClientBuilder {
         self
     }
 
-    pub fn with_default_client_auth(self, client_node: NodeId) -> Self {
+    pub fn with_default_client_auth<R: Rng + CryptoRng>(
+        self,
+        client_node: NodeId,
+        rng: &mut R,
+    ) -> Self {
         self.with_client_auth(
             CertWithPrivateKey::builder()
                 .cn(client_node.to_string())
-                .build_ed25519(),
+                .build_ed25519(rng),
         )
     }
 

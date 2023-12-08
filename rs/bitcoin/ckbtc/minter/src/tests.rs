@@ -397,14 +397,19 @@ fn arb_retrieve_btc_requests(
         any::<u64>(),
         1569975147000..2069975147000u64,
         option::of(any::<u64>()),
+        option::of(arb_account()),
     )
         .prop_map(
-            |(amount, address, block_index, received_at, provider)| RetrieveBtcRequest {
-                amount,
-                address,
-                block_index,
-                received_at,
-                kyt_provider: provider.map(|id| Principal::from(CanisterId::from_u64(id).get())),
+            |(amount, address, block_index, received_at, provider, reimbursement_account)| {
+                RetrieveBtcRequest {
+                    amount,
+                    address,
+                    block_index,
+                    received_at,
+                    kyt_provider: provider
+                        .map(|id| Principal::from(CanisterId::from_u64(id).get())),
+                    reimbursement_account,
+                }
             },
         );
     pvec(request_strategy, num).prop_map(|mut reqs| {

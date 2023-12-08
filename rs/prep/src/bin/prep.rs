@@ -511,8 +511,7 @@ mod test_flag_node_parser {
     use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
 
-    const GOOD_FLAG: &str =
-        r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#;
+    const GOOD_FLAG: &str = r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#;
 
     /// Verifies that a good flag parses correctly
     #[test]
@@ -524,7 +523,6 @@ mod test_flag_node_parser {
             config: NodeConfiguration {
                 xnet_api: "1.2.3.4:81".parse().unwrap(),
                 public_api: "3.4.5.6:82".parse().unwrap(),
-                p2p_addr: "1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: None,
@@ -539,12 +537,11 @@ mod test_flag_node_parser {
     fn missing_fields() {
         // Each flag variant omits a field, starting with `idx`.
         let flags = vec![
-            r#"subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
+            r#"subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
             // Omitting subnet index yields an unassigned node.
-            // r#"idx:1,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+            // r#"idx:1,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+            r#"idx:1,subnet_idx:2,public_api:"3.4.5.6:82""#,
+            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81""#,
         ];
 
         for flag in flags {

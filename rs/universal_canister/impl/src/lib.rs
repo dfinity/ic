@@ -108,5 +108,6 @@ try_from_u8!(
         CyclesBurn128 = 78,
         BlobLength = 79,
         PushEqualBytes = 80,
+        InReplicatedExecution = 81,
     }
 );

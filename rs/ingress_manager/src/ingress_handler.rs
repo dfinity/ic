@@ -85,6 +85,10 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
 
             // Check signatures, remove from unvalidated if they can't be
             // verified, add to validated otherwise.
+            //
+            // Note that consensus_time is used here instead of current_time,
+            // in order to be consistent with expiry_range, which imposes
+            // a precondition that all messages processed here are in range.
             if let Err(err) = self.request_validator.validate_request(
                 ingress_message.as_ref(),
                 consensus_time,

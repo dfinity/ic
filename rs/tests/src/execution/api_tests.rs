@@ -110,6 +110,61 @@ pub fn test_controller(env: TestEnv) {
     })
 }
 
+pub fn test_in_replicated_execution(env: TestEnv) {
+    let logger = env.logger();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+
+            const REPLICATED_EXECUTION: [u8; 4] = [1u8, 0u8, 0u8, 0u8];
+            const NON_REPLICATED_EXECUTION: [u8; 4] = [0u8, 0u8, 0u8, 0u8];
+
+            // Assert update is in replicated execution.
+            assert_eq!(
+                canister
+                    .update(wasm().in_replicated_execution().reply_int())
+                    .await
+                    .unwrap(),
+                REPLICATED_EXECUTION
+            );
+
+            // Assert replicated query is in replicated execution.
+            assert_eq!(
+                canister
+                    .replicated_query(wasm().in_replicated_execution().reply_int())
+                    .await
+                    .unwrap(),
+                REPLICATED_EXECUTION
+            );
+
+            // Assert query is NOT in replicated execution.
+            assert_eq!(
+                canister
+                    .query(wasm().in_replicated_execution().reply_int())
+                    .await
+                    .unwrap(),
+                NON_REPLICATED_EXECUTION
+            );
+
+            // Assert composite query is NOT in replicated execution.
+            assert_eq!(
+                canister
+                    .composite_query(wasm().in_replicated_execution().reply_int())
+                    .await
+                    .unwrap(),
+                NON_REPLICATED_EXECUTION
+            );
+        }
+    })
+}
+
 pub fn test_cycles_burn(env: TestEnv) {
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let agent = nns_node.build_default_agent();

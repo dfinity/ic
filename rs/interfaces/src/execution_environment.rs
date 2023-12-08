@@ -927,6 +927,12 @@ pub trait SystemApi {
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
     fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32>;
 
+    /// If run in replicated execution (i.e. an update call or a certified
+    /// query), returns 1.
+    /// If run in non-replicated execution (i.e. query),
+    /// returns 0 if the data certificate is present, 1 otherwise.
+    fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32>;
+
     /// Burns the provided `amount` cycles.
     /// Removes cycles from the canister's balance.
     ///

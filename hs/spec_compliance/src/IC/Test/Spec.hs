@@ -1022,6 +1022,7 @@ icTests my_sub other_sub =
                                                                                  t "time" star $ ignore getTime,
                                                                                  t "performance_counter" star $ ignore $ performanceCounter (int 0),
                                                                                  t "is_controller" star $ ignore $ isController "",
+                                                                                 t "in_replicated_execution" star $ ignore inReplicatedExecution,
                                                                                  t "canister_version" star $ ignore $ canisterVersion,
                                                                                  t "global_timer_set" "I G U Ry Rt C T" $ ignore $ apiGlobalTimerSet (int64 0),
                                                                                  t "debug_print" star $ debugPrint "hello",

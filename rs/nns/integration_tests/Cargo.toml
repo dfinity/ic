@@ -15,8 +15,12 @@ name = "governance-mem-test-canister"
 path = "test_canisters/governance_mem_test_canister.rs"
 
 [[bin]]
-name = "governance-memory-migration-test-canister"
-path = "test_canisters/governance_memory_migration_test_canister.rs"
+name = "unstoppable-canister"
+path = "test_canisters/unstoppable_canister.rs"
+
+[[bin]]
+name = "unstoppable-sns-root-canister"
+path = "test_canisters/unstoppable_sns_root_canister.rs"
 
 # Dependencies required to compile the test canisters.
 [dependencies]
@@ -31,11 +35,15 @@ dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = "0.10.0"
+ic-cdk-timers = "0.4.0"
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }
+ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }

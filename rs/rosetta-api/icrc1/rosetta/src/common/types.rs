@@ -1,25 +1,26 @@
-use std::time::Duration;
-
+use super::storage::types::RosettaBlock;
+use super::utils::utils::icrc1_account_to_rosetta_accountidentifier;
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use candid::Deserialize;
-use rosetta_core::identifiers::BlockIdentifier;
-
-use super::storage::types::RosettaBlock;
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
-use rosetta_core::identifiers::NetworkIdentifier;
-use rosetta_core::objects::Currency;
-use rosetta_core::objects::ObjectMap;
+use rosetta_core::identifiers::*;
+use rosetta_core::objects::*;
+use rosetta_core::response_types::*;
 use serde::Serialize;
 use serde_json::Number;
+use std::time::Duration;
+use strum_macros::Display;
+use strum_macros::EnumIter;
+use strum_macros::{EnumString, EnumVariantNames};
 
 // Generated from the [Rosetta API specification v1.4.13](https://github.com/coinbase/rosetta-specifications/blob/v1.4.13/api.json)
 // Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Error(pub rosetta_core::objects::Error);
+pub struct Error(pub rosetta_core::miscellaneous::Error);
 const ERROR_CODE_INVALID_NETWORK_ID: u32 = 1;
 const ERROR_CODE_UNABLE_TO_FIND_BLOCK: u32 = 2;
 const ERROR_CODE_INVALID_BLOCK_IDENTIFIER: u32 = 3;
@@ -31,19 +32,19 @@ impl IntoResponse for Error {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(self.0)).into_response()
     }
 }
-impl From<Error> for rosetta_core::objects::Error {
+impl From<Error> for rosetta_core::miscellaneous::Error {
     fn from(value: Error) -> Self {
         value.0
     }
 }
-impl From<rosetta_core::objects::Error> for Error {
-    fn from(value: rosetta_core::objects::Error) -> Self {
+impl From<rosetta_core::miscellaneous::Error> for Error {
+    fn from(value: rosetta_core::miscellaneous::Error) -> Self {
         Error(value)
     }
 }
 impl Error {
     pub fn invalid_network_id(expected: &NetworkIdentifier) -> Self {
-        Self(rosetta_core::objects::Error {
+        Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_NETWORK_ID,
             message: "Invalid network identifier".into(),
             description: Some(format!(
@@ -56,7 +57,7 @@ impl Error {
     }
 
     pub fn unable_to_find_block(description: String) -> Self {
-        Self(rosetta_core::objects::Error {
+        Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_UNABLE_TO_FIND_BLOCK,
             message: "Unable to find block".into(),
             description: Some(description),
@@ -65,20 +66,18 @@ impl Error {
         })
     }
 
-    pub fn invalid_block_identifier() -> Self {
-        Self(rosetta_core::objects::Error {
+    pub fn invalid_block_identifier(description: String) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_BLOCK_IDENTIFIER,
             message: "Invalid block identifier provided".into(),
-            description: Some(
-                "Invalid block identifier provided. Must provide either an index or hash.".into(),
-            ),
+            description: Some(description),
             retriable: false,
             details: None,
         })
     }
 
     pub fn failed_to_build_block_response(description: String) -> Self {
-        Self(rosetta_core::objects::Error {
+        Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE,
             message: "Failed to build block response".into(),
             description: Some(description),
@@ -88,7 +87,7 @@ impl Error {
     }
 
     pub fn invalid_transaction_identifier() -> Self {
-        Self(rosetta_core::objects::Error {
+        Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER,
             message: "Invalid transaction identifier provided".into(),
             description: Some("Invalid transaction identifier provided.".into()),
@@ -98,94 +97,14 @@ impl Error {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct PartialBlockIdentifier {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hash: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Block {
-    pub block_identifier: BlockIdentifier,
-    pub parent_block_identifier: BlockIdentifier,
-    pub timestamp: u64,
-    pub transactions: Vec<Transaction>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Transaction {
-    pub transaction_identifier: TransactionIdentifier,
-    pub operations: Vec<Operation>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl Transaction {
-    pub fn builder() -> TransactionBuilder {
-        TransactionBuilder::new()
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct TransactionIdentifier {
-    pub hash: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Operation {
-    pub operation_identifier: OperationIdentifier,
-    pub account: AccountIdentifier,
-    pub r#type: OperationType,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub amount: Option<Amount>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct OperationIdentifier {
-    pub index: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Amount {
-    pub amount: String,
-    pub currency: Currency,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Display, Debug, Clone, PartialEq, Eq, EnumIter, EnumString, EnumVariantNames)]
+#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum OperationType {
     Mint,
     Burn,
     Transfer,
     Approve,
     Fee,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct AccountIdentifier {
-    pub address: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_account: Option<SubAccountIdentifier>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SubAccountIdentifier {
-    pub address: String,
-}
-
-impl From<&icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
-    fn from(account: &icrc_ledger_types::icrc1::account::Account) -> Self {
-        Self {
-            address: account.owner.to_string(),
-            sub_account: account.subaccount.map(|s| SubAccountIdentifier {
-                address: hex::encode(s),
-            }),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -248,21 +167,26 @@ impl TransactionBuilder {
         };
 
         let mut operations = vec![];
-        let mut push_operation = |r#type: OperationType,
+        let mut push_operation = |_type: OperationType,
                                   account: AccountIdentifier,
                                   amount: Option<String>,
                                   metadata: Option<ObjectMap>| {
             operations.push(Operation {
                 operation_identifier: OperationIdentifier {
                     index: operations.len() as u64,
+                    network_index: None,
                 },
-                account,
-                r#type,
+                account: Some(account),
                 amount: amount.map(|amount| Amount {
-                    amount,
                     currency: currency.clone(),
+                    value: amount,
+                    metadata: None,
                 }),
                 metadata,
+                related_operations: None,
+                _type: _type.to_string(),
+                status: None,
+                coin_change: None,
             });
         };
 
@@ -270,7 +194,7 @@ impl TransactionBuilder {
             ic_icrc1::Operation::Mint { to, amount } => {
                 push_operation(
                     OperationType::Mint,
-                    AccountIdentifier::from(&to),
+                    icrc1_account_to_rosetta_accountidentifier(&to),
                     Some(format!("{}", amount)),
                     None,
                 );
@@ -284,13 +208,13 @@ impl TransactionBuilder {
             } => {
                 push_operation(
                     OperationType::Transfer,
-                    AccountIdentifier::from(&from),
+                    icrc1_account_to_rosetta_accountidentifier(&from),
                     Some(format!("-{}", amount)),
                     None,
                 );
                 push_operation(
                     OperationType::Transfer,
-                    AccountIdentifier::from(&to),
+                    icrc1_account_to_rosetta_accountidentifier(&to),
                     Some(format!("{}", amount)),
                     None,
                 );
@@ -301,7 +225,7 @@ impl TransactionBuilder {
                     .context("Unable to determine fee")?;
                 push_operation(
                     OperationType::Fee,
-                    AccountIdentifier::from(&from),
+                    icrc1_account_to_rosetta_accountidentifier(&from),
                     Some(format!("-{}", fee)),
                     None,
                 );
@@ -309,7 +233,7 @@ impl TransactionBuilder {
             ic_icrc1::Operation::Burn { from, amount, .. } => {
                 push_operation(
                     OperationType::Burn,
-                    AccountIdentifier::from(&from),
+                    icrc1_account_to_rosetta_accountidentifier(&from),
                     Some(format!("-{}", amount)),
                     None,
                 );
@@ -324,12 +248,12 @@ impl TransactionBuilder {
             } => {
                 push_operation(
                     OperationType::Approve,
-                    AccountIdentifier::from(&from),
+                    icrc1_account_to_rosetta_accountidentifier(&from),
                     None,
                     Some(
                         ApproveMetadata {
-                            from: AccountIdentifier::from(&from),
-                            spender: AccountIdentifier::from(&spender),
+                            from: icrc1_account_to_rosetta_accountidentifier(&from),
+                            spender: icrc1_account_to_rosetta_accountidentifier(&spender),
                             allowance: amount,
                             expected_allowance,
                             expires_at,
@@ -344,7 +268,7 @@ impl TransactionBuilder {
                     .context("Unable to determine fee")?;
                 push_operation(
                     OperationType::Fee,
-                    AccountIdentifier::from(&from),
+                    icrc1_account_to_rosetta_accountidentifier(&from),
                     Some(format!("-{}", fee)),
                     None,
                 );
@@ -385,36 +309,13 @@ impl TransactionBuilder {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct BlockRequest {
-    pub block_identifier: PartialBlockIdentifier,
-    pub network_identifier: NetworkIdentifier,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct BlockResponse {
-    pub block: Block,
-}
-
-impl BlockResponse {
-    pub fn builder() -> BlockResponseBuilder {
-        BlockResponseBuilder::new()
-    }
-}
-
+#[derive(Default)]
 pub struct BlockResponseBuilder {
     block: Option<RosettaBlock>,
     currency: Option<Currency>,
 }
 
 impl BlockResponseBuilder {
-    fn new() -> Self {
-        Self {
-            block: None,
-            currency: None,
-        }
-    }
-
     pub fn with_rosetta_block(mut self, block: RosettaBlock) -> Self {
         self.block = Some(block);
         self
@@ -451,7 +352,7 @@ impl BlockResponseBuilder {
 
         let icrc1_transaction = block.get_transaction()?;
 
-        let mut tx_builder = Transaction::builder()
+        let mut tx_builder = TransactionBuilder::new()
             .with_currency(currency)
             .with_transaction(icrc1_transaction);
         if let Some(effective_fee) = block.get_effective_fee()? {
@@ -461,12 +362,14 @@ impl BlockResponseBuilder {
         let transaction = tx_builder.build()?;
 
         Ok(BlockResponse {
-            block: Block {
+            block: Some(Block {
                 block_identifier,
                 parent_block_identifier,
                 timestamp,
                 transactions: vec![transaction],
-            },
+                metadata: None,
+            }),
+            other_transactions: None,
         })
     }
 }
@@ -474,24 +377,6 @@ impl BlockResponseBuilder {
 fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> {
     let millis = Duration::from_nanos(timestamp_nanos).as_millis();
     u64::try_from(millis).context("Failed to convert timestamp to milliseconds")
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct BlockTransactionRequest {
-    pub block_identifier: BlockIdentifier,
-    pub transaction_identifier: TransactionIdentifier,
-    pub network_identifier: NetworkIdentifier,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct BlockTransactionResponse {
-    pub transaction: Transaction,
-}
-
-impl BlockTransactionResponse {
-    pub fn builder() -> BlockTransactionResponseBuilder {
-        BlockTransactionResponseBuilder::new()
-    }
 }
 
 #[derive(Default)]
@@ -533,7 +418,7 @@ impl BlockTransactionResponseBuilder {
             .currency
             .clone()
             .context("A currency is required to build a response.")?;
-        let mut tx_builder = Transaction::builder()
+        let mut tx_builder = TransactionBuilder::new()
             .with_currency(currency)
             .with_transaction(transaction);
         if let Some(effective_fee) = self.effective_fee {
@@ -570,21 +455,12 @@ mod test {
         effective_fee: Option<U64>,
     ) -> Transaction {
         let operations = match transaction.operation {
-            ic_icrc1::Operation::Mint { to, amount } => vec![Operation {
-                operation_identifier: OperationIdentifier { index: 0 },
-                account: AccountIdentifier {
-                    address: to.owner.to_string(),
-                    sub_account: to.subaccount.map(|s| SubAccountIdentifier {
-                        address: hex::encode(s),
-                    }),
-                },
-                amount: Some(Amount {
-                    amount: amount.to_string(),
-                    currency: currency.clone(),
-                }),
-                r#type: OperationType::Mint,
-                metadata: None,
-            }],
+            ic_icrc1::Operation::Mint { to, amount } => vec![Operation::new(
+                0,
+                OperationType::Mint.to_string(),
+                Some(icrc1_account_to_rosetta_accountidentifier(&to)),
+                Some(Amount::new(amount.to_string(), currency.clone())),
+            )],
             ic_icrc1::Operation::Transfer {
                 from,
                 to,
@@ -592,68 +468,36 @@ mod test {
                 fee,
                 ..
             } => {
-                let from = AccountIdentifier {
-                    address: from.owner.to_string(),
-                    sub_account: from.subaccount.map(|s| SubAccountIdentifier {
-                        address: hex::encode(s),
-                    }),
-                };
                 let fee = effective_fee
                     .or(fee)
                     .expect("There should be a fee or an effective fee!");
                 vec![
-                    Operation {
-                        operation_identifier: OperationIdentifier { index: 0 },
-                        account: from.clone(),
-                        amount: Some(Amount {
-                            amount: format!("-{}", amount),
-                            currency: currency.clone(),
-                        }),
-                        r#type: OperationType::Transfer,
-                        metadata: None,
-                    },
-                    Operation {
-                        operation_identifier: OperationIdentifier { index: 1 },
-                        account: AccountIdentifier {
-                            address: to.owner.to_string(),
-                            sub_account: to.subaccount.map(|s| SubAccountIdentifier {
-                                address: hex::encode(s),
-                            }),
-                        },
-                        amount: Some(Amount {
-                            amount: amount.to_string(),
-                            currency: currency.clone(),
-                        }),
-                        r#type: OperationType::Transfer,
-                        metadata: None,
-                    },
-                    Operation {
-                        operation_identifier: OperationIdentifier { index: 2 },
-                        account: from,
-                        amount: Some(Amount {
-                            amount: format!("-{}", fee),
-                            currency: currency.clone(),
-                        }),
-                        r#type: OperationType::Fee,
-                        metadata: None,
-                    },
+                    Operation::new(
+                        0,
+                        OperationType::Transfer.to_string(),
+                        Some(icrc1_account_to_rosetta_accountidentifier(&from)),
+                        Some(Amount::new(format!("-{}", amount), currency.clone())),
+                    ),
+                    Operation::new(
+                        1,
+                        OperationType::Transfer.to_string(),
+                        Some(icrc1_account_to_rosetta_accountidentifier(&to)),
+                        Some(Amount::new(amount.to_string(), currency.clone())),
+                    ),
+                    Operation::new(
+                        2,
+                        OperationType::Fee.to_string(),
+                        Some(icrc1_account_to_rosetta_accountidentifier(&from)),
+                        Some(Amount::new(format!("-{}", fee), currency.clone())),
+                    ),
                 ]
             }
-            ic_icrc1::Operation::Burn { from, amount, .. } => vec![Operation {
-                operation_identifier: OperationIdentifier { index: 0 },
-                account: AccountIdentifier {
-                    address: from.owner.to_string(),
-                    sub_account: from.subaccount.map(|s| SubAccountIdentifier {
-                        address: hex::encode(s),
-                    }),
-                },
-                amount: Some(Amount {
-                    amount: format!("-{}", amount),
-                    currency: currency.clone(),
-                }),
-                r#type: OperationType::Burn,
-                metadata: None,
-            }],
+            ic_icrc1::Operation::Burn { from, amount, .. } => vec![Operation::new(
+                0,
+                OperationType::Burn.to_string(),
+                Some(icrc1_account_to_rosetta_accountidentifier(&from)),
+                Some(Amount::new(format!("-{}", amount), currency.clone())),
+            )],
             ic_icrc1::Operation::Approve {
                 from,
                 spender,
@@ -662,47 +506,35 @@ mod test {
                 expires_at,
                 fee,
             } => {
-                let account = AccountIdentifier {
-                    address: from.owner.to_string(),
-                    sub_account: from.subaccount.map(|s| SubAccountIdentifier {
-                        address: hex::encode(s),
-                    }),
-                };
                 let fee = effective_fee
                     .or(fee)
                     .expect("There should be a fee or an effective fee!");
                 vec![
                     Operation {
-                        operation_identifier: OperationIdentifier { index: 0 },
-                        account: account.clone(),
+                        operation_identifier: OperationIdentifier::new(0),
+                        _type: OperationType::Approve.to_string(),
+                        account: Some(icrc1_account_to_rosetta_accountidentifier(&from)),
                         amount: None,
-                        r#type: OperationType::Approve,
                         metadata: Some(
                             ApproveMetadata {
-                                from: account.clone(),
-                                spender: AccountIdentifier {
-                                    address: spender.owner.to_string(),
-                                    sub_account: spender.subaccount.map(|s| SubAccountIdentifier {
-                                        address: hex::encode(s),
-                                    }),
-                                },
+                                from: icrc1_account_to_rosetta_accountidentifier(&from),
+                                spender: icrc1_account_to_rosetta_accountidentifier(&spender),
                                 allowance: amount,
                                 expected_allowance,
                                 expires_at,
                             }
                             .into(),
                         ),
+                        related_operations: None,
+                        status: None,
+                        coin_change: None,
                     },
-                    Operation {
-                        operation_identifier: OperationIdentifier { index: 1 },
-                        account,
-                        amount: Some(Amount {
-                            amount: format!("-{}", fee),
-                            currency: currency.clone(),
-                        }),
-                        r#type: OperationType::Fee,
-                        metadata: None,
-                    },
+                    Operation::new(
+                        1,
+                        OperationType::Fee.to_string(),
+                        Some(icrc1_account_to_rosetta_accountidentifier(&from)),
+                        Some(Amount::new(format!("-{}", fee), currency.clone())),
+                    ),
                 ]
             }
         };
@@ -747,7 +579,7 @@ mod test {
             effective_fee in prop::option::of(arb_small_amount()),
         ) {
 
-            let mut builder = Transaction::builder();
+            let mut builder = TransactionBuilder::new();
             if let Some(transaction) = &transaction {
                 builder = builder.with_transaction(transaction.clone());
             }
@@ -793,7 +625,7 @@ mod test {
             currency in prop::option::of(currency_strategy()),
             block_idx in 0..100_000u64
         ) {
-            let mut builder = BlockResponse::builder();
+            let mut builder = BlockResponseBuilder::default();
             if let Some(block) = &block {
                 let rosetta_block = RosettaBlock::from_icrc_ledger_block(block.clone(), block_idx).expect("Failed to make rosetta block");
                 builder = builder.with_rosetta_block(rosetta_block);
@@ -809,19 +641,7 @@ mod test {
                     let block = block.unwrap();
                     let currency = currency.unwrap();
 
-                    let expected_response = BlockResponse {
-                        block: Block {
-                            block_identifier: BlockIdentifier { index: block_idx, hash: ic_icrc1::Block::<U64>::block_hash(&block.clone().encode()).to_string()  },
-                            parent_block_identifier: block.parent_hash.map(|h| BlockIdentifier {
-                                hash: h.to_string(),
-                                index: block_idx.saturating_sub(1)
-                            }).unwrap_or_else(|| {
-                                built_block_response.block.block_identifier.clone()
-                            }),
-                            timestamp: convert_timestamp_to_millis(block.timestamp).unwrap(),
-                            transactions: vec![build_expected_transaction(block.transaction, currency, block.effective_fee)]
-                        }
-                    };
+                    let expected_response = BlockResponse {block:Some(Block::new(BlockIdentifier{index:block_idx,hash:ic_icrc1::Block::<U64>::block_hash(&block.clone().encode()).to_string()},block.parent_hash.map(|h|BlockIdentifier{hash:h.to_string(),index:block_idx.saturating_sub(1)}).unwrap_or_else(||{built_block_response.block.clone().unwrap().block_identifier.clone()}),convert_timestamp_to_millis(block.timestamp).unwrap(),vec![build_expected_transaction(block.transaction,currency,block.effective_fee)])), other_transactions: None };
 
                     assert_eq!(built_block_response, expected_response);
                 },
@@ -851,7 +671,7 @@ mod test {
             block in prop::option::of(blocks_strategy(arb_small_amount())),
             currency in prop::option::of(currency_strategy()),
         ) {
-            let mut builder = BlockTransactionResponse::builder();
+            let mut builder = BlockTransactionResponseBuilder::default();
             if let Some(block) = &block {
                 builder = builder.with_transaction(block.transaction.clone());
                 if let Some(effective_fee) = block.effective_fee {

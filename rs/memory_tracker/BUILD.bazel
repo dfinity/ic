@@ -20,7 +20,7 @@ rust_library(
     name = "memory_tracker",
     srcs = glob(["src/**"]),
     crate_name = "memory_tracker",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

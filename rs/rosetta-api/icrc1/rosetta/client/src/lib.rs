@@ -1,15 +1,8 @@
-use ic_icrc_rosetta::common::types::{
-    BlockRequest, BlockResponse, BlockTransactionRequest, BlockTransactionResponse,
-    PartialBlockIdentifier, TransactionIdentifier,
-};
 use ic_rosetta_api::models::MempoolResponse;
 use reqwest::{Client, Url};
-use rosetta_core::identifiers::BlockIdentifier;
-use rosetta_core::identifiers::NetworkIdentifier;
-use rosetta_core::request_types::MetadataRequest;
-use rosetta_core::request_types::NetworkRequest;
-use rosetta_core::response_types::NetworkListResponse;
-use rosetta_core::response_types::NetworkStatusResponse;
+use rosetta_core::identifiers::*;
+use rosetta_core::request_types::*;
+use rosetta_core::response_types::*;
 use url::ParseError;
 
 pub struct RosettaClient {

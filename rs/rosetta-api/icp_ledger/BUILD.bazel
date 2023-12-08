@@ -27,7 +27,7 @@ rust_library(
         "@crate_index//:prost-derive",
         "@crate_index//:strum_macros",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -54,6 +54,9 @@ rust_library(
 rust_test(
     name = "icp_ledger_test",
     crate = ":icp_ledger",
+    deps = [
+        "@crate_index//:proptest",
+    ],
 )
 
 motoko_library(

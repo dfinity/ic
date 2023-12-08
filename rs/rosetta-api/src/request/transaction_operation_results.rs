@@ -5,7 +5,8 @@ use crate::request::Request;
 use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 
-use crate::models::operation::{Operation, OperationType};
+use crate::models::operation::OperationType;
+use crate::models::Operation;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -68,9 +69,9 @@ impl TransactionOperationResults {
                         ..
                     },
                     [withdraw, deposit, fee, ..],
-                ) if withdraw._type == OperationType::Transaction
-                    && deposit._type == OperationType::Transaction
-                    && fee._type == OperationType::Fee =>
+                ) if withdraw._type.parse::<OperationType>()? == OperationType::Transaction
+                    && deposit._type.parse::<OperationType>()? == OperationType::Transaction
+                    && fee._type.parse::<OperationType>()? == OperationType::Fee =>
                 {
                     merge_metadata(withdraw, rr);
                     merge_metadata(deposit, rr);

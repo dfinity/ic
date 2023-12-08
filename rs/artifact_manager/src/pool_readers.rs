@@ -9,7 +9,6 @@ use ic_types::{
     artifact::*,
     artifact_kind::*,
     canister_http::*,
-    chunkable::*,
     consensus::{
         certification::CertificationMessage,
         dkg::DkgMessageId,
@@ -19,7 +18,6 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
-    single_chunked::*,
 };
 use std::sync::{Arc, RwLock};
 
@@ -85,12 +83,6 @@ impl<
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }
-
-    /// The method returns the chunk tracker for the given *Consensus* message
-    /// ID.
-    fn get_chunk_tracker(&self, _id: &ConsensusMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Consensus)
-    }
 }
 
 /// The ingress `ArtifactClient` to be managed by the `ArtifactManager`.
@@ -142,12 +134,6 @@ impl<
     fn get_priority_function(&self) -> PriorityFn<IngressMessageId, ()> {
         let pool = self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(&pool)
-    }
-
-    /// The method returns a new chunk tracker for (single-chunked) ingress
-    /// messages, ignoring the given ingress message ID.
-    fn get_chunk_tracker(&self, _id: &IngressMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Ingress)
     }
 }
 
@@ -216,12 +202,6 @@ impl<
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }
-
-    /// The method returns a new (single-chunked) certification tracker,
-    /// ignoring the certification message ID.
-    fn get_chunk_tracker(&self, _id: &CertificationMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Certification)
-    }
 }
 
 /// The DKG client.
@@ -268,11 +248,6 @@ impl<
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }
-
-    /// The method returns a new (single-chunked) DKG message tracker.
-    fn get_chunk_tracker(&self, _id: &DkgMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Dkg)
-    }
 }
 
 /// The ECDSA client.
@@ -309,10 +284,6 @@ impl<
     fn get_priority_function(&self) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
-    }
-
-    fn get_chunk_tracker(&self, _id: &EcdsaMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Ecdsa)
     }
 }
 
@@ -353,9 +324,5 @@ impl<
     fn get_priority_function(&self) -> PriorityFn<CanisterHttpResponseId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
-    }
-
-    fn get_chunk_tracker(&self, _id: &CanisterHttpResponseId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::CanisterHttp)
     }
 }

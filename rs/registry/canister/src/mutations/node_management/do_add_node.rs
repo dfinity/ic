@@ -11,7 +11,7 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, FlowEndpoint, IPv4InterfaceConfig, NodeRecord},
+    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
 };
 
 use crate::mutations::node_management::common::{
@@ -85,9 +85,6 @@ impl Registry {
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
-            p2p_flow_endpoints: vec![FlowEndpoint {
-                endpoint: Some(p2p_endpoint),
-            }],
             node_operator_id: caller.into_vec(),
             hostos_version_id: None,
             chip_id: payload.chip_id.clone(),
@@ -152,27 +149,6 @@ pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
         Ok(sa) => ConnectionEndpoint {
             ip_addr: sa.ip().to_string(),
             port: sa.port() as u32, // because protobufs don't have u16
-        },
-    }
-}
-
-/// Parses a P2P flow encoded in a string
-///
-/// The string is written in form: `flow,ipv4:port` or `flow,[ipv6]:port`.
-pub fn flow_endpoint_from_string(endpoint: &str) -> FlowEndpoint {
-    let parts = endpoint.splitn(2, ',').collect::<Vec<&str>>();
-    parts[0].parse::<u32>().unwrap();
-    println!("Parts are {:?} and {:?}", parts[0], parts[1]);
-    match parts[1].parse::<SocketAddr>() {
-        Err(e) => panic!(
-            "Could not convert {:?} to a connection endpoint: {:?}",
-            endpoint, e
-        ),
-        Ok(sa) => FlowEndpoint {
-            endpoint: Some(ConnectionEndpoint {
-                ip_addr: sa.ip().to_string(),
-                port: sa.port() as u32, // because protobufs don't have u16
-            }),
         },
     }
 }
@@ -457,37 +433,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn no_flow_id_causes_panic() {
-        flow_endpoint_from_string("127.0.0.1:8080");
-    }
-
-    #[test]
-    #[should_panic]
-    fn empty_flow_endpoint_string_causes_panic() {
-        flow_endpoint_from_string("");
-    }
-
-    #[test]
-    #[should_panic]
-    fn non_numeric_flow_id_causes_panic() {
-        flow_endpoint_from_string("abcd,127.0.0.1:8080");
-    }
-
-    #[test]
-    fn good_flow_id_ipv4() {
-        assert_eq!(
-            flow_endpoint_from_string("1337,127.0.0.1:8080"),
-            FlowEndpoint {
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "127.0.0.1".to_string(),
-                    port: 8080u32,
-                })
-            }
-        );
-    }
-
-    #[test]
     fn should_succeed_if_ipv4_config_is_valid() {
         let ipv4_config_raw = vec![
             "204.153.51.58/24".to_string(),
@@ -509,8 +454,15 @@ mod tests {
     #[should_panic(
         expected = "Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway"
     )]
-    fn should_panic_if_ipv4_config_is_incomplete() {
+    fn should_panic_if_ipv4_config_is_empty() {
         make_valid_node_ivp4_config_or_panic(Vec::new());
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway"
+    )]
+    fn should_panic_if_ipv4_config_is_incomplete() {
         make_valid_node_ivp4_config_or_panic(vec!["204.153.51.58/24".to_string()]);
     }
 
