@@ -396,12 +396,6 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> St
 
 fn alter_chunk_data(chunk: &mut ArtifactChunk) {
     let mut chunk_data = match &chunk.artifact_chunk_data {
-        ArtifactChunkData::UnitChunkData(_) => {
-            panic!(
-                "Unexpected artifact chunk data type: {:?}",
-                chunk.artifact_chunk_data
-            );
-        }
         ArtifactChunkData::SemiStructuredChunkData(chunk_data) => chunk_data.clone(),
     };
     match chunk_data.last_mut() {

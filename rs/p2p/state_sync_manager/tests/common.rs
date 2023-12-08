@@ -293,14 +293,10 @@ impl Chunkable for FakeChunkable {
 
         // Add chunk to state if not part of manifest
         if !is_manifest_chunk(artifact_chunk.chunk_id) {
-            if let ArtifactChunkData::SemiStructuredChunkData(data) =
-                artifact_chunk.artifact_chunk_data
-            {
-                self.local_state
-                    .add_chunk(artifact_chunk.chunk_id, data.len())
-            } else {
-                panic!("Bug: Wrong artifact data type.")
-            }
+            let ArtifactChunkData::SemiStructuredChunkData(data) =
+                artifact_chunk.artifact_chunk_data;
+            self.local_state
+                .add_chunk(artifact_chunk.chunk_id, data.len())
         }
 
         let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();

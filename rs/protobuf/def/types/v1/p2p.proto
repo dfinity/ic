@@ -36,10 +36,10 @@ message GossipChunkRequest {
 message GossipChunk {
   GossipChunkRequest request = 6;
   oneof response {
-    ArtifactChunk chunk = 3;
+    Artifact artifact = 7;
     P2PError error = 4;
   }
-  reserved 1, 2, 5;
+  reserved 1, 2, 3, 5;
 }
 
 enum P2PError {
@@ -76,12 +76,4 @@ message Artifact {
     types.v1.CanisterHttpShare http_share = 6;
     FileTreeSyncArtifact file_tree_sync = 7;
   }
-}
-
-message ArtifactChunk {
-  oneof data {
-    bytes chunk = 3;
-    Artifact artifact = 4;
-  }
-  reserved 1, 2;
 }
