@@ -426,8 +426,8 @@ async-scoped = { version = "0.8", features = ["use-tokio"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
-build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "83b9ae07d0624db04675a71ae4179c4a17e99f77" }
-build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "83b9ae07d0624db04675a71ae4179c4a17e99f77", default_features = false }
+build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764" }
+build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764", default_features = false }
 bytes = "1.5.0"
 candid = { version = "0.9.10", features = ["parser"] }
 chrono = { version = "0.4.19", features = ["serde"] }
