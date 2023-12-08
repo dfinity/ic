@@ -44,8 +44,8 @@ proxies:
           - keep
           - reduce_time_resolution:
               resolution: 30s
-      # NIC carrier information.
-      - regex: node_network_carrier.*|node_network_info|node_network_iface.*|node_network_mtu_bytes
+      # NIC carrier information and throughput information.
+      - regex: node_network_carrier.*|node_network_info|node_network_iface.*|node_network_mtu_bytes|node_network_(receive|transmit)_.*
         actions:
           - keep
       # HostOS version
