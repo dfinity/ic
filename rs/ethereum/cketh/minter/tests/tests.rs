@@ -72,6 +72,7 @@ const MAX_ETH_LOGS_BLOCK_RANGE: u64 = 799;
 #[test]
 fn should_deposit_and_withdraw() {
     let cketh = CkEthSetup::new();
+    let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
@@ -112,7 +113,10 @@ fn should_deposit_and_withdraw() {
                 owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
                 subaccount: None,
             },
-            spender: None,
+            spender: Some(Account {
+                owner: minter,
+                subaccount: None,
+            }),
             memo: Some(Memo::from(BurnMemo::Convert {
                 to_address: destination.parse().unwrap(),
             })),
@@ -373,6 +377,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
 #[test]
 fn should_reimburse() {
     let cketh = CkEthSetup::new();
+    let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let destination = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string();
@@ -428,7 +433,10 @@ fn should_reimburse() {
                 owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
                 subaccount: None,
             },
-            spender: None,
+            spender: Some(Account {
+                owner: minter,
+                subaccount: None,
+            }),
             memo: Some(Memo::from(BurnMemo::Convert {
                 to_address: destination.parse().unwrap(),
             })),

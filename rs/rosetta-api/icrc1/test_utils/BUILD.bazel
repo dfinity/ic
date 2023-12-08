@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEV_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/ic-ledger-hash-of",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",

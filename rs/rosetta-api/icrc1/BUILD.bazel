@@ -33,6 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
+    "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:leb128",
     "@crate_index//:proptest",

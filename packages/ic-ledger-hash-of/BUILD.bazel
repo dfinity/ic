@@ -2,6 +2,11 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
+alias(
+    name = "ic-ledger-hash-of",
+    actual = ":ic_ledger_hash_of",
+)
+
 rust_library(
     name = "ic_ledger_hash_of",
     srcs = [
