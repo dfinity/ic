@@ -11892,13 +11892,6 @@ lazy_static! {
             coefficient_intervals: vec![
                 LinearScalingCoefficient {
                     from_direct_participation_icp_e8s: Some(0),
-                    to_direct_participation_icp_e8s: Some(3600000000000),
-                    slope_numerator: Some(0),
-                    slope_denominator: Some(100000000000000),
-                    intercept_icp_e8s: Some(0),
-                },
-                LinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: Some(3600000000000),
                     to_direct_participation_icp_e8s: Some(3752190620030),
                     slope_numerator: Some(0),
                     slope_denominator: Some(100000000000000),
