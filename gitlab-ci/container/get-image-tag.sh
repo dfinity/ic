@@ -4,5 +4,13 @@ set -eEuo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+INPUT_FILES=(
+    .bazelversion
+    rust-toolchain.toml
+    gitlab-ci/container/Dockerfile*
+    gitlab-ci/container/files/*
+    typescript/service-worker/.nvmrc
+)
+
 # print sha of relevant files
-sha256sum gitlab-ci/container/Dockerfile* gitlab-ci/container/files/* .bazelversion typescript/service-worker/.nvmrc | sha256sum | cut -d' ' -f1
+sha256sum ${INPUT_FILES[@]} | sha256sum | cut -d' ' -f1
