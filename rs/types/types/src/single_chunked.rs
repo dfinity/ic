@@ -6,7 +6,7 @@
 use crate::{
     artifact::Artifact,
     canister_http::CanisterHttpResponseShare,
-    chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId, ChunkableArtifact, CHUNKID_UNIT_CHUNK},
+    chunkable::{ChunkId, ChunkableArtifact, CHUNKID_UNIT_CHUNK},
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
         ConsensusMessage,
@@ -43,15 +43,12 @@ pub enum SingleChunked {
 macro_rules! chunkable_artifact_impl {
     ($id:path, |$self:ident| $v:expr) => {
         impl ChunkableArtifact for $id {
-            fn get_chunk($self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+            fn get_chunk($self: Box<Self>, chunk_id: ChunkId) -> Option<Artifact> {
                 if chunk_id != ChunkId::from(CHUNKID_UNIT_CHUNK) {
                     // Single chunked in identified only chunk CHUNKID_UNIT_CHUNK
                     None
                 } else {
-                    Some(ArtifactChunk {
-                        chunk_id,
-                        artifact_chunk_data: $v,
-                    })
+                    Some($v)
                 }
             }
         }
@@ -59,20 +56,20 @@ macro_rules! chunkable_artifact_impl {
 }
 
 chunkable_artifact_impl! {ConsensusMessage, |self|
-    ArtifactChunkData::UnitChunkData(Artifact::ConsensusMessage(*self))
+    Artifact::ConsensusMessage(*self)
 }
 chunkable_artifact_impl! {SignedIngress, |self|
-    ArtifactChunkData::UnitChunkData(Artifact::IngressMessage(*self))
+    Artifact::IngressMessage(*self)
 }
 chunkable_artifact_impl! {CertificationMessage, |self|
-    ArtifactChunkData::UnitChunkData(Artifact::CertificationMessage(*self))
+    Artifact::CertificationMessage(*self)
 }
 chunkable_artifact_impl! {DkgMessage, |self|
-    ArtifactChunkData::UnitChunkData(Artifact::DkgMessage(*self))
+    Artifact::DkgMessage(*self)
 }
 chunkable_artifact_impl! {EcdsaMessage, |self|
-    ArtifactChunkData::UnitChunkData(Artifact::EcdsaMessage(*self))
+    Artifact::EcdsaMessage(*self)
 }
 chunkable_artifact_impl! {CanisterHttpResponseShare, |self|
-    ArtifactChunkData::UnitChunkData(Artifact::CanisterHttpMessage(*self))
+    Artifact::CanisterHttpMessage(*self)
 }
