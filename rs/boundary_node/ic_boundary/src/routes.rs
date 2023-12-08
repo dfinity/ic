@@ -677,12 +677,19 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
             HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
         );
 
-        ctx.canister_id.and_then(|v| {
-            response.headers_mut().insert(
-                HEADER_IC_CANISTER_ID,
-                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
-            )
-        });
+        // Try to get canister_id from CBOR first, then from the URL
+        ctx.canister_id
+            .or(response
+                .extensions()
+                .get::<CanisterId>()
+                .map(|x| x.get_ref().0))
+            .map(|x| x.to_string())
+            .and_then(|v| {
+                response.headers_mut().insert(
+                    HEADER_IC_CANISTER_ID,
+                    HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
+                )
+            });
 
         ctx.sender.and_then(|v| {
             response.headers_mut().insert(
