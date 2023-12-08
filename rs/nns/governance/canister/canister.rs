@@ -15,13 +15,11 @@ use dfn_candid::{candid, candid_one};
 use dfn_core::{
     api::{arg_data, call_with_callbacks, caller, now, reject_message},
     over, over_async, println,
-    stable::stable64_read,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{
     cmc::CMCCanister,
-    dfn_core_stable_mem_utils::BufferedStableMemReader,
     ledger::IcpLedgerCanister,
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
 };
@@ -64,14 +62,6 @@ use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{borrow::Cow, boxed::Box, str::FromStr, time::SystemTime};
-
-/// Size of the buffer for stable memory reads and writes.
-///
-/// Smaller buffer size means more stable_write and stable_read calls. With
-/// 100MiB buffer size, when the heap is near full, we need ~40 system calls.
-/// Larger buffer size means we may not be able to serialize the heap fully in
-/// some cases.
-const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -357,34 +347,15 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
 
-    // Look for MemoryManager magic bytes
-    let mut magic_bytes = [0u8; 3];
-    stable64_read(&mut magic_bytes, 0, 3);
-    let mut mgr_version_byte = [0u8; 1];
-    stable64_read(&mut mgr_version_byte, 3, 1);
+    let restored_state = with_upgrades_memory(|memory| {
+        let result: Result<GovernanceProto, _> = load_protobuf(memory);
+        result
+    })
+    .expect(
+        "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+             CANISTER MIGHT HAVE BROKEN STATE!!!!.",
+    );
 
-    // For the version of MemoryManager we are using, the version byte will be 1
-    // We use the magic bytes, along with this, to identify if we are before or after the migration
-    // to MemoryManager.  Previously, the first 4 bytes contained a size.  b"MBR\1" evaluates to
-    // 22169421 bytes (which is ~22MB, and is much smaller than governance in mainnet (about 500MB))
-    // Meaning there is no real possibility of these bytes being misinterpreted
-    // TODO NNS1-2357 Remove conditional after deploying the updated version to production
-    let restored_state = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
-        with_upgrades_memory(|memory| {
-            let result: Result<GovernanceProto, _> = load_protobuf(memory);
-            result
-        })
-        .expect(
-            "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
-             CANISTER MIGHT HAVE BROKEN STATE!!!!.",
-        )
-    } else {
-        let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
-        GovernanceProto::decode(reader).expect(
-            "Error deserializing canister state post-upgrade. \
-             CANISTER MIGHT HAVE BROKEN STATE!!!!.",
-        )
-    };
     grow_upgrades_memory_to(WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY);
 
     println!(
