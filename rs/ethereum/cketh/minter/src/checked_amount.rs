@@ -61,7 +61,7 @@ impl<Unit> CandidType for CheckedAmountOf<Unit> {
     where
         S: candid::types::Serializer,
     {
-        serializer.serialize_text(&self.0.to_string())
+        serializer.serialize_text(&format!("{:#X}", self.0))
     }
 }
 
