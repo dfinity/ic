@@ -1570,7 +1570,7 @@ pub struct GossipChunkRequest {
 pub struct GossipChunk {
     #[prost(message, optional, tag = "6")]
     pub request: ::core::option::Option<GossipChunkRequest>,
-    #[prost(oneof = "gossip_chunk::Response", tags = "3, 4")]
+    #[prost(oneof = "gossip_chunk::Response", tags = "7, 4")]
     pub response: ::core::option::Option<gossip_chunk::Response>,
 }
 /// Nested message and enum types in `GossipChunk`.
@@ -1580,8 +1580,8 @@ pub mod gossip_chunk {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Response {
-        #[prost(message, tag = "3")]
-        Chunk(super::ArtifactChunk),
+        #[prost(message, tag = "7")]
+        Artifact(super::Artifact),
         #[prost(enumeration = "super::P2pError", tag = "4")]
         Error(i32),
     }
@@ -1649,27 +1649,6 @@ pub mod artifact {
         HttpShare(super::CanisterHttpShare),
         #[prost(message, tag = "7")]
         FileTreeSync(super::FileTreeSyncArtifact),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::large_enum_variant)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ArtifactChunk {
-    #[prost(oneof = "artifact_chunk::Data", tags = "3, 4")]
-    pub data: ::core::option::Option<artifact_chunk::Data>,
-}
-/// Nested message and enum types in `ArtifactChunk`.
-pub mod artifact_chunk {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::large_enum_variant)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Data {
-        #[prost(bytes, tag = "3")]
-        Chunk(::prost::alloc::vec::Vec<u8>),
-        #[prost(message, tag = "4")]
-        Artifact(super::Artifact),
     }
 }
 #[derive(

@@ -5,8 +5,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::gossip_chunk::Response;
 use ic_protobuf::types::v1::gossip_message::Body;
 use ic_types::{
-    artifact::{ArtifactFilter, ArtifactId},
-    chunkable::{ArtifactChunk, ChunkId},
+    artifact::{Artifact, ArtifactFilter, ArtifactId},
+    chunkable::ChunkId,
     crypto::CryptoHash,
     p2p::GossipAdvert,
 };
@@ -31,7 +31,7 @@ pub(crate) struct GossipChunk {
     /// The request which resulted in the 'artifact_chunk'.
     pub(crate) request: GossipChunkRequest,
     /// The artifact chunk, encapsulated in a `P2PResult`.
-    pub(crate) artifact_chunk: P2PResult<ArtifactChunk>,
+    pub(crate) artifact: P2PResult<Artifact>,
 }
 
 /// This is the message exchanged on the wire with other peers.  This
@@ -135,12 +135,9 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
 impl From<GossipChunk> for pb::GossipChunk {
     /// The function converts the given chunk into the Protobuf equivalent.
     fn from(gossip_chunk: GossipChunk) -> Self {
-        let GossipChunk {
-            request,
-            artifact_chunk,
-        } = gossip_chunk;
-        let response = match artifact_chunk {
-            Ok(artifact_chunk) => Some(Response::Chunk(artifact_chunk.into())),
+        let GossipChunk { request, artifact } = gossip_chunk;
+        let response = match artifact {
+            Ok(artifact_chunk) => Some(Response::Artifact(artifact_chunk.into())),
             // Add additional cases as required.
             Err(_) => Some(Response::Error(pb::P2pError::NotFound as i32)),
         };
@@ -160,18 +157,11 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
         let request = gossip_chunk.request.ok_or(ProxyDecodeError::MissingField(
             "The 'request' field is missing",
         ))?;
-        let chunk_id = ChunkId::from(request.chunk_id);
         let request = GossipChunkRequest::try_from(request)?;
         Ok(Self {
             request,
-            artifact_chunk: match response {
-                Response::Chunk(c) => {
-                    let artifact_chunk: ArtifactChunk = c.try_into()?;
-                    Ok(ArtifactChunk {
-                        chunk_id,
-                        artifact_chunk_data: artifact_chunk.artifact_chunk_data,
-                    })
-                }
+            artifact: match response {
+                Response::Artifact(c) => Ok(c.try_into()?),
                 Response::Error(_e) => Err(P2PError {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }),

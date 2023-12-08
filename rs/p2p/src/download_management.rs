@@ -83,7 +83,6 @@ use ic_types::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
     },
-    chunkable::ArtifactChunkData,
     chunkable::ChunkId,
     chunkable::CHUNKID_UNIT_CHUNK,
     crypto::CryptoHash,
@@ -211,7 +210,7 @@ impl GossipImpl {
         // Allowing the rest of the artifact to be downloaded and
         // skipping only the affected chunk increase overall
         // resilience.
-        if let Err(error) = gossip_chunk.artifact_chunk {
+        if let Err(error) = gossip_chunk.artifact {
             self.metrics.chunks_not_served_from_peer.inc();
             trace!(
                 self.log,
@@ -262,12 +261,7 @@ impl GossipImpl {
         let artifact_tracker = artifact_tracker.unwrap();
 
         // Feed the chunk to the tracker.
-        let completed_artifact = match gossip_chunk.artifact_chunk.unwrap().artifact_chunk_data {
-            ArtifactChunkData::UnitChunkData(artifact) => artifact,
-            _ => {
-                return;
-            }
-        };
+        let completed_artifact = gossip_chunk.artifact.unwrap();
 
         // Record metrics.
         self.metrics.artifacts_received.inc();
@@ -1007,7 +1001,6 @@ pub mod tests {
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_types::chunkable::ArtifactErrorCode;
     use ic_types::consensus::dkg::{DealingContent, DkgMessageId, Message as DkgMessage};
     use ic_types::crypto::{
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -1018,7 +1011,7 @@ pub mod tests {
     use ic_types::{
         artifact,
         artifact::{Artifact, ArtifactAttribute, ArtifactPriorityFn, Priority},
-        chunkable::{ArtifactChunk, ArtifactChunkData, Chunkable, ChunkableArtifact},
+        chunkable::ChunkableArtifact,
         Height, NodeId, PrincipalId,
     };
     use ic_types::{artifact::ArtifactKind, artifact_kind::ConsensusArtifact, consensus::*};
@@ -1036,43 +1029,6 @@ pub mod tests {
     /// The test artifact manager.
     #[derive(Default)]
     pub(crate) struct TestArtifactManager {}
-
-    /// The test artifact.
-    struct TestArtifact {
-        /// The number of chunks.
-        num_chunks: u32,
-        /// The list of artifact chunks.
-        chunks: Vec<ArtifactChunk>,
-    }
-
-    /// `TestArtifact` implements the `Chunkable` trait.
-    impl Chunkable for TestArtifact {
-        /// The method returns an Iterator over the chunks to download.
-        fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
-            Box::new(
-                (0..self.num_chunks)
-                    .map(ChunkId::from)
-                    .collect::<Vec<_>>()
-                    .into_iter(),
-            )
-        }
-
-        /// The method adds the given chunk.
-        fn add_chunk(
-            &mut self,
-            artifact_chunk: ArtifactChunk,
-        ) -> Result<Artifact, ArtifactErrorCode> {
-            self.chunks.push(artifact_chunk.clone());
-            if self.chunks.len() == self.num_chunks as usize {
-                match artifact_chunk.artifact_chunk_data {
-                    ArtifactChunkData::UnitChunkData(artifact) => Ok(artifact),
-                    _ => Err(ArtifactErrorCode::ChunkVerificationFailed),
-                }
-            } else {
-                Err(ArtifactErrorCode::ChunksMoreNeeded)
-            }
-        }
-    }
 
     /// The `TestArtifactManager` implements the `TestArtifact` trait.
     impl ArtifactManager for TestArtifactManager {
@@ -1555,10 +1511,6 @@ pub mod tests {
         integrity_hash: CryptoHash,
     ) -> GossipChunk {
         let payload = Artifact::DkgMessage(receive_check_test_create_message(number));
-        let artifact_chunk = ArtifactChunk {
-            chunk_id,
-            artifact_chunk_data: ArtifactChunkData::UnitChunkData(payload),
-        };
 
         let request = GossipChunkRequest {
             artifact_id,
@@ -1567,7 +1519,7 @@ pub mod tests {
         };
         GossipChunk {
             request,
-            artifact_chunk: Ok(artifact_chunk),
+            artifact: Ok(payload),
         }
     }
 
