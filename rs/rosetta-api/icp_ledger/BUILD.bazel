@@ -54,6 +54,9 @@ rust_library(
 rust_test(
     name = "icp_ledger_test",
     crate = ":icp_ledger",
+    deps = [
+        "@crate_index//:proptest",
+    ],
 )
 
 motoko_library(
