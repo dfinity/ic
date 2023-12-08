@@ -2,7 +2,7 @@ use ic_base_types::NodeId;
 use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
-use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use quinn::Connection;
 use tokio_metrics::TaskMonitor;
 
@@ -52,8 +52,10 @@ pub struct QuicTransportMetrics {
     pub connection_handle_duration_seconds: HistogramVec,
     pub connection_handle_errors_total: IntCounterVec,
     // Quinn
-    quinn_path_rtt_duration: GaugeVec,
-    quinn_path_congestion_window: GaugeVec,
+    quinn_path_rtt_seconds: GaugeVec,
+    quinn_path_congestion_window: IntGaugeVec,
+    quinn_path_sent_packets: IntGaugeVec,
+    quinn_path_lost_packets: IntGaugeVec,
 }
 
 impl QuicTransportMetrics {
@@ -155,29 +157,47 @@ impl QuicTransportMetrics {
             ),
 
             // Quinn stats
-            quinn_path_rtt_duration: metrics_registry.gauge_vec(
-                "quic_transport_quinn_path_rtt_duration",
+            quinn_path_rtt_seconds: metrics_registry.gauge_vec(
+                "quic_transport_quinn_path_rtt_seconds",
                 "Estimated rtt of this connection.",
                 &[PEER_ID_LABEL],
             ),
-            quinn_path_congestion_window: metrics_registry.gauge_vec(
+            quinn_path_congestion_window: metrics_registry.int_gauge_vec(
                 "quic_transport_quinn_path_congestion_window",
                 "Congestion window of this connection.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_path_sent_packets: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_path_sent_packets",
+                "The amount of packets sent on this path.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_path_lost_packets: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_path_lost_packets",
+                "The amount of packets lost on this path.",
                 &[PEER_ID_LABEL],
             ),
         }
     }
 
     pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, peer_id: &NodeId) {
-        let stats = conn.stats();
+        let path_stats = conn.stats().path;
         let peer_id_label: [&str; 1] = [&peer_id.to_string()];
 
-        self.quinn_path_rtt_duration
+        self.quinn_path_rtt_seconds
             .with_label_values(&peer_id_label)
-            .set(stats.path.rtt.as_secs_f64());
+            .set(path_stats.rtt.as_secs_f64());
 
         self.quinn_path_congestion_window
             .with_label_values(&peer_id_label)
-            .set(stats.path.cwnd as f64);
+            .set(path_stats.cwnd as i64);
+
+        self.quinn_path_sent_packets
+            .with_label_values(&peer_id_label)
+            .set(path_stats.sent_packets as i64);
+
+        self.quinn_path_lost_packets
+            .with_label_values(&peer_id_label)
+            .set(path_stats.lost_packets as i64);
     }
 }
