@@ -896,7 +896,9 @@ pub struct DerivedState {
     /// Current amount of contributions from direct swap participants.
     #[prost(uint64, optional, tag = "6")]
     pub direct_participation_icp_e8s: ::core::option::Option<u64>,
-    /// Current amount of contributions from the Neurons' Fund.
+    /// Current amount that the Neurons' Fund promises to participate with if the swap were to
+    /// successfully finalize now. Until the swap's success criterium is satisfied, this value is
+    /// merely a progress indicator.
     #[prost(uint64, optional, tag = "7")]
     pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
