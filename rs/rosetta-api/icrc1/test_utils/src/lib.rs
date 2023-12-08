@@ -6,6 +6,7 @@ use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
+use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
@@ -923,4 +924,150 @@ mod tests {
             .expect("Unable to run valid_transactions_strategy");
         assert_eq!(tree.current().len(), size)
     }
+}
+
+pub fn arb_account() -> impl Strategy<Value = Account> {
+    (
+        proptest::collection::vec(any::<u8>(), 28),
+        any::<Option<[u8; 32]>>(),
+    )
+        .prop_map(|(mut principal, subaccount)| {
+            principal.push(0x00);
+            Account {
+                owner: Principal::try_from_slice(&principal[..]).unwrap(),
+                subaccount,
+            }
+        })
+}
+
+pub fn arb_transfer<Tokens, S>(arb_tokens: fn() -> S) -> impl Strategy<Value = Operation<Tokens>>
+where
+    Tokens: TokensType,
+    S: Strategy<Value = Tokens>,
+{
+    (
+        arb_account(),
+        arb_account(),
+        arb_tokens(),
+        proptest::option::of(arb_tokens()),
+        proptest::option::of(arb_account()),
+    )
+        .prop_map(|(from, to, amount, fee, spender)| Operation::Transfer {
+            from,
+            to,
+            amount,
+            fee,
+            spender,
+        })
+}
+
+pub fn arb_approve<Tokens, S>(arb_tokens: fn() -> S) -> impl Strategy<Value = Operation<Tokens>>
+where
+    Tokens: TokensType,
+    S: Strategy<Value = Tokens>,
+{
+    (
+        arb_account(),
+        arb_account(),
+        arb_tokens(),
+        proptest::option::of(arb_tokens()),
+        proptest::option::of(arb_tokens()),
+        proptest::option::of(any::<u64>()),
+    )
+        .prop_map(
+            |(from, spender, amount, fee, expected_allowance, expires_at)| Operation::Approve {
+                from,
+                spender,
+                amount,
+                fee,
+                expected_allowance,
+                expires_at,
+            },
+        )
+}
+
+pub fn arb_mint<Tokens, S>(arb_tokens: fn() -> S) -> impl Strategy<Value = Operation<Tokens>>
+where
+    Tokens: TokensType,
+    S: Strategy<Value = Tokens>,
+{
+    (arb_account(), arb_tokens()).prop_map(|(to, amount)| Operation::Mint { to, amount })
+}
+
+pub fn arb_burn<Tokens, S>(arb_tokens: fn() -> S) -> impl Strategy<Value = Operation<Tokens>>
+where
+    Tokens: TokensType,
+    S: Strategy<Value = Tokens>,
+{
+    (
+        arb_account(),
+        proptest::option::of(arb_account()),
+        arb_tokens(),
+    )
+        .prop_map(|(from, spender, amount)| Operation::Burn {
+            from,
+            spender,
+            amount,
+        })
+}
+
+pub fn arb_operation<Tokens, S>(arb_tokens: fn() -> S) -> impl Strategy<Value = Operation<Tokens>>
+where
+    Tokens: TokensType,
+    S: Strategy<Value = Tokens>,
+{
+    prop_oneof![
+        arb_transfer(arb_tokens),
+        arb_mint(arb_tokens),
+        arb_burn(arb_tokens),
+        arb_approve(arb_tokens)
+    ]
+}
+
+pub fn arb_transaction<Tokens, S>(
+    arb_tokens: fn() -> S,
+    max_memo_length: usize,
+) -> impl Strategy<Value = Transaction<Tokens>>
+where
+    Tokens: TokensType,
+    S: Strategy<Value = Tokens>,
+{
+    (
+        arb_operation(arb_tokens),
+        any::<Option<u64>>(),
+        proptest::option::of(proptest::collection::vec(any::<u8>(), 0..=max_memo_length)),
+    )
+        .prop_map(|(operation, ts, memo)| Transaction {
+            operation,
+            created_at_time: ts,
+            memo: memo.map(Memo::from),
+        })
+}
+
+pub fn arb_block<Tokens, S>(
+    arb_tokens: fn() -> S,
+    max_memo_length: usize,
+) -> impl Strategy<Value = Block<Tokens>>
+where
+    Tokens: TokensType,
+    S: Strategy<Value = Tokens>,
+{
+    (
+        any::<Option<[u8; 32]>>(),
+        arb_transaction(arb_tokens, max_memo_length),
+        proptest::option::of(arb_tokens()),
+        any::<u64>(),
+        proptest::option::of(arb_account()),
+        proptest::option::of(any::<u64>()),
+    )
+        .prop_map(
+            |(parent_hash, transaction, effective_fee, ts, fee_col, fee_col_block)| Block {
+                parent_hash: parent_hash.map(HashOf::new),
+                transaction,
+                effective_fee,
+                timestamp: ts,
+                fee_collector: fee_col,
+                fee_collector_block_index: fee_col_block,
+            },
+        )
 }

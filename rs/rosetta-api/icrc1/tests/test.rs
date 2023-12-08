@@ -3,12 +3,13 @@ use ic_icrc1::blocks::{
     generic_transaction_from_generic_block,
 };
 use ic_icrc1::{Block, Transaction};
-use ic_icrc1_test_utils::{arb_small_amount, blocks_strategy};
+use ic_icrc1_test_utils::{arb_block, arb_small_amount, blocks_strategy};
 use ic_icrc1_tokens_u256::U256;
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::Tokens;
 use proptest::prelude::*;
 
 fn arb_u256() -> impl Strategy<Value = U256> {
@@ -92,4 +93,30 @@ proptest! {
     fn test_generic_transaction_hash_u256(block in blocks_strategy(arb_u256())) {
         check_tx_hash::<U256>(block)?;
     }
+}
+
+#[test]
+fn test_encoding_decoding_block_u64() {
+    fn arb_token() -> impl Strategy<Value = Tokens> {
+        any::<u64>().prop_map(Tokens::from_e8s)
+    }
+    proptest!(|(block in arb_block(arb_token, 32))| {
+        let mut bytes = vec![];
+        ciborium::into_writer(&block, &mut bytes).unwrap();
+        let decoded: Block<Tokens> = ciborium::from_reader(&bytes[..]).unwrap();
+        prop_assert_eq!(block, decoded);
+    })
+}
+
+#[test]
+fn test_encoding_decoding_block_u254() {
+    fn arb_token() -> impl Strategy<Value = U256> {
+        (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| U256::from_words(hi, lo))
+    }
+    proptest!(|(block in arb_block(arb_token, 32))| {
+        let mut bytes = vec![];
+        ciborium::into_writer(&block, &mut bytes).unwrap();
+        let decoded: Block<U256> = ciborium::from_reader(&bytes[..]).unwrap();
+        prop_assert_eq!(block, decoded);
+    })
 }

@@ -8103,6 +8103,7 @@ dependencies = [
  "ic-icrc1",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "icrc-ledger-types",
  "num-traits",
  "proptest",
