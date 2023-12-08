@@ -67,7 +67,7 @@ pub trait ChunkableArtifact {
     ///
     /// The chunk ID for single-chunked artifacts must be
     /// `CHUNKID_UNIT_CHUNK`.
-    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk>;
+    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<Artifact>;
 }
 
 /// Basic chunking interface for [`crate::single_chunked::SingleChunked`] artifact tracker.

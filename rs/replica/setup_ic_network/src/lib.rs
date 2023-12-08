@@ -54,7 +54,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_transport::transport::create_transport;
 use ic_types::{
-    artifact::{Advert, ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation},
+    artifact::{ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation},
     artifact_kind::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
@@ -62,8 +62,6 @@ use ic_types::{
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
     consensus::CatchUpPackage,
     consensus::HasHeight,
-    crypto::CryptoHash,
-    filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     malicious_flags::MaliciousFlags,
     p2p::GossipAdvert,
     replica_config::ReplicaConfig,
@@ -71,7 +69,6 @@ use ic_types::{
 };
 use std::{
     collections::HashMap,
-    convert::Infallible,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
@@ -926,48 +923,5 @@ fn init_artifact_pools(
         dkg_pool,
         ecdsa_pool,
         canister_http_pool,
-    }
-}
-
-// The following types are used for testing only. Ideally, they should only
-// appear in the test module, but `TestArtifact` is used by
-// `P2PStateSyncClient` so these definitions are still required here.
-
-#[derive(Eq, PartialEq)]
-/// The artifact struct used by the testing framework.
-pub struct TestArtifact;
-/// The artifact message used by the testing framework.
-pub type TestArtifactMessage = FileTreeSyncArtifact;
-/// The artifact ID used by the testing framework.
-pub type TestArtifactId = FileTreeSyncId;
-
-/// `TestArtifact` implements the `ArtifactKind` trait.
-impl ArtifactKind for TestArtifact {
-    const TAG: ArtifactTag = ArtifactTag::FileTreeSyncArtifact;
-    type PbMessageError = Infallible;
-    type PbMessage = ic_protobuf::types::v1::FileTreeSyncArtifact;
-    type Message = TestArtifactMessage;
-
-    type PbId = String;
-    type PbIdError = Infallible;
-    type Id = TestArtifactId;
-
-    type PbAttributeError = Infallible;
-    type PbAttribute = ();
-    type Attribute = ();
-
-    type PbFilterError = Infallible;
-    type PbFilter = ();
-    type Filter = ();
-
-    /// The function converts a TestArtifactMessage to an advert for a
-    /// TestArtifact.
-    fn message_to_advert(msg: &TestArtifactMessage) -> Advert<TestArtifact> {
-        Advert {
-            attribute: (),
-            size: 0,
-            id: msg.id.clone(),
-            integrity_hash: CryptoHash(msg.id.clone().into_bytes()),
-        }
     }
 }
