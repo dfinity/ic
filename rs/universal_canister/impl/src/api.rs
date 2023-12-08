@@ -71,6 +71,7 @@ mod ic0 {
         pub fn mint_cycles(amount: u64) -> u64;
 
         pub fn is_controller(src: u32, size: u32) -> u32;
+        pub fn in_replicated_execution() -> u32;
 
         pub fn cycles_burn128(amount_high: u64, amount_low: u64, dst: u32) -> ();
     }
@@ -394,6 +395,10 @@ pub fn mint_cycles(amount: u64) -> u64 {
 
 pub fn is_controller(data: &[u8]) -> u32 {
     unsafe { ic0::is_controller(data.as_ptr() as u32, data.len() as u32) }
+}
+
+pub fn in_replicated_execution() -> u32 {
+    unsafe { ic0::in_replicated_execution() }
 }
 
 /// Burn cycles.

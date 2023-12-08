@@ -1115,6 +1115,18 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "in_replicated_execution", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(IN_REPLICATED_EXECUTION, metering_type),
+                )?;
+                with_system_api(&mut caller, |s| s.ic0_in_replicated_execution())
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "data_certificate_copy", {
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
                 charge_for_cpu_and_mem(

@@ -412,6 +412,7 @@ fn eval(ops_bytes: OpsBytes) {
                 let data = vec![byte as u8; length as usize];
                 stack.push_blob(data);
             }
+            Ops::InReplicatedExecution => stack.push_int(api::in_replicated_execution()),
         }
     }
 }
