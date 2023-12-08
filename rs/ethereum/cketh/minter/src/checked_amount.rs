@@ -11,6 +11,8 @@ use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::ops::Rem;
 
+use crate::eth_rpc::into_nat;
+
 /// `CheckedAmountOf<Unit>` provides a type-safe way to keep an amount of some `Unit`.
 /// In contrast to `AmountOf<Unit>`, all operations are checked and do not overflow.
 ///
@@ -54,14 +56,14 @@ pub struct CheckedAmountOf<Unit>(ethnum::u256, PhantomData<Unit>);
 
 impl<Unit> CandidType for CheckedAmountOf<Unit> {
     fn _ty() -> candid::types::Type {
-        String::_ty()
+        candid::Nat::_ty()
     }
 
     fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
     where
         S: candid::types::Serializer,
     {
-        serializer.serialize_text(&format!("{:#X}", self.0))
+        serializer.serialize_nat(&into_nat(self.0))
     }
 }
 
@@ -269,7 +271,49 @@ impl<Unit> Serialize for CheckedAmountOf<Unit> {
 
 impl<'de, Unit> Deserialize<'de> for CheckedAmountOf<Unit> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        ethnum::u256::deserialize(deserializer).map(Self::from_inner)
+        use num_bigint::BigUint;
+        use serde::de::{self, SeqAccess, Visitor};
+        fn cautious(hint: Option<usize>) -> usize {
+            const MAX_PREALLOC_BYTES: usize = 1024 * 1024;
+            std::cmp::min(
+                hint.unwrap_or(0),
+                MAX_PREALLOC_BYTES / std::mem::size_of::<u32>(),
+            )
+        }
+        struct CheckedAmountVisitor<Unit> {
+            phantom: PhantomData<Unit>,
+        }
+        impl<Unit> Default for CheckedAmountVisitor<Unit> {
+            fn default() -> Self {
+                Self {
+                    phantom: PhantomData::default(),
+                }
+            }
+        }
+        impl<'de, Unit> Visitor<'de> for CheckedAmountVisitor<Unit> {
+            type Value = CheckedAmountOf<Unit>;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "CheckedAmountOf value")
+            }
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                CheckedAmountOf::from_str_hex(v)
+                    .map_err(|_| de::Error::custom("invalid hex string"))
+            }
+            fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+            where
+                S: SeqAccess<'de>,
+            {
+                let len = cautious(seq.size_hint());
+                let mut data = Vec::with_capacity(len);
+                while let Some(value) = seq.next_element::<u32>()? {
+                    data.push(value);
+                }
+                candid::Nat(BigUint::new(data))
+                    .try_into()
+                    .map_err(|_| de::Error::custom("invalid BigUint"))
+            }
+        }
+        deserializer.deserialize_any(CheckedAmountVisitor::default())
     }
 }
 
