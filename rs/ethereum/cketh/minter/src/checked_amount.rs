@@ -11,8 +11,6 @@ use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::ops::Rem;
 
-use crate::eth_rpc::into_nat;
-
 /// `CheckedAmountOf<Unit>` provides a type-safe way to keep an amount of some `Unit`.
 /// In contrast to `AmountOf<Unit>`, all operations are checked and do not overflow.
 ///
@@ -63,7 +61,7 @@ impl<Unit> CandidType for CheckedAmountOf<Unit> {
     where
         S: candid::types::Serializer,
     {
-        serializer.serialize_nat(&into_nat(self.0))
+        serializer.serialize_text(&self.0.to_string())
     }
 }
 
