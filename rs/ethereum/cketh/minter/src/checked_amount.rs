@@ -54,7 +54,7 @@ pub struct CheckedAmountOf<Unit>(ethnum::u256, PhantomData<Unit>);
 
 impl<Unit> CandidType for CheckedAmountOf<Unit> {
     fn _ty() -> candid::types::Type {
-        candid::Nat::_ty()
+        String::_ty()
     }
 
     fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
