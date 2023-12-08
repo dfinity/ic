@@ -253,6 +253,10 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         block_index,
         received_at: ic_cdk::api::time(),
         kyt_provider: Some(kyt_provider),
+        reimbursement_account: Some(Account {
+            owner: caller,
+            subaccount: None,
+        }),
     };
 
     log!(
@@ -375,6 +379,10 @@ pub async fn retrieve_btc_with_approval(
                 block_index,
                 received_at: ic_cdk::api::time(),
                 kyt_provider: Some(kyt_provider),
+                reimbursement_account: Some(Account {
+                    owner: caller,
+                    subaccount: args.from_subaccount,
+                }),
             };
 
             mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));

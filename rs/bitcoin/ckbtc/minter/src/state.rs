@@ -15,7 +15,7 @@ use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
-use candid::{Deserialize, Principal};
+use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
 pub use ic_btc_interface::Network;
 use ic_btc_interface::{OutPoint, Txid, Utxo};
@@ -23,6 +23,7 @@ use ic_canister_log::log;
 use ic_utils_ensure::{ensure, ensure_eq};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
+use std::collections::btree_map::Entry;
 
 /// The maximum number of finalized BTC retrieval requests that we keep in the
 /// history.
@@ -51,6 +52,10 @@ pub struct RetrieveBtcRequest {
     #[serde(rename = "kyt_provider")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kyt_provider: Option<Principal>,
+    /// The reimbursement_account of the retrieve_btc transaction.
+    #[serde(rename = "reimbursement_account")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reimbursement_account: Option<Account>,
 }
 
 /// A transaction output storing the minter's change.
@@ -129,6 +134,49 @@ pub enum RetrieveBtcStatus {
     AmountTooLow,
     /// Confirmed a transaction satisfying this request.
     Confirmed { txid: Txid },
+}
+
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct BtcRetrievalStatusV2 {
+    pub block_index: u64,
+    pub status_v2: Option<RetrieveBtcStatusV2>,
+}
+
+impl From<RetrieveBtcStatus> for RetrieveBtcStatusV2 {
+    fn from(status: RetrieveBtcStatus) -> Self {
+        match status {
+            RetrieveBtcStatus::Unknown => RetrieveBtcStatusV2::Unknown,
+            RetrieveBtcStatus::Pending => RetrieveBtcStatusV2::Pending,
+            RetrieveBtcStatus::Signing => RetrieveBtcStatusV2::Signing,
+            RetrieveBtcStatus::Sending { txid } => RetrieveBtcStatusV2::Sending { txid },
+            RetrieveBtcStatus::Submitted { txid } => RetrieveBtcStatusV2::Submitted { txid },
+            RetrieveBtcStatus::AmountTooLow => RetrieveBtcStatusV2::AmountTooLow,
+            RetrieveBtcStatus::Confirmed { txid } => RetrieveBtcStatusV2::Confirmed { txid },
+        }
+    }
+}
+
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
+pub enum RetrieveBtcStatusV2 {
+    /// The minter has no data for this request.
+    /// The request id is either invalid or too old.
+    Unknown,
+    /// The request is in the batch queue.
+    Pending,
+    /// Waiting for a signature on a transaction satisfy this request.
+    Signing,
+    /// Sending the transaction satisfying this request.
+    Sending { txid: Txid },
+    /// Awaiting for confirmations on the transaction satisfying this request.
+    Submitted { txid: Txid },
+    /// The retrieval amount was too low. Satisfying the request is impossible.
+    AmountTooLow,
+    /// Confirmed a transaction satisfying this request.
+    Confirmed { txid: Txid },
+    /// The retrieve bitcoin request has been reimbursed.
+    Reimbursed(ReimbursedDeposit),
+    /// The minter will try to reimburse this transaction.
+    WillReimburse(ReimburseDepositTask),
 }
 
 /// Controls which operations the minter can perform.
@@ -248,6 +296,9 @@ pub struct CkBtcMinterState {
     /// received_at.
     pub pending_retrieve_btc_requests: Vec<RetrieveBtcRequest>,
 
+    /// Maps Account to its retrieve_btc requests burn block indices.
+    pub retrieve_btc_account_to_block_indices: BTreeMap<Account, Vec<u64>>,
+
     /// The identifiers of retrieve_btc requests which we're currently signing a
     /// transaction or sending to the Bitcoin network.
     pub requests_in_flight: BTreeMap<u64, InFlightStatus>,
@@ -330,14 +381,25 @@ pub struct CkBtcMinterState {
 
     /// Map from burn block index to amount to reimburse because of
     /// KYT fees.
-    pub reimbursement_map: BTreeMap<u64, ReimburseDepositTask>,
+    pub pending_reimbursements: BTreeMap<u64, ReimburseDepositTask>,
+
+    /// Map from burn block index to the the reimbursed request.
+    pub reimbursed_transactions: BTreeMap<u64, ReimbursedDeposit>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
 pub struct ReimburseDepositTask {
     pub account: Account,
     pub amount: u64,
     pub reason: ReimbursementReason,
+}
+
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+pub struct ReimbursedDeposit {
+    pub account: Account,
+    pub amount: u64,
+    pub reason: ReimbursementReason,
+    pub mint_block_index: u64,
 }
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Clone, Serialize, candid::CandidType, Copy)]
@@ -535,6 +597,46 @@ impl CkBtcMinterState {
         #[cfg(debug_assertions)]
         self.check_invariants()
             .expect("state invariants are violated");
+    }
+
+    pub fn retrieve_btc_status_v2_by_account(
+        &self,
+        target: Option<Account>,
+    ) -> Vec<BtcRetrievalStatusV2> {
+        let target_account = target.unwrap_or(Account {
+            owner: ic_cdk::caller(),
+            subaccount: None,
+        });
+
+        let block_indices: Vec<u64> = self
+            .retrieve_btc_account_to_block_indices
+            .get(&target_account)
+            .unwrap_or(&vec![])
+            .to_vec();
+
+        let result: Vec<BtcRetrievalStatusV2> = block_indices
+            .iter()
+            .map(|&block_index| BtcRetrievalStatusV2 {
+                block_index,
+                status_v2: Some(self.retrieve_btc_status_v2(block_index)),
+            })
+            .collect();
+
+        result
+    }
+
+    pub fn retrieve_btc_status_v2(&self, block_index: u64) -> RetrieveBtcStatusV2 {
+        if let Some(reimbursement) = self.pending_reimbursements.get(&block_index) {
+            return RetrieveBtcStatusV2::WillReimburse(reimbursement.clone());
+        }
+
+        if let Some(reimbursement) = self.reimbursed_transactions.get(&block_index) {
+            return RetrieveBtcStatusV2::Reimbursed(reimbursement.clone());
+        }
+
+        let status_v2: RetrieveBtcStatusV2 = self.retrieve_btc_status(block_index).into();
+
+        status_v2
     }
 
     /// Returns the status of the retrieve_btc request with the specified
@@ -923,7 +1025,6 @@ impl CkBtcMinterState {
     /// That's because we mint tokens on the ledger before calling this method, so preserving the
     /// original owed amount does not make sense.
     fn distribute_kyt_fee(&mut self, provider: Principal, amount: u64) -> Result<(), Overdraft> {
-        use std::collections::btree_map::Entry;
         if amount == 0 {
             return Ok(());
         }
@@ -959,7 +1060,12 @@ impl CkBtcMinterState {
             }
             ReimbursementReason::CallFailed => {}
         }
-        self.reimbursement_map
+        self.retrieve_btc_account_to_block_indices
+            .entry(reimburse_deposit_task.account)
+            .and_modify(|entry| entry.push(burn_block_index))
+            .or_insert(vec![burn_block_index]);
+
+        self.pending_reimbursements
             .insert(burn_block_index, reimburse_deposit_task);
     }
 
@@ -1035,6 +1141,12 @@ impl CkBtcMinterState {
             "kyt_principal does not match"
         );
 
+        ensure_eq!(
+            self.retrieve_btc_account_to_block_indices,
+            other.retrieve_btc_account_to_block_indices,
+            "retrieve_btc_account_to_block_indices does not match"
+        );
+
         let my_txs = as_sorted_vec(self.submitted_transactions.iter().cloned(), |tx| tx.txid);
         let other_txs = as_sorted_vec(other.submitted_transactions.iter().cloned(), |tx| tx.txid);
         ensure_eq!(my_txs, other_txs, "submitted_transactions do not match");
@@ -1097,6 +1209,7 @@ impl From<InitArgs> for CkBtcMinterState {
             requests_in_flight: Default::default(),
             submitted_transactions: Default::default(),
             replacement_txid: Default::default(),
+            retrieve_btc_account_to_block_indices: Default::default(),
             rev_replacement_txid: Default::default(),
             stuck_transactions: Default::default(),
             finalized_requests: VecDeque::with_capacity(MAX_FINALIZED_REQUESTS),
@@ -1120,7 +1233,8 @@ impl From<InitArgs> for CkBtcMinterState {
             checked_utxos: Default::default(),
             ignored_utxos: Default::default(),
             quarantined_utxos: Default::default(),
-            reimbursement_map: Default::default(),
+            pending_reimbursements: Default::default(),
+            reimbursed_transactions: Default::default(),
         }
     }
 }

@@ -4,7 +4,7 @@ use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
     RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
 };
-use crate::state::{ReimburseDepositTask, ReimbursementReason};
+use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
@@ -210,6 +210,13 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 to_account, utxos, ..
             } => state.add_utxos(to_account, utxos),
             Event::AcceptedRetrieveBtcRequest(req) => {
+                if let Some(account) = req.reimbursement_account {
+                    state
+                        .retrieve_btc_account_to_block_indices
+                        .entry(account)
+                        .and_modify(|entry| entry.push(req.block_index))
+                        .or_insert(vec![req.block_index]);
+                }
                 state.push_back_pending_request(req);
             }
             Event::RemovedRetrieveBtcRequest { block_index } => {
@@ -345,9 +352,22 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 );
             }
             Event::ReimbursedFailedDeposit {
-                burn_block_index, ..
+                burn_block_index,
+                mint_block_index,
             } => {
-                state.reimbursement_map.remove(&burn_block_index);
+                let reimbursed_tx = state
+                    .pending_reimbursements
+                    .remove(&burn_block_index)
+                    .expect("bug: reimbursement task should be present");
+                state.reimbursed_transactions.insert(
+                    burn_block_index,
+                    ReimbursedDeposit {
+                        account: reimbursed_tx.account,
+                        amount: reimbursed_tx.amount,
+                        reason: reimbursed_tx.reason,
+                        mint_block_index,
+                    },
+                );
             }
         }
     }

@@ -432,7 +432,7 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
 }
 
 async fn reimburse_failed_kyt() {
-    let try_to_reimburse = state::read_state(|s| s.reimbursement_map.clone());
+    let try_to_reimburse = state::read_state(|s| s.pending_reimbursements.clone());
     for (burn_block_index, entry) in try_to_reimburse {
         let (memo_status, kyt_fee) = match entry.reason {
             ReimbursementReason::TaintedDestination { kyt_fee, .. } => (Status::Rejected, kyt_fee),
