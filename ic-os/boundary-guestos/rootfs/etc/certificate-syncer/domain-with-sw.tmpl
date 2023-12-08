@@ -52,7 +52,6 @@ server {
 
         # Required for clients that have a service worker, which hasn't been uninstalled yet
         add_header "X-Ic-Gateway" "$primary_api_domain" always;
-        add_header "X-Ic-Canister-Id" "$inferred_canister_id" always;
 
         proxy_set_header x-icx-require-certification "1";
 
