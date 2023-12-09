@@ -293,7 +293,7 @@ impl<'de, Unit> Deserialize<'de> for CheckedAmountOf<Unit> {
         impl<'de, Unit> Visitor<'de> for CheckedAmountVisitor<Unit> {
             type Value = CheckedAmountOf<Unit>;
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "CheckedAmountOf value")
+                write!(f, "a hex-encoded string or u32 sequence")
             }
             fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
                 CheckedAmountOf::from_str_hex(v)
