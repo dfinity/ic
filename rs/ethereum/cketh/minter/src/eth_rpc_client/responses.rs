@@ -6,22 +6,25 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
-#[serde(rename_all = "camelCase")]
 pub struct TransactionReceipt {
     /// The hash of the block containing the transaction.
     #[n(0)]
+    #[serde(rename = "blockHash")]
     pub block_hash: Hash,
 
     /// The number of the block containing the transaction.
     #[n(1)]
+    #[serde(rename = "blockNumber")]
     pub block_number: BlockNumber,
 
     /// The total base charge plus tip paid for each unit of gas
     #[n(2)]
+    #[serde(rename = "effectiveGasPrice")]
     pub effective_gas_price: WeiPerGas,
 
     /// The amount of gas used by this specific transaction alone
     #[n(3)]
+    #[serde(rename = "gasUsed")]
     pub gas_used: GasAmount,
 
     /// Status of the transaction.
@@ -30,6 +33,7 @@ pub struct TransactionReceipt {
 
     /// The hash of the transaction
     #[n(5)]
+    #[serde(rename = "transactionHash")]
     pub transaction_hash: Hash,
 }
 

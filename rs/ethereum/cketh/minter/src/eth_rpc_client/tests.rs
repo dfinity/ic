@@ -1,5 +1,5 @@
 mod eth_rpc_client {
-    use crate::eth_rpc_client::providers::{EthMainnetService, RpcService, EthSepoliaService};
+    use crate::eth_rpc_client::providers::{EthMainnetService, EthSepoliaService, RpcService};
     use crate::eth_rpc_client::EthRpcClient;
     use crate::lifecycle::EthereumNetwork;
 

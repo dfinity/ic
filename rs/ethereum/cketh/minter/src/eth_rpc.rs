@@ -187,18 +187,20 @@ impl HttpResponsePayload for Hash {}
 /// Block tags.
 /// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
 #[derive(Debug, Default, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
-#[serde(rename_all = "lowercase")]
 pub enum BlockTag {
     /// The latest mined block.
     #[default]
+    #[serde(rename = "latest")]
     Latest,
     /// The latest safe head block.
     /// See
     /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
+    #[serde(rename = "safe")]
     Safe,
     /// The latest finalized block.
     /// See
     /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
+    #[serde(rename = "finalized")]
     Finalized,
 }
 
@@ -258,11 +260,12 @@ impl std::str::FromStr for BlockSpec {
 
 /// Parameters of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call.
 #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
-#[serde(rename_all = "camelCase")]
 pub struct GetLogsParam {
     /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    #[serde(rename = "fromBlock")]
     pub from_block: BlockSpec,
     /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    #[serde(rename = "toBlock")]
     pub to_block: BlockSpec,
     /// Contract address or a list of addresses from which logs should originate.
     pub address: Vec<Address>,
@@ -376,17 +379,19 @@ impl From<FeeHistoryParams> for (Quantity, BlockSpec, Vec<u8>) {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, CandidType)]
-#[serde(rename_all = "camelCase")]
 pub struct FeeHistory {
     /// Lowest number block of the returned range.
+    #[serde(rename = "oldestBlock")]
     pub oldest_block: BlockNumber,
     /// An array of block base fees per gas.
     /// This includes the next block after the newest of the returned range,
     /// because this value can be derived from the newest block.
     /// Zeroes are returned for pre-EIP-1559 blocks.
+    #[serde(rename = "baseFeePerGas")]
     pub base_fee_per_gas: Vec<WeiPerGas>,
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
     #[serde(default)]
+    #[serde(rename = "reward")]
     pub reward: Vec<Vec<WeiPerGas>>,
 }
 
@@ -429,7 +434,6 @@ pub struct JsonRpcRequest<T> {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct JsonRpcReply<T> {
     pub id: u64,
     pub jsonrpc: String,
@@ -439,9 +443,10 @@ pub struct JsonRpcReply<T> {
 
 /// An envelope for all JSON-RPC replies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, CandidType)]
-#[serde(rename_all = "camelCase")]
 pub enum JsonRpcResult<T> {
+    #[serde(rename = "result")]
     Result(T),
+    #[serde(rename = "error")]
     Error { code: i64, message: String },
 }
 
