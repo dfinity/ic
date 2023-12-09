@@ -272,14 +272,7 @@ impl<Unit> Serialize for CheckedAmountOf<Unit> {
 impl<'de, Unit> Deserialize<'de> for CheckedAmountOf<Unit> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use num_bigint::BigUint;
-        use serde::de::{self, SeqAccess, Visitor};
-        fn cautious(hint: Option<usize>) -> usize {
-            const MAX_PREALLOC_BYTES: usize = 1024 * 1024;
-            std::cmp::min(
-                hint.unwrap_or(0),
-                MAX_PREALLOC_BYTES / std::mem::size_of::<u32>(),
-            )
-        }
+        use serde::de::{self, Visitor};
         struct CheckedAmountVisitor<Unit> {
             phantom: PhantomData<Unit>,
         }
@@ -293,24 +286,20 @@ impl<'de, Unit> Deserialize<'de> for CheckedAmountOf<Unit> {
         impl<'de, Unit> Visitor<'de> for CheckedAmountVisitor<Unit> {
             type Value = CheckedAmountOf<Unit>;
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "a hex-encoded string or u32 sequence")
+                write!(f, "hex-encoded string or Candid nat")
             }
             fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
                 CheckedAmountOf::from_str_hex(v)
                     .map_err(|_| de::Error::custom("invalid hex string"))
             }
-            fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
-            where
-                S: SeqAccess<'de>,
-            {
-                let len = cautious(seq.size_hint());
-                let mut data = Vec::with_capacity(len);
-                while let Some(value) = seq.next_element::<u32>()? {
-                    data.push(value);
+            fn visit_byte_buf<E: de::Error>(self, v: Vec<u8>) -> Result<Self::Value, E> {
+                if v[0] == 1 {
+                    candid::Nat(BigUint::from_bytes_le(&v[1..]))
+                        .try_into()
+                        .map_err(|_| de::Error::custom("invalid BigUint"))
+                } else {
+                    Err(de::Error::custom("not nat"))
                 }
-                candid::Nat(BigUint::new(data))
-                    .try_into()
-                    .map_err(|_| de::Error::custom("invalid BigUint"))
             }
         }
         deserializer.deserialize_any(CheckedAmountVisitor::default())
