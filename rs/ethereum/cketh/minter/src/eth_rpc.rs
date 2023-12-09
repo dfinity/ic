@@ -617,6 +617,7 @@ pub enum HttpOutcallError {
     InvalidHttpJsonRpcResponse {
         status: u16,
         body: String,
+        #[serde(rename = "parsingError")]
         parsing_error: Option<String>,
     },
 }
