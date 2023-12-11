@@ -772,7 +772,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    assert_api_not_supported(api.ic0_in_replicated_execution());
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
