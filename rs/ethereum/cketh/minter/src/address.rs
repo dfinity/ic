@@ -11,18 +11,7 @@ mod tests;
 
 /// An Ethereum account address.
 #[derive(
-    Clone,
-    Copy,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    Encode,
-    Decode,
-    CandidType,
+    Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
 )]
 #[serde(transparent)]
 #[cbor(transparent)]
@@ -31,6 +20,19 @@ pub struct Address(
     #[cbor(n(0), with = "minicbor::bytes")]
     [u8; 20],
 );
+
+impl CandidType for Address {
+    fn _ty() -> candid::types::Type {
+        String::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        serializer.serialize_text(&format!("{:#x}", self))
+    }
+}
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
