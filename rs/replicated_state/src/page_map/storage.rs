@@ -13,8 +13,8 @@ use std::{
 use crate::page_map::{
     checkpoint::{Checkpoint, Mapping},
     CheckpointSerialization, FileDescriptor, FileOffset, MappingSerialization, MemoryInstruction,
-    MemoryInstructions, MemoryMapOrData, PageDelta, PersistenceError, StorageMetrics,
-    LABEL_OP_FLUSH, LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
+    MemoryInstructions, MemoryMapOrData, PageDelta, PersistDestination, PersistenceError,
+    StorageMetrics, LABEL_OP_FLUSH, LABEL_OP_MERGE, LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
 };
 
 use bit_vec::BitVec;
@@ -27,7 +27,7 @@ use strum_macros::{EnumCount, EnumIter};
 /// The (soft) maximum of the number of overlay files.
 /// There is no limit on the number of overlays while reading,
 /// but we target this number with merges.
-pub const MAX_NUMBER_OF_OVERLAYS: usize = 7;
+pub const MAX_NUMBER_OF_FILES: usize = 7;
 
 /// For `get_memory_instructions`, any range with a size of up to that number
 /// of pages will be copied, and larger ranges will be memory mapped instead.
@@ -38,6 +38,9 @@ const CURRENT_OVERLAY_VERSION: OverlayVersion = OverlayVersion::V0;
 
 /// The maximum supported overlay version for reading.
 const MAX_SUPPORTED_OVERLAY_VERSION: OverlayVersion = OverlayVersion::V0;
+
+/// Buffer size, in bytes, for writing data to disk.
+const BUF_SIZE: usize = 16 * 1024 * 1024;
 
 #[derive(
     Clone,
@@ -224,6 +227,26 @@ pub(crate) struct OverlayFile {
 }
 
 impl OverlayFile {
+    fn iter(&self) -> impl Iterator<Item = (PageIndex, &[u8])> {
+        self.index
+            .iter()
+            .flat_map(
+                |PageIndexRange {
+                     start_page,
+                     end_page,
+                     start_file_index,
+                 }| {
+                    (start_page.get()..end_page.get()).map(move |index| {
+                        (
+                            PageIndex::new(index),
+                            PageIndex::new(start_file_index.get() + index - start_page.get()),
+                        )
+                    })
+                },
+            )
+            .map(|(index, offset)| (index, self.mapping.get_page(offset).as_slice()))
+    }
+
     /// Get the page at `page_index`.
     /// Returns `None` for pages not contained in this overlay.
     fn get_page(&self, page_index: PageIndex) -> Option<&PageBytes> {
@@ -524,6 +547,225 @@ impl OverlayFile {
     }
 }
 
+/// `MergeCandidate` shows which files to merge into a single `PageMap`.
+#[derive(Clone, Debug)]
+pub struct MergeCandidate {
+    /// Overlay files to merge.
+    overlays: Vec<PathBuf>,
+    /// Base to merge if any.
+    base: Option<PathBuf>,
+    /// File to create. The format is based on `PersistDestination` variant, either `Base` or
+    /// `Overlay`.
+    /// We merge all the data from `overlays` and `base` into it, and remove old files.
+    dst: PersistDestination,
+}
+
+impl MergeCandidate {
+    /// Create a `MergeCandidate` for the given overlays and base. The `MergeCandidate` has as dst
+    /// either `dst_base` or `dst_overlay` depending on if we decided to make a partial (overlay) or a
+    /// full (base) merge.
+    /// If we apply the `MergeCandidate`, we must have up to `MAX_NUMBER_OF_FILES` files, forming a
+    /// pyramid, each file size being greater or equal to sum of newer files on top. For example:
+    ///     Overlay_3   |x|
+    ///     Overlay_2   |xx|
+    ///     Overlay_1   |xxxxxx|
+    ///     Base        |xxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+    pub fn new(
+        dst_base: &Path,
+        dst_overlay: &Path,
+        existing_base: &Path,
+        existing_overlays: &[PathBuf],
+    ) -> Result<Option<MergeCandidate>, PersistenceError> {
+        let existing_base = if existing_base.exists() {
+            Some(existing_base.to_path_buf())
+        } else {
+            None
+        };
+
+        // base if any; then overlays old to new.
+        let existing_files = existing_base.iter().chain(existing_overlays.iter());
+
+        let file_lengths: Vec<usize> = existing_files
+            .map(|path| Ok(std::fs::metadata(path)?.len() as usize))
+            .collect::<Result<_, std::io::Error>>()
+            .map_err(|err: _| PersistenceError::FileSystemError {
+                path: dst_overlay.display().to_string(),
+                context: format!("Failed get existing file length: {}", dst_overlay.display()),
+                internal_error: err.to_string(),
+            })?;
+
+        let Some(num_files_to_merge) = Self::num_files_to_merge(&file_lengths) else {
+            return Ok(None);
+        };
+
+        // If we merge all including base, `num_files_to_merge` is larger than the length of
+        // `existing_overlays`, `saturating_sub` returns zero, and we merge all overlays without
+        // skipping.
+        let overlays: Vec<PathBuf> = existing_overlays
+            .iter()
+            .skip(existing_overlays.len().saturating_sub(num_files_to_merge))
+            .cloned()
+            .collect();
+
+        // Merge all existing files and put all the data into a single base file.
+        // Otherwise we create an overlay file.
+        let merge_all = num_files_to_merge == file_lengths.len();
+        let base = if merge_all {
+            existing_base.clone()
+        } else {
+            None
+        };
+
+        let dst = if merge_all {
+            PersistDestination::BaseFile(dst_base.to_path_buf())
+        } else {
+            PersistDestination::OverlayFile(dst_overlay.to_path_buf())
+        };
+
+        Ok(Some(MergeCandidate {
+            overlays,
+            base,
+            dst,
+        }))
+    }
+
+    /// Merge data from `overlays` and `base` into `dst` and remove the input files.
+    pub fn apply(&self, metrics: &StorageMetrics) -> Result<(), PersistenceError> {
+        let _timer = metrics
+            .write_duration
+            .with_label_values(&[LABEL_OP_MERGE])
+            .start_timer();
+        let base: Option<Checkpoint> = match self.base {
+            None => None,
+            Some(ref path) => {
+                let checkpoint = Checkpoint::open(path)?;
+                std::fs::remove_file(path).map_err(|io_err| PersistenceError::FileSystemError {
+                    path: path.display().to_string(),
+                    context: "Could not remove base file before merge".to_string(),
+                    internal_error: io_err.to_string(),
+                })?;
+                Some(checkpoint)
+            }
+        };
+
+        let num_merged_files = self.overlays.len() + base.iter().count();
+        metrics.num_merged_files.observe(num_merged_files as f64);
+
+        let overlays: Vec<OverlayFile> = self
+            .overlays
+            .iter()
+            .map(|path| OverlayFile::load(path))
+            .collect::<Result<Vec<_>, PersistenceError>>()?;
+        for path in &self.overlays {
+            std::fs::remove_file(path).map_err(|io_err| PersistenceError::FileSystemError {
+                path: path.display().to_string(),
+                context: "Could not remove overlay file before merge".to_string(),
+                internal_error: io_err.to_string(),
+            })?;
+        }
+        Self::merge_impl(&self.dst, base, &overlays, metrics)
+    }
+
+    fn merge_impl(
+        dst: &PersistDestination,
+        existing_base: Option<Checkpoint>,
+        existing: &[OverlayFile],
+        metrics: &StorageMetrics,
+    ) -> Result<(), PersistenceError> {
+        let max_size = existing.iter().map(|f| f.num_pages()).sum::<usize>()
+            + existing_base.as_ref().map_or(0, |base| base.num_pages());
+        struct PageWithPriority<'a> {
+            // Page index in the `PageMap`.
+            page_index: PageIndex,
+            page_data: &'a [u8],
+            // Given the same `page_index`, we chose the data with the lowest priority to write.
+            priority: usize,
+        }
+
+        let iterators_with_priority: Vec<Box<dyn Iterator<Item = PageWithPriority>>> = existing
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(priority, overlay)| {
+                Box::new(
+                    overlay
+                        .iter()
+                        .map(move |(page_index, page_data)| PageWithPriority {
+                            page_index,
+                            page_data,
+                            priority,
+                        }),
+                ) as Box<dyn Iterator<Item = PageWithPriority>>
+            })
+            .chain(existing_base.as_ref().map(|checkpoint| {
+                Box::new((0..checkpoint.num_pages()).map(|index| {
+                    let page_index = PageIndex::new(index as u64);
+                    PageWithPriority {
+                        page_index,
+                        page_data: checkpoint.get_page(page_index).as_slice(),
+                        priority: existing.len(),
+                    }
+                })) as Box<dyn Iterator<Item = PageWithPriority>>
+            }))
+            .collect();
+
+        // Sort all iterators by `(page_index, priority)`. All sub-iterators in `iterators_with_priority`
+        // are sorted by `page_index` and have the same priority. So all the sub-iterators are sorted
+        // and the `merged_iterators` as well.
+        let merged_iterator = iterators_with_priority
+            .into_iter()
+            .kmerge_by(|a, b| (a.page_index, a.priority) < (b.page_index, b.priority));
+        let mut pages_data: Vec<&[u8]> = Vec::with_capacity(max_size);
+        let mut pages_indices: Vec<PageIndex> = Vec::with_capacity(max_size);
+        // Group sorted `merged_iterator` by `page_index`. Elements within group are sorted by
+        // priority; we need only the first element of each group.
+        for (_, mut group) in
+            &merged_iterator.group_by(|page_with_priority| page_with_priority.page_index)
+        {
+            let page_with_priority = group
+                .next()
+                .expect("group_by is expected to create non-empty groups");
+            pages_data.push(page_with_priority.page_data);
+            pages_indices.push(page_with_priority.page_index);
+        }
+
+        match dst {
+            PersistDestination::OverlayFile(path) => {
+                write_overlay(&pages_data, &pages_indices, path, metrics, LABEL_OP_MERGE)
+            }
+            PersistDestination::BaseFile(path) => {
+                write_base(&pages_data, &pages_indices, path, metrics, LABEL_OP_MERGE)
+            }
+        }
+    }
+
+    /// Number of files to merge to achieve the `MergeCandidate` criteria (see `MergeCandidate::new`
+    /// documentation).
+    /// If no merge is required, return `None`.
+    fn num_files_to_merge(existing_lengths: &[usize]) -> Option<usize> {
+        let mut merge_to_get_pyramid = 0;
+        let mut sum = 0;
+        for (i, len) in existing_lengths.iter().rev().enumerate() {
+            if sum > *len {
+                merge_to_get_pyramid = i + 1;
+            }
+            sum += len;
+        }
+
+        let result = std::cmp::max(
+            merge_to_get_pyramid,
+            // +1 because merge is going to create a file.
+            (existing_lengths.len() + 1).saturating_sub(MAX_NUMBER_OF_FILES),
+        );
+        assert!(result <= existing_lengths.len());
+        if result <= 1 {
+            None
+        } else {
+            Some(result)
+        }
+    }
+}
+
 /// A struct describing the index section of an overlay file.
 struct OverlayIndices {
     /// A memory map of the index section of the file.
@@ -571,7 +813,13 @@ impl OverlayIndices {
         }
     }
 
-    /// Open the `StorageIndices` in the given file at the right offset.
+    /// Iterate over all ranges.
+    fn iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
+        let slice = self.as_slice();
+        (0..slice.len()).map(|i| index_range(slice, i, self.num_pages))
+    }
+
+    /// Open the `OverlayIndices` in the given file at the right offset.
     fn new(file: File, len: usize, offset: i64, num_pages: u64) -> Result<Self, PersistenceError> {
         assert!(len > 0);
         let mmap =
@@ -789,9 +1037,99 @@ fn group_pages_into_ranges(page_indices: &[PageIndex]) -> Vec<IndexEntry> {
         .collect()
 }
 
+/// Create a new file to write `PageMap` data to. Because we write asynchonously with execution we
+/// open file with `O_DIRECT | O_DSYNC`, otherwise it tends to cause lock congestion in Qemu.
+fn create_file_for_write(path: &Path) -> Result<File, PersistenceError> {
+    let mut open_options = OpenOptions::new();
+    open_options.write(true).create_new(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        open_options
+            .custom_flags(libc::O_DIRECT)
+            .custom_flags(libc::O_DSYNC);
+    }
+    open_options
+        .open(path)
+        .map_err(|err| PersistenceError::FileSystemError {
+            path: path.display().to_string(),
+            context: "Failed to open file".to_string(),
+            internal_error: err.to_string(),
+        })
+}
+
+/// A buffer to write data to file at offset based on `PageIndex` of the start.
+struct LinearWriteBuffer {
+    /// Content to write.
+    content: Vec<u8>,
+    /// `PageIndex` of offset in the destination file.
+    start_index: PageIndex,
+}
+
+impl LinearWriteBuffer {
+    fn apply_to_file(&mut self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
+        let offset = self.start_index.get() * PAGE_SIZE as u64;
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|err| PersistenceError::FileSystemError {
+                path: path.display().to_string(),
+                context: format!("Failed to seek to {}", offset),
+                internal_error: err.to_string(),
+            })?;
+
+        file.write_all(&self.content)
+            .map_err(|err| PersistenceError::FileSystemError {
+                path: path.display().to_string(),
+                context: format!(
+                    "Failed to write page range #{}..{}",
+                    self.start_index,
+                    self.start_index.get() + self.content.len() as u64
+                ),
+                internal_error: err.to_string(),
+            })?;
+
+        Ok(())
+    }
+}
+
+/// Write all the pages into their corresponding indices as a base file (dense storage).
+fn write_base(
+    pages: &[&[u8]],
+    indices: &[PageIndex],
+    path: &Path,
+    metrics: &StorageMetrics,
+    op_label: &str, // `LABEL_OP_FLUSH` or `LABEL_OP_MERGE`.
+) -> Result<(), PersistenceError> {
+    assert_eq!(pages.len(), indices.len());
+    if pages.is_empty() {
+        return Ok(());
+    }
+    let mut file = create_file_for_write(path)?;
+    let mut data_size = 0;
+    let mut buffer = LinearWriteBuffer {
+        content: pages[0].to_vec(),
+        start_index: indices[0],
+    };
+    let mut last_index = indices[0];
+    for (page, index) in pages.iter().zip(indices).skip(1) {
+        if index.get() != last_index.get() + 1 || buffer.content.len() + page.len() > BUF_SIZE {
+            buffer.apply_to_file(&mut file, path)?;
+            buffer.start_index = *index;
+            buffer.content.clear();
+        }
+        buffer.content.extend(*page);
+        data_size += page.len();
+        last_index = *index;
+    }
+    buffer.apply_to_file(&mut file, path)?;
+    metrics
+        .write_bytes
+        .with_label_values(&[op_label, LABEL_TYPE_PAGE_DATA])
+        .inc_by(data_size as u64);
+    Ok(())
+}
+
 /// Helper function to write the data section of an overlay file.
 fn write_pages(file: &mut File, data: &Vec<&[u8]>) -> std::io::Result<()> {
-    const BUF_SIZE: usize = 16 * 1024 * 1024;
     let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
     for page in data {
         if buf.len() + page.len() > BUF_SIZE {
@@ -823,22 +1161,7 @@ fn write_overlay(
             },
         );
 
-    let mut open_options = OpenOptions::new();
-    open_options.write(true).create_new(true);
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        open_options
-            .custom_flags(libc::O_DIRECT)
-            .custom_flags(libc::O_DSYNC);
-    }
-    let mut file = open_options
-        .open(path)
-        .map_err(|err| PersistenceError::FileSystemError {
-            path: path.display().to_string(),
-            context: "Failed to open file".to_string(),
-            internal_error: err.to_string(),
-        })?;
+    let mut file = create_file_for_write(path)?;
 
     write_pages(&mut file, pages).map_err(|err| PersistenceError::FileSystemError {
         path: path.display().to_string(),
