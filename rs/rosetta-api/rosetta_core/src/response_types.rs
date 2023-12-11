@@ -138,3 +138,34 @@ impl BlockTransactionResponse {
         BlockTransactionResponse { transaction }
     }
 }
+
+/// ConstructionDeriveResponse is returned by the `/construction/derive`
+/// endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionDeriveResponse {
+    /// [DEPRECATED by `account_identifier` in `v1.4.4`] Address in
+    /// network-specific format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+
+    /// The account_identifier uniquely identifies an account within a network. All fields in the account_identifier are utilized to determine this uniqueness (including the metadata field, if populated).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_identifier: Option<AccountIdentifier>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+impl ConstructionDeriveResponse {
+    pub fn new(
+        address: Option<String>,
+        account_identifier: Option<AccountIdentifier>,
+    ) -> ConstructionDeriveResponse {
+        ConstructionDeriveResponse {
+            address,
+            account_identifier,
+            metadata: None,
+        }
+    }
+}
