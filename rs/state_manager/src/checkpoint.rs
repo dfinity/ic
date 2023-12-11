@@ -370,17 +370,12 @@ pub fn load_canister_state<P: ReadPolicy>(
     );
 
     let starting_time = Instant::now();
-    // on initial rollout the checkpoint file won't exist.
-    let wasm_chunk_store_data = if canister_layout.wasm_chunk_store().exists() {
-        PageMap::open(
-            &canister_layout.wasm_chunk_store(),
-            &canister_layout.wasm_chunk_store_overlays()?,
-            height,
-            Arc::clone(&fd_factory),
-        )?
-    } else {
-        PageMap::new(Arc::clone(&fd_factory))
-    };
+    let wasm_chunk_store_data = PageMap::open(
+        &canister_layout.wasm_chunk_store(),
+        &canister_layout.wasm_chunk_store_overlays()?,
+        height,
+        Arc::clone(&fd_factory),
+    )?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
     let system_state = SystemState::new_from_checkpoint(
