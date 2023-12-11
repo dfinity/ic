@@ -31,7 +31,6 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::*;
 
 use crate::datavolume::*;
-use crate::event::*;
 use crate::persistentvolumeclaim::*;
 use crate::pod::*;
 use crate::prep::*;
@@ -474,22 +473,24 @@ impl TNet {
             }
         }
 
-        wait_for_event(
-            self.k8s.as_ref().unwrap().client.clone(),
-            &TNET_NAMESPACE,
-            "Import Successful",
-            "PersistentVolumeClaim",
-            tnet_image,
-            180,
-        )
-        .await
-        .unwrap_or_else(|_| {
-            error!(
-                "Timeout waiting for import of PersistentVolumeClaim {}",
-                tnet_image.to_string()
-            );
-            std::process::exit(124);
-        });
+        tokio::time::timeout(tokio::time::Duration::from_secs(100), async {
+            while (|| async {
+                self.k8s
+                    .as_ref()
+                    .unwrap()
+                    .api_dv
+                    .get(tnet_image)
+                    .await
+                    .map(|r| r.data["status"]["phase"] != "Succeeded")
+            })
+            .retry(&ExponentialBuilder::default())
+            .await?
+            {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            }
+            anyhow::Ok(())
+        })
+        .await??;
 
         for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
             let pvc_name = format!("{}-guestos", node.name.clone().unwrap());
