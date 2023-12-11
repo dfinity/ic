@@ -85,6 +85,7 @@ pub enum PerformanceCounterType {
 }
 
 /// System API call ids to track their execution (in alphabetical order).
+#[derive(Debug)]
 pub enum SystemApiCallId {
     /// Tracker for `ic0.accept_message())`
     AcceptMessage,
@@ -192,6 +193,21 @@ pub enum SystemApiCallId {
     Trap,
     /// Tracker for `__.update_available_memory()`
     UpdateAvailableMemory,
+}
+
+/// System API call counters, i.e. how many times each tracked System API call
+/// was invoked.
+// #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Default)]
+pub struct SystemApiCallCounters {
+    /// Counter for `ic0.call_perform()`
+    pub call_perform: usize,
+    /// Counter for `ic0.canister_cycle_balance()`
+    pub canister_cycle_balance: usize,
+    /// Counter for `ic0.canister_cycle_balance128()`
+    pub canister_cycle_balance128: usize,
+    /// Counter for `ic0.time()`
+    pub time: usize,
 }
 
 /// Tracks the available memory on a subnet. The main idea is to separately track
@@ -832,7 +848,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<(NumPages, NumInstructions)>;
 
     /// The canister can query the IC for the current time.
-    fn ic0_time(&self) -> HypervisorResult<Time>;
+    fn ic0_time(&mut self) -> HypervisorResult<Time>;
 
     /// The canister can set a global one-off timer at the specific time.
     fn ic0_global_timer_set(&mut self, time: Time) -> HypervisorResult<Time>;
@@ -898,7 +914,7 @@ pub trait SystemApi {
     /// Returns the current balance in cycles.
     ///
     /// Traps if current canister balance cannot fit in a 64-bit value.
-    fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64>;
+    fn ic0_canister_cycle_balance(&mut self) -> HypervisorResult<u64>;
 
     /// This system call indicates the current cycle balance
     /// of the canister.
@@ -906,7 +922,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_canister_cycle_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_canister_cycle_balance128(&mut self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
     /// This API supports only 64-bit values.

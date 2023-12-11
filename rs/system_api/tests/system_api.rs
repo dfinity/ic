@@ -1171,7 +1171,7 @@ fn test_canister_balance() {
             Time::from_nanos_since_unix_epoch(0),
         );
 
-    let api = get_system_api(
+    let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
         cycles_account_manager,
@@ -1199,7 +1199,7 @@ fn test_canister_cycle_balance() {
             Time::from_nanos_since_unix_epoch(0),
         );
 
-    let api = get_system_api(
+    let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
         cycles_account_manager,
