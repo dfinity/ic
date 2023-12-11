@@ -1,14 +1,10 @@
-use std::collections::BTreeMap;
-
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::DynamicObject;
 use kube::api::{Patch, PatchParams};
 use kube::Api;
 use tracing::*;
 
-use crate::event::*;
-use crate::pod::get_pods;
 use crate::tnet::K8sClient;
 use crate::tnet::{TNet, TNode};
 
@@ -70,70 +66,6 @@ spec:
         - dataVolume:
             name: "{name}-config"
           name: disk1
-"#;
-
-static VM_HOST_DISK_TEMPLATE: &str = r#"
-apiVersion: kubevirt.io/v1
-kind: VirtualMachine
-metadata:
-  name: {name}
-  tnet.internetcomputer.org/name: {tnet}
-spec:
-  running: true
-  template:
-    metadata:
-      annotations:
-        "cni.projectcalico.org/ipAddrs": '["{ipv6}"]'
-        "container.apparmor.security.beta.kubernetes.io/compute": "unconfined"
-      labels:
-        kubevirt.io/network: passt
-        kubevirt.io/vm: {name}
-    spec:
-      nodeSelector:
-        kubernetes.io/hostname: {nodename}
-      domain:
-        cpu:
-          cores: 32
-        devices:
-          disks:
-          - disk:
-              bus: virtio
-            name: host-disk-guestos
-          - disk:
-              bus: scsi
-            name: host-disk-config
-            serial: config
-          interfaces:
-          - name: default
-            passt: {}
-            ports:
-            - port: 22
-            - port: 4100
-            - port: 2497
-            - port: 8080
-            - port: 9090
-            - port: 9100
-        firmware:
-          bootloader:
-            efi:
-              secureBoot: false
-        machine:
-          type: q35
-        resources:
-          requests:
-            memory: 64Gi
-      networks:
-      - name: default
-        pod: {}
-      volumes:
-      - hostDisk:
-          path: /tnet/{tnet}/{name}-guestos.img
-          type: Disk
-        name: host-disk-guestos
-      - hostDisk:
-          path: /tnet/{tnet}/{name}-config.img
-          type: Disk
-        name: host-disk-config
 "#;
 
 static VMI_SETUP_TEMPLATE: &str = r#"
@@ -226,68 +158,6 @@ pub async fn prepare_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) 
         )
         .await?;
     debug!("Creating virtual machine instance response: {:?}", response);
-
-    Ok(())
-}
-
-pub async fn create_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) -> Result<()> {
-    let vm_name: String = node.name.as_ref().unwrap().to_string();
-    let vmi_name: String = format!("{}-disk-setup", &node.name.as_ref().unwrap());
-
-    wait_for_event(
-        k8s_client.client.clone(),
-        &tnet.namespace,
-        "Signaled Deletion",
-        "VirtualMachineInstance",
-        &vmi_name,
-        600,
-    )
-    .await
-    .unwrap_or_else(|_| {
-        error!(
-            "Timeout waiting for VirtualMachineInstance {} to create local image disks",
-            &vmi_name
-        );
-        std::process::exit(124);
-    });
-    info!("Preparing disks for virtual machine {} complete", &vm_name);
-
-    let labels = Some(BTreeMap::from([(
-        "kubevirt.io/vm".to_string(),
-        vm_name.to_string(),
-    )]));
-    let pods = get_pods(&k8s_client.api_pod, labels).await?;
-    if pods.items.is_empty() {
-        return Err(anyhow!("No setup vmi found!"));
-    } else if pods.items.len() > 1 {
-        return Err(anyhow!("Multiple setup vmis found!"));
-    }
-    let nodename = pods.items[0]
-        .metadata
-        .labels
-        .as_ref()
-        .unwrap()
-        .get("kubevirt.io/nodeName")
-        .unwrap();
-
-    info!("Creating virtual machine {}", &vm_name);
-    let yaml = VM_HOST_DISK_TEMPLATE
-        .replace("{nodename}", nodename)
-        .replace("{name}", &vm_name)
-        .replace("{tnet}", &TNet::owner_config_map_name(tnet.index.unwrap()))
-        .replace("{ipv6}", &node.ipv6_addr.as_ref().unwrap().to_string());
-    let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
-    data.metadata.owner_references = vec![tnet.owner_reference()].into();
-    let response = &k8s_client
-        .api_vm
-        .patch(
-            &vm_name,
-            &PatchParams::apply("system-driver"),
-            &Patch::Apply(data),
-        )
-        .await?;
-    debug!("Creating virtual machine response: {:?}", response);
-    info!("Creating virtual machine {} complete", vm_name);
 
     Ok(())
 }
