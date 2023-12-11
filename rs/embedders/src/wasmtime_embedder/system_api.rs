@@ -891,8 +891,8 @@ pub(crate) fn syscalls(
                     &mut caller,
                     overhead!(CANISTER_CYCLE_BALANCE128, metering_type),
                 )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_canister_cycle_balance128(dst, memory)
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    s.ic0_canister_cycle_balance128(dst, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst as usize, 16)
