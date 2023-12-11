@@ -49,6 +49,32 @@ Installing the canister:
     --summary-file ./ledger_proposal.md
 ```
 
+Submitting an upgrade proposal:
+
+```shell
+didc encode -d ../../../rosetta-api/icrc1/ledger/ledger.did -t '(LedgerArg)' '(variant {Upgrade})' | xxd -r -p > ledger_arg.bin
+```
+
+```shell
+bazel build //rs/registry/admin:ic-admin
+
+../../../../bazel-bin/rs/registry/admin/ic-admin \
+    --use-hsm \
+    --key-id $KEY_ID \
+    --slot 0 \
+    --pin $HSM_PIN \
+    --nns-url "https://ic0.app" \
+    propose-to-change-nns-canister \
+    --proposer $NEURON_ID \
+    --canister-id ss2fx-dyaaa-aaaar-qacoq-cai \
+    --mode upgrade \
+    --wasm-module-path ./ic-icrc1-ledger-u256.wasm.gz \
+    --wasm-module-sha256 $WASM_SHA256 \
+    --arg ledger_arg.bin \
+    --summary-file ./ledger_upgrade_yyyy_mm_dd.md
+```
+
+
 ## Installing the [minter](https://dashboard.internetcomputer.org/canister/sv3dd-oaaaa-aaaar-qacoa-cai)
 
 Encoding the init args:
