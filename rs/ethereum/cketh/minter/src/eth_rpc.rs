@@ -50,9 +50,22 @@ pub fn into_nat(quantity: Quantity) -> candid::Nat {
     candid::Nat::from(BigUint::from_bytes_be(&quantity.to_be_bytes()))
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, CandidType)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Data(#[serde(with = "crate::serde_data")] pub Vec<u8>);
+
+impl CandidType for Data {
+    fn _ty() -> candid::types::Type {
+        String::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        serializer.serialize_text(&format!("{:#x}", self))
+    }
+}
 
 impl AsRef<[u8]> for Data {
     fn as_ref(&self) -> &[u8] {
@@ -60,9 +73,22 @@ impl AsRef<[u8]> for Data {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash, CandidType)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct FixedSizeData(#[serde(with = "crate::serde_data")] pub [u8; 32]);
+
+impl CandidType for FixedSizeData {
+    fn _ty() -> candid::types::Type {
+        String::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        serializer.serialize_text(&format!("{:#x}", self))
+    }
+}
 
 impl AsRef<[u8]> for FixedSizeData {
     fn as_ref(&self) -> &[u8] {
