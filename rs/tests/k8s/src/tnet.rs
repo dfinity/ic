@@ -288,11 +288,11 @@ impl TNet {
         path: P,
         uri: &str,
     ) -> Result<()> {
-        Ok(Self::upload_url(
+        Self::upload_url(
             path,
             &format!("{}/{}/{}", *TNET_CONFIG_URL, *TNET_BUCKET, uri),
         )
-        .await?)
+        .await
     }
 
     async fn upload_url<P: AsRef<Path> + std::fmt::Display + Clone>(
