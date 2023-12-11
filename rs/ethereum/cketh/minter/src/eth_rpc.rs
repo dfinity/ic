@@ -149,18 +149,7 @@ impl HttpResponsePayload for SendRawTransactionResult {
 }
 
 #[derive(
-    Clone,
-    Copy,
-    Deserialize,
-    Serialize,
-    PartialEq,
-    Eq,
-    Hash,
-    Ord,
-    PartialOrd,
-    Encode,
-    Decode,
-    CandidType,
+    Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd, Encode, Decode,
 )]
 #[serde(transparent)]
 #[cbor(transparent)]
@@ -169,6 +158,19 @@ pub struct Hash(
     #[cbor(n(0), with = "minicbor::bytes")]
     pub [u8; 32],
 );
+
+impl CandidType for Hash {
+    fn _ty() -> candid::types::Type {
+        String::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        serializer.serialize_text(&format!("{:#x}", self))
+    }
+}
 
 impl Debug for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
