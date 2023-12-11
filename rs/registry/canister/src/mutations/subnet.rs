@@ -24,6 +24,7 @@ use ic_registry_keys::{
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
 use ic_registry_transport::upsert;
 use on_wire::bytes;
+use prost::Message;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
@@ -32,23 +33,31 @@ use std::{collections::HashSet, convert::TryFrom};
 impl Registry {
     /// Get the subnet record or panic on error with a message.
     pub fn get_subnet_or_panic(&self, subnet_id: SubnetId) -> SubnetRecord {
+        self.get_subnet(subnet_id, self.latest_version())
+            .unwrap_or_else(|err| {
+                panic!("{}Failed to get subnet record: {}", LOG_PREFIX, err);
+            })
+    }
+
+    pub fn get_subnet(
+        &self,
+        subnet_id: SubnetId,
+        version: Version,
+    ) -> Result<SubnetRecord, String> {
         let RegistryValue {
             value: subnet_record_vec,
             version: _,
             deletion_marker: _,
         } = self
-            .get(
-                &make_subnet_record_key(subnet_id).into_bytes(),
-                self.latest_version(),
-            )
-            .unwrap_or_else(|| {
-                panic!(
-                    "{}subnet record for {:} not found in the registry.",
-                    LOG_PREFIX, subnet_id
+            .get(&make_subnet_record_key(subnet_id).into_bytes(), version)
+            .ok_or_else(|| {
+                format!(
+                    "Subnet record for {:} not found in the registry.",
+                    subnet_id
                 )
-            });
+            })?;
 
-        decode_registry_value::<SubnetRecord>(subnet_record_vec.clone())
+        SubnetRecord::decode(subnet_record_vec.as_slice()).map_err(|err| err.to_string())
     }
 
     pub fn get_subnet_list_record(&self) -> SubnetListRecord {
