@@ -60,9 +60,22 @@ impl AsRef<[u8]> for Data {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash, CandidType)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct FixedSizeData(#[serde(with = "crate::serde_data")] pub [u8; 32]);
+
+impl CandidType for FixedSizeData {
+    fn _ty() -> candid::types::Type {
+        String::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        serializer.serialize_text(&format!("{:#x}", self))
+    }
+}
 
 impl AsRef<[u8]> for FixedSizeData {
     fn as_ref(&self) -> &[u8] {
