@@ -6,7 +6,7 @@ mod storage;
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_config::flag_status::FlagStatus;
-use ic_metrics::buckets::decimal_buckets;
+use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_metrics::MetricsRegistry;
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
@@ -15,17 +15,17 @@ pub use page_allocator::{
     allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
     PageDeltaSerialization, PageSerialization,
 };
-use storage::{OverlayFile, OverlayVersion, Storage};
 pub use storage::{
-    OverlayFileSerialization, OverlayIndicesSerialization, StorageSerialization,
-    MAX_NUMBER_OF_OVERLAYS,
+    MergeCandidate, OverlayFileSerialization, OverlayIndicesSerialization, StorageSerialization,
+    MAX_NUMBER_OF_FILES,
 };
+use storage::{OverlayFile, OverlayVersion, Storage};
 
 use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
 use int_map::{Bounds, IntMap};
 use libc::off_t;
 use page_allocator::Page;
-use prometheus::{HistogramVec, IntCounter, IntCounterVec};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -52,6 +52,8 @@ pub struct StorageMetrics {
     write_duration: HistogramVec,
     /// Number of overlays not written because they would have been empty.
     empty_delta_writes: IntCounter,
+    /// For each merge, amount of input files we merged.
+    num_merged_files: Histogram,
 }
 
 impl StorageMetrics {
@@ -85,10 +87,17 @@ impl StorageMetrics {
             "The number of PageMaps that did not receive any deltas since the last write attempt.",
         );
 
+        let num_merged_files = metrics_registry.histogram(
+            "storage_layer_num_merged_files",
+            "For each merge, number of input files we merged.",
+            linear_buckets(0.0, 1.0, 20),
+        );
+
         Self {
             write_bytes,
             write_duration,
             empty_delta_writes,
+            num_merged_files,
         }
     }
 }
@@ -323,7 +332,8 @@ pub enum MemoryMapOrData<'a> {
     Data(&'a [u8]),
 }
 
-/// For write operations, whether the delta should be written to a base file or an overlay file
+/// For write operations, whether the delta should be written to a base file or an overlay file.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PersistDestination {
     BaseFile(PathBuf),
     OverlayFile(PathBuf),
@@ -337,9 +347,16 @@ impl PersistDestination {
             FlagStatus::Disabled => PersistDestination::BaseFile(base_file),
         }
     }
+
+    pub fn raw_path(&self) -> &Path {
+        match self {
+            PersistDestination::BaseFile(path) => path,
+            PersistDestination::OverlayFile(path) => path,
+        }
+    }
 }
 
-/// PageMap is a data structure that represents an image of a canister virtual
+/// `PageMap` is a data structure that represents an image of a canister virtual
 /// memory.  The memory is viewed as a collection of _pages_. `PageMap` uses
 /// 4KiB host OS pages to track the heap contents, not 64KiB Wasm pages.
 ///

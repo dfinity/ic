@@ -153,7 +153,7 @@ impl RosettaApiClient {
         pk: PublicKey,
     ) -> Result<Result<ConstructionDeriveResponse, Error>, String> {
         let req = ConstructionDeriveRequest::new(
-            ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
+            ic_rosetta_api::models::NetworkIdentifier(self.network_id()).into(),
             pk,
         );
         to_rosetta_response::<ConstructionDeriveResponse>(
@@ -170,11 +170,14 @@ impl RosettaApiClient {
         pk: PublicKey,
     ) -> Result<Result<ConstructionDeriveResponse, Error>, String> {
         let req = ConstructionDeriveRequest {
-            network_identifier: ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
+            network_identifier: ic_rosetta_api::models::NetworkIdentifier(self.network_id()).into(),
             public_key: pk,
-            metadata: Some(ConstructionDeriveRequestMetadata {
-                account_type: AccountType::Neuron { neuron_index: 0 },
-            }),
+            metadata: Some(
+                ConstructionDeriveRequestMetadata {
+                    account_type: AccountType::Neuron { neuron_index: 0 },
+                }
+                .into(),
+            ),
         };
         to_rosetta_response::<ConstructionDeriveResponse>(
             self.post_json_request(

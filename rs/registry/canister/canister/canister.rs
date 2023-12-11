@@ -784,7 +784,7 @@ fn prepare_canister_migration() {
 fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) -> Result<(), String> {
     if let Err(msg) = registry_mut().prepare_canister_migration(payload) {
         println!("{} Reject: {}", LOG_PREFIX, msg);
-        return Err(msg);
+        return Err(msg.to_string());
     }
     recertify_registry();
     Ok(())

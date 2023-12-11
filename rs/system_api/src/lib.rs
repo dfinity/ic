@@ -12,7 +12,7 @@ use ic_interfaces::execution_environment::{
     ExecutionMode,
     HypervisorError::{self, *},
     HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, StableGrowOutcome,
-    StableMemoryApi, SubnetAvailableMemory, SystemApi,
+    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
@@ -833,6 +833,9 @@ pub struct SystemApiImpl {
     /// is initialized to 0 and updated after each out-of-instructions call that
     /// starts a new slice.
     instructions_executed_before_current_slice: i64,
+
+    /// How many times each tracked System API call was invoked.
+    call_counters: SystemApiCallCounters,
 }
 
 impl SystemApiImpl {
@@ -874,6 +877,7 @@ impl SystemApiImpl {
             log,
             current_slice_instruction_limit: i64::try_from(slice_limit).unwrap_or(i64::MAX),
             instructions_executed_before_current_slice: 0,
+            call_counters: SystemApiCallCounters::default(),
         }
     }
 
@@ -1324,6 +1328,31 @@ impl SystemApiImpl {
             panic!("{}", WASM_NATIVE_STABLE_MEMORY_ERROR)
         }
     }
+
+    /// Increase `ic0.call_perform()` system API call counter.
+    fn inc_call_perform_counter(&mut self) {
+        self.call_counters.call_perform += 1;
+    }
+
+    /// Increase `ic0.canister_cycle_balance()` system API call counter.
+    fn inc_canister_cycle_balance_counter(&mut self) {
+        self.call_counters.canister_cycle_balance += 1;
+    }
+
+    /// Increase `ic0.canister_cycle_balance128()` system API call counter.
+    fn inc_canister_cycle_balance128_counter(&mut self) {
+        self.call_counters.canister_cycle_balance128 += 1;
+    }
+
+    /// Increase `ic0.time()` system API call counter.
+    fn inc_time_counter(&mut self) {
+        self.call_counters.time += 1;
+    }
+
+    /// Return tracked System API call counters.
+    pub fn call_counters(&self) -> SystemApiCallCounters {
+        self.call_counters.clone()
+    }
 }
 
 impl SystemApi for SystemApiImpl {
@@ -1416,7 +1445,7 @@ impl SystemApi for SystemApiImpl {
         let result = self
             .get_msg_caller_id("ic0_msg_caller_size")
             .map(|caller_id| caller_id.as_slice().len() as u32);
-        trace_syscall!(self, ic0_msg_caller_size, result);
+        trace_syscall!(self, MsgCallerSize, result);
         result
     }
 
@@ -1440,7 +1469,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_msg_caller_copy,
+            MsgCallerCopy,
             result,
             dst,
             offset,
@@ -1476,7 +1505,7 @@ impl SystemApi for SystemApiImpl {
                 incoming_payload, ..
             } => Ok(incoming_payload.len() as u32),
         };
-        trace_syscall!(self, ic0_msg_arg_data_size, result);
+        trace_syscall!(self, MsgArgDataSize, result);
         result
     }
 
@@ -1525,7 +1554,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_msg_arg_data_copy,
+            MsgArgDataCopy,
             result,
             dst,
             offset,
@@ -1549,7 +1578,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::Init { .. } => Err(self.error_for("ic0_msg_method_name_size")),
             ApiType::InspectMessage { method_name, .. } => Ok(method_name.len() as u32),
         };
-        trace_syscall!(self, ic0_msg_method_name_size, result);
+        trace_syscall!(self, MsgMethodNameSize, result);
         result
     }
 
@@ -1586,7 +1615,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_msg_method_name_copy,
+            MsgMethodNameCopy,
             result,
             dst,
             offset,
@@ -1621,7 +1650,7 @@ impl SystemApi for SystemApiImpl {
                 }
             }
         };
-        trace_syscall!(self, ic0_accept_message, result);
+        trace_syscall!(self, AcceptMessage, result);
         result
     }
 
@@ -1640,7 +1669,7 @@ impl SystemApi for SystemApiImpl {
                 ),
             },
         };
-        trace_syscall!(self, ic0_msg_reply, result);
+        trace_syscall!(self, MsgReply, result);
         result
     }
 
@@ -1675,7 +1704,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_msg_reply_data_append,
+            MsgReplyDataAppend,
             result,
             src,
             size,
@@ -1713,7 +1742,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_msg_reject,
+            MsgReject,
             result,
             src,
             size,
@@ -1726,7 +1755,7 @@ impl SystemApi for SystemApiImpl {
         let result = self
             .get_reject_code()
             .ok_or_else(|| self.error_for("ic0_msg_reject_code"));
-        trace_syscall!(self, ic0_msg_reject_code, result);
+        trace_syscall!(self, MsgRejectCode, result);
         result
     }
 
@@ -1735,7 +1764,7 @@ impl SystemApi for SystemApiImpl {
             .get_reject_context()
             .ok_or_else(|| self.error_for("ic0_msg_reject_msg_size"))?;
         let result = Ok(reject_context.message().len() as u32);
-        trace_syscall!(self, ic0_msg_reject_msg_size, result);
+        trace_syscall!(self, MsgRejectMsgSize, result);
         result
     }
 
@@ -1762,7 +1791,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_msg_reject_msg_copy,
+            MsgRejectMsgCopy,
             result,
             dst,
             offset,
@@ -1791,7 +1820,7 @@ impl SystemApi for SystemApiImpl {
                 .as_slice()
                 .len()),
         };
-        trace_syscall!(self, ic0_canister_self_size, result);
+        trace_syscall!(self, CanisterSelfSize, result);
         result
     }
 
@@ -1825,7 +1854,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_canister_self_copy,
+            CanisterSelfCopy,
             result,
             dst,
             offset,
@@ -1901,7 +1930,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_call_new,
+            CallNew,
             result,
             callee_src,
             callee_size,
@@ -1953,13 +1982,7 @@ impl SystemApi for SystemApiImpl {
                 Some(request) => request.extend_method_payload(src, size, heap),
             },
         };
-        trace_syscall!(
-            self,
-            ic0_call_data_append,
-            src,
-            size,
-            summarize(heap, src, size)
-        );
+        trace_syscall!(self, CallDataAppend, src, size, summarize(heap, src, size));
         result
     }
 
@@ -2000,19 +2023,19 @@ impl SystemApi for SystemApiImpl {
                 Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env)),
             },
         };
-        trace_syscall!(self, ic0_call_on_cleanup, fun, env);
+        trace_syscall!(self, CallOnCleanup, fun, env);
         result
     }
 
     fn ic0_call_cycles_add(&mut self, amount: u64) -> HypervisorResult<()> {
         let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add", Cycles::from(amount));
-        trace_syscall!(self, ic0_call_cycles_add, result, amount);
+        trace_syscall!(self, CallCyclesAdd, result, amount);
         result
     }
 
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()> {
         let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add128", amount);
-        trace_syscall!(self, ic0_call_cycles_add128, result, amount);
+        trace_syscall!(self, CallCyclesAdd128, result, amount);
         result
     }
 
@@ -2026,6 +2049,7 @@ impl SystemApi for SystemApiImpl {
     // or the output queues are full. In this case, we need to perform the
     // necessary cleanups.
     fn ic0_call_perform(&mut self) -> HypervisorResult<i32> {
+        self.inc_call_perform_counter();
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -2085,7 +2109,7 @@ impl SystemApi for SystemApiImpl {
                 )
             }
         };
-        trace_syscall!(self, ic0_call_perform, result);
+        trace_syscall!(self, CallPerform, result);
         result
     }
 
@@ -2103,7 +2127,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. } => self.stable_memory().stable_size(),
         };
-        trace_syscall!(self, ic0_stable_size, result);
+        trace_syscall!(self, StableSize, result);
         result
     }
 
@@ -2124,7 +2148,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(old_size.get().try_into().unwrap())
             }
         };
-        trace_syscall!(self, ic0_stable_grow, result, additional_pages);
+        trace_syscall!(self, StableGrow, result, additional_pages);
         result
     }
 
@@ -2138,7 +2162,7 @@ impl SystemApi for SystemApiImpl {
         let result = self.stable_memory().stable_read(dst, offset, size, heap);
         trace_syscall!(
             self,
-            ic0_stable_read,
+            StableRead,
             result,
             dst,
             offset,
@@ -2160,7 +2184,7 @@ impl SystemApi for SystemApiImpl {
             .stable_write(offset, src, size, heap);
         trace_syscall!(
             self,
-            ic0_stable_write,
+            StableWrite,
             result,
             offset,
             src,
@@ -2172,7 +2196,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
         let result = self.stable_memory().stable_memory_size.get() as u64;
-        trace_syscall!(self, ic0_stable64_size, result);
+        trace_syscall!(self, Stable64Size, result);
         Ok(result)
     }
 
@@ -2193,7 +2217,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(old_size.get().try_into().unwrap())
             }
         };
-        trace_syscall!(self, ic0_stable64_grow, result, additional_pages);
+        trace_syscall!(self, Stable64Grow, result, additional_pages);
         result
     }
 
@@ -2207,7 +2231,7 @@ impl SystemApi for SystemApiImpl {
         let result = self.stable_memory().stable64_read(dst, offset, size, heap);
         trace_syscall!(
             self,
-            ic0_stable64_read,
+            Stable64Read,
             result,
             dst,
             offset,
@@ -2240,7 +2264,7 @@ impl SystemApi for SystemApiImpl {
             .stable64_write(offset, src, size, heap);
         trace_syscall!(
             self,
-            ic0_stable64_write,
+            Stable64Write,
             result,
             offset,
             src,
@@ -2262,7 +2286,8 @@ impl SystemApi for SystemApiImpl {
         Ok((dirty_pages, cost))
     }
 
-    fn ic0_time(&self) -> HypervisorResult<Time> {
+    fn ic0_time(&mut self) -> HypervisorResult<Time> {
+        self.inc_time_counter();
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_time")),
             ApiType::Init { time, .. }
@@ -2276,7 +2301,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { time, .. }
             | ApiType::InspectMessage { time, .. } => Ok(*time),
         };
-        trace_syscall!(self, ic0_time, result);
+        trace_syscall!(self, Time, result);
         result
     }
 
@@ -2305,7 +2330,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(prev_time)
             }
         };
-        trace_syscall!(self, ic0_global_timer_set, result);
+        trace_syscall!(self, GlobalTimerSet, result);
         result
     }
 
@@ -2325,7 +2350,7 @@ impl SystemApi for SystemApiImpl {
                         .get(),
                 )),
         };
-        trace_syscall!(self, ic0_performance_counter, result);
+        trace_syscall!(self, PerformanceCounter, result);
         result
     }
 
@@ -2345,7 +2370,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(self.sandbox_safe_system_state.canister_version())
             }
         };
-        trace_syscall!(self, ic0_canister_version, result);
+        trace_syscall!(self, CanisterVersion, result);
         result
     }
 
@@ -2362,7 +2387,7 @@ impl SystemApi for SystemApiImpl {
             self.instructions_executed_before_current_slice += slice_instructions;
             self.current_slice_instruction_limit = new_slice_instruction_limit;
         }
-        trace_syscall!(self, out_of_instructions, result, instruction_counter);
+        trace_syscall!(self, OutOfInstructions, result, instruction_counter);
         result
     }
 
@@ -2401,7 +2426,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            update_available_memory,
+            UpdateAvailableMemory,
             result,
             native_memory_grow_res,
             additional_elements,
@@ -2456,7 +2481,8 @@ impl SystemApi for SystemApiImpl {
         }
     }
 
-    fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
+    fn ic0_canister_cycle_balance(&mut self) -> HypervisorResult<u64> {
+        self.inc_canister_cycle_balance_counter();
         let result = {
             let (high_amount, low_amount) = self
                 .ic0_canister_cycle_balance_helper("ic0_canister_cycle_balance")?
@@ -2466,23 +2492,19 @@ impl SystemApi for SystemApiImpl {
             }
             Ok(low_amount)
         };
-        trace_syscall!(self, ic0_canister_cycle_balance, result);
+        trace_syscall!(self, CanisterCycleBalance, result);
         result
     }
 
-    fn ic0_canister_cycle_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+    fn ic0_canister_cycle_balance128(&mut self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+        self.inc_canister_cycle_balance128_counter();
         let result = {
             let method_name = "ic0_canister_cycle_balance128";
             let cycles = self.ic0_canister_cycle_balance_helper(method_name)?;
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
-        trace_syscall!(
-            self,
-            ic0_canister_cycle_balance128,
-            dst,
-            summarize(heap, dst, 16)
-        );
+        trace_syscall!(self, CanisterCycleBalance128, dst, summarize(heap, dst, 16));
         result
     }
 
@@ -2496,7 +2518,7 @@ impl SystemApi for SystemApiImpl {
             }
             Ok(low_amount)
         };
-        trace_syscall!(self, ic0_msg_cycles_available, result);
+        trace_syscall!(self, MsgCyclesAvailable, result);
         result
     }
 
@@ -2507,7 +2529,7 @@ impl SystemApi for SystemApiImpl {
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
-        trace_syscall!(self, ic0_msg_cycles_available128, result);
+        trace_syscall!(self, MsgCyclesAvailable128, result);
         result
     }
 
@@ -2521,7 +2543,7 @@ impl SystemApi for SystemApiImpl {
             }
             Ok(low_amount)
         };
-        trace_syscall!(self, ic0_msg_cycles_refunded, result);
+        trace_syscall!(self, MsgCyclesRefunded, result);
         result
     }
 
@@ -2532,12 +2554,7 @@ impl SystemApi for SystemApiImpl {
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
-        trace_syscall!(
-            self,
-            ic0_msg_cycles_refunded128,
-            result,
-            summarize(heap, dst, 16)
-        );
+        trace_syscall!(self, MsgCyclesRefunded128, result, summarize(heap, dst, 16));
         result
     }
 
@@ -2557,7 +2574,7 @@ impl SystemApi for SystemApiImpl {
             }
             Ok(low_amount)
         };
-        trace_syscall!(self, ic0_msg_cycles_accept, result, max_amount);
+        trace_syscall!(self, MsgCyclesAccept, result, max_amount);
         result
     }
 
@@ -2573,7 +2590,7 @@ impl SystemApi for SystemApiImpl {
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
-        trace_syscall!(self, ic0_msg_cycles_accept128, result);
+        trace_syscall!(self, MsgCyclesAccept128, result);
         result
     }
 
@@ -2598,7 +2615,7 @@ impl SystemApi for SystemApiImpl {
                 None => Ok(0),
             },
         };
-        trace_syscall!(self, ic0_data_certificate_present, result);
+        trace_syscall!(self, DataCertificatePresent, result);
         result
     }
 
@@ -2623,7 +2640,7 @@ impl SystemApi for SystemApiImpl {
                 None => Err(self.error_for("ic0_data_certificate_size")),
             },
         };
-        trace_syscall!(self, ic0_data_certificate_size, result);
+        trace_syscall!(self, DataCertificateSize, result);
         result
     }
 
@@ -2689,7 +2706,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_data_certificate_copy,
+            DataCertificateCopy,
             dst,
             offset,
             size,
@@ -2747,7 +2764,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_certified_data_set,
+            CertifiedDataSet,
             result,
             src,
             size,
@@ -2774,7 +2791,7 @@ impl SystemApi for SystemApiImpl {
                 CanisterStatusView::Stopped => Ok(3),
             },
         };
-        trace_syscall!(self, ic0_canister_status, result);
+        trace_syscall!(self, CanisterStatus, result);
         result
     }
 
@@ -2796,7 +2813,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(amount)
             }
         };
-        trace_syscall!(self, ic0_mint_cycles, result, amount);
+        trace_syscall!(self, MintCycles, result, amount);
         result
     }
 
@@ -2828,7 +2845,7 @@ impl SystemApi for SystemApiImpl {
                 time, self.sandbox_safe_system_state.canister_id, msg
             ),
         }
-        trace_syscall!(self, ic0_debug_print, src, size, summarize(heap, src, size));
+        trace_syscall!(self, DebugPrint, src, size, summarize(heap, src, size));
         Ok(())
     }
 
@@ -2841,7 +2858,7 @@ impl SystemApi for SystemApiImpl {
                 .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
             CalledTrap(msg)
         };
-        trace_syscall!(self, ic0_trap, src, size, summarize(heap, src, size));
+        trace_syscall!(self, Trap, src, size, summarize(heap, src, size));
         Err(result)
     }
 
@@ -2873,7 +2890,7 @@ impl SystemApi for SystemApiImpl {
 
         trace_syscall!(
             self,
-            ic0_is_controller,
+            IsController,
             src,
             size,
             summarize(heap, src, size),
@@ -2884,8 +2901,8 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32> {
         let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_in_replicated_execution")),
-            ApiType::Init { .. }
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
@@ -2935,7 +2952,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(())
             }
         };
-        trace_syscall!(self, ic0_cycles_burn128, result, amount);
+        trace_syscall!(self, CyclesBurn128, result, amount);
         result
     }
 }

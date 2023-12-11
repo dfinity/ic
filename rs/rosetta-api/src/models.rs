@@ -263,6 +263,27 @@ pub struct ConstructionDeriveRequestMetadata {
     pub account_type: AccountType,
 }
 
+impl From<ConstructionDeriveRequestMetadata> for ObjectMap {
+    fn from(p: ConstructionDeriveRequestMetadata) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for ConstructionDeriveRequestMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse ConstructionDeriveRequestMetadata metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
 #[test]
 fn test_construction_derive_request_metadata() {
     let r0 = ConstructionDeriveRequestMetadata {
@@ -274,68 +295,6 @@ fn test_construction_derive_request_metadata() {
 
     assert_eq!(s, r#"{"account_type":"neuron","neuron_index":1}"#);
     assert_eq!(r0, r1);
-}
-
-/// ConstructionDeriveRequest is passed to the `/construction/derive` endpoint.
-/// Network is provided in the request because some blockchains have different
-/// address formats for different networks. Metadata is provided in the request
-/// because some blockchains allow for multiple address types (i.e. different
-/// address for validators vs normal accounts).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionDeriveRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "public_key")]
-    pub public_key: PublicKey,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ConstructionDeriveRequestMetadata>,
-}
-
-impl ConstructionDeriveRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        public_key: PublicKey,
-    ) -> ConstructionDeriveRequest {
-        ConstructionDeriveRequest {
-            network_identifier,
-            public_key,
-            metadata: None,
-        }
-    }
-}
-
-/// ConstructionDeriveResponse is returned by the `/construction/derive`
-/// endpoint.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionDeriveResponse {
-    /// [DEPRECATED by `account_identifier` in `v1.4.4`] Address in
-    /// network-specific format.
-    #[serde(rename = "address")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub address: Option<String>,
-
-    #[serde(rename = "account_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_identifier: Option<AccountIdentifier>,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl ConstructionDeriveResponse {
-    pub fn new() -> ConstructionDeriveResponse {
-        ConstructionDeriveResponse {
-            address: None,
-            account_identifier: None,
-            metadata: None,
-        }
-    }
 }
 
 /// ConstructionHashRequest is the input to the `/construction/hash` endpoint.
@@ -737,49 +696,6 @@ impl ConstructionSubmitRequest {
     }
 }
 
-/// CurveType is the type of cryptographic curve associated with a PublicKey.  * secp256k1: SEC compressed - `33 bytes` (https://secg.org/sec1-v2.pdf#subsubsection.2.3.3) * secp256r1: SEC compressed - `33 bytes` (https://secg.org/sec1-v2.pdf#subsubsection.2.3.3) * edwards25519: `y (255-bits) || x-sign-bit (1-bit)` - `32 bytes` (https://ed25519.cr.yp.to/ed25519-20110926.pdf) * tweedle: 1st pk : Fq.t (32 bytes) || 2nd pk : Fq.t (32 bytes) (https://github.com/CodaProtocol/coda/blob/develop/rfcs/0038-rosetta-construction-api.md#marshal-keys)
-/// Enumeration of values.
-/// Since this enum's variants do not hold data, we can easily define them them
-/// as `#[repr(C)]` which helps with FFI.
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
-pub enum CurveType {
-    #[serde(rename = "secp256k1")]
-    Secp256K1,
-    #[serde(rename = "secp256r1")]
-    Secp256R1,
-    #[serde(rename = "edwards25519")]
-    Edwards25519,
-    #[serde(rename = "tweedle")]
-    Tweedle,
-}
-
-impl ::std::fmt::Display for CurveType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            CurveType::Secp256K1 => write!(f, "secp256k1"),
-            CurveType::Secp256R1 => write!(f, "secp256r1"),
-            CurveType::Edwards25519 => write!(f, "edwards25519"),
-            CurveType::Tweedle => write!(f, "tweedle"),
-        }
-    }
-}
-
-impl ::std::str::FromStr for CurveType {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "secp256k1" => Ok(CurveType::Secp256K1),
-            "secp256r1" => Ok(CurveType::Secp256R1),
-            "edwards25519" => Ok(CurveType::Edwards25519),
-            "tweedle" => Ok(CurveType::Tweedle),
-            _ => Err(()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Error(pub rosetta_core::miscellaneous::Error);
@@ -828,23 +744,6 @@ impl actix_web::ResponseError for Error {
     }
 }
 
-/// A MempoolResponse contains all transaction identifiers in the mempool for a
-/// particular network_identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct MempoolResponse {
-    #[serde(rename = "transaction_identifiers")]
-    pub transaction_identifiers: Vec<TransactionIdentifier>,
-}
-
-impl MempoolResponse {
-    pub fn new(transaction_identifiers: Vec<TransactionIdentifier>) -> MempoolResponse {
-        MempoolResponse {
-            transaction_identifiers,
-        }
-    }
-}
-
 /// A MempoolTransactionRequest is utilized to retrieve a transaction from the
 /// mempool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -865,29 +764,6 @@ impl MempoolTransactionRequest {
         MempoolTransactionRequest {
             network_identifier,
             transaction_identifier,
-        }
-    }
-}
-
-/// A MempoolTransactionResponse contains an estimate of a mempool transaction.
-/// It may not be possible to know the full impact of a transaction in the
-/// mempool (ex: fee paid).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct MempoolTransactionResponse {
-    #[serde(rename = "transaction")]
-    pub transaction: Transaction,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl MempoolTransactionResponse {
-    pub fn new(transaction: Transaction) -> MempoolTransactionResponse {
-        MempoolTransactionResponse {
-            transaction,
-            metadata: None,
         }
     }
 }
@@ -923,29 +799,6 @@ impl NetworkIdentifier {
         Self(rosetta_core::identifiers::NetworkIdentifier::new(
             blockchain, network,
         ))
-    }
-}
-
-/// PublicKey contains a public key byte array for a particular CurveType
-/// encoded in hex.  Note that there is no PrivateKey struct as this is NEVER
-/// the concern of an implementation.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct PublicKey {
-    /// Hex-encoded public key bytes in the format specified by the CurveType.
-    #[serde(rename = "hex_bytes")]
-    pub hex_bytes: String,
-
-    #[serde(rename = "curve_type")]
-    pub curve_type: CurveType,
-}
-
-impl PublicKey {
-    pub fn new(hex_bytes: String, curve_type: CurveType) -> PublicKey {
-        PublicKey {
-            hex_bytes,
-            curve_type,
-        }
     }
 }
 

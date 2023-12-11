@@ -12,14 +12,14 @@ use ic_rosetta_api::models::{
     AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
     BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
     ConstructionMetadataRequest, ConstructionMetadataResponse, Currency, CurveType,
-    MempoolResponse, MempoolTransactionRequest, NetworkRequest, NetworkStatusResponse,
-    SearchTransactionsRequest, SearchTransactionsResponse, SyncStatus,
+    MempoolTransactionRequest, NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest,
+    SearchTransactionsResponse, SyncStatus,
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
 use rosetta_core::request_types::MetadataRequest;
-use rosetta_core::response_types::NetworkListResponse;
+use rosetta_core::response_types::{MempoolResponse, NetworkListResponse};
 use std::sync::Arc;
 
 #[actix_rt::test]
@@ -187,7 +187,7 @@ async fn smoke_test() {
     );
 
     let (acc_id, _ed_kp, pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
-    let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
+    let msg = ConstructionDeriveRequest::new(req_handler.network_id().into(), pk);
     let res = req_handler.construction_derive(msg);
     assert_eq!(
         res,
@@ -200,7 +200,7 @@ async fn smoke_test() {
 
     let (_acc_id, _ed_kp, mut pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
     pk.curve_type = CurveType::Secp256K1;
-    let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
+    let msg = ConstructionDeriveRequest::new(req_handler.network_id().into(), pk);
     let res = req_handler.construction_derive(msg);
     assert!(res.is_err(), "This pk should not have been accepted");
 

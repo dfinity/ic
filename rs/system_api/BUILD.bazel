@@ -83,3 +83,12 @@ rust_test(
         "@crate_index//:prometheus",
     ],
 )
+
+rust_test(
+    name = "system_api_tracking_test",
+    srcs = [
+        "tests/system_api_tracking.rs",
+    ],
+    crate_root = "tests/system_api_tracking.rs",
+    deps = INTEGRATION_TEST_DEPS,
+)

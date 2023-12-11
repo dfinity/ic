@@ -87,3 +87,60 @@ impl BlockTransactionRequest {
         }
     }
 }
+
+/// A MempoolTransactionRequest is utilized to retrieve a transaction from the
+/// mempool.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct MempoolTransactionRequest {
+    // The network_identifier specifies which network a particular object is associated with.
+    #[serde(rename = "network_identifier")]
+    pub network_identifier: NetworkIdentifier,
+
+    // The transaction_identifier uniquely identifies a transaction in a particular network and block or in the mempool.
+    #[serde(rename = "transaction_identifier")]
+    pub transaction_identifier: TransactionIdentifier,
+}
+
+impl MempoolTransactionRequest {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        transaction_identifier: TransactionIdentifier,
+    ) -> MempoolTransactionRequest {
+        MempoolTransactionRequest {
+            network_identifier,
+            transaction_identifier,
+        }
+    }
+}
+
+/// ConstructionDeriveRequest is passed to the `/construction/derive` endpoint.
+/// Network is provided in the request because some blockchains have different
+/// address formats for different networks. Metadata is provided in the request
+/// because some blockchains allow for multiple address types (i.e. different
+/// address for validators vs normal accounts).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionDeriveRequest {
+    /// The network_identifier specifies which network a particular object is associated with.
+    pub network_identifier: NetworkIdentifier,
+
+    /// PublicKey contains a public key byte array for a particular CurveType encoded in hex. Note that there is no PrivateKey struct as this is NEVER the concern of an implementation.
+    pub public_key: PublicKey,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+impl ConstructionDeriveRequest {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        public_key: PublicKey,
+    ) -> ConstructionDeriveRequest {
+        ConstructionDeriveRequest {
+            network_identifier,
+            public_key,
+            metadata: None,
+        }
+    }
+}

@@ -207,7 +207,7 @@ impl RosettaApiHandle {
         &self,
         pk: PublicKey,
     ) -> Result<Result<ConstructionDeriveResponse, RosettaError>, String> {
-        let req = ConstructionDeriveRequest::new(self.network_id(), pk);
+        let req = ConstructionDeriveRequest::new(self.network_id().into(), pk);
         to_rosetta_response(
             self.post_json_request(
                 &format!("http://{}/construction/derive", self.api_url),
@@ -222,11 +222,14 @@ impl RosettaApiHandle {
         pk: PublicKey,
     ) -> Result<Result<ConstructionDeriveResponse, RosettaError>, String> {
         let req = ConstructionDeriveRequest {
-            network_identifier: self.network_id(),
+            network_identifier: self.network_id().into(),
             public_key: pk,
-            metadata: Some(ConstructionDeriveRequestMetadata {
-                account_type: AccountType::Neuron { neuron_index: 0 },
-            }),
+            metadata: Some(
+                ConstructionDeriveRequestMetadata {
+                    account_type: AccountType::Neuron { neuron_index: 0 },
+                }
+                .into(),
+            ),
         };
         to_rosetta_response(
             self.post_json_request(

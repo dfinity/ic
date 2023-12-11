@@ -11,7 +11,7 @@ source = """
 . = parse_json!(.message)
 
 .service = "certificate-issuer"
-.timestamp = to_timestamp!(.timestamp, unit: "nanoseconds")
+.timestamp = parse_timestamp!(.timestamp, "%+")
 """
 
 # certificate-syncer
@@ -27,7 +27,7 @@ source = """
 . = parse_json!(.message)
 
 .service = "certificate-syncer"
-.timestamp = to_timestamp!(.timestamp, unit: "nanoseconds")
+.timestamp = parse_timestamp!(.timestamp, "%+")
 """
 
 # ic-boundary
@@ -43,7 +43,7 @@ source = """
 . = parse_json!(.message)
 
 .service = "ic-boundary"
-.timestamp = to_timestamp!(.timestamp, unit: "nanoseconds")
+.timestamp = parse_timestamp!(.timestamp, "%+")
 """
 
 [transforms.ic_boundary_filtered]

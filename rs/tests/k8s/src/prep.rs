@@ -9,7 +9,7 @@ use tracing::*;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::NodeConfiguration,
-    subnet_configuration::{SubnetConfig, SubnetRunningState},
+    subnet_configuration::SubnetConfig,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -85,59 +85,25 @@ pub(crate) fn generate_config(
     let mut ic_topology = TopologyConfig::default();
 
     if !nns_nodes.is_empty() {
-        // Use defaults for all unset fields
-        let nns_subnet = SubnetConfig::new(
-            0,
-            nns_nodes,
-            Some(subnet_version.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            SubnetType::System,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Vec::new(),
-            Vec::new(),
-            SubnetRunningState::Active,
-        );
+        let nns_subnet = SubnetConfig {
+            subnet_index: 0,
+            membership: nns_nodes,
+            replica_version_id: subnet_version.clone(),
+            subnet_type: SubnetType::System,
+            ..Default::default()
+        };
 
         ic_topology.insert_subnet(0, nns_subnet);
     }
 
     if !app_nodes.is_empty() {
-        // Use defaults for all unset fields
-        let app_subnet = SubnetConfig::new(
-            1,
-            app_nodes,
-            Some(subnet_version.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            SubnetType::Application,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Vec::new(),
-            Vec::new(),
-            SubnetRunningState::Active,
-        );
+        let app_subnet = SubnetConfig {
+            subnet_index: 1,
+            membership: app_nodes,
+            replica_version_id: subnet_version.clone(),
+            subnet_type: SubnetType::Application,
+            ..Default::default()
+        };
 
         ic_topology.insert_subnet(1, app_subnet);
     }
@@ -145,7 +111,7 @@ pub(crate) fn generate_config(
     let mut ic_config = IcConfig::new(
         &tempdir,                        // target_dir
         ic_topology,                     // topology_config
-        Some(subnet_version.clone()),    // replica_version_id
+        subnet_version.clone(),          // replica_version_id
         true,                            // generate_subnet_records
         Some(0),                         // nns_subnet_index
         None,                            // release_package_url

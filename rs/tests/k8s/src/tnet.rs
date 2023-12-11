@@ -31,7 +31,6 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::*;
 
 use crate::datavolume::*;
-use crate::event::*;
 use crate::persistentvolumeclaim::*;
 use crate::pod::*;
 use crate::prep::*;
@@ -58,7 +57,6 @@ static TNET_NAME_LABEL: &str = "tnet.internetcomputer.org/name";
 static TNET_TERMINATE_TIME_ANNOTATION: &str = "tnet.internetcomputer.org/terminate-time";
 
 pub struct K8sClient {
-    pub(crate) client: Client,
     pub(crate) api_dv: Api<DynamicObject>,
     pub(crate) api_vm: Api<DynamicObject>,
     pub(crate) api_vmi: Api<DynamicObject>,
@@ -84,7 +82,6 @@ impl K8sClient {
         let api_vmi = Api::<DynamicObject>::namespaced_with(client.clone(), &TNET_NAMESPACE, &ar);
 
         Ok(Self {
-            client,
             api_dv,
             api_vm,
             api_vmi,
@@ -111,7 +108,6 @@ pub struct TNet {
     ipv6_net: Option<Ipv6Cidr>,
     config_url: Option<String>,
     pub(crate) index: Option<u32>,
-    pub(crate) namespace: String,
     pub nns_nodes: Vec<TNode>,
     pub app_nodes: Vec<TNode>,
     k8s: Option<K8sClient>,
@@ -123,7 +119,6 @@ impl TNet {
     pub fn new(name: &str) -> Result<Self> {
         Self {
             name: name.to_string(),
-            namespace: TNET_NAMESPACE.clone(),
             ..Default::default()
         }
         .ttl(Duration::days(1))
@@ -288,11 +283,11 @@ impl TNet {
         path: P,
         uri: &str,
     ) -> Result<()> {
-        Ok(Self::upload_url(
+        Self::upload_url(
             path,
             &format!("{}/{}/{}", *TNET_CONFIG_URL, *TNET_BUCKET, uri),
         )
-        .await?)
+        .await
     }
 
     async fn upload_url<P: AsRef<Path> + std::fmt::Display + Clone>(
@@ -474,22 +469,24 @@ impl TNet {
             }
         }
 
-        wait_for_event(
-            self.k8s.as_ref().unwrap().client.clone(),
-            &TNET_NAMESPACE,
-            "Import Successful",
-            "PersistentVolumeClaim",
-            tnet_image,
-            180,
-        )
-        .await
-        .unwrap_or_else(|_| {
-            error!(
-                "Timeout waiting for import of PersistentVolumeClaim {}",
-                tnet_image.to_string()
-            );
-            std::process::exit(124);
-        });
+        tokio::time::timeout(tokio::time::Duration::from_secs(100), async {
+            while (|| async {
+                self.k8s
+                    .as_ref()
+                    .unwrap()
+                    .api_dv
+                    .get(tnet_image)
+                    .await
+                    .map(|r| r.data["status"]["phase"] != "Succeeded")
+            })
+            .retry(&ExponentialBuilder::default())
+            .await?
+            {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            }
+            anyhow::Ok(())
+        })
+        .await??;
 
         for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
             let pvc_name = format!("{}-guestos", node.name.clone().unwrap());
@@ -575,97 +572,6 @@ impl TNet {
                     "tail -f /dev/null",
                 ],
                 Some((&dv_info_name, "/mnt")),
-                self.owner_reference(),
-            )
-            .await?;
-        }
-
-        Ok(self)
-    }
-
-    pub async fn create_local(&mut self) -> Result<&Self> {
-        self.tnet_owner().await?;
-        let k8s_client = &self.k8s.as_ref().unwrap();
-
-        // generate and upload node config images
-        if self.init {
-            generate_config(
-                &self.version,
-                self.use_zero_version,
-                &self.nns_nodes,
-                &self.app_nodes,
-            )?;
-            self.upload_config().await?;
-        }
-
-        // create virtual machines
-        for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-            prepare_host_vm(self.k8s.as_ref().unwrap(), node, self).await?;
-        }
-
-        for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-            create_host_vm(self.k8s.as_ref().unwrap(), node, self).await?;
-        }
-
-        let config_url = format!("{}/init.tar", self.config_url.clone().unwrap());
-        let nns_ips = self
-            .nns_nodes
-            .iter()
-            .map(|node| node.ipv6_addr.unwrap().to_string())
-            .collect::<Vec<String>>()
-            .join(" ");
-
-        // initialize nns
-        // TODO: save init state somehere (host-based pvc)
-        // initialize nns
-        if self.init {
-            create_pod(
-                &k8s_client.api_pod,
-                "tnet-operator",
-                "ubuntu:20.04",
-                vec![
-                    "/usr/bin/bash",
-                    "-c",
-                    &format!(
-                        r#"
-                        set -eEuo pipefail
-
-                        if [ -e /mnt/ic-nns-init.complete ]; then
-                          echo NNS already initialized, nothing to do
-                          exit 0
-                        fi
-
-                        apt update && apt install -y parallel wget iputils-ping libssl1.1="1.1.1f-1ubuntu2"
-                        pushd /mnt
-                        wget {}
-                        tar -xf init.tar
-                        popd
-                        gunzip /mnt/*.gz /mnt/canisters/*.gz || true
-                        chmod u+x /mnt/ic-nns-init
-
-                        timeout 10m bash -c 'until parallel -u ping -c1 -W1 ::: {} >/dev/null;
-                        do
-                          echo Waiting for NNS nodes to come up...
-                          sleep 5
-                        done'
-
-                        echo NNS nodes seem to be up...
-                        sleep 30
-                        echo Initiliazing NNS nodes...
-                        /mnt/ic-nns-init --url 'http://[{}]:8080' \
-                          --registry-local-store-dir /mnt/ic_registry_local_store \
-                          --wasm-dir /mnt/canisters --http2-only 2>&1 | tee /mnt/ic-nns-init.log
-                        touch /mnt/ic-nns-init.complete
-                        "#,
-                        config_url, nns_ips, self.nns_nodes[0].ipv6_addr.unwrap()
-                    ),
-                ],
-                vec![
-                    "/usr/bin/bash",
-                    "-c",
-                    "tail -f /dev/null",
-                ],
-                None,
                 self.owner_reference(),
             )
             .await?;

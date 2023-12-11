@@ -138,3 +138,67 @@ impl BlockTransactionResponse {
         BlockTransactionResponse { transaction }
     }
 }
+
+/// A MempoolResponse contains all transaction identifiers in the mempool for a
+/// particular network_identifier.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct MempoolResponse {
+    #[serde(rename = "transaction_identifiers")]
+    pub transaction_identifiers: Vec<TransactionIdentifier>,
+}
+
+impl MempoolResponse {
+    pub fn new(transaction_identifiers: Vec<TransactionIdentifier>) -> MempoolResponse {
+        MempoolResponse {
+            transaction_identifiers,
+        }
+    }
+}
+
+/// A MempoolTransactionResponse contains an estimate of a mempool transaction.
+/// It may not be possible to know the full impact of a transaction in the
+/// mempool (ex: fee paid).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct MempoolTransactionResponse {
+    #[serde(rename = "transaction")]
+    pub transaction: Transaction,
+}
+
+impl MempoolTransactionResponse {
+    pub fn new(transaction: Transaction) -> MempoolTransactionResponse {
+        MempoolTransactionResponse { transaction }
+    }
+}
+
+/// ConstructionDeriveResponse is returned by the `/construction/derive`
+/// endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionDeriveResponse {
+    /// [DEPRECATED by `account_identifier` in `v1.4.4`] Address in
+    /// network-specific format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+
+    /// The account_identifier uniquely identifies an account within a network. All fields in the account_identifier are utilized to determine this uniqueness (including the metadata field, if populated).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_identifier: Option<AccountIdentifier>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+impl ConstructionDeriveResponse {
+    pub fn new(
+        address: Option<String>,
+        account_identifier: Option<AccountIdentifier>,
+    ) -> ConstructionDeriveResponse {
+        ConstructionDeriveResponse {
+            address,
+            account_identifier,
+            metadata: None,
+        }
+    }
+}

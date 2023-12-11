@@ -13,5 +13,6 @@ ic-rosetta-api = { path = "../../../" }
 ic-icrc-rosetta = { path = "../" }
 anyhow = { version = "1.0", default-features = false }
 reqwest = { workspace = true }
+serde = { workspace = true }
 url = "2.2.1"
 rosetta-core = {path = "../../../rosetta_core"}

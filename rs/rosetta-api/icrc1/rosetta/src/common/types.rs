@@ -26,6 +26,7 @@ const ERROR_CODE_UNABLE_TO_FIND_BLOCK: u32 = 2;
 const ERROR_CODE_INVALID_BLOCK_IDENTIFIER: u32 = 3;
 const ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE: u32 = 4;
 const ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER: u32 = 5;
+const ERROR_CODE_MEMPOOL_TRANSACTION_MISSING: u32 = 6;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -91,6 +92,16 @@ impl Error {
             code: ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER,
             message: "Invalid transaction identifier provided".into(),
             description: Some("Invalid transaction identifier provided.".into()),
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn mempool_transaction_missing() -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_MEMPOOL_TRANSACTION_MISSING,
+            message: "Mempool transaction not found".into(),
+            description: Some("Mempool transaction not found.".into()),
             retriable: false,
             details: None,
         })

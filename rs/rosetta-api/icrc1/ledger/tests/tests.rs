@@ -407,3 +407,449 @@ fn test_upgrade_from_first_version() {
     transfer(&env, ledger_id, MINTER, account(2), 3_000_000);
     transfer(&env, ledger_id, account(1), account(3), 1_000_000);
 }
+
+mod verify_written_blocks {
+    use super::*;
+    use ic_icrc1_ledger::FeatureFlags;
+    use ic_icrc1_ledger_sm_tests::{system_time_to_nanos, MINTER};
+    use ic_state_machine_tests::{StateMachine, Time, WasmResult};
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc1::transfer::{Memo, NumTokens, TransferArg};
+    use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+    use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+    use icrc_ledger_types::icrc3::transactions::{
+        Approve, Burn, GetTransactionsRequest, GetTransactionsResponse, Mint, Transaction, Transfer,
+    };
+    use num_traits::ToPrimitive;
+    use serde_bytes::ByteBuf;
+    use std::time::SystemTime;
+
+    const DEFAULT_FEE: u64 = 10_000;
+    const DEFAULT_AMOUNT: u64 = 1_000_000;
+    const DEFAULT_MEMO: [u8; 10] = [0u8; 10];
+    const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
+
+    #[test]
+    fn test_verify_written_mint_block() {
+        let ledger = Setup::new();
+        let mint_args = TransferArg {
+            from_subaccount: ledger.minter_account.subaccount,
+            to: ledger.from_account,
+            amount: Nat::from(10 * DEFAULT_AMOUNT),
+            fee: Some(NumTokens::from(0)),
+            created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
+            memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
+        };
+        ledger.mint(&mint_args).expect_mint(Mint {
+            amount: mint_args.amount,
+            to: mint_args.to,
+            memo: mint_args.memo,
+            created_at_time: mint_args.created_at_time,
+        });
+    }
+
+    #[test]
+    fn test_verify_written_transfer_block() {
+        let ledger = Setup::new();
+        let from_account = ledger.from_account;
+        let transfer_args = TransferArg {
+            from_subaccount: ledger.from_account.subaccount,
+            to: ledger.to_account,
+            fee: Some(Nat::from(DEFAULT_FEE)),
+            created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
+            memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
+            amount: Nat::from(DEFAULT_AMOUNT),
+        };
+        ledger
+            .icrc1_transfer(from_account, &transfer_args)
+            .expect_transfer(Transfer {
+                amount: transfer_args.amount,
+                from: from_account,
+                to: transfer_args.to,
+                spender: None,
+                memo: transfer_args.memo,
+                fee: transfer_args.fee,
+                created_at_time: transfer_args.created_at_time,
+            });
+    }
+
+    #[test]
+    fn test_verify_written_initial_approve_block_and_approve_block_with_expected_allowance() {
+        let ledger = Setup::new();
+        let from_account = ledger.from_account;
+        let spender_account = ledger.minter_account;
+        let approve_args = ApproveArgs {
+            from_subaccount: ledger.from_account.subaccount,
+            spender: ledger.minter_account,
+            amount: Nat::from(2 * DEFAULT_AMOUNT),
+            expected_allowance: Some(Nat::from(0)),
+            expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
+            fee: Some(Nat::from(DEFAULT_FEE)),
+            memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
+            created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
+        };
+        let mut approve_args_with_expected_allowance = approve_args.clone();
+        approve_args_with_expected_allowance.expected_allowance = Some(approve_args.amount.clone());
+        approve_args_with_expected_allowance.amount = Nat::from(2 * DEFAULT_AMOUNT);
+        ledger
+            .icrc2_approve(from_account, &approve_args)
+            .expect_approve(Approve {
+                amount: approve_args.amount,
+                expected_allowance: approve_args.expected_allowance,
+                expires_at: approve_args.expires_at,
+                memo: approve_args.memo,
+                fee: approve_args.fee,
+                created_at_time: approve_args.created_at_time,
+                from: from_account,
+                spender: spender_account,
+            })
+            .icrc2_approve(from_account, &approve_args_with_expected_allowance)
+            .expect_approve(Approve {
+                amount: approve_args_with_expected_allowance.amount,
+                expected_allowance: approve_args_with_expected_allowance.expected_allowance,
+                expires_at: approve_args_with_expected_allowance.expires_at,
+                memo: approve_args_with_expected_allowance.memo,
+                fee: approve_args_with_expected_allowance.fee,
+                created_at_time: approve_args_with_expected_allowance.created_at_time,
+                from: from_account,
+                spender: spender_account,
+            });
+    }
+
+    #[test]
+    fn test_verify_written_approve_and_burn_blocks() {
+        let ledger = Setup::new();
+        let from_account = ledger.from_account;
+        let spender_account = ledger.minter_account;
+        let approve_args = ApproveArgs {
+            from_subaccount: ledger.from_account.subaccount,
+            spender: ledger.minter_account,
+            amount: Nat::from(2 * DEFAULT_AMOUNT),
+            expected_allowance: Some(Nat::from(0)),
+            expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
+            fee: Some(Nat::from(DEFAULT_FEE)),
+            memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
+            created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
+        };
+        let burn_args = TransferFromArgs {
+            spender_subaccount: spender_account.subaccount,
+            from: ledger.from_account,
+            to: ledger.minter_account,
+            amount: Nat::from(DEFAULT_AMOUNT),
+            fee: Some(NumTokens::from(0)),
+            memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
+            created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
+        };
+        ledger
+            .icrc2_approve(from_account, &approve_args)
+            .expect_approve(Approve {
+                amount: approve_args.amount,
+                expected_allowance: approve_args.expected_allowance,
+                expires_at: approve_args.expires_at,
+                memo: approve_args.memo,
+                fee: approve_args.fee,
+                created_at_time: approve_args.created_at_time,
+                from: from_account,
+                spender: spender_account,
+            })
+            .minter_burn(&burn_args)
+            .expect_burn(Burn {
+                amount: burn_args.amount,
+                from: burn_args.from,
+                spender: Some(spender_account),
+                memo: burn_args.memo,
+                created_at_time: burn_args.created_at_time,
+            });
+    }
+
+    #[test]
+    fn test_verify_written_approve_and_transfer_from_blocks() {
+        let ledger = Setup::new();
+        let from_account = ledger.from_account;
+        let spender_account = ledger.spender_account;
+        let approve_args = ApproveArgs {
+            from_subaccount: ledger.from_account.subaccount,
+            spender: ledger.spender_account,
+            amount: Nat::from(2 * DEFAULT_AMOUNT),
+            expected_allowance: Some(Nat::from(0)),
+            expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
+            fee: Some(Nat::from(DEFAULT_FEE)),
+            memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
+            created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
+        };
+        let transfer_from_args = TransferFromArgs {
+            spender_subaccount: ledger.spender_account.subaccount,
+            from: ledger.from_account,
+            to: ledger.to_account,
+            amount: Nat::from(DEFAULT_AMOUNT),
+            fee: Some(Nat::from(DEFAULT_FEE)),
+            memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
+            created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
+        };
+        ledger
+            .icrc2_approve(from_account, &approve_args)
+            .expect_approve(Approve {
+                amount: approve_args.amount,
+                expected_allowance: approve_args.expected_allowance,
+                expires_at: approve_args.expires_at,
+                memo: approve_args.memo,
+                fee: approve_args.fee,
+                created_at_time: approve_args.created_at_time,
+                from: from_account,
+                spender: spender_account,
+            })
+            .icrc2_transfer_from(spender_account, &transfer_from_args)
+            .expect_transfer(Transfer {
+                amount: transfer_from_args.amount,
+                from: from_account,
+                to: transfer_from_args.to,
+                spender: Some(spender_account),
+                memo: transfer_from_args.memo,
+                fee: transfer_from_args.fee,
+                created_at_time: transfer_from_args.created_at_time,
+            });
+    }
+
+    struct Setup {
+        minter_account: Account,
+        from_account: Account,
+        to_account: Account,
+        spender_account: Account,
+        env: StateMachine,
+        ledger_id: CanisterId,
+        current_time_ns_since_unix_epoch: u64,
+    }
+
+    impl Setup {
+        fn new() -> Self {
+            let minter_account = Account {
+                owner: MINTER.owner,
+                subaccount: Some([42u8; 32]),
+            };
+            let from_account = Account {
+                owner: PrincipalId::new_user_test_id(1).0,
+                subaccount: Some([1u8; 32]),
+            };
+            let to_account = Account {
+                owner: PrincipalId::new_user_test_id(2).0,
+                subaccount: Some([2u8; 32]),
+            };
+            let spender_account = Account {
+                owner: PrincipalId::new_user_test_id(3).0,
+                subaccount: Some([3u8; 32]),
+            };
+            let initial_balances = vec![
+                (from_account, Nat::from(10 * DEFAULT_AMOUNT)),
+                (to_account, Nat::from(10 * DEFAULT_AMOUNT)),
+                (spender_account, Nat::from(10 * DEFAULT_AMOUNT)),
+            ];
+            let ledger_arg_init = LedgerArgument::Init(InitArgs {
+                minting_account: minter_account,
+                fee_collector_account: None,
+                initial_balances,
+                transfer_fee: FEE.into(),
+                token_name: TOKEN_NAME.to_string(),
+                decimals: Some(DECIMAL_PLACES),
+                token_symbol: TOKEN_SYMBOL.to_string(),
+                metadata: vec![
+                    Value::entry(NAT_META_KEY, NAT_META_VALUE),
+                    Value::entry(INT_META_KEY, INT_META_VALUE),
+                    Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
+                    Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+                ],
+                archive_options: ArchiveOptions {
+                    trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+                    num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+                    node_max_memory_size_bytes: None,
+                    max_message_size_bytes: None,
+                    controller_id: PrincipalId::new_user_test_id(100),
+                    cycles_for_archive_creation: None,
+                    max_transactions_per_response: None,
+                },
+                max_memo_length: None,
+                feature_flags: Some(FeatureFlags { icrc2: true }),
+                maximum_number_of_accounts: None,
+                accounts_overflow_trim_quantity: None,
+            });
+
+            let args = Encode!(&ledger_arg_init).unwrap();
+            let env = StateMachine::new();
+            let ledger_id = env.install_canister(ledger_wasm(), args, None).unwrap();
+
+            env.set_time(SystemTime::from(GENESIS));
+            let current_time_ns_since_unix_epoch = system_time_to_nanos(env.time());
+
+            Self {
+                minter_account,
+                from_account,
+                to_account,
+                spender_account,
+                env,
+                ledger_id,
+                current_time_ns_since_unix_epoch,
+            }
+        }
+
+        fn get_transaction(&self, block_index: BlockIndex) -> Transaction {
+            let request = GetTransactionsRequest {
+                start: block_index.into(),
+                length: 1.into(),
+            };
+
+            let wasm_result_bytes = match {
+                self.env
+                    .query(
+                        self.ledger_id,
+                        "get_transactions",
+                        Encode!(&request).unwrap(),
+                    )
+                    .expect("failed to query get_transactions on the ledger")
+            } {
+                WasmResult::Reply(bytes) => bytes,
+                WasmResult::Reject(reject) => {
+                    panic!("Expected a successful reply, got a reject: {}", reject)
+                }
+            };
+            let mut response = Decode!(&wasm_result_bytes, GetTransactionsResponse).unwrap();
+            assert_eq!(
+                response.transactions.len(),
+                1,
+                "Expected exactly one transaction but got {:?}",
+                response.transactions
+            );
+            response.transactions.pop().unwrap()
+        }
+
+        fn mint(self, mint_args: &TransferArg) -> TransactionAssert {
+            let minter_account = self.minter_account;
+            self.icrc1_transfer(minter_account, mint_args)
+        }
+
+        fn icrc1_transfer(self, from: Account, transfer_args: &TransferArg) -> TransactionAssert {
+            let args = Encode!(transfer_args).unwrap();
+            let res = self
+                .env
+                .execute_ingress_as(
+                    PrincipalId::from(from.owner),
+                    self.ledger_id,
+                    "icrc1_transfer",
+                    args,
+                )
+                .expect("Unable to perform icrc1_transfer")
+                .bytes();
+            let block_index = Decode!(&res, Result<Nat, TransferError>)
+                .unwrap()
+                .expect("Unable to decode icrc1_transfer error")
+                .0
+                .to_u64()
+                .unwrap();
+            TransactionAssert {
+                ledger: self,
+                block_index,
+            }
+        }
+
+        fn icrc2_transfer_from(
+            self,
+            spender: Account,
+            transfer_from_args: &TransferFromArgs,
+        ) -> TransactionAssert {
+            let args = Encode!(transfer_from_args).unwrap();
+            let res = self
+                .env
+                .execute_ingress_as(
+                    PrincipalId::from(spender.owner),
+                    self.ledger_id,
+                    "icrc2_transfer_from",
+                    args,
+                )
+                .expect("Unable to perform icrc2_transfer_from")
+                .bytes();
+            let block_index = Decode!(&res, Result<Nat, TransferFromError>)
+                .unwrap()
+                .expect("Unable to decode icrc2_transfer_from error")
+                .0
+                .to_u64()
+                .unwrap();
+            TransactionAssert {
+                ledger: self,
+                block_index,
+            }
+        }
+
+        fn icrc2_approve(self, from: Account, approve_args: &ApproveArgs) -> TransactionAssert {
+            let args = Encode!(approve_args).unwrap();
+            let res = self
+                .env
+                .execute_ingress_as(from.owner.into(), self.ledger_id, "icrc2_approve", args)
+                .expect("Unable to perform icrc2_approve")
+                .bytes();
+            let block_index = Decode!(&res, Result<Nat, ApproveError>)
+                .unwrap()
+                .expect("Unable to decode icrc2_approve error")
+                .0
+                .to_u64()
+                .unwrap();
+            TransactionAssert {
+                ledger: self,
+                block_index,
+            }
+        }
+
+        fn minter_burn(self, burn_args: &TransferFromArgs) -> TransactionAssert {
+            let minter_account = self.minter_account;
+            self.icrc2_transfer_from(minter_account, burn_args)
+        }
+    }
+
+    struct TransactionAssert {
+        ledger: Setup,
+        block_index: BlockIndex,
+    }
+
+    impl TransactionAssert {
+        fn expect_approve(self, expected_approve: Approve) -> Setup {
+            let ledger_transaction = self.ledger.get_transaction(self.block_index);
+            assert_eq!("approve", ledger_transaction.kind);
+            let ledger_approve = ledger_transaction
+                .approve
+                .as_ref()
+                .expect("expecting approve transaction");
+            assert_eq!(ledger_approve, &expected_approve);
+            self.ledger
+        }
+
+        fn expect_mint(self, expected_mint: Mint) -> Setup {
+            let ledger_transaction = self.ledger.get_transaction(self.block_index);
+            assert_eq!("mint", ledger_transaction.kind);
+            let ledger_mint = ledger_transaction
+                .mint
+                .as_ref()
+                .expect("expecting mint transaction");
+            assert_eq!(ledger_mint, &expected_mint);
+            self.ledger
+        }
+
+        fn expect_transfer(self, expected_transfer: Transfer) -> Setup {
+            let ledger_transaction = self.ledger.get_transaction(self.block_index);
+            assert_eq!("transfer", ledger_transaction.kind);
+            let ledger_transfer = ledger_transaction
+                .transfer
+                .as_ref()
+                .expect("expecting transfer transaction");
+            assert_eq!(ledger_transfer, &expected_transfer);
+            self.ledger
+        }
+
+        fn expect_burn(self, expected_burn: Burn) -> Setup {
+            let ledger_transaction = self.ledger.get_transaction(self.block_index);
+            assert_eq!("burn", ledger_transaction.kind);
+            let ledger_burn = ledger_transaction
+                .burn
+                .as_ref()
+                .expect("expecting burn transaction");
+            assert_eq!(ledger_burn, &expected_burn);
+            self.ledger
+        }
+    }
+}
