@@ -43,26 +43,8 @@ if err != null || remote_addr == "" {
   .remote_addr_hashed = truncate(.remote_addr_hashed, limit: 32, ellipsis: false)
 }
 
-# In some rare cases several replicas are contacted and it makes the following fields
-# comma- and/or colon-separated depending on the request flow. This breaks Clickhouse ingests.
-# See http://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_addr
-#
-# We're trying to parse all these potentially multi-value fields as ints/floats and fall back to zero if that fails
-.upstream_bytes_received = to_int(.upstream_bytes_received) ?? 0
-.upstream_bytes_sent = to_int(.upstream_bytes_sent) ?? 0
-.upstream_connect_time = to_float(.upstream_connect_time) ?? 0.0
-.upstream_header_time = to_float(.upstream_header_time) ?? 0.0
-.upstream_response_length = to_int(.upstream_response_length) ?? 0
-.upstream_response_time = to_float(.upstream_response_time) ?? 0.0
-
-# Also sometimes status contains a dash "-" and this also breaks ingests.
-# This happens e.g. when a client closed connection before the upstream returned a reply.
-.upstream_status = to_int(.upstream_status) ?? 0
-
 # Remove privacy related info
-del(.remote_user)
 del(.remote_addr)
-del(.remote_port)
 
 # parse status for later sampling
 status, err = to_int(.status)
@@ -78,12 +60,12 @@ if err == null {
 type = "route"
 inputs = ["nginx_access_preprocessed"]
 
-  [transforms.nginx_access_by_status.route]
-  1xx = '.status >= 100 && .status < 200 ?? false'
-  2xx = '.status >= 200 && .status < 300 ?? false'
-  3xx = '.status >= 300 && .status < 400 ?? false'
-  4xx = '.status >= 400 && .status < 500 ?? false'
-  5xx = '.status >= 500 && .status < 600 ?? false'
+[transforms.nginx_access_by_status.route]
+1xx = '.status >= 100 && .status < 200 ?? false'
+2xx = '.status >= 200 && .status < 300 ?? false'
+3xx = '.status >= 300 && .status < 400 ?? false'
+4xx = '.status >= 400 && .status < 500 ?? false'
+5xx = '.status >= 500 && .status < 600 ?? false'
 
 # nginx access (metrics)
 
@@ -106,31 +88,28 @@ for_each([
 type = "log_to_metric"
 inputs = ["metrics_nginx_access_preprocessed"]
 
-  [[transforms.nginx_access_metrics.metrics]]
-  type = "counter"
-  field = "status"
-  name = "request_total"
+[[transforms.nginx_access_metrics.metrics]]
+type = "counter"
+field = "status"
+name = "request_total"
 
-    [transforms.nginx_access_metrics.metrics.tags]
-    hostname = "{{ hostname }}"
-    ic_http_request = "{{ ic_http_request }}"
-    ic_node_id = "{{ ic_node_id }}"
-    ic_request_type = "{{ ic_request_type }}"
-    ic_subnet_id = "{{ ic_subnet_id }}"
-    is_bot = "{{ is_bot }}"
-    request_method = "{{ request_method }}"
-    status = "{{ status }}"
-    traffic_segment = "{{ traffic_segment }}"
-    upstream_cache_status = "{{ upstream_cache_status }}"
-    upstream_status = "{{ upstream_status }}"
+[transforms.nginx_access_metrics.metrics.tags]
+hostname = "{{ hostname }}"
+ic_http_request = "{{ ic_http_request }}"
+ic_node_id = "{{ ic_node_id }}"
+ic_request_type = "{{ ic_request_type }}"
+ic_subnet_id = "{{ ic_subnet_id }}"
+is_bot = "{{ is_bot }}"
+request_method = "{{ request_method }}"
+status = "{{ status }}"
 
 # nginx access (clickhouse)
 
 [transforms.clickhouse_nginx_access_2xx_sampled]
-type = "sample"
-inputs = ["nginx_access_by_status.2xx"]
 rate = ${CLICKHOUSE_2XX_SAMPLE_RATE:?CLICKHOUSE_2XX_SAMPLE_RATE must be provided}
 
+type = "sample"
+inputs = ["nginx_access_by_status.2xx"]
 [transforms.clickhouse_nginx_access_preprocessed]
 type = "remap"
 inputs = [
@@ -149,9 +128,6 @@ source = """
 for_each([
   "connection_time",
   "request_time",
-  "upstream_connect_time",
-  "upstream_header_time",
-  "upstream_response_time",
 ]) -> |_, k| {
   t_ms, err = to_float(get!(., [k])) * 1000
   if err != null {
@@ -174,87 +150,68 @@ endpoint = "${CLICKHOUSE_URL:?CLICKHOUSE_URL must be provided}"
 database = "default"
 table = "http_access"
 
-  [sinks.clickhouse_nginx_access.healthcheck]
-  enabled = false
+[sinks.clickhouse_nginx_access.healthcheck]
+enabled = false
 
-  [sinks.clickhouse_nginx_access.batch]
-  max_bytes = 10485760 # 10 MB
-  max_events = 25000 # 25k
-  timeout_secs = 10
+[sinks.clickhouse_nginx_access.batch]
+max_bytes = 10485760 # 10 MB
+max_events = 25000   # 25k
+timeout_secs = 10
 
-  [sinks.clickhouse_nginx_access.buffer]
-  max_events = 100000 # 100k
-  type = "memory"
-  when_full = "block"
+[sinks.clickhouse_nginx_access.buffer]
+max_events = 100000 # 100k
+type = "memory"
+when_full = "block"
 
-  [sinks.clickhouse_nginx_access.request]
-  retry_attempts = 5
-  retry_initial_backoff_secs = 2
+[sinks.clickhouse_nginx_access.request]
+retry_attempts = 5
+retry_initial_backoff_secs = 2
 
-  [sinks.clickhouse_nginx_access.auth]
-  strategy = "basic"
-  user = "${CLICKHOUSE_USER:?CLICKHOUSE_USER must be provided}"
-  password = "${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD must be provided}"
+[sinks.clickhouse_nginx_access.auth]
+strategy = "basic"
+user = "${CLICKHOUSE_USER:?CLICKHOUSE_USER must be provided}"
+password = "${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD must be provided}"
 
-  [sinks.clickhouse_nginx_access.encoding]
-  only_fields = [
-    "body_bytes_sent",
-    "bytes_sent",
-    "connection_time_ms",
-    "content_length",
-    "content_type",
-    "date",
-    "env",
-    "geo_city_name",
-    "geo_country_code",
-    "geo_country_name",
-    "host",
-    "hostname",
-    "http_host",
-    "http_origin",
-    "http_referer",
-    "http_user_agent",
-    "https",
-    "ic_canister_id",
-    "ic_canister_id_cbor",
-    "ic_http_request",
-    "ic_method_name",
-    "ic_node_id",
-    "ic_request_type",
-    "ic_sender",
-    "ic_subnet_id",
-    "is_bot",
-    "nginx_version",
-    "pre_isolation_canister",
-    "proxy_host",
-    "proxy_port",
-    "query_string",
-    "remote_addr_hashed",
-    "remote_addr_family",
-    "request_id",
-    "request_length",
-    "request_method",
-    "request_time_ms",
-    "request_uri",
-    "scheme",
-    "server_addr",
-    "server_name",
-    "server_port",
-    "server_protocol",
-    "ssl_cipher",
-    "ssl_protocol",
-    "status",
-    "traffic_segment",
-    "upstream_addr",
-    "upstream_bytes_received",
-    "upstream_bytes_sent",
-    "upstream_cache_status",
-    "upstream_connect_time_ms",
-    "upstream_header_time_ms",
-    "upstream_response_length",
-    "upstream_response_time_ms",
-    "upstream_status"
-  ]
+[sinks.clickhouse_nginx_access.encoding]
+only_fields = [
+  "body_bytes_sent",
+  "bytes_sent",
+  "content_length",
+  "content_type",
+  "date",
+  "env",
+  "geo_city_name",
+  "geo_country_code",
+  "geo_country_name",
+  "hostname",
+  "http_host",
+  "http_origin",
+  "http_referer",
+  "http_user_agent",
+  "https",
+  "ic_canister_id",
+  "ic_canister_id_cbor",
+  "ic_http_request",
+  "ic_method_name",
+  "ic_node_id",
+  "ic_request_type",
+  "ic_sender",
+  "ic_subnet_id",
+  "is_bot",
+  "pre_isolation_canister",
+  "query_string",
+  "remote_addr_hashed",
+  "remote_addr_family",
+  "request_id",
+  "request_length",
+  "request_method",
+  "request_time_ms",
+  "request_uri",
+  "server_protocol",
+  "ssl_cipher",
+  "ssl_protocol",
+  "status",
+]
 
 # nginx error
 
@@ -296,13 +253,13 @@ if err != null {
 type = "log_to_metric"
 inputs = ["nginx_error_json"]
 
-  [[transforms.nginx_error_metrics.metrics]]
-  type = "counter"
-  field = "message"
-  name = "error_total"
+[[transforms.nginx_error_metrics.metrics]]
+type = "counter"
+field = "message"
+name = "error_total"
 
-    [transforms.nginx_error_metrics.metrics.tags]
-    hostname = "{{ host }}"
+[transforms.nginx_error_metrics.metrics.tags]
+hostname = "{{ host }}"
 
 # nginx (prometheus)
 
@@ -353,15 +310,15 @@ server_addr_with_port = split(addrs[1], ".") ?? ["N/A", "N/A"]
 type = "log_to_metric"
 inputs = ["danted_json"]
 
-  [[transforms.danted_metrics.metrics]]
-  type = "counter"
-  field = "timestamp"
-  name = "requests_total"
+[[transforms.danted_metrics.metrics]]
+type = "counter"
+field = "timestamp"
+name = "requests_total"
 
-    [transforms.danted_metrics.metrics.tags]
-    hostname = "{{ host }}"
-    client_addr = "{{ client_addr }}"
-    server_addr = "{{ server_addr }}"
+[transforms.danted_metrics.metrics.tags]
+hostname = "{{ host }}"
+client_addr = "{{ client_addr }}"
+server_addr = "{{ server_addr }}"
 
 # danted (socks proxy) (prometheus)
 
