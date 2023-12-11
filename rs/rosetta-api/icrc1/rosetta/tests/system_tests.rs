@@ -1,5 +1,6 @@
 use crate::common::local_replica;
 use crate::common::local_replica::test_identity;
+use axum::http::StatusCode;
 use candid::{Nat, Principal};
 use ic_agent::{identity::Secp256k1Identity, Identity};
 use ic_base_types::CanisterId;
@@ -27,6 +28,7 @@ use icrc_ledger_types::{
 use lazy_static::lazy_static;
 use rosetta_core::identifiers::*;
 use rosetta_core::objects::*;
+use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde_json::Number;
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -678,9 +680,22 @@ async fn test_mempool() {
     );
 
     let transaction_identifiers = client
-        .mempool(network_identifier)
+        .mempool(network_identifier.clone())
         .await
         .expect("Unable to call mempool")
         .transaction_identifiers;
     assert_eq!(transaction_identifiers, vec![]);
+
+    let transaction_id = TransactionIdentifier {
+        hash: "1234".to_string(),
+    };
+    let mempool_transaction_request =
+        MempoolTransactionRequest::new(network_identifier, transaction_id);
+    let response = client
+        .mempool_transaction(mempool_transaction_request)
+        .await;
+    assert_eq!(
+        response.expect_err("expected an error").status().unwrap(),
+        StatusCode::INTERNAL_SERVER_ERROR
+    );
 }

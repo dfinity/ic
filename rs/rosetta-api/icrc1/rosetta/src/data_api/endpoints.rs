@@ -1,5 +1,8 @@
 use super::services;
-use crate::{common::utils::utils::verify_network_id, AppState};
+use crate::{
+    common::{types::Error, utils::utils::verify_network_id},
+    AppState,
+};
 use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_rosetta_api::models::MempoolResponse;
 use rosetta_core::{request_types::*, response_types::*};
@@ -63,4 +66,12 @@ pub async fn mempool(
 ) -> Result<Json<MempoolResponse>> {
     verify_network_id(&request.network_identifier, &state)?;
     Ok(Json(MempoolResponse::new(vec![])))
+}
+
+pub async fn mempool_transaction(
+    State(state): State<Arc<AppState>>,
+    request: Json<MempoolTransactionRequest>,
+) -> Result<Json<MempoolTransactionResponse>> {
+    verify_network_id(&request.network_identifier, &state)?;
+    Err(Error::mempool_transaction_missing().into())
 }
