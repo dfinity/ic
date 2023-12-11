@@ -113,9 +113,6 @@ RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-
     adduser ic-replica vsock && \
     adduser ic-replica sudo
 
-# User which will run the replica service.
-RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy
-
 # Accounts to allow remote access to state bits
 
 # The "backup" user account. We simply use the existing "backup" account and
@@ -153,6 +150,12 @@ RUN addgroup node_exporter && \
                /usr/local/bin/node_exporter && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml
+
+# User which will run the metrics proxy service.
+# Needs access to the node exporter SSL certificate private key,
+# stored in /etc/node_exporter.
+RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy && \
+    usermod -a -G node_exporter metrics-proxy
 
 # Compile locale specification
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
