@@ -7839,6 +7839,7 @@ dependencies = [
  "ic-rosetta-api",
  "reqwest",
  "rosetta-core",
+ "serde",
  "url",
 ]
 

@@ -139,6 +139,39 @@ impl BlockTransactionResponse {
     }
 }
 
+/// A MempoolResponse contains all transaction identifiers in the mempool for a
+/// particular network_identifier.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct MempoolResponse {
+    #[serde(rename = "transaction_identifiers")]
+    pub transaction_identifiers: Vec<TransactionIdentifier>,
+}
+
+impl MempoolResponse {
+    pub fn new(transaction_identifiers: Vec<TransactionIdentifier>) -> MempoolResponse {
+        MempoolResponse {
+            transaction_identifiers,
+        }
+    }
+}
+
+/// A MempoolTransactionResponse contains an estimate of a mempool transaction.
+/// It may not be possible to know the full impact of a transaction in the
+/// mempool (ex: fee paid).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct MempoolTransactionResponse {
+    #[serde(rename = "transaction")]
+    pub transaction: Transaction,
+}
+
+impl MempoolTransactionResponse {
+    pub fn new(transaction: Transaction) -> MempoolTransactionResponse {
+        MempoolTransactionResponse { transaction }
+    }
+}
+
 /// ConstructionDeriveResponse is returned by the `/construction/derive`
 /// endpoint.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

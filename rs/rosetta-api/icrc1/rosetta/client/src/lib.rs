@@ -1,8 +1,8 @@
-use ic_rosetta_api::models::MempoolResponse;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
+use serde::{Deserialize, Serialize};
 use url::ParseError;
 
 pub struct RosettaClient {
@@ -38,13 +38,26 @@ impl RosettaClient {
             .await
     }
 
-    pub async fn network_list(&self) -> reqwest::Result<NetworkListResponse> {
-        self.http_client
-            .post(self.url("/network/list"))
-            .json(&MetadataRequest { metadata: None })
+    async fn call_endpoint<T: Serialize + ?Sized, R: for<'a> Deserialize<'a>>(
+        &self,
+        path: &str,
+        arg: &T,
+    ) -> reqwest::Result<R> {
+        let response = self
+            .http_client
+            .post(self.url(path))
+            .json(arg)
             .send()
-            .await?
-            .json()
+            .await?;
+
+        match response.error_for_status() {
+            Ok(res) => Ok(res.json().await?),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub async fn network_list(&self) -> reqwest::Result<NetworkListResponse> {
+        self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await
     }
 
@@ -52,16 +65,14 @@ impl RosettaClient {
         &self,
         network_identifier: NetworkIdentifier,
     ) -> reqwest::Result<NetworkStatusResponse> {
-        self.http_client
-            .post(self.url("/network/status"))
-            .json(&NetworkRequest {
+        self.call_endpoint(
+            "/network/status",
+            &NetworkRequest {
                 network_identifier,
                 metadata: None,
-            })
-            .send()
-            .await?
-            .json()
-            .await
+            },
+        )
+        .await
     }
 
     pub async fn block(
@@ -69,16 +80,14 @@ impl RosettaClient {
         network_identifier: NetworkIdentifier,
         block_identifier: PartialBlockIdentifier,
     ) -> reqwest::Result<BlockResponse> {
-        self.http_client
-            .post(self.url("/block"))
-            .json(&BlockRequest {
+        self.call_endpoint(
+            "/block",
+            &BlockRequest {
                 network_identifier: network_identifier.clone(),
                 block_identifier: block_identifier.clone(),
-            })
-            .send()
-            .await?
-            .json()
-            .await
+            },
+        )
+        .await
     }
 
     pub async fn block_transaction(
@@ -87,32 +96,36 @@ impl RosettaClient {
         block_identifier: BlockIdentifier,
         transaction_identifier: TransactionIdentifier,
     ) -> reqwest::Result<BlockTransactionResponse> {
-        self.http_client
-            .post(self.url("/block/transaction"))
-            .json(&BlockTransactionRequest {
+        self.call_endpoint(
+            "/block/transaction",
+            &BlockTransactionRequest {
                 network_identifier,
                 block_identifier,
                 transaction_identifier,
-            })
-            .send()
-            .await?
-            .json()
-            .await
+            },
+        )
+        .await
     }
 
     pub async fn mempool(
         &self,
         network_identifier: NetworkIdentifier,
     ) -> reqwest::Result<MempoolResponse> {
-        self.http_client
-            .post(self.url("/mempool"))
-            .json(&NetworkRequest {
+        self.call_endpoint(
+            "/mempool",
+            &NetworkRequest {
                 network_identifier,
                 metadata: None,
-            })
-            .send()
-            .await?
-            .json()
+            },
+        )
+        .await
+    }
+
+    pub async fn mempool_transaction(
+        &self,
+        mempool_transaction_request: MempoolTransactionRequest,
+    ) -> reqwest::Result<MempoolTransactionResponse> {
+        self.call_endpoint("/mempool/transaction", &mempool_transaction_request)
             .await
     }
 }
