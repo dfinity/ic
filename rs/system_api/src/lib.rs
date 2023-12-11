@@ -2901,8 +2901,8 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32> {
         let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_in_replicated_execution")),
-            ApiType::Init { .. }
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
