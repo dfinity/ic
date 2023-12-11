@@ -710,7 +710,7 @@ http_file(
 http_file(
     name = "nns_dapp_canister",
     downloaded_file_path = "nns_dapp_canister.wasm.gz",
-    sha256 = "dc1d5e2ab0993f9839379e96a7fdad8c8f7a4d2712e640deadd6a407eb5c8aa7",
+    sha256 = "10cd06c5912411a7e038c3a0f3160190ab3cf31b747c9707d1d7332b222a4933",
     url = "https://github.com/dfinity/nns-dapp/releases/download/sdvp-demo/nns-dapp_test.wasm.gz",
 )
 
