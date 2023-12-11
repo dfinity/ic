@@ -573,6 +573,24 @@ impl PayloadBuilder {
         self
     }
 
+    /// Push `int64` with current time. The time is given as nanoseconds since 1970-01-01.
+    pub fn time(mut self) -> Self {
+        self.0.push(Ops::Time as u8);
+        self
+    }
+
+    /// Push `int64` with canister cycles balance.
+    pub fn cycles_balance(mut self) -> Self {
+        self.0.push(Ops::CyclesBalance as u8);
+        self
+    }
+
+    /// Push `blob` with canister cycles balance.
+    pub fn cycles_balance128(mut self) -> Self {
+        self.0.push(Ops::CyclesBalance128 as u8);
+        self
+    }
+
     pub fn build(self) -> Vec<u8> {
         self.0
     }
