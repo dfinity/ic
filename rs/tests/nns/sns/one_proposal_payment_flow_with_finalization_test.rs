@@ -24,20 +24,21 @@ fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
 }
 
 fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
-    let cf_contribution = create_service_nervous_system_proposal()
+    let max_nf_contribution = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap()
-        .neurons_fund_investment_icp
+        .maximum_direct_participation_icp
         .unwrap()
         .e8s
-        .unwrap();
+        .unwrap()
+        * 2;
 
-    neurons_fund::initial_nns_neurons(cf_contribution * 100, 1)
+    neurons_fund::initial_nns_neurons(max_nf_contribution * 10, 1)
 }
 
 fn sns_setup_with_one_proposal(env: TestEnv) {
     sns_deployment::setup(
-        env,
+        &env,
         vec![],
         nns_nf_neurons(),
         create_service_nervous_system_proposal(),
@@ -47,7 +48,7 @@ fn sns_setup_with_one_proposal(env: TestEnv) {
 }
 
 fn wait_for_swap_to_start(env: TestEnv) {
-    block_on(swap_finalization::wait_for_swap_to_start(env));
+    block_on(swap_finalization::wait_for_swap_to_start(&env));
 }
 
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
@@ -65,19 +66,15 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     // participants, to allow the swap to have enough participants to close.
     let num_participants = swap_params.minimum_participants.unwrap();
 
-    let cf_contribution = create_service_nervous_system_proposal()
-        .swap_parameters
-        .unwrap()
-        .neurons_fund_investment_icp
-        .unwrap()
-        .e8s
-        .unwrap();
-
     // Calculate a value for `contribution_per_user` that will cause the icp
-    // raised by the swap to exactly equal `params.max_icp_e8s - cf_contribution`.
+    // raised by the swap to exactly equal `params.max_icp_e8s`.
     let contribution_per_user = ic_tests::util::divide_perfectly(
-        "max_icp_e8s",
-        swap_params.maximum_icp.unwrap().e8s.unwrap() - cf_contribution,
+        "maximum_direct_participation_icp",
+        swap_params
+            .maximum_direct_participation_icp
+            .unwrap()
+            .e8s
+            .unwrap(),
         num_participants,
     )
     .unwrap();
@@ -86,7 +83,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     // So if we set rps to `1`, and the duration to `num_participants`, we'll
     // have `num_participants` participants.
     generate_ticket_participants_workload(
-        env,
+        &env,
         1,
         Duration::from_secs(num_participants),
         contribution_per_user,
@@ -96,7 +93,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
 fn finalize_swap(env: TestEnv) {
     let create_service_nervous_system_proposal = create_service_nervous_system_proposal();
     block_on(finalize_committed_swap(
-        env,
+        &env,
         create_service_nervous_system_proposal,
     ));
 }

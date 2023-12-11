@@ -13,7 +13,7 @@ use ic_tests::systest;
 /// Issue just three workflows over 1 second - this allows detecting possible degradations in the workload metrics aggregator logic.
 fn multiple_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(
-        env,
+        &env,
         3,
         Duration::from_secs(1),
         SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,

@@ -90,7 +90,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     // So if we set rps to `1`, and the duration to `num_participants`, we'll
     // have `num_participants` participants.
     generate_ticket_participants_workload(
-        env,
+        &env,
         1,
         Duration::from_secs(num_participants),
         contribution_per_user,
@@ -100,7 +100,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
 fn finalize_swap(env: TestEnv) {
     let create_service_nervous_system_proposal = create_service_nervous_system_proposal();
     block_on(finalize_committed_swap(
-        env,
+        &env,
         create_service_nervous_system_proposal,
     ));
 }
