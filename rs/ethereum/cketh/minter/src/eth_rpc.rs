@@ -63,7 +63,7 @@ impl CandidType for Data {
     where
         S: candid::types::Serializer,
     {
-        serializer.serialize_text(&format!("{:#x}", self))
+        serializer.serialize_text(&format!("0x{}", hex::encode(self)))
     }
 }
 
