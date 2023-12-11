@@ -37,8 +37,8 @@ use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
-    STABLE_ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME, MAIN_ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+    DIRTY_PAGES_COUNTER_GLOBAL_NAME, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    MAIN_ACCESSED_PAGES_COUNTER_GLOBAL_NAME, STABLE_ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
 };
 use crate::{serialized_module::SerializedModuleBytes, wasm_utils::validation::ensure_determinism};
 
@@ -196,13 +196,9 @@ impl WasmtimeEmbedder {
         config.cranelift_opt_level(OptLevel::None);
         ensure_determinism(&mut config);
         disable_unused_features(&mut config);
-        if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled
-            || embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled
-        {
-            config.wasm_multi_memory(true);
-        }
-        // Enable 64-bit main memory
+        // Enable 64-bit main memory and if needed a byte map for guarding working set limit.
         config.wasm_memory64(true);
+        config.wasm_multi_memory(true);
         config
             // The maximum size in bytes where a linear memory is considered
             // static. Setting this to maximum Wasm memory size will guarantee
@@ -272,6 +268,7 @@ impl WasmtimeEmbedder {
         modification_tracking: ModificationTracking,
         heap_memory: &execution_state::Memory,
         stable_memory: &execution_state::Memory,
+        need_main_memory_byte_map: bool,
     ) -> Vec<WasmMemoryInfo> {
         let dirty_page_tracking = match (
             modification_tracking,
@@ -285,7 +282,7 @@ impl WasmtimeEmbedder {
 
         let mut result = vec![WasmMemoryInfo {
             name: WASM_HEAP_MEMORY_NAME,
-            bytemap_name: if self.config.feature_flags.write_barrier == FlagStatus::Enabled {
+            bytemap_name: if need_main_memory_byte_map {
                 Some(WASM_HEAP_BYTEMAP_MEMORY_NAME)
             } else {
                 None
@@ -438,8 +435,17 @@ impl WasmtimeEmbedder {
         }
 
         let mut memories = HashMap::new();
-        for memory_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory)
-        {
+
+        let need_main_memory_byte_map = instance
+            .get_memory(&mut store, WASM_HEAP_BYTEMAP_MEMORY_NAME)
+            .is_some();
+
+        for memory_info in self.list_memory_infos(
+            modification_tracking,
+            heap_memory,
+            stable_memory,
+            need_main_memory_byte_map,
+        ) {
             store =
                 self.instantiate_memory(memory_info, &instance, store, &mut memories, canister_id)?;
         }

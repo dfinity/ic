@@ -2244,16 +2244,16 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     linker
         .func_wrap("__", "main_read_page_guard", {
-            move |mut caller: Caller<'_, StoreData<S>>, page_index: i64| {
-                main_read_page_guard(&mut caller, page_index as u64 as usize)
+            move |mut caller: Caller<'_, StoreData<S>>, page_index: i32| {
+                main_read_page_guard(&mut caller, page_index as u32 as usize)
             }
         })
         .unwrap();
 
     linker
         .func_wrap("__", "main_write_page_guard", {
-            move |mut caller: Caller<'_, StoreData<S>>, page_index: i64| {
-                main_write_page_guard(&mut caller, page_index as u64 as usize)
+            move |mut caller: Caller<'_, StoreData<S>>, page_index: i32| {
+                main_write_page_guard(&mut caller, page_index as u32 as usize)
             }
         })
         .unwrap();
