@@ -150,12 +150,13 @@ pub(crate) enum InjectedImports {
     // Optional 64-bit main memory support functions
     MainReadPageGuard,
     MainWritePageGuard,
+    MainBulkAccessGuard,
 }
 
 impl InjectedImports {
     const BASIC_FUNCTIONS_COUNT: usize = 2;
     const OPTIONAL_STABLE_FUNCTIONS_COUNT: usize = 3;
-    const OPTIONAL_MEMORY64_FUNCTIONS_COUNT: usize = 2;
+    const OPTIONAL_MEMORY64_FUNCTIONS_COUNT: usize = 3;
 
     fn count(main_memory_mode: MemoryMode, wasm_native_stable_memory: FlagStatus) -> usize {
         let mut count = Self::BASIC_FUNCTIONS_COUNT;
@@ -187,6 +188,10 @@ impl InjectedImports {
             InjectedImports::MainWritePageGuard => {
                 assert!(main_memory_mode == MemoryMode::Memory64);
                 functions_count_base + 1
+            }
+            InjectedImports::MainBulkAccessGuard => {
+                assert!(main_memory_mode == MemoryMode::Memory64);
+                functions_count_base + 2
             }
             _ => unimplemented!(),
         }
@@ -503,6 +508,7 @@ const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const STABLE_READ_FIRST_ACCESS_NAME: &str = "stable_read_first_access";
 const MAIN_READ_PAGE_GUARD_NAME: &str = "main_read_page_guard";
 const MAIN_WRITE_PAGE_GUARD_NAME: &str = "main_write_page_guard";
+const MAIN_BULK_ACCESS_GUARD_NAME: &str = "main_bulk_access_guard";
 const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
 pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
@@ -695,6 +701,15 @@ fn inject_helper_functions(
             ty: TypeRef::Func(write_page_guard_index),
         };
         module.imports.push(write_page_guard_import);
+
+        let bulk_access_guard_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], []);
+        let bulk_access_guard_index = add_func_type(&mut module, bulk_access_guard_type);
+        let bulk_access_guard_import = Import {
+            module: INSTRUMENTED_FUN_MODULE,
+            name: MAIN_BULK_ACCESS_GUARD_NAME,
+            ty: TypeRef::Func(bulk_access_guard_index),
+        };
+        module.imports.push(bulk_access_guard_import);
     }
 
     module.imports.append(&mut old_imports);
@@ -738,6 +753,12 @@ fn inject_helper_functions(
             .name,
             "main_write_page_guard"
         );
+        debug_assert_eq!(
+            module.imports[InjectedImports::MainBulkAccessGuard
+                .get_index(main_memory_mode, wasm_native_stable_memory)]
+            .name,
+            "main_bulk_access_guard"
+        )
     }
 
     module
@@ -1697,6 +1718,116 @@ fn memory64_barrier_instructions<'a>(
     instructions
 }
 
+const IS_BULK_READ: i32 = 0;
+const IS_BULK_WRITE: i32 = 1;
+
+fn memory_copy_barrier_instructions<'a>(
+    destination_argument_index: u32,
+    source_argument_index: u32,
+    length_argument_index: u32,
+    wasm_native_stable_memory: FlagStatus,
+) -> Vec<Operator<'a>> {
+    use Operator::*;
+    let bulk_access_guard_index = InjectedImports::MainBulkAccessGuard
+        .get_index(MemoryMode::Memory64, wasm_native_stable_memory)
+        as u32;
+    vec![
+        // Backup arguments.
+        LocalSet {
+            local_index: length_argument_index,
+        },
+        LocalSet {
+            local_index: source_argument_index,
+        },
+        LocalSet {
+            local_index: destination_argument_index,
+        },
+        // Bulk read guard on the source segment.
+        LocalGet {
+            local_index: source_argument_index,
+        },
+        LocalGet {
+            local_index: length_argument_index,
+        },
+        I32Const {
+            value: IS_BULK_READ,
+        },
+        Call {
+            function_index: bulk_access_guard_index,
+        },
+        // Bulk write guard on the destination segment.
+        LocalGet {
+            local_index: destination_argument_index,
+        },
+        LocalGet {
+            local_index: length_argument_index,
+        },
+        I32Const {
+            value: IS_BULK_WRITE,
+        },
+        Call {
+            function_index: bulk_access_guard_index,
+        },
+        // Restore arguments
+        LocalGet {
+            local_index: destination_argument_index,
+        },
+        LocalGet {
+            local_index: source_argument_index,
+        },
+        LocalGet {
+            local_index: length_argument_index,
+        },
+    ]
+}
+
+fn memory_fill_barrier_instructions<'a>(
+    destination_argument_index: u32,
+    val_i32_index: u32,
+    length_argument_index: u32,
+    wasm_native_stable_memory: FlagStatus,
+) -> Vec<Operator<'a>> {
+    use Operator::*;
+    let bulk_access_guard_index = InjectedImports::MainBulkAccessGuard
+        .get_index(MemoryMode::Memory64, wasm_native_stable_memory)
+        as u32;
+    vec![
+        // Backup arguments.
+        LocalSet {
+            local_index: length_argument_index,
+        },
+        LocalSet {
+            local_index: val_i32_index,
+        },
+        LocalSet {
+            local_index: destination_argument_index,
+        },
+        // Bulk write guard on the destination segment.
+        LocalGet {
+            local_index: destination_argument_index,
+        },
+        LocalGet {
+            local_index: length_argument_index,
+        },
+        I32Const {
+            value: IS_BULK_WRITE,
+        },
+        Call {
+            function_index: bulk_access_guard_index,
+        },
+        // Restore arguments
+        LocalGet {
+            local_index: destination_argument_index,
+        },
+        LocalGet {
+            local_index: val_i32_index,
+        },
+        LocalGet {
+            local_index: length_argument_index,
+        },
+    ]
+}
+
 fn inject_mem_barrier(
     func_body: &mut wasm_transform::Body,
     func_type: &FuncType,
@@ -1708,6 +1839,7 @@ fn inject_mem_barrier(
     let mut val_i64_needed = false;
     let mut val_f32_needed = false;
     let mut val_f64_needed = false;
+    let mut memory_length_needed = false;
 
     let mut injection_points: Vec<usize> = Vec::new();
     {
@@ -1757,6 +1889,16 @@ fn inject_mem_barrier(
                 }
                 F64Store { .. } => {
                     val_f64_needed = true;
+                    injection_points.push(idx)
+                }
+                MemoryCopy { .. } if main_memory_mode == MemoryMode::Memory64 => {
+                    val_i64_needed = true;
+                    memory_length_needed = true;
+                    injection_points.push(idx)
+                }
+                MemoryFill { .. } if main_memory_mode == MemoryMode::Memory64 => {
+                    val_i32_needed = true;
+                    memory_length_needed = true;
                     injection_points.push(idx)
                 }
                 _ => (),
@@ -1818,6 +1960,15 @@ fn inject_mem_barrier(
             arg_f64_val_idx = u32::MAX;
         }
 
+        let memory_length_index = if memory_length_needed {
+            let memory_length_index = next_local;
+            next_local += 1;
+            func_body.locals.push((1, ValType::I64));
+            Some(memory_length_index)
+        } else {
+            None
+        };
+
         let byte_map_index = if main_memory_mode == MemoryMode::Memory64 {
             let byte_map_index = next_local;
             // next_local += 1;
@@ -1840,19 +1991,18 @@ fn inject_mem_barrier(
                 | I32Load8U { memarg }
                 | I32Load8S { memarg }
                 | I32Load16U { memarg }
-                | I32Load16S { memarg } => match main_memory_mode {
-                    MemoryMode::Memory64 => {
-                        elems.extend_from_slice(&memory64_barrier_instructions(
-                            AccessKind::Load,
-                            memarg.offset,
-                            access_size.unwrap(),
-                            arg_address_idx,
-                            byte_map_index.unwrap(),
-                            wasm_native_stable_memory,
-                        ))
-                    }
-                    MemoryMode::Memory32 => {}
-                },
+                | I32Load16S { memarg }
+                    if main_memory_mode == MemoryMode::Memory64 =>
+                {
+                    elems.extend_from_slice(&memory64_barrier_instructions(
+                        AccessKind::Load,
+                        memarg.offset,
+                        access_size.unwrap(),
+                        arg_address_idx,
+                        byte_map_index.unwrap(),
+                        wasm_native_stable_memory,
+                    ));
+                }
                 I32Store { memarg } | I32Store8 { memarg } | I32Store16 { memarg } => {
                     match main_memory_mode {
                         MemoryMode::Memory64 => {
@@ -1882,19 +2032,18 @@ fn inject_mem_barrier(
                 | I64Load16U { memarg }
                 | I64Load16S { memarg }
                 | I64Load32U { memarg }
-                | I64Load32S { memarg } => match main_memory_mode {
-                    MemoryMode::Memory64 => {
-                        elems.extend_from_slice(&memory64_barrier_instructions(
-                            AccessKind::Load,
-                            memarg.offset,
-                            access_size.unwrap(),
-                            arg_address_idx,
-                            byte_map_index.unwrap(),
-                            wasm_native_stable_memory,
-                        ))
-                    }
-                    MemoryMode::Memory32 => {}
-                },
+                | I64Load32S { memarg }
+                    if main_memory_mode == MemoryMode::Memory64 =>
+                {
+                    elems.extend_from_slice(&memory64_barrier_instructions(
+                        AccessKind::Load,
+                        memarg.offset,
+                        access_size.unwrap(),
+                        arg_address_idx,
+                        byte_map_index.unwrap(),
+                        wasm_native_stable_memory,
+                    ));
+                }
                 I64Store { memarg }
                 | I64Store8 { memarg }
                 | I64Store16 { memarg }
@@ -1917,19 +2066,16 @@ fn inject_mem_barrier(
                         arg_address_idx,
                     )),
                 },
-                F32Load { memarg } => match main_memory_mode {
-                    MemoryMode::Memory64 => {
-                        elems.extend_from_slice(&memory64_barrier_instructions(
-                            AccessKind::Load,
-                            memarg.offset,
-                            access_size.unwrap(),
-                            arg_address_idx,
-                            byte_map_index.unwrap(),
-                            wasm_native_stable_memory,
-                        ))
-                    }
-                    MemoryMode::Memory32 => {}
-                },
+                F32Load { memarg } if main_memory_mode == MemoryMode::Memory64 => {
+                    elems.extend_from_slice(&memory64_barrier_instructions(
+                        AccessKind::Load,
+                        memarg.offset,
+                        access_size.unwrap(),
+                        arg_address_idx,
+                        byte_map_index.unwrap(),
+                        wasm_native_stable_memory,
+                    ));
+                }
                 F32Store { memarg } => match main_memory_mode {
                     MemoryMode::Memory64 => {
                         elems.extend_from_slice(&memory64_barrier_instructions(
@@ -1949,19 +2095,16 @@ fn inject_mem_barrier(
                         arg_address_idx,
                     )),
                 },
-                F64Load { memarg } => match main_memory_mode {
-                    MemoryMode::Memory64 => {
-                        elems.extend_from_slice(&memory64_barrier_instructions(
-                            AccessKind::Load,
-                            memarg.offset,
-                            access_size.unwrap(),
-                            arg_address_idx,
-                            byte_map_index.unwrap(),
-                            wasm_native_stable_memory,
-                        ))
-                    }
-                    MemoryMode::Memory32 => {}
-                },
+                F64Load { memarg } if main_memory_mode == MemoryMode::Memory64 => {
+                    elems.extend_from_slice(&memory64_barrier_instructions(
+                        AccessKind::Load,
+                        memarg.offset,
+                        access_size.unwrap(),
+                        arg_address_idx,
+                        byte_map_index.unwrap(),
+                        wasm_native_stable_memory,
+                    ));
+                }
                 F64Store { memarg } => match main_memory_mode {
                     MemoryMode::Memory64 => {
                         elems.extend_from_slice(&memory64_barrier_instructions(
@@ -1981,6 +2124,25 @@ fn inject_mem_barrier(
                         arg_address_idx,
                     )),
                 },
+                MemoryCopy { dst_mem, src_mem } if main_memory_mode == MemoryMode::Memory64 => {
+                    assert_eq!(dst_mem, 0);
+                    assert_eq!(src_mem, 0);
+                    elems.extend_from_slice(&memory_copy_barrier_instructions(
+                        arg_address_idx,
+                        arg_i64_val_idx,
+                        memory_length_index.unwrap(),
+                        wasm_native_stable_memory,
+                    ));
+                }
+                MemoryFill { mem } if main_memory_mode == MemoryMode::Memory64 => {
+                    assert_eq!(mem, 0);
+                    elems.extend_from_slice(&memory_fill_barrier_instructions(
+                        arg_address_idx,
+                        arg_i32_val_idx,
+                        memory_length_index.unwrap(),
+                        wasm_native_stable_memory,
+                    ));
+                }
                 _ => {}
             }
             // add the original store instruction itself

@@ -2259,6 +2259,22 @@ pub(crate) fn syscalls<S: SystemApi>(
         .unwrap();
 
     linker
+        .func_wrap("__", "main_bulk_access_guard", {
+            move |mut caller: Caller<'_, StoreData<S>>,
+                  start_address: i64,
+                  length: i64,
+                  write_access: i32| {
+                main_bulk_access_guard(
+                    &mut caller,
+                    start_address as u64 as usize,
+                    length as u64 as usize,
+                    write_access,
+                )
+            }
+        })
+        .unwrap();
+
+    linker
 }
 
 const NO_ACCESS: u8 = 0;
@@ -2311,6 +2327,30 @@ fn main_write_page_guard<S: SystemApi>(
     bytemap[page_index] = WRITE_ACCESS;
     if bytemap[page_index] == NO_ACCESS {
         first_access_on_main_memory_page(&mut caller)?;
+    }
+    Ok(())
+}
+
+// Used during 64-bit main memory to guard the working set limit for bulk memory operations,
+// that potentially access multiple consecutive pages.
+// * `memory.copy` (reading and writing)
+// * `memory.fill` (write)
+#[inline(never)]
+fn main_bulk_access_guard<S: SystemApi>(
+    mut caller: &mut Caller<'_, StoreData<S>>,
+    start_address: usize,
+    length: usize,
+    write_access: i32,
+) -> Result<(), anyhow::Error> {
+    let write_access = write_access != 0;
+    let start_page = start_address / PAGE_SIZE;
+    let end_page = (start_address + length - 1) / PAGE_SIZE;
+    for page_index in start_page..end_page + 1 {
+        if write_access {
+            main_write_page_guard(&mut caller, page_index)?;
+        } else {
+            main_read_page_guard(&mut caller, page_index)?;
+        }
     }
     Ok(())
 }
