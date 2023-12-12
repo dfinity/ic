@@ -5,7 +5,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{mem::size_of_val, sync::Mutex};
+use std::{mem::size_of_val, sync::Mutex, time::Duration};
 
 use crate::metrics::duration_histogram;
 
@@ -21,6 +21,7 @@ pub(crate) struct QueryCacheMetrics {
     pub evicted_entries_duration: Histogram,
     pub invalidated_entries: IntCounter,
     pub invalidated_entries_by_time: IntCounter,
+    pub invalidated_entries_by_max_expiry_time: IntCounter,
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
     pub invalidated_entries_duration: Histogram,
@@ -55,6 +56,10 @@ impl QueryCacheMetrics {
             invalidated_entries_by_time: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_time_total",
                 "The total number of invalidated entries due to the changed time",
+            ),
+            invalidated_entries_by_max_expiry_time: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_max_expiry_time_total",
+                "The total number of invalidated entries due to the max expiry time",
             ),
             invalidated_entries_by_canister_version: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_canister_version_total",
@@ -167,12 +172,24 @@ impl EntryValue {
         Self { env, result }
     }
 
-    fn is_valid(&self, env: &EntryEnv) -> bool {
-        self.env == *env
+    fn is_valid(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
+        self.is_valid_time(env)
+            && self.is_not_expired(env, max_expiry_time)
+            && self.is_valid_canister_version(env)
+            && self.is_valid_canister_balance(env)
     }
 
     fn is_valid_time(&self, env: &EntryEnv) -> bool {
         self.env.batch_time == env.batch_time
+    }
+
+    /// Check cache entry max expiration time.
+    fn is_not_expired(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
+        if let Some(duration) = env.batch_time.checked_sub(self.env.batch_time) {
+            duration <= max_expiry_time
+        } else {
+            true
+        }
     }
 
     fn is_valid_canister_version(&self, env: &EntryEnv) -> bool {
@@ -198,7 +215,9 @@ pub(crate) struct QueryCache {
     // We can't use `RwLock`, as the `LruCache::get()` requires mutable reference
     // to update the LRU.
     cache: Mutex<LruCache<EntryKey, EntryValue>>,
-    // Query cache metrics (public for tests)
+    /// The upper limit on how long the cache entry stays valid in the query cache.
+    max_expiry_time: Duration,
+    /// Query cache metrics (public for tests)
     pub(crate) metrics: QueryCacheMetrics,
 }
 
@@ -209,9 +228,15 @@ impl CountBytes for QueryCache {
 }
 
 impl QueryCache {
-    pub(crate) fn new(metrics_registry: &MetricsRegistry, capacity: NumBytes) -> Self {
+    /// Create a new `QueryCache` instance.
+    pub(crate) fn new(
+        metrics_registry: &MetricsRegistry,
+        capacity: NumBytes,
+        max_expiry_time: Duration,
+    ) -> Self {
         QueryCache {
             cache: Mutex::new(LruCache::new(capacity)),
+            max_expiry_time,
             metrics: QueryCacheMetrics::new(metrics_registry),
         }
     }
@@ -225,7 +250,7 @@ impl QueryCache {
         let now = env.batch_time;
 
         if let Some(value) = cache.get(key) {
-            if value.is_valid(env) {
+            if value.is_valid(env, self.max_expiry_time) {
                 let res = value.result();
                 // Update the metrics.
                 self.metrics.hits.inc();
@@ -242,6 +267,9 @@ impl QueryCache {
                 // For the sake of correctness, we need a fall-through logic here.
                 if !value.is_valid_time(env) {
                     self.metrics.invalidated_entries_by_time.inc();
+                }
+                if !value.is_not_expired(env, self.max_expiry_time) {
+                    self.metrics.invalidated_entries_by_max_expiry_time.inc();
                 }
                 if !value.is_valid_canister_version(env) {
                     self.metrics.invalidated_entries_by_canister_version.inc();

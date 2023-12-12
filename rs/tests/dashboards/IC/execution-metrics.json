@@ -8877,6 +8877,20 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_max_expiry_time_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "Max expiry time",
+              "range": true,
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
               "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_canister_version_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
               "hide": false,
               "legendFormat": "Canister version",

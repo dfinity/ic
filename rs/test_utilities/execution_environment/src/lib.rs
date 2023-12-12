@@ -63,9 +63,12 @@ use ic_wasm_types::BinaryEncodedWasm;
 
 use ic_config::embedders::MeteringType;
 use maplit::{btreemap, btreeset};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    time::Duration,
+};
 use std::{os::unix::prelude::FileExt, str::FromStr};
 use tempfile::NamedTempFile;
 
@@ -1796,6 +1799,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_query_cache_capacity(mut self, capacity_bytes: u64) -> Self {
         self.execution_config.query_cache_capacity = capacity_bytes.into();
+        self
+    }
+
+    pub fn with_query_cache_max_expiry_time(mut self, max_expiry_time: Duration) -> Self {
+        self.execution_config.query_cache_max_expiry_time = max_expiry_time;
         self
     }
 
