@@ -4731,7 +4731,7 @@ async fn main() {
 
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
-            let file_downloader = FileDownloader::new(None).follow_redirects();
+            let file_downloader = FileDownloader::new(None);
 
             let mut result = Err(anyhow!("Download of release package failed."));
             for url in version.release_package_urls.iter() {
