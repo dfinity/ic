@@ -224,8 +224,7 @@ where
     }
 
     /// Event loop that processes advert updates and artifact downloads.
-    /// The event loop preserves the following invariant:
-    ///  - The number of download tasks is equal to the total number of distinct slot entries.
+    /// The event loop preserves the invariants checked with `debug_assert`.
     async fn start_event_loop(mut self) {
         let mut priority_fn_interval = time::interval(PRIORITY_FUNCTION_UPDATE_INTERVAL);
         priority_fn_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -435,7 +434,7 @@ where
         }
     }
 
-    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop a `DownloadResult` is returned.
+    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop `DownloadStopped` is returned.
     async fn wait_fetch(
         id: &Artifact::Id,
         attr: &Artifact::Attribute,
@@ -484,8 +483,9 @@ where
     /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
     ///
     /// The download fails iff:
-    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadResult::PriorityIsDrop`]
-    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadResult::AllPeersDeletedTheArtifact`]
+    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadStopped::PriorityIsDrop`]
+    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
+    /// and the failure condition is reported in the error variant of the returned result.
     async fn download_artifact(
         log: ReplicaLogger,
         id: &Artifact::Id,
@@ -574,7 +574,7 @@ where
 
     /// Tries to download the given artifact, and insert it into the unvalidated pool.
     ///
-    /// This future completes waits for all peers that advertise the artifact to delete it.
+    /// This future waits for all peers that advertise the artifact to delete it.
     /// The artifact is deleted from the unvalidated pool upon completion.
     async fn process_advert(
         log: ReplicaLogger,
@@ -755,7 +755,7 @@ mod tests {
         }
     }
 
-    /// Check that all variants of stale advers to not get added to the slot table.
+    /// Check that all variants of stale adverts to not get added to the slot table.
     #[test]
     fn receiving_stale_advert_updates() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -911,7 +911,7 @@ mod tests {
         });
     }
 
-    /// Check that adverts updates with higher connnection ids take precedence.
+    /// Check that adverts updates with higher connection ids take precedence.
     #[test]
     fn overwrite_slot() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
