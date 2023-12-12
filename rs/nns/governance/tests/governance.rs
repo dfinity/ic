@@ -44,12 +44,12 @@ use ic_nns_governance::{
         test_data::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
-        validate_proposal_title, Environment, Governance, HeapGrowthPotential, DEPRECATED_TOPICS,
-        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
-        MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
-        ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
-        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        validate_proposal_title, Environment, Governance, HeapGrowthPotential, TimeWarp,
+        DEPRECATED_TOPICS, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
+        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
@@ -327,9 +327,6 @@ fn test_single_neuron_proposal_new() {
                         GovernanceCachedMetricsChange::NotDissolvingNeuronsCountBuckets(vec![
                             MapChange::Added(1, 1),
                         ]),
-                        GovernanceCachedMetricsChange::GarbageCollectableNeuronsCount(U64Change(
-                            0, 1
-                        )),
                         GovernanceCachedMetricsChange::TotalStakedE8S(U64Change(0, 1)),
                         GovernanceCachedMetricsChange::TotalLockedE8S(U64Change(0, 1)),
                         GovernanceCachedMetricsChange::NotDissolvingNeuronsStakedMaturityE8SEquivalentBuckets(vec![
@@ -9239,7 +9236,7 @@ fn test_update_stake() {
 
 #[test]
 fn test_compute_cached_metrics() {
-    let now = 100;
+    let now = 1_700_000_000;
     let neurons = btreemap! {
         1 => Neuron {
             id: Some(NeuronId {id: 1}),
@@ -9368,7 +9365,7 @@ fn test_compute_cached_metrics() {
     let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(147, 0).unwrap());
 
     let expected_metrics = GovernanceCachedMetrics {
-        timestamp_seconds: 100,
+        timestamp_seconds: now,
         total_supply_icp: 147,
         dissolving_neurons_count: 5,
         dissolving_neurons_e8s_buckets: hashmap! {
@@ -9388,7 +9385,7 @@ fn test_compute_cached_metrics() {
         not_dissolving_neurons_count_buckets: hashmap! {0 => 3, 2 => 1, 8 => 2, 16 => 1},
         dissolved_neurons_count: 3,
         dissolved_neurons_e8s: 5770000000,
-        garbage_collectable_neurons_count: 2,
+        garbage_collectable_neurons_count: 0,
         neurons_with_invalid_stake_count: 1,
         total_staked_e8s: 39_894_000_100,
         neurons_with_less_than_6_months_dissolve_delay_count: 6,
@@ -9426,6 +9423,68 @@ fn test_compute_cached_metrics() {
     };
 
     assert_eq!(expected_metrics, actual_metrics);
+}
+
+#[test]
+fn test_compute_cached_metrics_inactive_neuron_in_heap() {
+    // Step 1: prepare 3 neurons with different dissolved time.
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            ..Default::default()
+        },
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+    let neuron_store = &mut gov.neuron_store;
+    let now = neuron_store.now();
+    // Add neurons that dissolved at different times in the past: 1 day ago, 13 days ago, and 30
+    // days ago.
+    neuron_store
+        .add_neuron(Neuron {
+            id: Some(NeuronId { id: 1 }),
+            cached_neuron_stake_e8s: 0,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now - ONE_DAY_SECONDS,
+            )),
+            ..Default::default()
+        })
+        .unwrap();
+    neuron_store
+        .add_neuron(Neuron {
+            id: Some(NeuronId { id: 2 }),
+            cached_neuron_stake_e8s: 0,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now - 13 * ONE_DAY_SECONDS,
+            )),
+            ..Default::default()
+        })
+        .unwrap();
+    neuron_store
+        .add_neuron(Neuron {
+            id: Some(NeuronId { id: 3 }),
+            cached_neuron_stake_e8s: 0,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now - 30 * ONE_DAY_SECONDS,
+            )),
+            ..Default::default()
+        })
+        .unwrap();
+
+    // Step 2: verify that 1 neuron (3) are inactive.
+    let actual_metrics =
+        gov.compute_cached_metrics(gov.neuron_store.now(), Tokens::new(147, 0).unwrap());
+    assert_eq!(actual_metrics.garbage_collectable_neurons_count, 1);
+
+    // Step 3: 2 days pass, and now neuron (2) is dissolved 15 days ago, and becomes inactive.
+    gov.neuron_store.set_time_warp(TimeWarp {
+        delta_s: 2 * ONE_DAY_SECONDS as i64,
+    });
+    let actual_metrics =
+        gov.compute_cached_metrics(gov.neuron_store.now(), Tokens::new(147, 0).unwrap());
+    assert_eq!(actual_metrics.garbage_collectable_neurons_count, 2);
 }
 
 /// Creates a fixture with one neuron, aging since the test start timestamp, in

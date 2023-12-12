@@ -292,7 +292,7 @@ impl NeuronStore {
     }
 
     /// If there is a bug (related to lock acquisition), this could return u64::MAX.
-    fn now(&self) -> u64 {
+    pub fn now(&self) -> u64 {
         self.clock.now()
     }
 
