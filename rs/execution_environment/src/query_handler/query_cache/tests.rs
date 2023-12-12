@@ -480,11 +480,72 @@ fn query_cache_env_different_batch_time_returns_different_results() {
         assert_eq!(output_1, output_2);
         assert_eq!(1, metrics.invalidated_entries.get());
         assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_max_expiry_time.get());
         assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
         assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
         assert_eq!(
             1,
             metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
+    }
+}
+
+#[test]
+fn query_cache_env_expired_entries_returns_different_results() {
+    let max_expiry_time = Duration::from_secs(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_max_expiry_time(max_expiry_time)
+        .build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let query_handler = downcast_query_handler(test.query_handler());
+        assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
+        assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+    }
+    test.state_mut().metadata.batch_time += max_expiry_time + Duration::from_secs(1);
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
+        assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(1, metrics.invalidated_entries_by_max_expiry_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
+        assert_eq!(
+            (max_expiry_time + Duration::from_secs(1)).as_secs(),
+            metrics.invalidated_entries_duration.get_sample_sum() as u64
         );
         assert_eq!(
             1,
@@ -537,6 +598,7 @@ fn query_cache_env_invalidated_entries_negative_duration_works() {
             .metrics;
         assert_eq!(output_1, output_2);
         assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_max_expiry_time.get());
         // Negative durations should give just 0.
         assert_eq!(
             0,
@@ -593,6 +655,7 @@ fn query_cache_env_different_canister_version_returns_different_results() {
         assert_eq!(output_1, output_2);
         assert_eq!(1, metrics.invalidated_entries.get());
         assert_eq!(0, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_max_expiry_time.get());
         assert_eq!(1, metrics.invalidated_entries_by_canister_version.get());
         assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
         assert_eq!(
@@ -650,6 +713,7 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
         assert_eq!(output_1, output_2);
         assert_eq!(1, metrics.invalidated_entries.get());
         assert_eq!(0, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_max_expiry_time.get());
         assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
         assert_eq!(1, metrics.invalidated_entries_by_canister_balance.get());
         assert_eq!(
@@ -665,7 +729,11 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
 
 #[test]
 fn query_cache_env_combined_invalidation() {
-    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let max_expiry_time = Duration::from_secs(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_max_expiry_time(max_expiry_time)
+        .build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let output_1 = test.query(
         UserQuery {
@@ -679,7 +747,7 @@ fn query_cache_env_combined_invalidation() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    test.state_mut().metadata.batch_time += Duration::from_secs(1);
+    test.state_mut().metadata.batch_time += max_expiry_time + Duration::from_secs(1);
     test.canister_state_mut(canister_id)
         .system_state
         .canister_version += 1;
@@ -706,6 +774,7 @@ fn query_cache_env_combined_invalidation() {
         assert_eq!(output_1, output_2);
         assert_eq!(1, metrics.invalidated_entries.get());
         assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(1, metrics.invalidated_entries_by_max_expiry_time.get());
         assert_eq!(1, metrics.invalidated_entries_by_canister_version.get());
         assert_eq!(1, metrics.invalidated_entries_by_canister_balance.get());
     }
