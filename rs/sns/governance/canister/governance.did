@@ -41,7 +41,6 @@ type CanisterStatusType = variant { stopped; stopping; running };
 type ChangeAutoStakeMaturity = record {
   requested_setting_for_auto_stake_maturity : bool;
 };
-type ChangeFeeCollector = variant { SetTo : Account; Unset : record {} };
 type ClaimOrRefresh = record { by : opt By };
 type ClaimOrRefreshResponse = record { refreshed_neuron_id : opt NeuronId };
 type ClaimSwapNeuronsRequest = record {
@@ -227,10 +226,7 @@ type ListProposals = record {
   include_status : vec int32;
 };
 type ListProposalsResponse = record { proposals : vec ProposalData };
-type ManageLedgerParameters = record {
-  transfer_fee : opt nat64;
-  change_fee_collector : opt ChangeFeeCollector;
-};
+type ManageLedgerParameters = record { transfer_fee : opt nat64 };
 type ManageNeuron = record { subaccount : vec nat8; command : opt Command };
 type ManageNeuronResponse = record { command : opt Command_1 };
 type ManageSnsMetadata = record {

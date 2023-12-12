@@ -4,7 +4,6 @@ use crate::{
     logs::INFO,
     pb::v1::{
         governance::{SnsMetadata, Version},
-        manage_ledger_parameters::ChangeFeeCollector,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         proposal,
         proposal::Action,
@@ -945,35 +944,6 @@ fn validate_and_render_manage_ledger_parameters(
             "# Set token transfer fee: {} token-quantums. \n",
             transfer_fee
         );
-        no_change = false;
-    }
-    if let Some(change_fee_collector) = &manage_ledger_parameters.change_fee_collector {
-        match change_fee_collector {
-            ChangeFeeCollector::SetTo(set_fee_collector) => {
-                let fee_collector_subaccount = set_fee_collector.subaccount.clone();
-                if let Some(ref s) = fee_collector_subaccount {
-                    if s.subaccount.len() != 32 {
-                        return Err(String::from(
-                            "If a subaccount is set for the fee-collector, it must be 32 bytes.",
-                        ));
-                    }
-                }
-                render += &format!(
-                    "# Set the fee collector account: {} \n",
-                    Account {
-                        owner: set_fee_collector
-                            .owner
-                            .ok_or(String::from("Fee collector account owner must be set"))?
-                            .into(),
-                        subaccount: fee_collector_subaccount
-                            .map(|s| s.subaccount.try_into().unwrap()),
-                    }
-                );
-            }
-            ChangeFeeCollector::Unset(_) => {
-                render += "# Unset the fee collector account\n";
-            }
-        }
         no_change = false;
     }
     if no_change {
@@ -3243,57 +3213,15 @@ Version {
     }
 
     #[test]
-    fn validate_and_render_manage_ledger_parameters_render_new_transfer_fee() {
-        let new_fee = 751;
-        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
-            transfer_fee: Some(new_fee),
-            ..Default::default()
-        })
-        .unwrap();
-        assert!(render.contains(&format!("transfer fee: {new_fee}")));
-    }
-
-    #[test]
-    fn validate_and_render_manage_ledger_parameters_render_new_fee_collector() {
-        let new_fee_collector = Account {
-            owner: candid::Principal::from_slice(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
-            subaccount: None,
-        };
-        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
-            change_fee_collector: Some(ChangeFeeCollector::SetTo(new_fee_collector.into())),
-            ..Default::default()
-        })
-        .unwrap();
-        assert!(render.contains(&format!(
-            "Set the fee collector account: {new_fee_collector}"
-        )));
-    }
-
-    #[test]
-    fn validate_and_render_manage_ledger_parameters_render_unset_fee_collector() {
-        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
-            change_fee_collector: Some(ChangeFeeCollector::Unset(Empty {})),
-            ..Default::default()
-        })
-        .unwrap();
-        assert!(render.contains("Unset the fee collector account"));
-    }
-
-    #[test]
     fn test_validate_and_render_manage_ledger_parameters() {
         let new_fee = 751;
-        let new_fee_collector = Account {
-            owner: candid::Principal::from_slice(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
-            subaccount: None,
-        };
         let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
             transfer_fee: Some(new_fee),
-            change_fee_collector: Some(ChangeFeeCollector::SetTo(new_fee_collector.into())),
         })
         .unwrap();
         assert_eq!(
             render,
-            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n# Set the fee collector account: {} \n", new_fee, new_fee_collector)
+            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n", new_fee)
         );
     }
 }

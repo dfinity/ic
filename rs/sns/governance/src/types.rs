@@ -14,7 +14,7 @@ use crate::{
                 self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
             },
             governance_error::ErrorType,
-            manage_ledger_parameters, manage_neuron, manage_neuron_response,
+            manage_neuron, manage_neuron_response,
             manage_neuron_response::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
@@ -2079,22 +2079,6 @@ impl From<DeregisterDappCanisters> for Action {
 impl From<MintSnsTokens> for Action {
     fn from(mint_sns_tokens: MintSnsTokens) -> Action {
         Action::MintSnsTokens(mint_sns_tokens)
-    }
-}
-
-impl TryFrom<manage_ledger_parameters::ChangeFeeCollector> for ic_icrc1_ledger::ChangeFeeCollector {
-    type Error = String;
-    fn try_from(
-        change_fee_collector: manage_ledger_parameters::ChangeFeeCollector,
-    ) -> Result<Self, Self::Error> {
-        match change_fee_collector {
-            manage_ledger_parameters::ChangeFeeCollector::Unset(_) => {
-                Ok(ic_icrc1_ledger::ChangeFeeCollector::Unset)
-            }
-            manage_ledger_parameters::ChangeFeeCollector::SetTo(account) => Ok(
-                ic_icrc1_ledger::ChangeFeeCollector::SetTo(account.try_into()?),
-            ),
-        }
     }
 }
 
