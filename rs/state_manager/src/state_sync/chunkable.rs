@@ -13,7 +13,7 @@ use ic_sys::mmap::ScopedMmap;
 use ic_types::{
     artifact::{Artifact, StateSyncMessage},
     chunkable::{
-        ArtifactChunk, ArtifactChunkData,
+        ArtifactChunk,
         ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
         ChunkId, Chunkable,
     },
@@ -1159,8 +1159,7 @@ impl Chunkable for IncompleteState {
 
     fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
         let ix = artifact_chunk.chunk_id.get();
-        let ArtifactChunkData::SemiStructuredChunkData(ref payload) =
-            artifact_chunk.artifact_chunk_data;
+        let payload = &artifact_chunk.chunk;
         match &mut self.state {
             DownloadState::Complete(ref artifact) => {
                 debug!(

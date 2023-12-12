@@ -56,7 +56,7 @@ pub(crate) async fn state_sync_chunk_handler(
         tokio::task::spawn_blocking(
             move || match state.state_sync.chunk(&artifact_id, chunk_id) {
                 Some(data) => {
-                    let pb_chunk = pb::StateSyncChunkResponse { data: data.into() };
+                    let pb_chunk = pb::StateSyncChunkResponse { data };
                     let mut raw = BytesMut::with_capacity(pb_chunk.encoded_len());
                     pb_chunk.encode(&mut raw).expect("Allocated enough memory");
                     let raw = raw.freeze();
@@ -129,8 +129,7 @@ pub(crate) fn parse_chunk_handler_response(
 
             let chunk = ArtifactChunk {
                 chunk_id,
-                artifact_chunk_data:
-                    ic_types::chunkable::ArtifactChunkData::SemiStructuredChunkData(pb.data),
+                chunk: pb.data,
             };
             Ok(chunk)
         }

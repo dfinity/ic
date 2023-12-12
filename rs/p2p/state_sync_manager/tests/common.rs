@@ -16,7 +16,7 @@ use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_types::{
     artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
-    chunkable::{ArtifactChunk, ArtifactChunkData, ArtifactErrorCode, Chunk, ChunkId, Chunkable},
+    chunkable::{ArtifactChunk, ArtifactErrorCode, Chunk, ChunkId, Chunkable},
     crypto::CryptoHash,
     state_sync::{Manifest, MetaManifest, StateSyncVersion},
     CryptoHashOfState, Height, NodeId, PrincipalId,
@@ -221,10 +221,10 @@ impl StateSyncClient for FakeStateSync {
         }
 
         if is_manifest_chunk(chunk_id) {
-            return Some(vec![0; 100].into());
+            return Some(vec![0; 100]);
         }
 
-        self.global_state.chunk(chunk_id).map(|c| c.into())
+        self.global_state.chunk(chunk_id)
     }
 
     fn deliver_state_sync(&self, msg: StateSyncMessage) {
@@ -293,10 +293,8 @@ impl Chunkable for FakeChunkable {
 
         // Add chunk to state if not part of manifest
         if !is_manifest_chunk(artifact_chunk.chunk_id) {
-            let ArtifactChunkData::SemiStructuredChunkData(data) =
-                artifact_chunk.artifact_chunk_data;
             self.local_state
-                .add_chunk(artifact_chunk.chunk_id, data.len())
+                .add_chunk(artifact_chunk.chunk_id, artifact_chunk.chunk.len())
         }
 
         let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();
