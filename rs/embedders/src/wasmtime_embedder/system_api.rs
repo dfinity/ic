@@ -2266,7 +2266,7 @@ const WRITE_ACCESS: u8 = 1;
 const READ_ONLY_ACCESS: u8 = 2;
 
 /// Used during 64-bit main memory to guard the working set limit.
-/// The page is accessed for the first time and this access is a read access.
+/// The page is accessed for the potentially first time and this access is a read access.
 #[inline(never)]
 fn main_read_page_guard<S: SystemApi>(
     mut caller: &mut Caller<'_, StoreData<S>>,
@@ -2283,14 +2283,15 @@ fn main_read_page_guard<S: SystemApi>(
     };
 
     let bytemap = bytemap_mem.data_mut(&mut caller);
-    debug_assert_eq!(bytemap[page_index], NO_ACCESS);
-    bytemap[page_index] = READ_ONLY_ACCESS;
-    first_access_on_main_memory_page(&mut caller)?;
+    if bytemap[page_index] == NO_ACCESS {
+        bytemap[page_index] = READ_ONLY_ACCESS;
+        first_access_on_main_memory_page(&mut caller)?;
+    }
     Ok(())
 }
 
 /// Used during 64-bit main memory to guard the working set limit.
-/// The page is written for the first time and there may have been preceding reads to this page.
+/// The page is written for the potentially first time and there may have been preceding reads to this page.
 #[inline(never)]
 fn main_write_page_guard<S: SystemApi>(
     mut caller: &mut Caller<'_, StoreData<S>>,

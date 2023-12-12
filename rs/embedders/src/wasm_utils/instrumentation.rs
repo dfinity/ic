@@ -1544,9 +1544,13 @@ enum AccessKind {
 ///
 /// It assumes that the original arguments of a load or store operation are
 /// on top of the Wasm evaluation stack.
+///
+/// Note: Accesses may be unaligned and cross an OS page boundary.
+/// Therefore, the barrier potentially triggers two page guards for an unaligned access.
 fn memory64_barrier_instructions<'a>(
     kind: AccessKind,
     offset: u64,
+    size: u64,
     address_argument_index: u32,
     byte_map_index: u32,
     wasm_native_stable_memory: FlagStatus,
@@ -1586,7 +1590,8 @@ fn memory64_barrier_instructions<'a>(
             value: page_size_shift as i64,
         },
         I64ShrU,
-        I32WrapI64, // See assertion above: Assumes that the maximum main memory can be mapped to a 32-bit byte map.
+        // See assertion above: Assumes that the maximum main memory can be mapped to a 32-bit byte map.
+        I32WrapI64,
         LocalTee {
             local_index: byte_map_index,
         },
@@ -1600,15 +1605,16 @@ fn memory64_barrier_instructions<'a>(
         },
     ]);
 
-    // Check whether page guard should be triggered:
+    // Check whether page guard should be triggered for the page of the first accessed byte:
     // * For read accesses, if it has not yet been previously read or written (i.e. state `0`).
     // * For write accesses, if it has not yet been previously written (i.e. state is not `1`).
+    // Unaligned accesses crossing pages are handled later.
     match kind {
         AccessKind::Load => instructions.push(I32Eqz),
         AccessKind::Store { .. } => instructions.append(&mut vec![I32Const { value: 1 }, I32Ne]),
     }
 
-    // Trigger page guard if needed.
+    // Trigger page guard for the first accessed byte only if needed.
     let page_guard_import = match kind {
         AccessKind::Load => InjectedImports::MainReadPageGuard,
         AccessKind::Store { .. } => InjectedImports::MainWritePageGuard,
@@ -1627,6 +1633,50 @@ fn memory64_barrier_instructions<'a>(
             function_index: page_guard_function_index,
         },
         End,
+    ]);
+
+    assert!(size <= PAGE_SIZE as u64);
+    if size > 1 {
+        // Handle potential unaligned accesses.
+        instructions.append(&mut vec![
+            // Compute the last accessed byte.
+            LocalGet {
+                local_index: address_argument_index,
+            },
+            I64Const {
+                value: (offset + size - 1) as i64,
+            },
+            I64Add,
+            I64Const {
+                value: page_size_shift as i64,
+            },
+            I64ShrU,
+            // See assertion above: Assumes that the maximum main memory can be mapped to a 32-bit byte map.
+            I32WrapI64,
+            // Compare against the first accessed byte.
+            LocalGet {
+                local_index: byte_map_index,
+            },
+            I32Ne,
+            If {
+                blockty: BlockType::Empty,
+            },
+            // Page-crossing access. At most one subsequent page can be accessed because `size <= PAGE_SIZE`.
+            // The guard is unconditionally triggered for the second accessed page. The guard logic checks whether
+            // this access needs specific handling (updating the byte map and guarding the working set limit).
+            LocalGet {
+                local_index: byte_map_index,
+            },
+            I32Const { value: 1 },
+            I32Add,
+            Call {
+                function_index: page_guard_function_index,
+            },
+            End,
+        ]);
+    }
+
+    instructions.append(&mut vec![
         // Restore the address argument of the access operation.
         LocalGet {
             local_index: address_argument_index,
@@ -1783,6 +1833,7 @@ fn inject_mem_barrier(
         for point in injection_points {
             let mem_instr = orig_elems[point].clone();
             elems.extend_from_slice(&orig_elems[last_injection_position..point]);
+            let access_size = get_access_size(&mem_instr);
 
             match mem_instr {
                 I32Load { memarg }
@@ -1794,6 +1845,7 @@ fn inject_mem_barrier(
                         elems.extend_from_slice(&memory64_barrier_instructions(
                             AccessKind::Load,
                             memarg.offset,
+                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -1809,6 +1861,7 @@ fn inject_mem_barrier(
                                     value_argument_index: arg_i32_val_idx,
                                 },
                                 memarg.offset,
+                                access_size.unwrap(),
                                 arg_address_idx,
                                 byte_map_index.unwrap(),
                                 wasm_native_stable_memory,
@@ -1834,6 +1887,7 @@ fn inject_mem_barrier(
                         elems.extend_from_slice(&memory64_barrier_instructions(
                             AccessKind::Load,
                             memarg.offset,
+                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -1851,6 +1905,7 @@ fn inject_mem_barrier(
                                 value_argument_index: arg_i64_val_idx,
                             },
                             memarg.offset,
+                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -1867,6 +1922,7 @@ fn inject_mem_barrier(
                         elems.extend_from_slice(&memory64_barrier_instructions(
                             AccessKind::Load,
                             memarg.offset,
+                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -1881,6 +1937,7 @@ fn inject_mem_barrier(
                                 value_argument_index: arg_f32_val_idx,
                             },
                             memarg.offset,
+                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -1897,6 +1954,7 @@ fn inject_mem_barrier(
                         elems.extend_from_slice(&memory64_barrier_instructions(
                             AccessKind::Load,
                             memarg.offset,
+                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -1911,6 +1969,7 @@ fn inject_mem_barrier(
                                 value_argument_index: arg_f64_val_idx,
                             },
                             memarg.offset,
+                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -1931,6 +1990,33 @@ fn inject_mem_barrier(
         }
         elems.extend_from_slice(&orig_elems[last_injection_position..]);
         func_body.instructions = elems;
+    }
+}
+
+fn get_access_size(mem_instr: &Operator<'_>) -> Option<u64> {
+    use Operator::*;
+    match *mem_instr {
+        I32Load8U { .. }
+        | I32Load8S { .. }
+        | I32Store8 { .. }
+        | I64Load8U { .. }
+        | I64Load8S { .. }
+        | I64Store8 { .. } => Some(1),
+        I32Load16U { .. }
+        | I32Load16S { .. }
+        | I32Store16 { .. }
+        | I64Load16U { .. }
+        | I64Load16S { .. }
+        | I64Store16 { .. } => Some(2),
+        I32Load { .. }
+        | I32Store { .. }
+        | I64Load32U { .. }
+        | I64Load32S { .. }
+        | I64Store32 { .. }
+        | F32Load { .. }
+        | F32Store { .. } => Some(4),
+        I64Load { .. } | I64Store { .. } | F64Load { .. } | F64Store { .. } => Some(8),
+        _ => None,
     }
 }
 
