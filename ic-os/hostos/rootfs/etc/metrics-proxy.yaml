@@ -1,6 +1,9 @@
 proxies:
   - listen_on:
-      url: http://[::]:42372/metrics/hostos_node_exporter
+      url: https://[::]:42372/metrics/hostos_node_exporter
+      # We reuse the SSL cert of node exporter.
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
     connect_to:
       url: https://[::1]:9100/metrics
       tolerate_bad_tls: true
@@ -60,4 +63,7 @@ proxies:
           - keep
 metrics:
   # Metrics clients only (see nftables.conf in HostOS).
-  url: http://[::]:19100/metrics
+  url: https://[::]:19100/metrics
+  # We reuse the SSL cert of node exporter.
+  certificate_file: /etc/node_exporter/node_exporter.crt
+  key_file: /etc/node_exporter/node_exporter.key
