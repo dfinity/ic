@@ -254,7 +254,7 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
     });
 }
 
-fn start_consenus_manager(
+fn start_consensus_manager(
     log: ReplicaLogger,
     rt_handle: Handle,
     node_id: NodeId,
@@ -282,7 +282,7 @@ fn start_consenus_manager(
     artifact_processor_jh
 }
 
-async fn generate_consenus_events(
+async fn generate_consensus_events(
     processor: TestConsensus<U64Artifact>,
     test_duration: Duration,
     purge_fraction: f64,
@@ -330,7 +330,7 @@ fn check_pools_equal(node_pool_map: &HashMap<NodeId, TestConsensus<U64Artifact>>
             if node2 != node1 {
                 // If other pool subset everything is fine
                 if !pool1.my_pool().is_subset(&pool2.peer_pool(node1)) {
-                    // It can be case that muliple peers advertised same id and it only got downloaded from a different peer.
+                    // It can be case that multiple peers advertised same id and it only got downloaded from a different peer.
                     // In that case check that the id is contained in some other pool.
                     for diff in pool1.my_pool().difference(&pool2.peer_pool(node1)) {
                         let mut found = false;
@@ -351,7 +351,7 @@ fn check_pools_equal(node_pool_map: &HashMap<NodeId, TestConsensus<U64Artifact>>
 }
 
 /// Generates load test for the consensus manager by generating a event sequence of pool additions/removals and verifies
-/// that the pools contains all expected elements according to `check_pools_equal` after all eveents were emitted.
+/// that the pools contains all expected elements according to `check_pools_equal` after all events were emitted.
 /// num_peers: Number of consensus managers to spawn
 /// num_events: Number of add/remove events to generate.
 /// purge_fraction: Number of add events that have a corresponding purge event. Setting it to 1 means that every add event has remove event that follows later.
@@ -386,7 +386,7 @@ fn load_test(
     for i in 0..num_peers {
         let node = node_test_id(i);
         let processor = TestConsensus::new(log.clone(), node);
-        let jh = start_consenus_manager(
+        let jh = start_consensus_manager(
             no_op_logger(),
             rt.handle().clone(),
             node,
@@ -403,7 +403,7 @@ fn load_test(
         let mut load_set = JoinSet::new();
         // Generate some random load
         for (i, processor) in node_advert_map.values().enumerate() {
-            load_set.spawn(generate_consenus_events(
+            load_set.spawn(generate_consensus_events(
                 processor.clone(),
                 TEST_DURATION,
                 purge_fraction,
@@ -432,7 +432,7 @@ fn load_test(
     });
 }
 /// NOTE: The values used for the tests below do not test anything specific and are set
-/// to cover a variaty of scenrios. The error signal of these tests is flakiness which indicate
+/// to cover a variety of scenarios. The error signal of these tests is flakiness which indicate
 /// that there might be some hidden race condition in the code.
 ///
 ///
