@@ -15,7 +15,7 @@ use bytes::Bytes;
 use http::{Request, Response};
 use hyper::{
     body::{Body, Incoming},
-    rt::{bounds::Http2ConnExec, Timer},
+    rt::{bounds::Http2ServerConnExec, Timer},
     server::conn::{http1, http2},
     service::Service,
 };
@@ -77,7 +77,7 @@ impl<E> Builder<E> {
         B::Data: Send,
         B::Error: Into<Box<dyn StdError + Send + Sync>>,
         I: AsyncRead + AsyncWrite + Unpin + 'static,
-        E: Http2ConnExec<S::Future, B>,
+        E: Http2ServerConnExec<S::Future, B>,
     {
         let (version, io) = read_version(io).await?;
         let io = TokioIo::new(io);
@@ -101,7 +101,7 @@ impl<E> Builder<E> {
         B::Data: Send,
         B::Error: Into<Box<dyn StdError + Send + Sync>>,
         I: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-        E: Http2ConnExec<S::Future, B>,
+        E: Http2ServerConnExec<S::Future, B>,
     {
         let (version, io) = read_version(io).await?;
         let io = TokioIo::new(io);
@@ -303,7 +303,7 @@ impl<E> Http1Builder<'_, E> {
         B::Data: Send,
         B::Error: Into<Box<dyn StdError + Send + Sync>>,
         I: AsyncRead + AsyncWrite + Unpin + 'static,
-        E: Http2ConnExec<S::Future, B>,
+        E: Http2ServerConnExec<S::Future, B>,
     {
         self.inner.serve_connection(io, service).await
     }
@@ -449,7 +449,7 @@ impl<E> Http2Builder<'_, E> {
         B::Data: Send,
         B::Error: Into<Box<dyn StdError + Send + Sync>>,
         I: AsyncRead + AsyncWrite + Unpin + 'static,
-        E: Http2ConnExec<S::Future, B>,
+        E: Http2ServerConnExec<S::Future, B>,
     {
         self.inner.serve_connection(io, service).await
     }

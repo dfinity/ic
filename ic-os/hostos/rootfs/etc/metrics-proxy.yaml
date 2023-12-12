@@ -3,6 +3,7 @@ proxies:
       url: http://[::]:42372/metrics/hostos_node_exporter
     connect_to:
       url: https://[::1]:9100/metrics
+      tolerate_bad_tls: true
     # In case of conflict, the last matching rule
     # overrides any previous rules.
     # Full documentation at:
@@ -22,8 +23,13 @@ proxies:
           - keep
       # Specifically temperatures.
       # Reduce sampling resolution to half a minute.
+      # Add three degrees Celsius of random noise to
+      # freshly-polled metrics.
       - regex: node_hwmon_temp_celsius
         actions:
+          - add_absolute_noise:
+              amplitude: 3
+              quantum: 0.25
           - reduce_time_resolution:
               resolution: 30s
       # File system errors and NVME hardware info.
@@ -53,4 +59,5 @@ proxies:
         actions:
           - keep
 metrics:
+  # Metrics clients only (see nftables.conf in HostOS).
   url: http://[::]:19100/metrics

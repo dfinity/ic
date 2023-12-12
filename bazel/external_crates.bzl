@@ -444,16 +444,20 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http": crate.spec(
                 version = "^0.2.9",
             ),
+            "http_1_0_0": crate.spec(
+                package = "http",
+                version = "^1.0.0",
+            ),
             "http-body": crate.spec(
                 version = "^0.4",
             ),
-            "http-body_1_0_0_rc_2": crate.spec(
+            "http-body_1_0_0": crate.spec(
                 package = "http-body",
-                version = "=1.0.0-rc.2",
+                version = "=1.0.0",
             ),
-            "http-body-util_0_1_0_rc_3": crate.spec(
+            "http-body-util_0_1_0": crate.spec(
                 package = "http-body-util",
-                version = "=0.1.0-rc.3",
+                version = "=0.1.0",
             ),
             "http-serde": crate.spec(
                 version = "^1.1.2",
@@ -481,9 +485,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tcp",
                 ],
             ),
-            "hyper_1_0_0_rc_4": crate.spec(
+            "hyper_1_0_0": crate.spec(
                 package = "hyper",
-                version = "=1.0.0-rc.4",
+                version = "=1.0.1",
                 features = [
                     "full",
                 ],
@@ -672,7 +676,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
-                rev = "c18f6ad2639b448968d461096abc76af8a069980",
+                rev = "b9e1c264fc9198f5dde704463b5acf2f34debf2d",
                 default_features = False,
                 features = [
                     "rustls-tls-webpki-roots",
