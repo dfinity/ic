@@ -535,7 +535,7 @@ mod tests {
             initial_transcript_records.fresh_subnet_id,
             SubnetId::from(
                 PrincipalId::from_str(
-                    "wqwyc-qwfhw-xd535-3ic5a-jqn3j-okdfe-vlasr-ulpoq-xiirw-xpeoc-iae"
+                    "icdrs-3sfmz-hm6r3-cdzf5-cfroa-3cddh-aght7-azz25-eo34b-4strl-wae"
                 )
                 .unwrap()
             )
