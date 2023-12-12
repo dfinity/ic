@@ -1,5 +1,5 @@
 {
-  "checksum": "f6e95aa4588036f20923951375aa3f5ab06a875c95204667a6d093cd0f858bef",
+  "checksum": "06e49bd4aa9720bd84debde5ada945567976284611aa4d08d6386023fc9d517a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14307,6 +14307,10 @@
             {
               "id": "mockall 0.11.4",
               "target": "mockall"
+            },
+            {
+              "id": "mockito 1.2.0",
+              "target": "mockito"
             },
             {
               "id": "moka 0.12.1",
@@ -30969,6 +30973,93 @@
         "version": "0.11.4"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "mockito 1.2.0": {
+      "name": "mockito",
+      "version": "1.2.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/mockito/1.2.0/download",
+          "sha256": "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "mockito",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "mockito",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "color",
+            "colored",
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "assert-json-diff 2.0.2",
+              "target": "assert_json_diff"
+            },
+            {
+              "id": "colored 2.0.4",
+              "target": "colored"
+            },
+            {
+              "id": "futures 0.3.28",
+              "target": "futures"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "regex 1.10.2",
+              "target": "regex"
+            },
+            {
+              "id": "serde_json 1.0.107",
+              "target": "serde_json"
+            },
+            {
+              "id": "serde_urlencoded 0.7.1",
+              "target": "serde_urlencoded"
+            },
+            {
+              "id": "similar 2.3.0",
+              "target": "similar"
+            },
+            {
+              "id": "tokio 1.33.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.2.0"
+      },
+      "license": "MIT"
     },
     "moka 0.12.1": {
       "name": "moka",

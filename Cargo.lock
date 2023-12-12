@@ -7615,14 +7615,18 @@ dependencies = [
 name = "ic-http-utils"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "flate2",
  "hex",
  "http 0.2.9",
  "ic-crypto-sha2",
  "ic-logger",
+ "ic-test-utilities-in-memory-logger",
+ "mockito",
  "reqwest",
  "slog",
  "tar",
+ "tempfile",
  "tokio",
 ]
 
@@ -13317,6 +13321,25 @@ dependencies = [
  "proc-macro2 1.0.70",
  "quote 1.0.31",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "mockito"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
+dependencies = [
+ "assert-json-diff",
+ "colored",
+ "futures",
+ "hyper 0.14.26",
+ "log",
+ "rand 0.8.5",
+ "regex",
+ "serde_json",
+ "serde_urlencoded",
+ "similar",
+ "tokio",
 ]
 
 [[package]]

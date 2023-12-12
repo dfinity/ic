@@ -384,3 +384,192 @@ pub enum HttpError {
     /// A redirect response without a required header
     RedirectMissingHeader(http::Method, http::HeaderName, http::StatusCode),
 }
+
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;
+    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
+    use mockito::{Mock, ServerGuard};
+    use slog::Level;
+    use tempfile::{NamedTempFile, TempPath};
+    use tokio::test;
+
+    use super::*;
+
+    struct Setup {
+        pub server: ServerGuard,
+        pub data: Mock,
+        pub redirect: Mock,
+        pub temp: TempPath,
+        pub logger: InMemoryReplicaLogger,
+    }
+
+    impl Setup {
+        fn new(body: &str) -> Self {
+            let mut server = mockito::Server::new();
+            let redirect = server
+                .mock("GET", "/redirect")
+                .with_status(301)
+                .with_header("Location", &server.url())
+                .create();
+            let data = server
+                .mock("GET", "/")
+                .with_status(200)
+                .with_body(body)
+                .create();
+
+            let temp = NamedTempFile::new()
+                .expect("Failed to create tmp file")
+                .into_temp_path();
+            std::fs::remove_file(&temp).expect("Failed to remove file");
+
+            Self {
+                server,
+                data,
+                redirect,
+                temp,
+                logger: InMemoryReplicaLogger::new(),
+            }
+        }
+
+        fn expect_routes(mut self, data_hits: usize, redirect_hits: usize) -> Self {
+            self.data = self.data.expect(data_hits);
+            self.redirect = self.redirect.expect(redirect_hits);
+            self
+        }
+
+        fn url(&self) -> String {
+            self.server.url()
+        }
+
+        fn assert(&self) {
+            self.data.assert();
+            self.redirect.assert();
+        }
+    }
+
+    fn hash(data: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher
+            .write_all(data.as_bytes())
+            .expect("Failed to write data");
+        hex::encode(hasher.finish())
+    }
+
+    #[test]
+    async fn test_file_downloader_handles_redirects() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+        let setup = Setup::new(&body).expect_routes(1, 1);
+
+        let downloader = FileDownloader::new(None);
+        downloader
+            .download_file(
+                &format!("{}/redirect", setup.url()),
+                &setup.temp,
+                Some(hash),
+            )
+            .await
+            .expect("Download failed");
+
+        let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
+        assert_eq!(result, body);
+        setup.assert();
+    }
+
+    #[test]
+    async fn test_hash_mismatch_returns_error() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+        let invalid_hash = format!("invalid_{}", hash);
+        let setup = Setup::new(&body).expect_routes(1, 0);
+
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
+
+        let result = downloader
+            .download_file(&setup.url(), &setup.temp, Some(invalid_hash))
+            .await;
+        assert_matches!(result, Err(FileDownloadError::FileHashMismatchError { .. }));
+
+        setup.assert();
+
+        let logs = setup.logger.drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Info, "Response read");
+    }
+
+    #[test]
+    async fn test_download_succeeds_if_file_exists() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+
+        let setup = Setup::new(&body).expect_routes(1, 0);
+
+        // Correct file already exists
+        std::fs::write(&setup.temp, &body).unwrap();
+
+        // Download the file without expected hash (it should be overwritten)
+        let logger = InMemoryReplicaLogger::new();
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&logger)));
+        downloader
+            .download_file(&setup.url(), &setup.temp, None)
+            .await
+            .expect("Download failed");
+
+        let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
+        assert_eq!(result, body);
+
+        let logs = logger.drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_exactly_n_messages_containing(0, &Level::Info, "File already exists")
+            .has_only_one_message_containing(&Level::Info, "Response read");
+
+        // Download it again, this time expecting the correct hash
+        let logger = InMemoryReplicaLogger::new();
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&logger)));
+        downloader
+            .download_file(&setup.url(), &setup.temp, Some(hash))
+            .await
+            .expect("Download failed");
+
+        let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
+        assert_eq!(result, body);
+
+        // We should not download anything, as the file already exists.
+        let logs = logger.drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Info, "File already exists")
+            .has_exactly_n_messages_containing(0, &Level::Info, "Response read");
+
+        setup.assert();
+    }
+
+    #[test]
+    async fn test_download_overwrites_existing_file() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+
+        let setup = Setup::new(&body).expect_routes(1, 0);
+
+        // An unexpected file already exists
+        std::fs::write(&setup.temp, "unexpected content").unwrap();
+
+        // It should be overwritten with the correct file
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
+        downloader
+            .download_file(&setup.url(), &setup.temp, Some(hash))
+            .await
+            .expect("Download failed");
+
+        let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
+        assert_eq!(result, body);
+
+        setup.assert();
+
+        let logs = setup.logger.drain_logs();
+        LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+            &Level::Warning,
+            "File already exists, but hash check failed",
+        );
+    }
+}
