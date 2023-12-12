@@ -19,30 +19,19 @@ pub struct FileDownloader {
     /// This is a timeout that is applied to the downloading each chunk that is
     /// yielded, not to the entire downloading of the file.
     timeout: Duration,
-    allow_redirects: bool,
 }
 
 impl FileDownloader {
     pub fn new(logger: Option<ReplicaLogger>) -> Self {
-        Self::new_with_timeout(logger, Duration::from_secs(15), false)
+        Self::new_with_timeout(logger, Duration::from_secs(15))
     }
 
-    pub fn new_with_timeout(
-        logger: Option<ReplicaLogger>,
-        timeout: Duration,
-        allow_redirects: bool,
-    ) -> Self {
+    pub fn new_with_timeout(logger: Option<ReplicaLogger>, timeout: Duration) -> Self {
         Self {
             client: Client::new(),
             logger,
             timeout,
-            allow_redirects,
         }
-    }
-
-    pub fn follow_redirects(mut self) -> FileDownloader {
-        self.allow_redirects = true;
-        self
     }
 
     /// Download a .tar.gz file from `url`, verify its hash if given, and
@@ -139,38 +128,13 @@ impl FileDownloader {
         let response = self.client.get(url).timeout(self.timeout).send().await?;
 
         if response.status().is_success() {
-            return Ok(response);
+            Ok(response)
+        } else {
+            Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
+                Method::GET,
+                response,
+            )))
         }
-
-        if response.status().is_redirection() && self.allow_redirects {
-            match response.headers().get(http::header::LOCATION) {
-                Some(url) => {
-                    let url = url.to_str().unwrap();
-                    let response = self.client.get(url).timeout(self.timeout).send().await?;
-                    if response.status().is_success() {
-                        return Ok(response);
-                    }
-                    return Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
-                        Method::GET,
-                        response,
-                    )));
-                }
-                None => {
-                    return Err(FileDownloadError::HttpError(
-                        HttpError::RedirectMissingHeader(
-                            Method::GET,
-                            http::header::LOCATION,
-                            response.status(),
-                        ),
-                    ))
-                }
-            }
-        }
-
-        Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
-            Method::GET,
-            response,
-        )))
     }
 
     /// Stream the bytes of a given HTTP response body into the given file
@@ -341,11 +305,6 @@ impl fmt::Display for FileDownloadError {
                 "Received non-success response from endpoint: method: {}, uri: {}, remote_addr: {:?}, status_code: {}, headers: {:?}",
                 method.as_str(), response.url(), response.remote_addr(), response.status(), response.headers()
             ),
-            FileDownloadError::HttpError(HttpError::RedirectMissingHeader(method, header, status_code)) => write!(
-                f,
-                "Received a redirect response from endpoint but a header is missing: method: {}, header: {}, status_code: {}",
-                method.as_str(), header, status_code
-            ),
             FileDownloadError::FileHashMismatchError { computed_hash, expected_hash, file_path } =>
                 write!(
                     f,
@@ -380,9 +339,6 @@ pub enum HttpError {
 
     /// A non-success HTTP response was received from the given URI
     NonSuccessResponse(http::Method, Response),
-
-    /// A redirect response without a required header
-    RedirectMissingHeader(http::Method, http::HeaderName, http::StatusCode),
 }
 
 #[cfg(test)]
