@@ -3,7 +3,11 @@ use crate::{
     execution::nonreplicated_query::execute_non_replicated_query,
     execution_environment::{as_round_instructions, RoundLimits},
     hypervisor::Hypervisor,
-    metrics::{MeasurementScope, QueryHandlerMetrics, QUERY_HANDLER_CRITICAL_ERROR},
+    metrics::{
+        MeasurementScope, QueryHandlerMetrics, QUERY_HANDLER_CRITICAL_ERROR,
+        SYSTEM_API_CALL_PERFORM, SYSTEM_API_CANISTER_CYCLE_BALANCE,
+        SYSTEM_API_CANISTER_CYCLE_BALANCE128, SYSTEM_API_TIME,
+    },
     NonReplicatedQueryKind, RoundInstructions,
 };
 use ic_base_types::NumBytes;
@@ -11,7 +15,9 @@ use ic_config::flag_status::FlagStatus;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
+};
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -33,7 +39,7 @@ use ic_types::{
     methods::{FuncRef, WasmClosure},
     NumSlices,
 };
-use prometheus::IntCounter;
+use prometheus::{IntCounter, IntCounterVec};
 use std::{collections::VecDeque, sync::Arc, time::Duration, time::Instant};
 
 use super::{query_call_graph::evaluate_query_call_graph, query_stats::QueryStatsCollector};
@@ -98,6 +104,8 @@ pub(super) struct QueryContext<'a> {
     query_context_time_limit: Duration,
     query_critical_error: &'a IntCounter,
     local_query_execution_stats: Option<&'a QueryStatsCollector>,
+    /// How many times each tracked System API call was invoked during the query execution.
+    system_api_call_counters: SystemApiCallCounters,
 }
 
 impl<'a> QueryContext<'a> {
@@ -146,6 +154,7 @@ impl<'a> QueryContext<'a> {
             query_context_time_limit: max_query_call_walltime,
             query_critical_error,
             local_query_execution_stats,
+            system_api_call_counters: SystemApiCallCounters::default(),
         }
     }
 
@@ -385,7 +394,7 @@ impl<'a> QueryContext<'a> {
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
-        let (mut canister, instructions_left, result, call_context_id) =
+        let (mut canister, instructions_left, result, call_context_id, system_api_call_counters) =
             execute_non_replicated_query(
                 query_kind,
                 method_name,
@@ -399,6 +408,8 @@ impl<'a> QueryContext<'a> {
                 &mut self.round_limits,
                 self.query_critical_error,
             );
+        self.system_api_call_counters
+            .saturating_add(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
 
         let ingress_payload_size = method_payload.len();
@@ -455,6 +466,22 @@ impl<'a> QueryContext<'a> {
             // This `unwrap()` cannot fail because of the non-optional `call_context_id`.
             .unwrap()
             .on_canister_result(call_context_id, callback_id, result, instructions_used)
+    }
+
+    /// Observe System API call counters in the corresponding metrics.
+    pub(super) fn observe_system_api_calls(&mut self, query_system_api_calls: &IntCounterVec) {
+        query_system_api_calls
+            .with_label_values(&[SYSTEM_API_CALL_PERFORM])
+            .inc_by(self.system_api_call_counters.call_perform as u64);
+        query_system_api_calls
+            .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE])
+            .inc_by(self.system_api_call_counters.canister_cycle_balance as u64);
+        query_system_api_calls
+            .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE128])
+            .inc_by(self.system_api_call_counters.canister_cycle_balance128 as u64);
+        query_system_api_calls
+            .with_label_values(&[SYSTEM_API_TIME])
+            .inc_by(self.system_api_call_counters.time as u64);
     }
 
     fn execute_callback(
@@ -561,6 +588,8 @@ impl<'a> QueryContext<'a> {
             self.query_critical_error,
         );
 
+        self.system_api_call_counters
+            .saturating_add(output.system_api_call_counters);
         let canister_current_memory_usage = canister.memory_usage();
         let canister_current_message_memory_usage = canister.message_memory_usage();
         canister.execution_state = Some(output_execution_state);
@@ -659,6 +688,8 @@ impl<'a> QueryContext<'a> {
                 self.query_critical_error,
             );
 
+        self.system_api_call_counters
+            .saturating_add(cleanup_output.system_api_call_counters);
         canister.execution_state = Some(output_execution_state);
         match cleanup_output.wasm_result {
             Ok(_) => {

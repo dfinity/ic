@@ -5,8 +5,14 @@ use ic_metrics::{
 use ic_types::{
     NumInstructions, NumMessages, NumSlices, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
-use prometheus::{Histogram, IntCounter};
+use prometheus::{Histogram, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
+
+pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
+pub(crate) const SYSTEM_API_CALL_PERFORM: &str = "call_perform";
+pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE: &str = "canister_cycle_balance";
+pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_balance128";
+pub(crate) const SYSTEM_API_TIME: &str = "time";
 
 #[derive(Clone)]
 pub struct IngressFilterMetrics {
@@ -36,14 +42,14 @@ impl IngressFilterMetrics {
     }
 }
 
-pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
-
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
     pub query_retry_call: ScopedMetrics,
     pub query_spawned_calls: ScopedMetrics,
     pub query_critical_error: IntCounter,
+    /// The total number of tracked System API calls invoked during the query execution.
+    pub query_system_api_calls: IntCounterVec,
 }
 
 impl QueryHandlerMetrics {
@@ -148,6 +154,12 @@ impl QueryHandlerMetrics {
                 ),
             },
             query_critical_error: metrics_registry.error_counter(QUERY_HANDLER_CRITICAL_ERROR),
+            query_system_api_calls: metrics_registry.int_counter_vec(
+                "execution_query_system_api_calls_total",
+                "The total number of tracked System API calls invoked \
+                        during the query execution",
+                &["system_api_call_counter"],
+            ),
         }
     }
 }

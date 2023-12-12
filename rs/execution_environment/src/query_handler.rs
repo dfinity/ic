@@ -279,6 +279,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             Arc::clone(&self.cycles_account_manager),
             &measurement_scope,
         );
+        context.observe_system_api_calls(&self.metrics.query_system_api_calls);
 
         // Add the query execution result to the query cache  (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
