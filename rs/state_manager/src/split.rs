@@ -206,6 +206,7 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
         thread_pool,
         fd_factory,
+        config.lsmt_storage,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
 
