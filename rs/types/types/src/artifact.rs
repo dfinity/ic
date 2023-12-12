@@ -637,7 +637,7 @@ impl StateSyncMessage {
                 }
             }
 
-            Some(payload.into())
+            Some(payload)
         }
     }
 }

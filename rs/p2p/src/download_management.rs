@@ -84,7 +84,6 @@ use ic_types::{
         IngressArtifact,
     },
     chunkable::ChunkId,
-    chunkable::CHUNKID_UNIT_CHUNK,
     crypto::CryptoHash,
     p2p::GossipAdvert,
     NodeId, RegistryVersion,
@@ -96,6 +95,8 @@ use std::{
     ops::DerefMut,
     time::{Instant, SystemTime},
 };
+
+const CHUNKID_UNIT_CHUNK: u32 = 0;
 
 /// `DownloadManagerImpl` implements the `DownloadManager` trait.
 impl GossipImpl {
