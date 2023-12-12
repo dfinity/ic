@@ -1,5 +1,11 @@
 use super::{EntryEnv, EntryValue};
-use crate::InternalHttpQueryHandler;
+use crate::{
+    metrics::{
+        SYSTEM_API_CALL_PERFORM, SYSTEM_API_CANISTER_CYCLE_BALANCE,
+        SYSTEM_API_CANISTER_CYCLE_BALANCE128, SYSTEM_API_TIME,
+    },
+    InternalHttpQueryHandler,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::{types::ids::user_test_id, universal_canister::wasm};
@@ -9,6 +15,7 @@ use ic_types::{
     messages::{CanisterTask, UserQuery},
     time, CountBytes, Cycles,
 };
+use ic_universal_canister::call_args;
 use std::{sync::Arc, time::Duration};
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -981,4 +988,85 @@ fn query_cache_capacity_zero() {
             .count_bytes();
         assert_eq!(initial_count_bytes, count_bytes);
     }
+}
+
+#[test]
+fn query_cache_system_api_calls_correctly_reported_on_composite_query() {
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        // Fist set of System API calls.
+        .cycles_balance()
+        .cycles_balance128()
+        .time()
+        // First nested call.
+        .composite_query(
+            b_id,
+            call_args().on_reply(
+                wasm()
+                    // Third set of System API calls.
+                    .cycles_balance()
+                    .cycles_balance128()
+                    .time()
+                    .time()
+                    // Second nested call.
+                    .composite_query(
+                        b_id,
+                        call_args().on_reply(
+                            wasm()
+                                // Forth set of System API calls.
+                                .cycles_balance()
+                                .cycles_balance128()
+                                .cycles_balance128()
+                                .time()
+                                .time()
+                                .reply_int64(),
+                        ),
+                    ),
+            ),
+        )
+        // Second set of System API calls.
+        .cycles_balance()
+        .cycles_balance128()
+        .time()
+        .build();
+    test.non_replicated_query(a_id, "composite_query", a)
+        .unwrap();
+
+    let metrics = &downcast_query_handler(test.query_handler()).metrics;
+
+    // Two nested calls.
+    assert_eq!(
+        2,
+        metrics
+            .query_system_api_calls
+            .with_label_values(&[SYSTEM_API_CALL_PERFORM])
+            .get()
+    );
+    // Four `ic0.canister_cycle_balance()` calls.
+    assert_eq!(
+        4,
+        metrics
+            .query_system_api_calls
+            .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE])
+            .get()
+    );
+    // Three `ic0.canister_cycle_balance128()` calls.
+    assert_eq!(
+        5,
+        metrics
+            .query_system_api_calls
+            .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE128])
+            .get()
+    );
+    // Two `ic0.time()` calls.
+    assert_eq!(
+        6,
+        metrics
+            .query_system_api_calls
+            .with_label_values(&[SYSTEM_API_TIME])
+            .get()
+    );
 }
