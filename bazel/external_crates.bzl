@@ -692,6 +692,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "mockall": crate.spec(
                 version = "^0.11.4",
             ),
+            "mockito": crate.spec(
+                version = "^1.2.0",
+            ),
             "moka": crate.spec(
                 version = "^0.12",
                 features = [
