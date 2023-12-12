@@ -51,7 +51,7 @@ impl HttpResponsePayload for TransactionReceipt {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Encode, Decode, CandidType)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
 #[serde(try_from = "ethnum::u256", into = "ethnum::u256")]
 pub enum TransactionStatus {
     /// Transaction was mined and executed successfully.
@@ -65,6 +65,19 @@ pub enum TransactionStatus {
     /// transaction nonce.
     #[n(1)]
     Failure,
+}
+
+impl CandidType for TransactionStatus {
+    fn _ty() -> candid::types::Type {
+        candid::Nat::_ty()
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        serializer.serialize_nat(&(*self as u64).into())
+    }
 }
 
 impl From<TransactionStatus> for ethnum::u256 {
