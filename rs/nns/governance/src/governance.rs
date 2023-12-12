@@ -53,6 +53,7 @@ use crate::{
         UpdateNodeProvider, Vote, WaitForQuietState,
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
+    storage::with_stable_neuron_store,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -7995,6 +7996,11 @@ impl Governance {
             neurons_fund_total_active_neurons: community_fund_total_joined_neurons(
                 &self.neuron_store,
             ),
+            // All neurons in stable storage are already inactive (while heap might have some
+            // inactive neurons which are counted below).
+            garbage_collectable_neurons_count: with_stable_neuron_store(|stable_neuron_store| {
+                stable_neuron_store.len() as u64
+            }),
             ..Default::default()
         };
 
@@ -8016,7 +8022,7 @@ impl Governance {
                     neuron.maturity_e8s_equivalent;
             }
 
-            if neuron.cached_neuron_stake_e8s < DEFAULT_TRANSFER_FEE.get_e8s() {
+            if neuron.is_inactive(now) {
                 metrics.garbage_collectable_neurons_count += 1;
             }
             if 0 < neuron.cached_neuron_stake_e8s
