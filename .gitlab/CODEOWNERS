@@ -50,6 +50,10 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /ic-os/boundary-api-guestos/                     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 /ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/runtime-owners
 
+# [metrics-proxy]
+/ic-os/hostos/rootfs/etc/metrics-proxy.yaml                             @dfinity-lab/teams/DRE
+/ic-os/hostos/rootfs/etc/systemd/system/metrics-proxy.service           @dfinity-lab/teams/DRE
+
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx
 /pre-commit/                                                            @dfinity-lab/teams/idx
