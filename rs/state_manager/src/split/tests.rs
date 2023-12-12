@@ -5,7 +5,7 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
-use ic_config::state_manager::lsmt_storage_default;
+use ic_config::{flag_status::FlagStatus, state_manager::lsmt_storage_default};
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -80,38 +80,73 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 
 /// Full list of files expected to be listed in the manifest of subnet A.
 /// Note that any queue files are missing as they would be empty.
-const SUBNET_A_FILES: &[&str] = &[
-    "canister_states/00000000000000010101/canister.pbuf",
-    "canister_states/00000000000000010101/wasm_chunk_store.bin",
-    "canister_states/00000000000000020101/canister.pbuf",
-    "canister_states/00000000000000020101/wasm_chunk_store.bin",
-    "canister_states/00000000000000030101/canister.pbuf",
-    "canister_states/00000000000000030101/wasm_chunk_store.bin",
-    INGRESS_HISTORY_FILE,
-    SUBNET_QUEUES_FILE,
-    SYSTEM_METADATA_FILE,
-];
+fn subnet_a_files() -> &'static [&'static str] {
+    // With lsmt enabled, we do do not write empty files for the wasm chunk store.
+    match lsmt_storage_default() {
+        FlagStatus::Enabled => &[
+            "canister_states/00000000000000010101/canister.pbuf",
+            "canister_states/00000000000000020101/canister.pbuf",
+            "canister_states/00000000000000030101/canister.pbuf",
+            INGRESS_HISTORY_FILE,
+            SUBNET_QUEUES_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+        FlagStatus::Disabled => &[
+            "canister_states/00000000000000010101/canister.pbuf",
+            "canister_states/00000000000000010101/wasm_chunk_store.bin",
+            "canister_states/00000000000000020101/canister.pbuf",
+            "canister_states/00000000000000020101/wasm_chunk_store.bin",
+            "canister_states/00000000000000030101/canister.pbuf",
+            "canister_states/00000000000000030101/wasm_chunk_store.bin",
+            INGRESS_HISTORY_FILE,
+            SUBNET_QUEUES_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+    }
+}
 
 /// Full list of files expected to be listed in the manifest of subnet A'.
-const SUBNET_A_PRIME_FILES: &[&str] = &[
-    "canister_states/00000000000000010101/canister.pbuf",
-    "canister_states/00000000000000010101/wasm_chunk_store.bin",
-    "canister_states/00000000000000030101/canister.pbuf",
-    "canister_states/00000000000000030101/wasm_chunk_store.bin",
-    INGRESS_HISTORY_FILE,
-    SPLIT_MARKER_FILE,
-    SUBNET_QUEUES_FILE,
-    SYSTEM_METADATA_FILE,
-];
+fn subnet_a_prime_files() -> &'static [&'static str] {
+    match lsmt_storage_default() {
+        FlagStatus::Enabled => &[
+            "canister_states/00000000000000010101/canister.pbuf",
+            "canister_states/00000000000000030101/canister.pbuf",
+            INGRESS_HISTORY_FILE,
+            SPLIT_MARKER_FILE,
+            SUBNET_QUEUES_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+        FlagStatus::Disabled => &[
+            "canister_states/00000000000000010101/canister.pbuf",
+            "canister_states/00000000000000010101/wasm_chunk_store.bin",
+            "canister_states/00000000000000030101/canister.pbuf",
+            "canister_states/00000000000000030101/wasm_chunk_store.bin",
+            INGRESS_HISTORY_FILE,
+            SPLIT_MARKER_FILE,
+            SUBNET_QUEUES_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+    }
+}
 
 /// Full list of files expected to be listed in the manifest of subnet B.
-const SUBNET_B_FILES: &[&str] = &[
-    "canister_states/00000000000000020101/canister.pbuf",
-    "canister_states/00000000000000020101/wasm_chunk_store.bin",
-    INGRESS_HISTORY_FILE,
-    SPLIT_MARKER_FILE,
-    SYSTEM_METADATA_FILE,
-];
+fn subnet_b_files() -> &'static [&'static str] {
+    match lsmt_storage_default() {
+        FlagStatus::Enabled => &[
+            "canister_states/00000000000000020101/canister.pbuf",
+            INGRESS_HISTORY_FILE,
+            SPLIT_MARKER_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+        FlagStatus::Disabled => &[
+            "canister_states/00000000000000020101/canister.pbuf",
+            "canister_states/00000000000000020101/wasm_chunk_store.bin",
+            INGRESS_HISTORY_FILE,
+            SPLIT_MARKER_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+    }
+}
 
 const HEIGHT: Height = Height::new(42);
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -176,7 +211,7 @@ fn split_subnet_a_prime() {
         let root = tmp.path().to_path_buf();
 
         let (manifest_a, height_a) = compute_manifest_for_root(&root, &log);
-        assert_eq!(SUBNET_A_FILES, manifest_files(&manifest_a).as_slice());
+        assert_eq!(subnet_a_files(), manifest_files(&manifest_a).as_slice());
 
         split(
             root.clone(),
@@ -190,7 +225,7 @@ fn split_subnet_a_prime() {
 
         let (manifest_a_prime, height_a_prime) = compute_manifest_for_root(&root, &log);
         assert_eq!(
-            SUBNET_A_PRIME_FILES,
+            subnet_a_prime_files(),
             manifest_files(&manifest_a_prime).as_slice()
         );
 
@@ -198,7 +233,7 @@ fn split_subnet_a_prime() {
         assert_eq!(height_a.increment(), height_a_prime);
 
         // Compare the 2 manifests.
-        for &file in SUBNET_A_PRIME_FILES {
+        for &file in subnet_a_prime_files() {
             if file == SPLIT_MARKER_FILE {
                 assert_eq!(SUBNET_A, deserialize_split_from(&root, height_a_prime));
             } else {
@@ -250,7 +285,7 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
         let new_subnet_batch_time = new_subnet_batch_time_delta.map(|delta| batch_time + delta);
 
         let (manifest_a, height_a) = compute_manifest_for_root(&root, &log);
-        assert_eq!(SUBNET_A_FILES, manifest_files(&manifest_a).as_slice());
+        assert_eq!(subnet_a_files(), manifest_files(&manifest_a).as_slice());
 
         split(
             root.clone(),
@@ -263,7 +298,7 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
         .unwrap();
 
         let (manifest_b, height_b) = compute_manifest_for_root(&root, &log);
-        assert_eq!(SUBNET_B_FILES, manifest_files(&manifest_b).as_slice());
+        assert_eq!(subnet_b_files(), manifest_files(&manifest_b).as_slice());
 
         // Checkpoint heights should differ by 1.
         assert_eq!(height_a.increment(), height_b);
@@ -278,7 +313,7 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
         //
         // Hence, for files that we expect to be different after the split it is
         // safe to compare the resulding Rust structs for equality.
-        for &file in SUBNET_B_FILES {
+        for &file in subnet_b_files() {
             if file == SPLIT_MARKER_FILE {
                 assert_eq!(SUBNET_A, deserialize_split_from(&root, height_b));
             } else if file == SYSTEM_METADATA_FILE {
