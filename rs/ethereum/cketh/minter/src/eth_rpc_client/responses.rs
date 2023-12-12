@@ -1,6 +1,5 @@
 use crate::eth_rpc::{Hash, HttpResponsePayload, ResponseTransform};
 use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
-use candid::CandidType;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -65,19 +64,6 @@ pub enum TransactionStatus {
     /// transaction nonce.
     #[n(1)]
     Failure,
-}
-
-impl CandidType for TransactionStatus {
-    fn _ty() -> candid::types::Type {
-        candid::Nat::_ty()
-    }
-
-    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
-    where
-        S: candid::types::Serializer,
-    {
-        serializer.serialize_nat(&(*self as u64).into())
-    }
 }
 
 impl From<TransactionStatus> for ethnum::u256 {
