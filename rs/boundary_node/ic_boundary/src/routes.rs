@@ -33,16 +33,6 @@ use serde::{Deserialize, Serialize};
 use tower_governor::errors::GovernorError;
 use url::Url;
 
-#[cfg(feature = "tls")]
-use {
-    axum::{
-        extract::{Host, OriginalUri},
-        http::{uri::PathAndQuery, Uri},
-        response::Redirect,
-    },
-    tokio::sync::RwLock,
-};
-
 use crate::{
     cache::CacheStatus,
     core::MAX_REQUEST_BODY_SIZE,
@@ -424,32 +414,6 @@ impl Health for ProxyRouter {
             None => ReplicaHealthStatus::Starting,
         }
     }
-}
-
-#[cfg(feature = "tls")]
-pub async fn acme_challenge(
-    Extension(token): Extension<Arc<RwLock<Option<String>>>>,
-) -> impl IntoResponse {
-    token.read().await.clone().unwrap_or_default()
-}
-
-#[cfg(feature = "tls")]
-pub async fn redirect_to_https(
-    Host(host): Host,
-    OriginalUri(uri): OriginalUri,
-) -> impl IntoResponse {
-    let fallback_path = PathAndQuery::from_static("/");
-    let pq = uri.path_and_query().unwrap_or(&fallback_path).as_str();
-
-    Redirect::permanent(
-        &Uri::builder()
-            .scheme("https") // redirect to https
-            .authority(host) // re-use the same host
-            .path_and_query(pq) // re-use the same path and query
-            .build()
-            .unwrap()
-            .to_string(),
-    )
 }
 
 #[derive(Debug, thiserror::Error)]
