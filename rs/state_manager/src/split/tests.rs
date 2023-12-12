@@ -388,6 +388,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         &state_manager_metrics.checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        lsmt_storage_default(),
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1;

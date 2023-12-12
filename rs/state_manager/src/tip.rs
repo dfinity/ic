@@ -189,58 +189,39 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert_eq!(tip_state, TipState::Serialized(height));
                             debug_assert!(have_latest_manifest);
                             have_latest_manifest = false;
-                            let cp = {
-                                let _timer =
-                                    request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
-                                let tip = tip_handler.tip(height);
-                                match tip {
-                                    Err(err) => {
-                                        sender
-                                            .send(Err(err))
-                                            .expect("Failed to return TipToCheckpoint error");
-                                        continue;
-                                    }
-                                    Ok(tip) => {
-                                        let cp_or_err = state_layout.scratchpad_to_checkpoint(
-                                            tip,
-                                            height,
-                                            Some(&mut thread_pool),
-                                        );
-                                        match cp_or_err {
-                                            Err(err) => {
-                                                sender.send(Err(err)).expect(
-                                                    "Failed to return TipToCheckpoint error",
-                                                );
-                                                continue;
-                                            }
-                                            Ok(cp) => {
-                                                sender.send(Ok(cp.clone())).expect(
-                                                    "Failed to return TipToCheckpoint result",
-                                                );
-                                                cp
-                                            }
+                            let _timer =
+                                request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
+                            let tip = tip_handler.tip(height);
+                            match tip {
+                                Err(err) => {
+                                    sender
+                                        .send(Err(err))
+                                        .expect("Failed to return TipToCheckpoint error");
+                                    continue;
+                                }
+                                Ok(tip) => {
+                                    let cp_or_err = state_layout.scratchpad_to_checkpoint(
+                                        tip,
+                                        height,
+                                        Some(&mut thread_pool),
+                                    );
+                                    match cp_or_err {
+                                        Err(err) => {
+                                            sender
+                                                .send(Err(err))
+                                                .expect("Failed to return TipToCheckpoint error");
+                                            continue;
+                                        }
+                                        Ok(cp) => {
+                                            sender
+                                                .send(Ok(cp.clone()))
+                                                .expect("Failed to return TipToCheckpoint result");
                                         }
                                     }
                                 }
-                            };
-
-                            let _timer = request_timer(&metrics, "tip_to_checkpoint_reset_tip_to");
-                            tip_handler
-                                .reset_tip_to(
-                                    &state_layout,
-                                    &cp,
-                                    lsmt_storage,
-                                    Some(&mut thread_pool),
-                                )
-                                .unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to reset tip to checkpoint @{}: {}",
-                                        height,
-                                        err
-                                    );
-                                });
+                            }
                         }
+
                         TipRequest::FlushPageMapDelta { height, pagemaps } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             #[cfg(debug_assertions)]
