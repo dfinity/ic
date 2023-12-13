@@ -448,7 +448,7 @@ pub struct Block {
     #[serde(rename = "baseFeePerGas")]
     pub base_fee_per_gas: Wei,
     pub number: BlockNumber,
-    pub difficulty: String,
+    pub difficulty: CheckedAmountOf<()>,
     #[serde(rename = "extraData")]
     pub extra_data: String,
     #[serde(rename = "gasLimit")]
