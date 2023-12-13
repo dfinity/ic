@@ -425,7 +425,7 @@ pub struct FeeHistory {
     pub base_fee_per_gas: Vec<WeiPerGas>,
     /// An array of block gas used ratios (gasUsed / gasLimit).
     #[serde(rename = "gasUsedRatio")]
-    pub gas_used_ratio: Vec<f64>,
+    pub gas_used_ratio: Option<Vec<f64>>,
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
     #[serde(default)]
     #[serde(rename = "reward")]
