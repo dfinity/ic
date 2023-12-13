@@ -162,6 +162,64 @@ fn should_serialization_and_deserialization_round_trip_for_public_keys(
 }
 
 #[test]
+fn should_reject_invalid_public_keys() {
+    struct InvalidKey {
+        reason: &'static str,
+        key: Vec<u8>,
+    }
+
+    impl InvalidKey {
+        fn new(reason: &'static str, key_hex: &'static str) -> Self {
+            let key = hex::decode(key_hex).expect("Invalid key_hex param");
+            Self { reason, key }
+        }
+    }
+
+    let invalid_keys = [
+        InvalidKey::new("empty", ""),
+        InvalidKey::new("too short", "02"),
+        InvalidKey::new(
+            "valid compressed point with uncompressed header",
+            "04EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A",
+        ),
+        InvalidKey::new(
+            "invalid x, header 02",
+            "02EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09C",
+        ),
+        InvalidKey::new(
+            "invalid x, header 03",
+            "03EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09C",
+        ),
+        InvalidKey::new(
+            "valid uncompressed point with header 02",
+            "02EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4E"
+        ),
+        InvalidKey::new(
+            "valid uncompressed point with header 03",
+            "03EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4E"
+        ),
+        InvalidKey::new(
+            "invalid uncompressed point (y off by one)",
+            "04EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4F",
+        ),
+        InvalidKey::new(
+            "valid secp256k1 point",
+            "04F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB4"
+        ),
+    ];
+
+    for invalid_key in &invalid_keys {
+        let result = PublicKey::deserialize_sec1(&invalid_key.key);
+
+        assert!(
+            result.is_err(),
+            "Accepted invalid key ({})",
+            invalid_key.reason
+        );
+    }
+}
+
+#[test]
 fn should_insecure_keygen_for_testing_be_deterministic() {
     assert_eq!(
         hex::encode(PrivateKey::generate_insecure_key_for_testing(42).serialize_sec1()),
