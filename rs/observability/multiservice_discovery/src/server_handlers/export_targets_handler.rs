@@ -25,6 +25,7 @@ pub async fn export_targets(binding: ExportTargetsBinding) -> WebResult<impl Rep
         JobType::Orchestrator,
         JobType::NodeExporter(NodeOS::Guest),
         JobType::NodeExporter(NodeOS::Host),
+        JobType::MetricsProxy,
     ];
 
     let mut total_targets: Vec<TargetDto> = vec![];

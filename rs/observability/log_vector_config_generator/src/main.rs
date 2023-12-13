@@ -43,7 +43,7 @@ fn main() -> Result<()> {
     ));
 
     info!(log, "Starting IcServiceDiscovery ...");
-    info!(log, "Started jobs: {:?}", cli_args.jobs_and_ports);
+    info!(log, "Started jobs: {:?}", &cli_args.jobs_and_ports);
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
         log.clone(),
         cli_args.targets_dir,

@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use service_discovery::{
     job_types::{JobType, NodeOS},
+    jobs::Job,
     IcServiceDiscovery,
 };
 use tokio::sync::Mutex;
@@ -11,7 +12,6 @@ use crate::definition::Definition;
 use multiservice_discovery_shared::{
     builders::prometheus_config_structure::{map_target_group, PrometheusStaticConfig},
     contracts::TargetDto,
-    jobs_list,
 };
 
 use super::WebResult;
@@ -30,6 +30,7 @@ pub async fn export_prometheus_config(
         JobType::Orchestrator,
         JobType::NodeExporter(NodeOS::Guest),
         JobType::NodeExporter(NodeOS::Host),
+        JobType::MetricsProxy,
     ];
 
     let mut total_targets: Vec<TargetDto> = vec![];
@@ -63,6 +64,14 @@ pub async fn export_prometheus_config(
 
     definitions.iter().for_each(|def| {
         def.boundary_nodes.iter().for_each(|bn| {
+            // Boundary nodes do not get the metrics-proxy installed.
+            if bn.job_type == JobType::MetricsProxy {
+                return;
+            }
+
+            // If this boundary node is under the test environment,
+            // and the job is Node Exporter, then skip adding this
+            // target altogether.
             if bn
                 .custom_labels
                 .iter()
@@ -71,7 +80,8 @@ pub async fn export_prometheus_config(
             {
                 return;
             }
-            let binding = jobs_list();
+
+            let binding = Job::all();
             let job = binding.iter().find(|j| j._type == bn.job_type).unwrap();
 
             total_set.insert(PrometheusStaticConfig {

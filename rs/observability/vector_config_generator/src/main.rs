@@ -41,10 +41,7 @@ fn get_jobs_parameters(jobs_and_ports: &[JobAndPort]) -> HashMap<JobType, JobPar
                 job_and_port.job_type,
                 JobParameters {
                     port: job_and_port.port,
-                    endpoint: match job_and_port.job_type {
-                        JobType::NodeExporter(_) => "/metrics".into(),
-                        JobType::Orchestrator | JobType::Replica => "/".into(),
-                    },
+                    endpoint: job_and_port.job_type.endpoint().into(),
                 },
             )
         })
@@ -60,7 +57,7 @@ fn main() -> Result<()> {
     let mut handles = vec![];
 
     info!(log, "Starting vector-config-generator");
-    info!(log, "Started jobs: {:?}", cli_args.jobs_and_ports);
+    info!(log, "Started jobs: {:?}", &cli_args.jobs_and_ports);
     let mercury_dir = cli_args.targets_dir.join("mercury");
     rt.block_on(sync_local_registry(
         log.clone(),
