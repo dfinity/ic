@@ -24,6 +24,7 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     consensus::{
@@ -362,7 +363,8 @@ fn generate_dkg_response_payload(
                 InitialNiDkgTranscriptRecord::from(high_threshold_transcript.clone());
 
             // This is what we expect consensus to reply with.
-            let threshold_sig_pk = high_threshold_transcript.public_key();
+            let threshold_sig_pk = ThresholdSigPublicKey::try_from(high_threshold_transcript)
+                .expect("should extract public key from high threshold transcript");
             let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
             let key_der: Vec<u8> =
                 ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der(
