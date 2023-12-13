@@ -159,6 +159,9 @@ pub struct MonitoringConfig {
     /// The socket used to export metrics.
     #[clap(long, default_value = "127.0.0.1:9090")]
     pub metrics_addr: SocketAddr,
+    /// Maximum logging level
+    #[clap(long, default_value = "info")]
+    pub max_logging_level: tracing::Level,
 }
 
 #[derive(Args)]

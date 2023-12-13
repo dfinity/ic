@@ -315,7 +315,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         cli.listen.http_port,
     ))
     .acceptor(DefaultAcceptor)
-    .serve(routers_http.clone().into_make_service());
+    .serve(
+        routers_http
+            .clone()
+            .into_make_service_with_connect_info::<SocketAddr>(),
+    );
 
     // HTTPS
     #[cfg(feature = "tls")]
@@ -324,7 +328,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         cli.listen.https_port,
     ))
     .acceptor(tls_acceptor.clone())
-    .serve(routers_https.clone().into_make_service());
+    .serve(
+        routers_https
+            .clone()
+            .into_make_service_with_connect_info::<SocketAddr>(),
+    );
 
     // Metrics
     let metrics_cache = Arc::new(RwLock::new(MetricsCache::new(METRICS_CACHE_CAPACITY)));
