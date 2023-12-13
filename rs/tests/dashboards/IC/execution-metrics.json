@@ -8294,12 +8294,36 @@
               },
               "editorMode": "code",
               "exemplar": true,
-              "expr": "label_replace(\n  sum by(ic_subnet) (\n    rate(execution_query_cache_hits_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
               "hide": false,
               "interval": "",
-              "legendFormat": "{{ic_subnet}}",
+              "legendFormat": "Total hits",
               "range": true,
               "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_with_ignored_time_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "legendFormat": "Hits with ignored time",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_with_ignored_canister_balance_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "legendFormat": "Hits with ignored canister balance",
+              "range": true,
+              "refId": "C"
             }
           ],
           "title": "Query cache hit rate",
@@ -8883,7 +8907,7 @@
               "interval": "",
               "legendFormat": "Max expiry time",
               "range": true,
-              "refId": "D"
+              "refId": "B"
             },
             {
               "datasource": {
@@ -8895,7 +8919,7 @@
               "hide": false,
               "legendFormat": "Canister version",
               "range": true,
-              "refId": "B"
+              "refId": "C"
             },
             {
               "datasource": {
@@ -8907,7 +8931,19 @@
               "hide": false,
               "legendFormat": "Canister balance",
               "range": true,
-              "refId": "C"
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_nested_call_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "legendFormat": "Nested calls",
+              "range": true,
+              "refId": "E"
             }
           ],
           "title": "Total query cache invalidation reason",

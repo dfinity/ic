@@ -17,6 +17,8 @@ mod tests;
 /// Query Cache metrics.
 pub(crate) struct QueryCacheMetrics {
     pub hits: IntCounter,
+    pub hits_with_ignored_time: IntCounter,
+    pub hits_with_ignored_canister_balance: IntCounter,
     pub misses: IntCounter,
     pub evicted_entries: IntCounter,
     pub evicted_entries_duration: Histogram,
@@ -25,6 +27,7 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries_by_max_expiry_time: IntCounter,
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
+    pub invalidated_entries_by_nested_call: IntCounter,
     pub invalidated_entries_duration: Histogram,
     pub count_bytes: IntGauge,
     pub len: IntGauge,
@@ -36,6 +39,14 @@ impl QueryCacheMetrics {
             hits: metrics_registry.int_counter(
                 "execution_query_cache_hits_total",
                 "The total number of replica side query cache hits",
+            ),
+            hits_with_ignored_time: metrics_registry.int_counter(
+                "execution_query_cache_hits_with_ignored_time_total",
+                "The total number of cache hits into entries with ignored time",
+            ),
+            hits_with_ignored_canister_balance: metrics_registry.int_counter(
+                "execution_query_cache_hits_with_ignored_canister_balance_total",
+                "The total number of cache hits into entries with ignored canister balance",
             ),
             misses: metrics_registry.int_counter(
                 "execution_query_cache_misses_total",
@@ -69,6 +80,10 @@ impl QueryCacheMetrics {
             invalidated_entries_by_canister_balance: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_canister_balance_total",
                 "The total number of invalidated entries due to the changed canister balance",
+            ),
+            invalidated_entries_by_nested_call: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_nested_call_total",
+                "The total number of invalidated entries due to a nested call",
             ),
             invalidated_entries_duration: duration_histogram(
                 "execution_query_cache_invalidated_entries_duration_seconds",
@@ -215,6 +230,16 @@ impl EntryValue {
         self.ignore_canister_balance || self.env.canister_balance == env.canister_balance
     }
 
+    /// Return true if the time difference was ignored.
+    fn is_ignored_time(&self, env: &EntryEnv) -> bool {
+        self.env.batch_time != env.batch_time && self.ignore_batch_time
+    }
+
+    /// Return true if the canister balance difference was ignored.
+    fn is_ignored_canister_balance(&self, env: &EntryEnv) -> bool {
+        self.env.canister_balance != env.canister_balance && self.ignore_canister_balance
+    }
+
     fn result(&self) -> Result<WasmResult, UserError> {
         self.result.clone()
     }
@@ -270,6 +295,13 @@ impl QueryCache {
                 let res = value.result();
                 // Update the metrics.
                 self.metrics.hits.inc();
+                // For the sake of correctness, we need a fall-through logic here.
+                if value.is_ignored_time(env) {
+                    self.metrics.hits_with_ignored_time.inc();
+                }
+                if value.is_ignored_canister_balance(env) {
+                    self.metrics.hits_with_ignored_canister_balance.inc();
+                }
                 // The cache entry is valid, return it.
                 return Some(res);
             } else {
@@ -315,6 +347,10 @@ impl QueryCache {
 
         // The result should not be saved if the query calls a nested query.
         if system_api_call_counters.call_perform != 0 {
+            // Because of the nested calls the entry is immediately invalidated.
+            self.metrics.invalidated_entries.inc();
+            self.metrics.invalidated_entries_duration.observe(0_f64);
+            self.metrics.invalidated_entries_by_nested_call.inc();
             return;
         }
 

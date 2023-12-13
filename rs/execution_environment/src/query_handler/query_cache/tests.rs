@@ -7,7 +7,7 @@ use crate::{
     query_handler::query_cache::EntryKey,
     InternalHttpQueryHandler,
 };
-use ic_interfaces::execution_environment::SystemApiCallCounters;
+use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::{types::ids::user_test_id, universal_canister::wasm};
@@ -580,10 +580,7 @@ fn query_cache_different_batch_times_return_the_same_result() {
     assert_eq!(0, metrics.hits.get());
     assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
 
-    // Change the canister balance and time.
-    test.canister_state_mut(canister_id)
-        .system_state
-        .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
+    // Change the time.
     test.state_mut().metadata.batch_time += Duration::from_secs(1);
 
     // Run the same query for the second time.
@@ -594,6 +591,8 @@ fn query_cache_different_batch_times_return_the_same_result() {
         .metrics;
     assert_eq!(1, metrics.misses.get());
     assert_eq!(1, metrics.hits.get());
+    assert_eq!(1, metrics.hits_with_ignored_time.get());
+    assert_eq!(0, metrics.hits_with_ignored_canister_balance.get());
     assert_eq!(output_1, output_2);
 }
 
@@ -886,11 +885,10 @@ fn query_cache_different_canister_balances_return_the_same_result() {
     assert_eq!(0, metrics.hits.get());
     assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
 
-    // Change the canister balance and time.
+    // Change the canister balance.
     test.canister_state_mut(canister_id)
         .system_state
         .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
-    test.state_mut().metadata.batch_time += Duration::from_secs(1);
 
     // Run the same query for the second time.
     let output_2 = test.non_replicated_query(canister_id, "query", query.clone());
@@ -900,6 +898,8 @@ fn query_cache_different_canister_balances_return_the_same_result() {
         .metrics;
     assert_eq!(1, metrics.misses.get());
     assert_eq!(1, metrics.hits.get());
+    assert_eq!(0, metrics.hits_with_ignored_time.get());
+    assert_eq!(1, metrics.hits_with_ignored_canister_balance.get());
     assert_eq!(output_1, output_2);
 }
 
@@ -1336,6 +1336,9 @@ fn query_cache_composite_queries_return_the_same_result() {
         .metrics;
     assert_eq!(1, metrics.misses.get());
     assert_eq!(1, metrics.hits.get());
+    assert_eq!(1, metrics.hits_with_ignored_time.get());
+    assert_eq!(1, metrics.hits_with_ignored_canister_balance.get());
+    assert_eq!(0, metrics.invalidated_entries_by_nested_call.get());
     assert_eq!(output_1, output_2);
 }
 
@@ -1372,6 +1375,7 @@ fn query_cache_composite_queries_return_different_results_after_expiry_time() {
         .metrics;
     assert_eq!(2, metrics.misses.get());
     assert_eq!(0, metrics.hits.get());
+    assert_eq!(0, metrics.invalidated_entries_by_nested_call.get());
     assert_eq!(output_1, output_2);
 }
 
@@ -1411,5 +1415,95 @@ fn query_cache_nested_queries_never_get_cached() {
         .metrics;
     assert_eq!(2, metrics.misses.get());
     assert_eq!(0, metrics.hits.get());
+    assert_eq!(2, metrics.invalidated_entries_by_nested_call.get());
     assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_future_proof() {
+    ////////////////////////////////////////////////////////////////////
+    // ATTENTION!
+    ////////////////////////////////////////////////////////////////////
+    // By adding a new System API call here, please consider potential
+    // direct or indirect effects on the Query Cache.
+    //
+    // Query Cache coherency relies on three assumptions:
+    // * Changes in `batch_time` invalidate cache entries.
+    //   `ic0.time()` is the only System API call providing
+    //   different values for distinct `batch_time`s.
+    // * Changes in `canister_balance` invalidate cache entries.
+    //   `ic0.canister_cycle_balance[128]()` is the sole System API
+    //   call dependent on canister balance.
+    // * Changes in `canister_version` always invalidate cache entries.
+    //   This includes update calls, configuration changes, upgrades...
+    //
+    // If you introduce a new System API call that depends on
+    // time or balance or a new Canister property that should
+    // invalidate cache entries, please check with the Runtime and/or
+    // Execution teams.
+    //
+    // BREAKING QUERY CACHE COHERENCY CAN RESULT IN UNEXPECTED
+    // OUTCOMES. PLEASE DOUBLE-CHECK YOUR DESIGN FOR POTENTIAL
+    // QUERY CACHING SIDE EFFECTS.
+    ////////////////////////////////////////////////////////////////////
+    let future_proof = SystemApiCallId::AcceptMessage;
+    match future_proof {
+        SystemApiCallId::AcceptMessage
+        | SystemApiCallId::CallCyclesAdd
+        | SystemApiCallId::CallCyclesAdd128
+        | SystemApiCallId::CallDataAppend
+        | SystemApiCallId::CallNew
+        | SystemApiCallId::CallOnCleanup
+        | SystemApiCallId::CallPerform
+        | SystemApiCallId::CanisterCycleBalance
+        | SystemApiCallId::CanisterCycleBalance128
+        | SystemApiCallId::CanisterSelfCopy
+        | SystemApiCallId::CanisterSelfSize
+        | SystemApiCallId::CanisterStatus
+        | SystemApiCallId::CanisterVersion
+        | SystemApiCallId::CertifiedDataSet
+        | SystemApiCallId::CyclesBurn128
+        | SystemApiCallId::DataCertificateCopy
+        | SystemApiCallId::DataCertificatePresent
+        | SystemApiCallId::DataCertificateSize
+        | SystemApiCallId::DebugPrint
+        | SystemApiCallId::GlobalTimerSet
+        | SystemApiCallId::IsController
+        | SystemApiCallId::MintCycles
+        | SystemApiCallId::MsgArgDataCopy
+        | SystemApiCallId::MsgArgDataSize
+        | SystemApiCallId::MsgCallerCopy
+        | SystemApiCallId::MsgCallerSize
+        | SystemApiCallId::MsgCyclesAccept
+        | SystemApiCallId::MsgCyclesAccept128
+        | SystemApiCallId::MsgCyclesAvailable
+        | SystemApiCallId::MsgCyclesAvailable128
+        | SystemApiCallId::MsgCyclesRefunded
+        | SystemApiCallId::MsgCyclesRefunded128
+        | SystemApiCallId::MsgMethodNameCopy
+        | SystemApiCallId::MsgMethodNameSize
+        | SystemApiCallId::MsgReject
+        | SystemApiCallId::MsgRejectCode
+        | SystemApiCallId::MsgRejectMsgCopy
+        | SystemApiCallId::MsgRejectMsgSize
+        | SystemApiCallId::MsgReply
+        | SystemApiCallId::MsgReplyDataAppend
+        | SystemApiCallId::OutOfInstructions
+        | SystemApiCallId::PerformanceCounter
+        | SystemApiCallId::Stable64Grow
+        | SystemApiCallId::Stable64Read
+        | SystemApiCallId::Stable64Size
+        | SystemApiCallId::Stable64Write
+        | SystemApiCallId::StableGrow
+        | SystemApiCallId::StableRead
+        | SystemApiCallId::StableSize
+        | SystemApiCallId::StableWrite
+        | SystemApiCallId::Time
+        | SystemApiCallId::Trap
+        | SystemApiCallId::UpdateAvailableMemory => {
+            ////////////////////////////////////////////////////////////
+            // ^^^ PLEASE READ THE DISCLAIMER ABOVE ^^^
+            ////////////////////////////////////////////////////////////
+        }
+    }
 }
